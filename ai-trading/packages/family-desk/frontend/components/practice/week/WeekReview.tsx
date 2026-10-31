@@ -52,7 +52,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
   const router = useRouter();
   const { review } = week;
   const toDate = week.to_date === "yes";
-  const heading = weekHeading(week);
+  const heading = weekHeading(week, review.holds.filter((hold) => hold.status === "open").length);
 
   const tiles = useMemo(() => weekTiles(review, toDate), [review, toDate]);
   const series = useMemo(() => weekEquitySeries(review), [review]);
@@ -209,7 +209,10 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
         </div>
 
         <footer className={styles.footer}>
-          <p className={styles.hint}>{week.footnote}</p>
+          <details className={styles.details}>
+            <summary className={styles.summary}>About these figures</summary>
+            <p className={styles.hint}>{week.footnote}</p>
+          </details>
         </footer>
       </div>
     </div>

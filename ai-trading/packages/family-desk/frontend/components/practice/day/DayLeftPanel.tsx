@@ -29,7 +29,7 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
   const brief = list.thread;
   return (
     <LeftRailPortal>
-      <div className={styles.side}>
+      <div className={styles.side} role="region" aria-label="Day lists and names" tabIndex={0}>
         <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayWatch}>
           <div className={styles.sideHead}>
             <h2 className={styles.sideTitle}>{practiceText("dayStarred", { n: list.watch.length, max: nameCap(list.plan) })}</h2>

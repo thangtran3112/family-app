@@ -5,6 +5,7 @@
 .wrap[data-density="compact"] .table th, .wrap[data-density="compact"] .table td { height: 24px; padding-inline: 6px; }
 .table th { position: sticky; top: 0; z-index: 1; background: var(--color-ground); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .right { text-align: right !important; }
+.center { text-align: center !important; }
 .row { box-shadow: inset 2px 0 0 transparent; }
 .row:hover { background: var(--color-raised); }
 .clickable { cursor: pointer; }
@@ -24,6 +25,9 @@ th.sticky { z-index: 2; }
 /* alwaysShowActions (the practice day list): visible without a hover, pinned to the scroller's right edge so a 1590 px table keeps its action in view. */
 .actionsPinned .actions > * { opacity: 1; }
 .actionsPinned .actions, .actionsPinned .actionsHead { position: sticky; right: 0; background: var(--color-ground); box-shadow: -1px 0 0 var(--color-hairline); }
+/* The pinned action column also says "more to the left": a soft edge, and room under the last row for the overlay scrollbar (D-136). */
+.actionsPinned { padding-bottom: 12px; }
+.actionsPinned .actions, .actionsPinned .actionsHead { box-shadow: -8px 0 8px -6px rgba(0, 0, 0, 0.55), -1px 0 0 var(--color-hairline); }
 .actionsPinned .actions { z-index: 1; }
 .actionsPinned .actionsHead { z-index: 2; }
 .actionsPinned .row:hover .actions { background: var(--color-raised); }

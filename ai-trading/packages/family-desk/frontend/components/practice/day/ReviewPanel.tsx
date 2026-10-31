@@ -7,7 +7,7 @@ import { withPriorities } from "@/lib/desk/columns";
 import { formatEtDay, formatPrice } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { DayJournal, DayReview, ReviewRow } from "@/lib/replay/daily";
-import { dayBalanceText, dayFinishedLine, dayRecordText, journalLine, moveText, pickedLabel, selectionText, tradeLineRows, type TradeLineRow } from "@/lib/replay/dayView";
+import { dayBalanceText, dayFinishedLine, dayRecordText, journalLine, moveText, pickedLabel, selectionText, tradeLineRows, tradeTotalRow, type TradeLineRow } from "@/lib/replay/dayView";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { UniverseFootnote } from "./UniverseFootnote";
 import styles from "./day.module.css";
@@ -33,8 +33,10 @@ const TRADE_COLUMNS: DenseColumn<TradeLineRow>[] = [
   { key: "symbol", label: "Symbol", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
   { key: "side", label: "Side", render: (row) => row.side },
   { key: "shares", label: "Shares", align: "right", render: (row) => row.shares },
-  { key: "entry", label: "Entry", render: (row) => row.entry },
-  { key: "exit", label: "Exit", render: (row) => row.exit },
+  { key: "entry", label: "Entry", align: "right", render: (row) => row.entry },
+  { key: "entryTime", label: "In at", render: (row) => row.entryTime },
+  { key: "exit", label: "Exit", align: "right", render: (row) => row.exit },
+  { key: "exitTime", label: "Out at", render: (row) => row.exitTime },
   { key: "pnl", label: "P/L", align: "right", render: (row) => <span className={styles[row.tone]}>{row.pnl}</span> },
 ];
 
@@ -83,7 +85,7 @@ export function ReviewPanel({ review, journal, footnote }: { review: DayReview; 
             <DenseTable
               caption="Your practice trades"
               columns={TRADE_COLUMNS}
-              rows={tradeLineRows(journal)}
+              rows={journal.lines.length > 1 ? [...tradeLineRows(journal), tradeTotalRow(journal)] : tradeLineRows(journal)}
               rowKey={(row) => row.key}
               empty={<EmptyBlock title={PRACTICE_COPY.reviewDayNone} />}
             />

@@ -12,7 +12,7 @@ export type DenseColumn<R> = {
   label: string;
   render: (row: R) => ReactNode;
   /** Numbers right-aligned with tabular figures; text left-aligned. */
-  align?: "left" | "right";
+  align?: "left" | "right" | "center";
   /** Present: sortable header. */
   sortValue?: (row: R) => SortValue;
   /** Present: dropped at the 1180 band (lowest first, see lib/desk/columns.ts). */
@@ -92,7 +92,7 @@ export function DenseTable<R>({
               <th
                 key={column.key}
                 scope="col"
-                className={`${column.align === "right" ? styles.right : ""} ${scrollX && index === 0 ? styles.sticky : ""}`}
+                className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""}`}
                 aria-sort={column.sortValue ? ariaSort(sort, column.key) : undefined}
               >
                 {column.sortValue ? (
@@ -120,7 +120,7 @@ export function DenseTable<R>({
                 onKeyDown={onSelect ? (event) => onKeyDown(event, row) : undefined}
               >
                 {visible.map((column, index) => (
-                  <td key={column.key} className={`${column.align === "right" ? styles.right : ""} ${scrollX && index === 0 ? styles.sticky : ""}`}>
+                  <td key={column.key} className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""}`}>
                     {column.render(row)}
                   </td>
                 ))}

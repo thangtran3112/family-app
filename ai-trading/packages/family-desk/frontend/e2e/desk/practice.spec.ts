@@ -280,7 +280,7 @@ test.describe("Practice", () => {
     const threadId = Number(new URL(page.url()).searchParams.get("id"));
     const planCard = page.getByRole("region", { name: "Daily list plan" });
     await expect(planCard).toContainText("Day 1 of 5 · next: Fri", { timeout: 60_000 });
-    await expect(planCard).toContainText("Armed on practice days: Any close"); // D-002: the card says what the modal armed
+    await expect(planCard).toContainText("Any close"); // the card names the filter once (D-118: the armed line is gone with the arming)
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(50_000));
     await expect(page.locator("body")).not.toContainText(DAY);
     await expectCleanScreen(page);
@@ -290,10 +290,10 @@ test.describe("Practice", () => {
     // D-004: the bare route finds the day she has open.
     await openDesk(page, "/practice/day");
     await page.waitForURL(dayUrl);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri");
 
     // The day list: dates hidden, the candidate, the universe line, and the footnote.
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri · Practice day list");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri");
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY, true, true));
     await expect(page.getByText(/^List built at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
     await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
@@ -616,7 +616,7 @@ test.describe("Practice", () => {
     await expect(day).not.toContainText("0 practice trades");
     // D-047: the replaced plan's half-practiced day was the thread's Day 1, so the new plan's first day is the thread's Day 2.
     const plan = page.getByRole("region", { name: "Daily list plan" });
-    await expect(plan).toContainText("Day 2 · plan day 1 of 5 · list ready");
+    await expect(plan).toContainText("Day 2 · list ready");
     await expect(plan).not.toContainText("in progress");
 
     // The thread page's Resume and the review's Next day open the same day.
@@ -625,7 +625,7 @@ test.describe("Practice", () => {
     await page.goto(practiced);
     await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
     await page.waitForURL(fresh);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 · plan day 1 of 5");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2");
     await expect(page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true })).toBeVisible();
   });
 
@@ -658,7 +658,7 @@ test.describe("Practice", () => {
     test.setTimeout(180_000);
     await startThread(page, context);
     // The plan arms its filter (D-002, D-049): the thread page says what it armed.
-    await expect(page.getByRole("region", { name: "Daily list plan" })).toContainText("Armed on practice days: Any close", { timeout: 60_000 });
+    await expect(page.getByRole("region", { name: "Daily list plan" })).toContainText("Any close", { timeout: 60_000 });
     await openFirstDay(page);
     const dayOne = page.url();
 
@@ -942,5 +942,61 @@ test.describe("Practice day list · fix wave 5S", () => {
     expect(s.y, "the starred names come first").toBeLessThan(b.y);
     expect(s.y + s.height, "and they are on screen, above the footer").toBeLessThan(page.viewportSize()!.height - 40);
     await expect(block, "ten days or fewer start open").toHaveAttribute("open", "");
+  });
+
+  test("a day that is not chosen and one that is not found say different things, and a journal with no thread says one thing (D-116, D-117)", async ({ page }) => {
+    await openDesk(page, "/practice/day");
+    await expect(page.getByText(PRACTICE_COPY.dayNoPlan)).toBeVisible();
+    for (const bad of ["abc", "999999"]) {
+      await openDesk(page, `/practice/day?id=${bad}`);
+      await expect(page.getByText(PRACTICE_COPY.dayNotFound), bad).toBeVisible();
+      await expect(page.getByText(PRACTICE_COPY.dayNoPlan), bad).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Open Practice" })).toBeVisible();
+    }
+    await openDesk(page, "/practice/journal");
+    await expect(page.getByText(PRACTICE_COPY.threadPickNone)).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.threadPickTitle), "one statement, not two stacked").toHaveCount(0);
+  });
+
+  test("while the day list loads the page shows its own shape and says it is busy (D-116)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await openDayList(page, context);
+    const url = page.url();
+    await page.route(/\/api\/desk\/replay\/day-lists\/\d+/, async (route) => {
+      await new Promise((done) => setTimeout(done, 1500));
+      await route.continue();
+    });
+    await page.goto(url);
+    await expect(page.locator('[role="status"][aria-busy="true"]')).toBeVisible();
+    await expect(page.getByRole("table", { name: "Candidates" })).toBeVisible();
+  });
+
+  test("the day's title is the day and weekday, with the page kind as a chip (D-139)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await openDayList(page, context);
+    const h1 = page.getByRole("heading", { level: 1 });
+    await expect(h1).toHaveText("Day 1 of 5 · Fri");
+    await expect(page.getByText("Practice day list", { exact: true })).toBeVisible();
+  });
+
+  test("the journal's passed-day box holds its whole label clear of the zero line (D-125)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await openDayList(page, context);
+    const daily = (await (await context.request.get(`${origin}/api/desk/replay/daily`)).json()) as { plan: { thread_id: number; current: { id: number } } };
+    await send(context, "POST", `/day-lists/${daily.plan.current.id}/end`); // ended with no session: a passed day
+    const threadId = daily.plan.thread_id;
+    await openDesk(page, `/practice/journal?thread=${threadId}`);
+    const chart = page.getByRole("img", { name: /^Result of each day/ });
+    await expect(chart).toBeVisible();
+    const fit = await chart.evaluate((svg) => {
+      const label = [...svg.querySelectorAll("text")].find((text) => text.textContent === "Passed")!;
+      const box = svg.querySelector("rect[class*=skipBox]")!.getBoundingClientRect();
+      const text = label.getBoundingClientRect();
+      const zero = svg.querySelector("line[class*=zeroLine]")!.getBoundingClientRect();
+      return { padLeft: text.left - box.left, padRight: box.right - text.right, clearOfZero: text.bottom <= zero.top + 1 };
+    });
+    expect(fit.padLeft, "room on the left").toBeGreaterThanOrEqual(3);
+    expect(fit.padRight, "room on the right").toBeGreaterThanOrEqual(3);
+    expect(fit.clearOfZero, "the $0 line does not cut through the label").toBe(true);
   });
 });
