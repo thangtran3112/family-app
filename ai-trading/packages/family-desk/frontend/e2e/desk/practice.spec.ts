@@ -886,21 +886,20 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByText(/Practice universe|^Universe: today's Desk set/), "the universe paragraph is said once").toHaveCount(1);
   });
 
-  test("the plan's own cap reads the same in the header and the rail, and the last day ends on Finish plan, a summary and Start a new plan (D-095, D-096)", async ({ page, context }) => {
+  test("the header and the rail name no cap on stars, and the last day ends on Finish plan, a summary and Start a new plan (D-095, D-096)", async ({ page, context }) => {
     test.setTimeout(240_000);
     await saveFilter(context);
     const dialog = await openNewPlan(page);
     await fillNewPlan(dialog, {});
-    await dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols }).getByRole("button", { name: "3", exact: true }).click();
     await dialog.getByRole("button", { name: START_BUTTON }).click();
     await page.waitForURL(THREAD_URL, { timeout: 90_000 });
     const threadId = Number(new URL(page.url()).searchParams.get("id"));
     await expect(page.getByRole("heading", { level: 1 }), "D-093: New plan submit lands with the heading focused").toBeFocused();
     await openFirstDay(page);
-    await expect(page.getByText("Starred 0 of 3").first()).toBeVisible();
+    await expect(page.getByText("Starred 0", { exact: true }).first()).toBeVisible();
     const side = page.getByRole("complementary", { name: "Practice side panel" });
-    await expect(side).toContainText("Star up to 3 names to keep them in view"); // D-095: one rule, one number
-    await expect(side).not.toContainText("up to 5");
+    await expect(side).toContainText("Star names to keep them in view"); // no cap on stars, so no number
+    await expect(side).not.toContainText("Star up to");
 
     // Days 1 to 4 by API; Day 5 is the plan's last.
     let list = Number(new URL(page.url()).searchParams.get("id"));

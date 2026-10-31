@@ -160,3 +160,10 @@
 .bare .footerRow .dataTable { flex: 1 1 auto; min-width: 0; margin-top: 0; }
 .bare .footerRow .dataTable summary { min-height: 24px; padding-block: 2px; font-size: 12px; }
 .bare .footerRow .chartFooter { flex: 0 0 auto; padding-top: 2px; font-size: 12px; }
+/* Workspace and replay charts fill their slot: the open data table lies over the bottom of the chart instead of taking
+   its height, so the panes keep their size and their legends stay on them (V-Technicals-05: the chart fell to 23 px). */
+.bare .footerRow { position: relative; }
+.bare .dataTable[open] .tableScroll { position: absolute; z-index: 4; right: 0; bottom: 100%; left: 0; max-height: min(320px, 60vh); border-top: 1px solid var(--color-hairline); background: var(--color-ground); }
+.bare .dataTable thead th { position: sticky; top: 0; background: var(--color-ground); }
+/* One legend per indicator pane, at the top of its pane (MarketChart places it from the pane layout). */
+.paneLegend { position: absolute; left: 12px; z-index: 3; }

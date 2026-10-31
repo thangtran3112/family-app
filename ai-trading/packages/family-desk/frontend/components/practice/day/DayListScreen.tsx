@@ -34,14 +34,12 @@ import {
   listCountsText,
   listWarning,
   nameActionLabel,
-  nameCap,
   practiceWindow,
   namesTodayText,
   rescanCounts,
   rescanLabel,
   rescanStaleText,
   sourceNote,
-  starsFullText,
   threadDayNo,
   toggledStars,
   universeNote,
@@ -181,7 +179,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
   const practicing = list.sessions.at(-1) ?? null;
   const opened = new Set(list.sessions.map((session) => session.symbol));
-  const cap = nameCap(list.plan);
   const columns = columnsOf(list, {
     starred: (symbol) => isStarred(list.watch, symbol),
     onStar: (symbol) => void star(symbol),
@@ -204,11 +201,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   }
 
   async function star(symbol: string) {
-    const next = toggledStars(list.watch, symbol, cap);
-    if (next === null) {
-      setMessage(starsFullText(cap));
-      return;
-    }
+    const next = toggledStars(list.watch, symbol);
     await run(async () => {
       await patchDayList(list.id, { watch: next });
       onChanged();
@@ -352,7 +345,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           <section className={styles.section} aria-label="Candidates">
             <div className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Candidates</h2>
-              <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length, max: cap })}</span>
+              <span className={styles.sideHint}>{practiceText("dayStarred", { n: list.watch.length })}</span>
             </div>
             <p className={styles.muted} data-testid="names-today">{namesTodayText(list)}</p>
             <DenseTable

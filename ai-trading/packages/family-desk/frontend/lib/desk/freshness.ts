@@ -9,6 +9,8 @@ export const COPY = {
   updating: "Updating quotes…",
   reconnecting: "Reconnecting… · last update {time}",
   paused: "Quotes paused · last update {ago}",
+  // The mark beside a price that is not current (V-Today-01): the age, in the same words the badge uses.
+  staleMark: "Stale · {ago}",
   backup: "Using backup quotes · may differ slightly from IBKR",
   closed: "Market closed · showing last close",
   pre_market: "Pre-market · {time}",
@@ -66,6 +68,10 @@ export const COPY = {
   alertTemplatesNotStarted: "Fundamental alerts start once their data sources are connected",
   maskShow: "Show values",
   maskHide: "Hide values",
+  // A symbol with no quote and no bars at all (V-Technicals-03): nothing will arrive, so no "trying again".
+  noMarketData: "No market data for {symbol}",
+  noMarketDataHint: "Check the symbol, or pick one from a watchlist",
+  noMarketDataBadge: "No market data",
 } as const;
 
 // Words that must never reach the screen (02l §c3). `containsBannedTerm` is also used by the e2e specs.
@@ -105,6 +111,8 @@ export type FreshnessInput = {
   connection?: Connection;
   /** The stamp covers the whole data feed (top bar, status bar, Today), not one symbol or one list. */
   feed?: boolean;
+  /** The Desk feed's own stamp (the top bar's). A paused feed sets the age on every page badge, so the screen states one age. */
+  feedStamp?: Pick<Stamp, "freshness" | "quality" | "as_of" | "source"> | null;
   now?: Date;
 };
 
@@ -116,6 +124,10 @@ export type FreshnessView = {
   dot: boolean;
   /** The last price stays visible but dimmed. */
   dim: boolean;
+  /** The price on screen is old but still shown (quotes paused or dropped): it needs a mark, not only a dim. */
+  stale: boolean;
+  /** "Stale · 45 min ago" for a stale price, else null. */
+  mark: string | null;
 };
 
 const TONE: Record<FreshnessState, FreshnessTone> = {
@@ -135,7 +147,16 @@ const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 export const fillCopy = fill;
 
-export function freshnessState({ stamp, session, connection = "ok", feed = false }: FreshnessInput): FreshnessState {
+/** The page's own stamp, except while the feed is paused: then the feed's age is the only age (V-Today-01, V-SCR-01). */
+function followFeed({ stamp, feedStamp }: Pick<FreshnessInput, "stamp" | "feedStamp">): FreshnessInput["stamp"] {
+  if (!stamp || feedStamp?.freshness !== "paused") return stamp;
+  if (stamp.freshness === "unavailable" || stamp.quality === "unavailable") return stamp; // a symbol the Desk cannot read stays unreadable
+  return { ...stamp, freshness: "paused", as_of: feedStamp.as_of };
+}
+
+export function freshnessState(input: FreshnessInput): FreshnessState {
+  const { session, connection = "ok", feed = false } = input;
+  const stamp = followFeed(input);
   if (connection === "reconnecting") return "reconnecting";
   if (!stamp) return "updating";
   // A whole feed with nothing stored while the market is closed has nothing to retry: red "trying again" is for an
@@ -152,13 +173,23 @@ export function freshnessState({ stamp, session, connection = "ok", feed = false
 
 export function resolveFreshness(input: FreshnessInput): FreshnessView {
   const state = freshnessState(input);
-  const asOf = input.stamp?.as_of ?? null;
+  const asOf = followFeed(input)?.as_of ?? null;
   const now = input.now ?? new Date();
+  const ago = formatAgo(asOf, now);
   const label = fill(COPY[state], {
     time: state === "reconnecting" ? formatEtClock(asOf) : formatEtTimeZone(asOf),
-    ago: formatAgo(asOf, now),
+    ago,
   });
-  return { state, label, tone: TONE[state], dot: state === "live", dim: state === "reconnecting" || state === "unavailable" };
+  const stale = state === "paused" || state === "reconnecting";
+  return {
+    state,
+    label,
+    tone: TONE[state],
+    dot: state === "live",
+    dim: stale || state === "unavailable",
+    stale,
+    mark: stale ? fill(COPY.staleMark, { ago }) : null,
+  };
 }
 
 const SOURCE_LABELS: Record<string, string> = { alpaca: "Alpaca", ibkr: "IBKR", mixed: "Alpaca + IBKR" };
@@ -209,6 +240,11 @@ export function marketPillText(session: MarketSession, nextOpen: string | null):
   if (session === "pre") return COPY.marketPre;
   if (session === "after") return COPY.marketAfter;
   return nextOpen ? fill(COPY.marketClosedOpens, { time: formatEtWeekdayTime(nextOpen) }) : "Market closed";
+}
+
+/** The market pill's dot is green only while the session is open and the quotes are not stale: "Market open" beside "Quotes paused" must not look live. */
+export function marketPillOpen(session: MarketSession, quotes: Pick<FreshnessView, "stale">): boolean {
+  return session === "regular" && !quotes.stale;
 }
 
 /** The pill at the 1180 band: just the session word, the full text moves to a tooltip. */
@@ -359,8 +395,6 @@ export const PRACTICE_COPY = {
   planArmed: "Armed on practice days: {names}",
   planArmedNone: "Nothing armed · no would-fire signals while you practice",
   planDays: "Days",
-  planMaxSymbols: "Names a day",
-  planMaxSymbolsHint: "The most names you can star and practice in one day",
   planHideDates: "Hide dates",
   planHideDatesHint: "Hides the calendar dates, so you cannot tell which day you are practicing until you finish it",
   planListAtHint: "Your list for the day is built at this time, from what had happened by then",
@@ -376,7 +410,7 @@ export const PRACTICE_COPY = {
   dayDateHidden: "Date hidden",
   dayFiltersNote: "Chosen at setup · a name that passes either one is listed",
   dayFiltersNoteOne: "Chosen at setup",
-  dayStarred: "Starred {n} of {max}",
+  dayStarred: "Starred {n}",
   dayUniverse: "Universe: today's Desk set, up to {max} names by today's dollar volume ({size} names here). It can differ from the names that traded on that day.",
   daySource: "Source: Alpaca SIP bars up to {through} · nothing after the list time is shown",
   dayNoNames: "No name passed your filters on this day · widen a filter, or end the day to open the next",
@@ -391,13 +425,11 @@ export const PRACTICE_COPY = {
   dayStar: "Star {symbol}",
   dayUnstar: "Unstar {symbol}",
   dayRemove: "Remove {symbol} from your names",
-  dayStarsFull: "You can star at most 20 names · 20/20 watched",
-  dayStarsFullAt: "Your plan limits a day to {max} {names} · unstar one first",
   dayWatch: "Your names",
-  dayWatchEmpty: "Star up to {max} {names} to keep them in view",
+  dayWatchEmpty: "Star names to keep them in view",
   dayPractice: "Practice {symbol}",
   dayPracticeHint: "Switch names any time · close an open trade first · End day scores the day",
-  dayNamesToday: "{used} of {max} {names} practiced today",
+  dayNamesToday: "{used} {names} practiced today",
   dayNamesTitle: "Day names",
   daySwitch: "Switch to {symbol}",
   dayOnNow: "On now",

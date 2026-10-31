@@ -121,7 +121,7 @@ test.describe("Practice landing", () => {
     // The rest of the form is on screen: dates (with the recorded-day note), days, names, hide dates, list time and size, interval, window.
     await expect(dialog.getByTestId("first-day-note")).toBeVisible();
     await expect(dialog.getByRole("group", { name: "Days" }).getByRole("button")).toHaveText(["5", "10", "20", "30"]);
-    await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols }).getByRole("button")).toHaveText(["1", "2", "3", "4", "5", "10", "20"]);
+    await expect(dialog.getByRole("group", { name: "Names a day" })).toHaveCount(0); // no limit on names
     await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planHideDates }).getByRole("button", { name: "Yes" })).toHaveAttribute("aria-pressed", "true");
     await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planListAt }).getByRole("button")).toHaveCount(3);
     await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");
@@ -311,7 +311,7 @@ test.describe("New plan modal redesign", () => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
     const groups = await segmentedGroups(dialog);
-    expect(groups.length).toBeGreaterThanOrEqual(6); // mode, days, names, hide dates, list time, interval
+    expect(groups.length).toBeGreaterThanOrEqual(5); // mode, days, hide dates, list time, interval
     for (const group of groups) {
       expect(group.overflow, `${group.name}: scrollWidth <= clientWidth`).toBeLessThanOrEqual(0);
       expect(group.poke, `${group.name}: no button outside its box`).toBeLessThanOrEqual(0.5);
@@ -319,7 +319,6 @@ test.describe("New plan modal redesign", () => {
     }
     const label = async (text: string) => (await dialog.getByText(text, { exact: true }).first().boundingBox())!;
     expect((await label("First day")).y, "First day and Days share a baseline").toBeCloseTo((await label("Days")).y, 0);
-    expect((await label("Names a day")).y, "Names a day and Hide dates share a baseline").toBeCloseTo((await label("Hide dates")).y, 0);
     expect((await label("List size")).y, "List size and Chart interval share a baseline").toBeCloseTo((await label("Chart interval")).y, 0);
     const firstDay = (await dialog.locator('input[type="date"]').boundingBox())!;
     const listSize = (await dialog.getByLabel(PRACTICE_COPY.planListSize).boundingBox())!;

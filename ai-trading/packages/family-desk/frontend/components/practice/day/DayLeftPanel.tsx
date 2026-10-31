@@ -5,7 +5,7 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { DayList } from "@/lib/replay/daily";
-import { blockLadder, blockOpenByDefault, nameActionLabel, nameCap, riskPlanText, stripRows, watchEmptyText } from "@/lib/replay/dayView";
+import { blockLadder, blockOpenByDefault, nameActionLabel, riskPlanText, stripRows } from "@/lib/replay/dayView";
 import { dayResultTone, formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./day.module.css";
@@ -32,11 +32,11 @@ export function DayLeftPanel({ list, thread, selected, onPeek, onPractice, onUns
       <div className={styles.side} role="region" aria-label="Day lists and names" tabIndex={0}>
         <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayWatch}>
           <div className={styles.sideHead}>
-            <h2 className={styles.sideTitle}>{practiceText("dayStarred", { n: list.watch.length, max: nameCap(list.plan) })}</h2>
+            <h2 className={styles.sideTitle}>{practiceText("dayStarred", { n: list.watch.length })}</h2>
             {!ended && <span className={styles.sideHint}>click to peek</span>}
           </div>
           {list.watch.length === 0 ? (
-            <p className={styles.muted}>{watchEmptyText(nameCap(list.plan))}</p>
+            <p className={styles.muted}>{PRACTICE_COPY.dayWatchEmpty}</p>
           ) : (
             <ul className={styles.watchList}>
               {list.watch.map((entry) => (

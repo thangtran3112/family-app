@@ -4742,8 +4742,6 @@ export interface components {
             finished: boolean;
             /** Id */
             id: number;
-            /** Max Symbols */
-            max_symbols: number;
             /** Next Day */
             next_day: string | null;
             /** Next Day No */

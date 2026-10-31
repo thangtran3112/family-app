@@ -11,8 +11,8 @@ import { SchemaVersionSchema } from "./strategy-common.ts";
 // boolean or null, every object is strict, and no field names an order, account or broker, as in the
 // other 02k-family contracts. The server rules that need a database (the filters are hers and
 // runnable, `listAt` of 08:30 or later for a premarket filter, every day finished, `firstDay` from
-// 2017-01-03) are not contract rules. `maxSymbols` (02o-b2, optional) caps the names she may watch
-// (star) and practise on one day; a block without it gets the server default (5, the star cap).
+// 2017-01-03) are not contract rules. `maxSymbols` (02o-b2, optional) is legacy: plans saved before
+// the no-cap ruling (2026-10-31) carry it, so it still validates, but nothing reads it. A day has no cap on names.
 
 const HhMmSchema = z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/);
 const IsoDaySchema = z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/);

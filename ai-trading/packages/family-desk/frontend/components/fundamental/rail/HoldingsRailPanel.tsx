@@ -5,6 +5,7 @@ import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { holdingsEmptyText, railRows } from "@/lib/desk/holdingsView";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { AiRatingChip } from "../shared/AiRatingChip";
+import { ImportText } from "../shared/ImportText";
 import fund from "../fundamental.module.css";
 import styles from "./rail.module.css";
 
@@ -16,7 +17,7 @@ export function HoldingsRailPanel({ band }: { band: ShellBand }) {
   if (failed) return <ErrorBlock subject="holdings list" onRetry={refresh} />;
   if (holdings === null) return <LoadingBlock label="Loading holdings…" height={80} />;
   const emptyText = holdingsEmptyText(holdings.import, holdings.rows.length);
-  if (emptyText) return <p className={styles.note} data-testid="fund-rail-holdings">{emptyText}</p>;
+  if (emptyText) return <p className={styles.note} data-testid="fund-rail-holdings"><ImportText text={emptyText} /></p>;
 
   return (
     <ul className={styles.list} aria-label="Holdings" data-testid="fund-rail-holdings">
