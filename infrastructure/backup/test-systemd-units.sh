@@ -55,6 +55,51 @@ for f in "$SERVICE" "$RETRY"; do
 done
 ok "both service units run the backup container read-only with a tmpfs /staging and a read-only receipt mount"
 
+# --- Durable image reference (2026-10-27..31 outage: a bare local image ID was pruned and could not
+# be rebuilt or pulled). The units stay templates; 40-backup.sh installs a local versioned tag (or a
+# registry digest) and refuses anything else; each run first self-heals the image through
+# ensure-backup-image.sh (present -> pull -> build from /opt/family-app/backup/src).
+for f in "$SERVICE" "$RETRY"; do
+  # The image is the last argument of `docker run`, still templated, never hard-coded here.
+  awk '/^ExecStopPost=/{run=0} run && /^  /{last=$0} /^ExecStart=/{run=1} END{print last}' "$f" | grep -Eq '^  __BACKUP_IMAGE__$' \
+    || fail "$f: the final docker run argument must be the templated image placeholder __BACKUP_IMAGE__"
+  if grep -Eq 'sha256:|ghcr\.io|family-app-backup:' "$f"; then
+    fail "$f must not hard-code an image reference; 40-backup.sh substitutes __BACKUP_IMAGE__"
+  fi
+  [[ "$(grep -c '^ExecStartPre=/opt/family-app/backup/ensure-backup-image.sh$' "$f")" == "1" ]] \
+    || fail "$f: ExecStartPre must be exactly /opt/family-app/backup/ensure-backup-image.sh (once)"
+  grep -Fxq 'Environment=BACKUP_IMAGE=__BACKUP_IMAGE__' "$f" || fail "$f: must hand the templated image to the helper via Environment=BACKUP_IMAGE=__BACKUP_IMAGE__"
+  if grep -Eq '^ExecStartPre=.*docker (pull|image inspect)' "$f"; then
+    fail "$f: ExecStartPre must not pull directly (the registry is private and the host has no login); use the helper"
+  fi
+done
+ok "both service units template the image and self-heal it through ensure-backup-image.sh (ExecStartPre), with no hard-coded reference"
+
+# The helper the units run must exist, be executable, and be installed by 40-backup.sh.
+[[ -x "$SCRIPT_DIR/ensure-backup-image.sh" ]] || fail "ensure-backup-image.sh must be executable"
+grep -Fq 'ensure-backup-image.sh' "$SCRIPT_DIR/../host/steps/40-backup.sh" || fail "40-backup.sh must install ensure-backup-image.sh"
+ok "the helper exists, is executable, and is installed by 40-backup.sh (its branches: test-ensure-backup-image.sh)"
+
+for f in "$SERVICE" "$RETRY"; do
+  run_block=$(awk '/^ExecStart=/{run=1} run{print} /^ExecStopPost=/{run=0}' "$f")
+  for flag in \
+    '--rm' \
+    '--network postgres_default' \
+    '--read-only' \
+    '--tmpfs /staging:size=512m,mode=1700' \
+    '--env-file /etc/family-app/backup.env' \
+    '-v /etc/family-app/backup-pgpassword:/run/secrets/pgpassword:ro' \
+    '-v /etc/family-app/backup-writer-key.json:/run/secrets/writer-key.json:ro' \
+    '-v /opt/family-app/backup/state:/state' \
+    '-v /opt/family-app/backup/ciphertext:/ciphertext' \
+    '-v __RECEIPT_VOLUME__:/receipts:ro'; do
+    printf '%s\n' "$run_block" | grep -Fq -- "$flag" || fail "$f: docker run lost '$flag'"
+  done
+done
+grep -Fxq 'ExecStopPost=-/usr/bin/docker rm -f family-app-backup-run' "$SERVICE" || fail "main service must keep its ExecStopPost cleanup"
+grep -Fxq 'ExecStopPost=-/usr/bin/docker rm -f family-app-backup-retry-run' "$RETRY" || fail "retry service must keep its ExecStopPost cleanup"
+ok "docker run keeps --rm, --read-only, the /staging tmpfs, the env file, and every mount; ExecStopPost cleanup kept"
+
 for f in "$SERVICE" "$RETRY"; do
   grep -Eq '^\[Install\]$' "$f" && fail "$f must have no [Install] section (activated only by the timer or OnFailure, never \`systemctl enable\` directly)"
 done

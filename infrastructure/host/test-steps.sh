@@ -379,6 +379,49 @@ fi
 grep -q 'backup-pgpassword' "$STEPS/40-backup.sh" || fail "40-backup.sh must expect the streamed backup-pgpassword file"
 ok "40-backup: BACKUP_HOST_ID is required and the Postgres password comes from the streamed file, not a .env"
 
+# BACKUP_IMAGE must be rebuildable on the host (the 2026-10-27..31 backup outage: a bare local image ID
+# was pruned and could be neither rebuilt nor pulled). The check runs before any file is touched.
+digest64=$(printf 'a%.0s' {1..64})
+run_backup_image() {
+  env BACKUP_DIR="$d/backup" BACKUP_GCS_URI=gs://b BACKUP_HOST_ID=h AGE_RECIPIENT=age1x RECEIPT_VOLUME=v \
+    BACKUP_IMAGE="$1" UNIT_FILES_DIR="$d/units" bash "$STEPS/40-backup.sh" >"$d/out" 2>&1
+}
+for bad in "sha256:93747d0e1f2a${digest64:0:52}" "93747d0e1f2a" "family-app-backup" "family-app-backup:latest" \
+  "ghcr.io/o/r/family-app-backup" "ghcr.io/o/r/family-app-backup:abc123" "other-image:1" \
+  "ghcr.io/o/r/family-app-backup@sha256:abc" "localhost:5000/o/family-app-backup@sha256:$digest64"; do
+  if run_backup_image "$bad"; then fail "40-backup must reject BACKUP_IMAGE='$bad'"; fi
+  grep -q "family-app-backup:2026-10-31" "$d/out" || fail "rejecting '$bad' must name the local-tag remedy: $(cat "$d/out")"
+  grep -q "family-app-backup-image.yml" "$d/out" || fail "rejecting '$bad' must name the registry-digest remedy: $(cat "$d/out")"
+  grep -q "writer-key.json missing" "$d/out" && fail "'$bad' must be rejected before any other preflight: $(cat "$d/out")"
+done
+run_backup_image "sha256:93747d0e1f2a${digest64:0:52}" || true
+grep -q "bare local image ID" "$d/out" || fail "a bare sha256 ID needs its own message: $(cat "$d/out")"
+# A local versioned tag or a registry digest passes the image check; the run then stops at the next
+# preflight (no writer key on this machine). Skipped on a host that really has the key, where the step
+# would install units.
+if [[ ! -e /etc/family-app/backup-writer-key.json ]]; then
+  for good in "family-app-backup:2026-10-31" "family-app-backup:v1.2_3" \
+    "ghcr.io/thangtran3112/family-app/family-app-backup@sha256:$digest64" \
+    "ghcr.io/o/r/family-app-backup:abc123@sha256:$digest64"; do
+    if run_backup_image "$good"; then fail "'$good' should stop at the missing writer key, not succeed"; fi
+    grep -q "BACKUP_IMAGE=" "$d/out" && fail "40-backup must accept '$good': $(cat "$d/out")"
+    grep -q "writer-key.json missing" "$d/out" || fail "'$good' must get past the image check: $(cat "$d/out")"
+  done
+  ok "40-backup: a bare image ID, :latest or other ref is refused (naming both remedies); a local versioned tag or registry digest is accepted"
+else
+  ok "40-backup: bad refs refused (acceptance case skipped: this host has a real writer key)"
+fi
+
+# The step stages the image build context and the self-heal helper (it runs as root, so this is a
+# static check of what it installs, with the modes the image itself uses).
+grep -Fq '"${BACKUP_DIR}/src"' "$STEPS/40-backup.sh" || fail "40-backup.sh must stage the build context in \${BACKUP_DIR}/src"
+for f in lib.sh backup.sh restore.sh recovery-drill.sh Dockerfile ensure-backup-image.sh; do
+  grep -Eq "(for f in .*\b$f\b|UNIT_FILES_DIR\}/$f)" "$STEPS/40-backup.sh" || fail "40-backup.sh must install $f"
+done
+grep -Fq 'install -m 0555 -o root -g root "${UNIT_FILES_DIR}/${f}" "${BACKUP_DIR}/src/${f}"' "$STEPS/40-backup.sh" || fail "the staged scripts must be root-owned 0555"
+grep -Fq 'install -m 0555 -o root -g root "${UNIT_FILES_DIR}/ensure-backup-image.sh" "${BACKUP_DIR}/ensure-backup-image.sh"' "$STEPS/40-backup.sh" || fail "the helper must be installed root-owned 0555 at \${BACKUP_DIR}/ensure-backup-image.sh"
+ok "40-backup: stages Dockerfile + lib/backup/restore/recovery-drill scripts in \${BACKUP_DIR}/src and installs ensure-backup-image.sh (root, 0555)"
+
 # --- bootstrap.sh option validation ---------------------------------------------------------------
 base=(--host 198.51.100.1 --ssh-user ubuntu --ssh-key /dev/null --app "$SCRIPT_DIR/apps/expense-tax-management.conf" --only firewall)
 for bad in "--allow-http 2" "--ssh-interface a;b" "--docker-data-min-gb many" "--docker-data-root relative/path"; do

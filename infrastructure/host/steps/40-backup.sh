@@ -25,9 +25,14 @@
 #                              -- a named volume, not a host path: Docker can
 #                              mount it into the backup container by name
 #                              regardless of which Compose project created it
-#   BACKUP_IMAGE           - pinned backup image ref (digest, not a mutable tag)
-#   UNIT_FILES_DIR         - dir (already scp'd by bootstrap.sh) holding the
-#                              three *.service/*.timer template files
+#   BACKUP_IMAGE           - local versioned tag family-app-backup:<version> (built on the host by
+#                              ensure-backup-image.sh from ${BACKUP_DIR}/src), or a registry digest
+#                              ref ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest> (tried
+#                              by `docker pull` first). A bare local image ID is refused below.
+#   UNIT_FILES_DIR         - dir (already scp'd by bootstrap.sh) holding the three
+#                              *.service/*.timer template files, the image build context
+#                              (Dockerfile, lib.sh, backup.sh, restore.sh, recovery-drill.sh)
+#                              and ensure-backup-image.sh
 #
 # Neither secret is an env var here. bootstrap.sh streams the writer key into
 # /etc/family-app/backup-writer-key.json and the Postgres superuser password (read from
@@ -47,6 +52,24 @@ set -euo pipefail
 : "${BACKUP_IMAGE:?BACKUP_IMAGE is required}"
 : "${UNIT_FILES_DIR:?UNIT_FILES_DIR is required}"
 
+# The image must be rebuildable on the host after a Docker prune. A bare local image ID
+# (sha256:93747d0e...) can be neither rebuilt nor pulled: one prune removed it and no backup ran
+# 2026-10-27..31. Accept a local versioned tag (family-app-backup:<version>, the normal case:
+# ensure-backup-image.sh builds it from ${BACKUP_DIR}/src) or a registry digest reference
+# (pulled first, for the day the GHCR package is public). The allowed characters also keep the
+# value safe for the sed substitution and the systemd unit text below.
+local_tag='family-app-backup:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}'
+registry_digest='[A-Za-z0-9.-]+(/[A-Za-z0-9._-]+)+(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}'
+image_hint="Use a local versioned tag such as family-app-backup:2026-10-31 (built on the host from ${BACKUP_DIR}/src), or a registry digest ghcr.io/<owner>/<repo>/family-app-backup@sha256:<digest> (printed by .github/workflows/family-app-backup-image.yml; pullable only if the package is public)"
+if [[ "$BACKUP_IMAGE" =~ ^(sha256:)?[0-9a-f]{12,64}$ ]]; then
+  echo "[backup] ERROR: BACKUP_IMAGE='${BACKUP_IMAGE}' is a bare local image ID; Docker can neither rebuild nor pull it after a prune. ${image_hint}" >&2
+  exit 1
+fi
+if ! [[ "$BACKUP_IMAGE" =~ ^${local_tag}$ || "$BACKUP_IMAGE" =~ ^${registry_digest}$ ]] || [[ "$BACKUP_IMAGE" == *:latest ]]; then
+  echo "[backup] ERROR: BACKUP_IMAGE='${BACKUP_IMAGE}' is not a versioned local tag or a registry digest reference (':latest' is refused: it never rebuilds). ${image_hint}" >&2
+  exit 1
+fi
+
 [[ -s /etc/family-app/backup-writer-key.json ]] || {
   echo "[backup] ERROR: /etc/family-app/backup-writer-key.json missing -- bootstrap.sh must install it (via SSH stdin) before running this step" >&2
   exit 1
@@ -61,6 +84,20 @@ echo "[backup] ensuring state/ciphertext directories"
 mkdir -p "${BACKUP_DIR}/state" "${BACKUP_DIR}/ciphertext"
 chmod 0700 "${BACKUP_DIR}/state" "${BACKUP_DIR}/ciphertext"
 chown root:root "${BACKUP_DIR}/state" "${BACKUP_DIR}/ciphertext"
+
+# The host rebuilds the image locally (the GHCR package is private and the host holds no registry
+# login): stage the build context and the self-heal helper the units run as ExecStartPre.
+echo "[backup] staging the image build context in ${BACKUP_DIR}/src"
+install -d -m 0755 -o root -g root "${BACKUP_DIR}/src"
+for f in Dockerfile lib.sh backup.sh restore.sh recovery-drill.sh; do
+  [[ -s "${UNIT_FILES_DIR}/${f}" ]] || { echo "[backup] ERROR: ${UNIT_FILES_DIR}/${f} missing -- bootstrap.sh must stage the image build context" >&2; exit 1; }
+done
+install -m 0644 -o root -g root "${UNIT_FILES_DIR}/Dockerfile" "${BACKUP_DIR}/src/Dockerfile"
+for f in lib.sh backup.sh restore.sh recovery-drill.sh; do
+  install -m 0555 -o root -g root "${UNIT_FILES_DIR}/${f}" "${BACKUP_DIR}/src/${f}"
+done
+[[ -s "${UNIT_FILES_DIR}/ensure-backup-image.sh" ]] || { echo "[backup] ERROR: ${UNIT_FILES_DIR}/ensure-backup-image.sh missing -- bootstrap.sh must stage it" >&2; exit 1; }
+install -m 0555 -o root -g root "${UNIT_FILES_DIR}/ensure-backup-image.sh" "${BACKUP_DIR}/ensure-backup-image.sh"
 
 mkdir -p /etc/family-app
 chmod 0700 /etc/family-app
