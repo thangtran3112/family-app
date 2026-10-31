@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { delta, mark, openTrade } from "./fixtures.ts";
-import { barStartFor, canUndoLast, entrySince, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
+import { defaultChartPrefs, togglePref } from "./chartPrefs.ts";
+import { barStartFor, canUndoLast, chartLevels, declutterMarkers, entrySince, firstDrawBars, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
 import { ReplaySignalSchema, type ReplayBar, type ReplayMark } from "./schemas.ts";
 import { ms } from "./time.ts";
 
