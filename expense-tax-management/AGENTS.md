@@ -70,15 +70,15 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 
 ## Git Safety
 
-- Default working branch is `feature/toby`; work directly on it permanently, across sessions.
-- Use a separate git worktree with its own throwaway `feature/*` branch only when a worktree is explicitly requested for that session.
-- Before starting new work on `feature/toby`: `git fetch origin`, then fast-forward `feature/toby` onto `origin/dev`, or merge `origin/dev` into it when a fast-forward is not possible (other sessions' unmerged commits may be on it).
+- **A git worktree is the default and required place for any coding change** (owner rule, 2026-10-31; root `AGENTS.md`). One worktree per task under `.worktrees/`, on its own `feature/*` branch cut from the latest `origin/dev`. Every harness and agent — Claude Code, opencode, subagents, and operators — follows this.
+- The main checkout (`/Users/tobytran/personal/family-app`) is the integration and review checkout: it stays on `feature/toby` and is never edited. Uncommitted or untracked files there belong to another session; never stage, commit, stash, discard, or clean them up.
+- Before starting new work: `git fetch origin`, then cut the task's worktree branch from `origin/dev`.
 - Never commit directly on `dev` or `main`.
-- Push `feature/toby` (or the explicitly requested worktree's branch), then open a pull request to `dev`.
+- Push the task's worktree branch (cut from the latest `origin/dev`), then open a pull request to `dev`. The owner's `feature/toby` is his own sync branch: agents never merge into it, reset it, or push it.
 - Unit/quality check must succeed before merge.
 - Integration result is advisory and must be reported when red.
 - GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge.
-- After a squash merge, `feature/toby` diverges from its now-merged commits; merge the new `origin/dev` tip into it (a fast-forward when possible) before the next round of work. Never reset or force-push `feature/toby`: other sessions share it, and a reset drops their unmerged commits. Never force-push `dev` or `main`.
+- After a squash merge, cut the next task's worktree branch from the new `origin/dev` tip. Never force-push `dev` or `main`, and never reset or push the owner's `feature/toby`.
 - Never bypass branch protection.
 - `main` remains outside the development flow until a later release phase.
 - Personal repository standing approval: agents may push `feature/*` branches, open pull requests to `dev`, and squash-merge them into `origin/dev` without execution-time confirmation once the merge conditions above hold.
