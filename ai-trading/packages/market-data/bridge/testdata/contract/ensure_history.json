@@ -1,0 +1,20 @@
+{
+  "http_status": 200,
+  "request": {
+    "firstSession": "2024-04-30",
+    "lastSession": "2024-05-01",
+    "symbols": [
+      "AAPL"
+    ],
+    "timeframe": "DAY_1"
+  },
+  "response": {
+    "coverage": [
+      {
+        "fetchedNow": 2,
+        "symbol": "AAPL"
+      }
+    ]
+  },
+  "rpc": "EnsureHistory"
+}

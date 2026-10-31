@@ -22,11 +22,14 @@ import (
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/archive"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/config"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/router"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/xnys"
 )
 
 const (
 	maxSymbols = 100
 	maxBody    = 1 << 20
+	// minEnsureDate bounds the "before the history floor" listing of EnsureHistory.
+	minEnsureDate = "2000-01-01"
 )
 
 // Same pattern as 01m's TICKER.
@@ -155,8 +158,50 @@ func attemptsOf(served *pb.Served) []*pb.Attempt {
 	return served.Attempts
 }
 
-func (s *service) ListProviders(context.Context, *connect.Request[pb.ListProvidersRequest]) (*connect.Response[pb.ListProvidersResponse], error) {
-	return connect.NewResponse(&pb.ListProvidersResponse{Providers: s.r.Providers()}), nil
+func (s *service) ListProviders(ctx context.Context, _ *connect.Request[pb.ListProvidersRequest]) (*connect.Response[pb.ListProvidersResponse], error) {
+	info := &pb.ArchiveInfo{Backend: "none"}
+	if s.archive != nil {
+		info = s.archive.Info(ctx)
+	}
+	return connect.NewResponse(&pb.ListProvidersResponse{Providers: s.r.Providers(), Archive: info}), nil
+}
+
+// EnsureHistory fills the RAW archive (02u §4.1) through the same read-through as GetBars. With the
+// archive off it says so with UNIMPLEMENTED rather than doing nothing; a failed fill is a per-symbol
+// result in the response, never an error of the call.
+func (s *service) EnsureHistory(ctx context.Context, req *connect.Request[pb.EnsureHistoryRequest]) (*connect.Response[pb.EnsureHistoryResponse], error) {
+	m := req.Msg
+	if s.archive == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("EnsureHistory is disabled: the history archive is off (ARCHIVE_ENABLED=0)"))
+	}
+	syms, err := cleanSymbols(m.Symbols)
+	if err != nil {
+		return nil, err
+	}
+	if m.Timeframe != pb.Timeframe_DAY_1 && m.Timeframe != pb.Timeframe_MINUTE_1 {
+		return nil, invalid("timeframe: only MINUTE_1 and DAY_1 are archived")
+	}
+	first, ferr := time.Parse(xnys.DateFormat, m.FirstSession)
+	last, lerr := time.Parse(xnys.DateFormat, m.LastSession)
+	switch {
+	case ferr != nil || lerr != nil || first.Format(xnys.DateFormat) != m.FirstSession || last.Format(xnys.DateFormat) != m.LastSession:
+		return nil, invalid("first_session and last_session are required, as YYYY-MM-DD")
+	case first.After(last):
+		return nil, invalid("first_session must not be after last_session")
+	case m.FirstSession < minEnsureDate:
+		return nil, invalid("first_session: not before " + minEnsureDate)
+	case !s.archive.Finished(m.LastSession):
+		return nil, invalid("last_session must be a finished session")
+	}
+	out := &pb.EnsureHistoryResponse{}
+	for _, sym := range syms {
+		if err := ctx.Err(); err != nil {
+			return nil, toConnect(err)
+		}
+		out.Coverage = append(out.Coverage, s.archive.Ensure(ctx, sym, m.Timeframe, m.FirstSession, m.LastSession, s.r.Bars))
+	}
+	s.log.Info("request", "rpc", "EnsureHistory", "symbols", len(syms), "timeframe", m.Timeframe.String())
+	return connect.NewResponse(out), nil
 }
 
 func (s *service) GetStatus(context.Context, *connect.Request[pb.GetStatusRequest]) (*connect.Response[pb.BridgeStatus], error) {
