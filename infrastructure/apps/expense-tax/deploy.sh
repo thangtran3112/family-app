@@ -94,7 +94,7 @@ is_known_key() {
 
 load_env_file() {
   local file=$1 line key value line_number=0
-  declare -A seen=()
+  local seen_keys=" "
   validate_env_bytes "$file"
   while IFS= read -r line || [[ -n "$line" ]]; do
     ((line_number += 1))
@@ -103,8 +103,8 @@ load_env_file() {
     key=${BASH_REMATCH[1]}
     value=${BASH_REMATCH[2]}
     is_known_key "$key" || die "unknown production env key: $key"
-    [[ -z "${seen[$key]+set}" ]] || die "duplicate production env key: $key"
-    seen[$key]=1
+    [[ "$seen_keys" != *" $key "* ]] || die "duplicate production env key: $key"
+    seen_keys+="$key "
     [[ "$value" =~ [[:cntrl:]] ]] && die "unsafe bytes in production env key: $key"
     [[ "$value" != *'\'* && "$value" != *'`'* && "$value" != *'$'* ]] || die "unsafe value for production env key: $key"
     printf -v "$key" '%s' "$value"
@@ -185,7 +185,7 @@ compose() {
   if [[ -n "${MAILBOX_COMPOSE_FILE:-}" && "${MAILBOX_FEATURE_ENABLED:-false}" == "true" ]]; then
     mailbox_overlay=(-f "$MAILBOX_COMPOSE_FILE")
   fi
-  docker compose --project-name "$PROJECT_NAME" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "${mailbox_overlay[@]}" "$@"
+  docker compose --project-name "$PROJECT_NAME" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ${mailbox_overlay[@]+"${mailbox_overlay[@]}"} "$@"
 }
 
 require_shared_temporal() {
@@ -202,7 +202,7 @@ verify_running_images() {
   local expected_tag=$1
   shift
   local services=("$@") service container_id actual_image
-  for service in "${services[@]}"; do
+  for service in ${services[@]+"${services[@]}"}; do
     container_id=$(compose ps -q "$service")
     [[ -n "$container_id" ]] || { printf 'missing running container: %s\n' "$service" >&2; return 1; }
     actual_image=$(docker inspect --format '{{.Config.Image}}' "$container_id")
@@ -284,7 +284,7 @@ if [[ "$DEPLOY_DARK" == "1" ]]; then
   for service in "${APPLICATION_SERVICES[@]}"; do
     [[ "$service" == "workflow-worker" ]] || dark_services+=("$service")
   done
-  APPLICATION_SERVICES=("${dark_services[@]}")
+  APPLICATION_SERVICES=(${dark_services[@]+"${dark_services[@]}"})
 fi
 compose config --quiet
 require_shared_temporal
@@ -327,23 +327,23 @@ rollback() {
     # first place; an ordinary (mailbox-disabled) rollback never has it in
     # rollback_services at all, so this is a no-op there.
     local has_mailbox_broker=0 rollback_service
-    for rollback_service in "${rollback_services[@]}"; do
+    for rollback_service in ${rollback_services[@]+"${rollback_services[@]}"}; do
       [[ "$rollback_service" == "mailbox-broker" ]] && has_mailbox_broker=1
     done
     if ((has_mailbox_broker == 1)) && ! mailbox_broker_image_exists "$previous_tag"; then
       printf 'mailbox-broker has no image for tag %s; rolling back without it\n' "$previous_tag" >&2
       local filtered_services=()
-      for rollback_service in "${rollback_services[@]}"; do
+      for rollback_service in ${rollback_services[@]+"${rollback_services[@]}"}; do
         [[ "$rollback_service" == "mailbox-broker" ]] || filtered_services+=("$rollback_service")
       done
-      rollback_services=("${filtered_services[@]}")
+      rollback_services=(${filtered_services[@]+"${filtered_services[@]}"})
       compose rm --force --stop mailbox-broker || true
     fi
 
-    if ! compose pull "${rollback_services[@]}"; then rollback_status=1; fi
-    if ! compose up -d "${rollback_services[@]}"; then rollback_status=1; fi
+    if ! compose pull ${rollback_services[@]+"${rollback_services[@]}"}; then rollback_status=1; fi
+    if ! compose up -d ${rollback_services[@]+"${rollback_services[@]}"}; then rollback_status=1; fi
     if ! HEALTH_CHECK_REQUIRED_WORKERS="$required_workers" PRODUCTION_ENV_FILE="$COMPOSE_ENV_FILE" "$SCRIPT_DIR/health-check.sh"; then rollback_status=1; fi
-    if ! verify_running_images "$previous_tag" "${rollback_services[@]}"; then rollback_status=1; fi
+    if ! verify_running_images "$previous_tag" ${rollback_services[@]+"${rollback_services[@]}"}; then rollback_status=1; fi
     if ((rollback_status != 0)); then
       printf 'rollback failed after original deployment failure (status %s)\n' "$status" >&2
     else
