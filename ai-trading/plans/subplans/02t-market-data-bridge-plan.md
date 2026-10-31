@@ -17,7 +17,7 @@ Related: [02b](02b-desk-market-data-options.md) §4d (the owner decisions this p
 ## 1. Goals and non-goals
 
 **Goals**
-- `ai-trading/market-data` becomes an independent **bridge API** that hides the data provider: a Go service speaking gRPC (and the Connect protocol on the same port, §3.1).
+- `ai-trading/packages/market-data` is the independent **bridge API** that hides the data provider: a Go service speaking gRPC (and the Connect protocol on the same port, §3.1). (Moved from `ai-trading/market-data/` to `packages/` in the 2026-11-01 layout cleanup, which also moved `packages/consensus/`; images, compose services, and Firestore profile names are unchanged.)
 - It serves three data classes: equity quotes, equity bars (closed bars only), and option-chain snapshots. Every answer says which provider served it, at what quality, and why it fell back.
 - A provider toggle on `trading.tobytran.dev` (Settings) picks the preferred provider per data class. The bridge validates the choice, falls back when the chosen provider is unavailable, and the UI shows what is actually serving.
 - The Desk keeps its adapter pattern: callers still see only `DataSources` (02j §7). The bridge enters as one more registry provider, `bridge`.
@@ -76,10 +76,10 @@ Typical day, after B4: before the ritual, quotes come from Longbridge (realtime,
 - **Layout** (sketch; nothing is created in this run):
 
   ```
-  ai-trading/market-data/
+  ai-trading/packages/market-data/
     server.py metrics.py sec.py alpaca.py ...   01m FD-compat facade (Python, stdlib), kept (§4.3)
     bridge/
-      go.mod                        module .../ai-trading/market-data/bridge
+      go.mod                        module .../ai-trading/packages/market-data/bridge
       proto/marketdata/v1/marketdata.proto
       gen/                          buf-generated Go, committed; CI checks for drift
       cmd/bridge/main.go            flags: --role=bridge|edge
@@ -92,7 +92,7 @@ Typical day, after B4: before the ritual, quotes come from Longbridge (realtime,
 - **Auth:** a bearer token checked in an interceptor with a constant-time compare, like 01m's `X-API-Key`. `MARKET_DATA_BRIDGE_TOKEN` grants reads. `MARKET_DATA_BRIDGE_ADMIN_TOKEN` is also required for `SetRouting`. `IBKR_EDGE_TOKEN` guards the edge. Tokens and query strings are never logged.
 - **Health:** a plain `GET /healthz` reports the process only, never provider health, so a gateway that is off never restarts the container.
 
-### 3.2 Proto sketch (the real file is `market-data/bridge/proto/marketdata/v1/marketdata.proto`, built at B0)
+### 3.2 Proto sketch (the real file is `packages/market-data/bridge/proto/marketdata/v1/marketdata.proto`, built at B0)
 
 ```proto
 syntax = "proto3";
@@ -376,7 +376,7 @@ Every stage ends with its gates green plus the **dual-agent post-phase walkthrou
 
 ### 7.1 Deploy shape (B0)
 
-- `ai-trading/deploy/docker-bake.hcl`: target `market-data-bridge` (context `ai-trading/market-data/bridge`, tag `ai-trading-market-data-bridge`), added to the default group. `docker-bake.ci.hcl` gets its GHA cache scope.
+- `ai-trading/deploy/docker-bake.hcl`: target `market-data-bridge` (context `ai-trading/packages/market-data/bridge`, tag `ai-trading-market-data-bridge`), added to the default group. `docker-bake.ci.hcl` gets its GHA cache scope.
 - `ai-trading/deploy/production/docker-compose.yml`:
   - Service `market-data-bridge`: `env_file` `market-data-bridge.env`, `read_only: true`, `no-new-privileges`, `mem_limit: 128m`, healthcheck `["CMD", "/bridge", "healthcheck"]`.
   - Service `bridge-tailscale` (from B1). The bridge uses `network_mode: service:bridge-tailscale`, and the sidecar joins a new internal network `marketdata`, shared with `api`, `scheduler`, and (B5) `market-data`. No host port is published.

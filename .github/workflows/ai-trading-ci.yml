@@ -71,15 +71,15 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ai-trading/market-data/bridge
+        working-directory: ai-trading/packages/market-data/bridge
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-go@v7
         with:
-          go-version-file: ai-trading/market-data/bridge/go.mod
-          cache-dependency-path: ai-trading/market-data/bridge/go.sum
+          go-version-file: ai-trading/packages/market-data/bridge/go.mod
+          cache-dependency-path: ai-trading/packages/market-data/bridge/go.sum
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: 1.75.0
@@ -95,8 +95,8 @@ jobs:
       - name: buf breaking against origin/dev
         run: |
           git fetch --no-tags --depth=1 origin dev:refs/remotes/origin/dev
-          if git cat-file -e origin/dev:ai-trading/market-data/bridge/buf.yaml 2>/dev/null; then
-            buf breaking --against "$(git rev-parse --show-toplevel)/.git#ref=refs/remotes/origin/dev,subdir=ai-trading/market-data/bridge"
+          if git cat-file -e origin/dev:ai-trading/packages/market-data/bridge/buf.yaml 2>/dev/null; then
+            buf breaking --against "$(git rev-parse --show-toplevel)/.git#ref=refs/remotes/origin/dev,subdir=ai-trading/packages/market-data/bridge"
           else
             echo "origin/dev has no bridge module yet (first introduction): nothing to compare against"
           fi
@@ -188,7 +188,7 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
           uv run pytest -q
-          uv run pytest -q ../consensus/test_server.py
+          uv run pytest -q ../packages/consensus/test_server.py
       - name: Contracts (Zod, fixtures, JSON Schema drift)
         working-directory: ai-trading/packages/family-desk/contracts
         run: |
@@ -329,7 +329,7 @@ jobs:
           "$RUNNER_TEMP/vibe-eval-venv/bin/python" -m pip install --disable-pip-version-check pytest==9.1.1 httpx==0.28.1
           "$RUNNER_TEMP/vibe-eval-venv/bin/python" -m pytest ai-trading/tools/vibe-eval -q
       - name: Market data tests
-        working-directory: ai-trading/market-data
+        working-directory: ai-trading/packages/market-data
         run: python3 -m unittest discover -v
       - name: Worker tests
         run: |

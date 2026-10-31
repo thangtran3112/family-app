@@ -252,13 +252,14 @@ The complete, verbatim upstream LICENSE (`ai-trading/packages/trading-agents/LIC
    limitations under the License.
 ```
 
-## `ai-trading/market-data/` (ours; open-source lane)
+## `ai-trading/packages/market-data/` (ours; open-source lane)
 
-Not a third party: `alpaca.py` was moved here from `ai-trading/market-data/` per
-the Phase 2 reuse map (02a §11, "move"). Same author, no license notice needed.
+Not a third party: `alpaca.py` moved here from `ai-trading/market-data/` per
+the Phase 2 reuse map (02a §11, "move") and into `packages/` per the 2026-11-01
+layout cleanup. Same author, no license notice needed.
 See `src/ai_trading_common/providers/alpaca.py`'s module docstring for what changed.
 
-`sec_edgar.py` also compares its design with `ai-trading/market-data/sec.py`
+`sec_edgar.py` also compares its design with `ai-trading/packages/market-data/sec.py`
 (ours; left untouched) and keeps that file's ticker-to-CIK lookup (including
 the `BRK.B` -> `BRK-B` mapping) and its "404 means nothing here" handling,
 alongside TradingAgents' span classification and amendment rule above. Same
