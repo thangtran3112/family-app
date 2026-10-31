@@ -70,7 +70,7 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 
 ## Git Safety
 
-- **A git worktree is the default and required place for any coding change** (owner rule, 2026-10-31; root `AGENTS.md`). One worktree per task under `.worktrees/`, on its own `feature/*` branch cut from the latest `origin/dev`. Every harness and agent — Claude Code, opencode, subagents, and operators — follows this.
+- **A git worktree is the default and required place for any coding change** (owner rule, 2026-10-31; root `AGENTS.md`). One worktree per task under `.worktrees/`, on its own `feature/*` branch cut from `origin/dev` after a `git fetch origin`. Never cut it from `feature/toby` or another lane's branch. Every harness and agent — Claude Code, opencode, subagents, and operators — follows this.
 - The main checkout (`/Users/tobytran/personal/family-app`) is the integration and review checkout: it stays on `feature/toby` and is never edited. Uncommitted or untracked files there belong to another session; never stage, commit, stash, discard, or clean them up.
 - Before starting new work: `git fetch origin`, then cut the task's worktree branch from `origin/dev`.
 - Never commit directly on `dev` or `main`.
