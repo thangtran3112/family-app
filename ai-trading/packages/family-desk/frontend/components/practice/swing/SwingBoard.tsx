@@ -30,7 +30,7 @@ import {
   trustedSwingState,
   type PrepStep,
 } from "@/lib/replay/boardView";
-import { MAX_STARS, isStarred, peekDailyBars, peekOffsets, toggledStars, watchEmptyText } from "@/lib/replay/dayView";
+import { isStarred, peekDailyBars, peekOffsets, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingBoardTitle, swingDatesHidden } from "@/lib/replay/swing";
 import { formatBalance } from "@/lib/replay/threadView";
@@ -149,10 +149,6 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
   function star(symbol: string) {
     const next = toggledStars(list.watch, symbol);
-    if (next === null) {
-      setMessage(PRACTICE_COPY.dayStarsFull);
-      return;
-    }
     const request = ++latestStar.current;
     setMessage(null);
     setList((current) => ({ ...current, watch: next.map((name) => current.watch.find((item) => item.symbol === name) ?? starEntry(current, name)) }));
@@ -323,7 +319,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
             node: (
               <div className={dayStyles.rail}>
                 {list.watch.length === 0 ? (
-                  <p className={dayStyles.muted}>{watchEmptyText(MAX_STARS)}</p>
+                  <p className={dayStyles.muted}>{PRACTICE_COPY.dayWatchEmpty}</p>
                 ) : (
                   <ul className={dayStyles.watchList}>
                     {list.watch.map((entry) => (

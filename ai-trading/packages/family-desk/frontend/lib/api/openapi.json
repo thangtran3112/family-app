@@ -9081,10 +9081,6 @@
             "title": "Id",
             "type": "integer"
           },
-          "max_symbols": {
-            "title": "Max Symbols",
-            "type": "integer"
-          },
           "next_day": {
             "anyOf": [
               {
@@ -9153,7 +9149,6 @@
           "thread_id",
           "spec",
           "sessions",
-          "max_symbols",
           "days_opened",
           "day_offset",
           "filters",
