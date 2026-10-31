@@ -493,7 +493,7 @@ def patch_day_list(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Stars (at most five names from the list, each stamped with the day clock), notes and the self-rating."""
+    """Stars (at most 20 names from the list, each stamped with the day clock), notes and the self-rating."""
     _call(
         plan_mod.patch_day_list,
         db,

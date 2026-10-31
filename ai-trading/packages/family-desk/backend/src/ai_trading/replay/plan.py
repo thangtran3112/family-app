@@ -2,7 +2,7 @@
 
 Each practice day, her own filters build a candidate list for the past day she is about to replay
 (`screen.build_list`: the live screener fed from the blob cache and cut at the time she would have looked). She stars
-up to five names, practises one of them, and ends the day to see how every candidate moved from its list price.
+up to 20 names, practises one of them, and ends the day to see how every candidate moved from its list price.
 
 - **Walk forward.** `practice_plans` is the saved setup plus a cursor. Days open in order, one list at a time; the
   next day opens only after the current one has ended. Dates are returned and hidden by a render rule.
@@ -70,7 +70,7 @@ from ai_trading.screener.runner import source_symbols
 log = logging.getLogger(__name__)
 
 MAX_UNIVERSE = 250
-MAX_WATCH = 5  # the most names she can star in a day, and the most `maxSymbols` can be
+MAX_WATCH = 20  # the most names she can star in a day, and the most `maxSymbols` can be
 PREP_STALE = timedelta(minutes=5)  # a prep that has not reported for this long died with its process
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
@@ -145,7 +145,7 @@ def _swing() -> Any:
 
 def max_symbols(spec: dict[str, Any]) -> int:
     """The plan's cap on the names she may star and practise in one day. A plan saved without `maxSymbols` allows the
-    star cap; the contract allows 1 to 5."""
+    star cap; the contract allows 1 to 20."""
     return min(int(spec.get("maxSymbols") or MAX_WATCH), MAX_WATCH)
 
 

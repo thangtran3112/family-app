@@ -17,6 +17,7 @@ import {
   linkDayRows,
   startOutcome,
   threadHref,
+  threadOverviewHref,
   weekAction,
   weekSubtitle,
   weekTitle,
@@ -51,7 +52,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
   const router = useRouter();
   const { review } = week;
   const toDate = week.to_date === "yes";
-  const heading = weekHeading(week);
+  const heading = weekHeading(week, review.holds.filter((hold) => hold.status === "open").length);
 
   const tiles = useMemo(() => weekTiles(review, toDate), [review, toDate]);
   const series = useMemo(() => weekEquitySeries(review), [review]);
@@ -111,6 +112,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
     <div className={styles.screen}>
       <header className={styles.header}>
         <div className={styles.titleBlock}>
+          <Link href={threadOverviewHref(threadId)} className={styles.link}>{WEEK_TEXT.back}</Link>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{weekTitle(week)}</h1>
             <span className={`${styles.chip} ${toDate ? styles.chipOpen : ""}`}>{heading.badge}</span>
@@ -120,8 +122,17 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
           {heading.note !== null && <p className={styles.sub}>{heading.note}</p>}
           <p className={styles.sub}>{week.universe_label}</p>
         </div>
-        <Link href={threadHref(threadId)} className={styles.link}>{WEEK_TEXT.threadJournal}</Link>
+        {/* The way on sits beside the "Final" chip, not 1,770 px down under the tables and the notes (D-088). A final week's one way on is the ← Thread link. */}
+        <div className={styles.actions}>
+          <Link href={threadHref(threadId)} className={styles.link}>{WEEK_TEXT.threadJournal}</Link>
+          {action.kind === "start" ? (
+            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={start.busy} onClick={startWeek}>{action.label}</button>
+          ) : (
+            action.href !== null && <Link href={action.href} className={`${styles.button} ${styles.primary}`}>{action.label}</Link>
+          )}
+        </div>
       </header>
+      {start.message !== null && <p className={`${styles.alert} ${styles.alertBar}`} role="alert">{start.message}</p>}
 
       <div className={styles.center}>
         <section className={styles.section} aria-labelledby="week-summary-title">
@@ -198,15 +209,10 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
         </div>
 
         <footer className={styles.footer}>
-          <p className={styles.hint}>{week.footnote}</p>
-          <div className={styles.actions}>
-            {action.kind === "start" ? (
-              <button type="button" className={`${styles.button} ${styles.primary}`} disabled={start.busy} onClick={startWeek}>{action.label}</button>
-            ) : (
-              <Link href={action.href ?? threadHref(threadId)} className={`${styles.button} ${styles.primary}`}>{action.label}</Link>
-            )}
-          </div>
-          {start.message !== null && <p className={styles.alert} role="alert">{start.message}</p>}
+          <details className={styles.details}>
+            <summary className={styles.summary}>About these figures</summary>
+            <p className={styles.hint}>{week.footnote}</p>
+          </details>
         </footer>
       </div>
     </div>

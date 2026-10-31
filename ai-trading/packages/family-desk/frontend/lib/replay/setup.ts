@@ -124,6 +124,16 @@ const previousWeekday = (day: string): string => {
   return date.toISOString().slice(0, 10);
 };
 
+/** The last of `count` weekday sessions starting at `first` (holidays not modeled). */
+export function lastWeekday(first: string, count: number): string {
+  const date = new Date(`${first}T12:00:00Z`);
+  for (let left = count - 1; left > 0; ) {
+    date.setUTCDate(date.getUTCDate() + 1);
+    if (date.getUTCDay() !== 0 && date.getUTCDay() !== 6) left -= 1;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 /** The latest day a replay can open: today after the regular close plus the 15 minute data delay (4:15 PM ET), else the previous weekday. */
 export function latestReplayDay(now: Date): string {
   const iso = now.toISOString();

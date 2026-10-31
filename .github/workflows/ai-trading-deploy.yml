@@ -173,7 +173,7 @@ jobs:
           set: '*.cache-to='
           load: true
       - name: Build MiroFish static frontend for smoke tests
-        # smoke-test.sh all checks this export; same step as ai-trading-ci.yml.
+        # smoke-test.sh all checks this export.
         uses: docker/bake-action@v7
         env:
           TAG: ci
@@ -574,7 +574,7 @@ jobs:
       - name: Build MiroFish static frontend
         uses: docker/bake-action@v7
         with:
-          # Match PR CI: the local exporter must contain Vue assets only,
+          # The local exporter must contain Vue assets only,
           # not provenance.json (which the public uploader rejects).
           provenance: false
           files: |

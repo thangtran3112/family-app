@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { planCard } from "@/lib/replay/dayView";
 import type { PracticePlan } from "@/lib/replay/daily";
-import { swingGate } from "@/lib/replay/overviewView";
+import { planFinishedLine, swingGate } from "@/lib/replay/overviewView";
 import { swingCardView } from "@/lib/replay/swing";
 import type { ThreadSummary } from "@/lib/replay/threads";
 import { todayView } from "@/lib/replay/threadView";
@@ -24,17 +25,28 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
   const gate = swingGate(summary);
   const view = todayView(today, lastDay);
   const canReplace = !closed && thread.mode === "day" && planOpensIn(plan, thread);
+  // The plan's data is still being prepared (D-084): the action slot says so, and the card says nothing else about Day 1.
+  const preparing = canReplace && planCard(plan).action === "none";
+  const preparingHint = preparing ? planCard(plan).detail : null;
   // A thread with a plan and no day yet: nothing to resume, so it says what comes next instead of "no day open".
-  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread);
+  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread) && !preparing;
   const finished = swing?.action.kind === "none";
+  // A day plan whose last day has ended: its summary sits above the one action, "Start a new plan" (D-096).
+  const planDone = !closed && thread.mode === "day" && plan !== null && plan.thread_id === thread.id && plan.finished;
   const title = closed ? PRACTICE_COPY.threadClosedTitle : swing ? PRACTICE_COPY.overviewNext : view.label;
   const result = <ResultLine pnl={view.pnl} line={view.line} />;
 
   return (
-    <section className={styles.panel} aria-label="Practice day">
+    <section className={`${styles.panel} ${styles.nextStep}`} aria-label="Practice day">
       <h2 className={styles.panelTitle}>{title}</h2>
       {closed ? (
-        <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
+        <>
+          <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
+          <div className={styles.dayActions}>
+            <Link href={`/practice/journal?thread=${thread.id}`} className={hub.primaryLink}>{PRACTICE_COPY.threadOpenJournal}</Link>
+            <Link href="/practice" className={styles.secondaryLink}>{PRACTICE_COPY.threadStartNew}</Link>
+          </div>
+        </>
       ) : (
         <>
           <div className={styles.dayActions}>
@@ -49,12 +61,15 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
                 </div>
               )
             )}
-            {canReplace && <button type="button" className={hub.button} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</button>}
+            {canReplace && <button type="button" className={hub.button} disabled={preparing} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</button>}
           </div>
           {gate && <p className={hub.muted}>{gate.locked}</p>}
           {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}
+          {planDone && <p className={styles.dayLine}>{planFinishedLine(thread)}</p>}
           <p className={styles.dayLine}>
-            {fresh ? (
+            {preparing ? (
+              preparingHint
+            ) : fresh ? (
               PRACTICE_COPY.threadPageFresh
             ) : swing ? (
               <>
@@ -65,7 +80,6 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
               result
             )}
           </p>
-          {swing?.notice && <p className={hub.swingNotice} role="status">{swing.notice}</p>}
         </>
       )}
     </section>

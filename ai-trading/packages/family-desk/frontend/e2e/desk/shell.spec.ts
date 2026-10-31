@@ -25,6 +25,15 @@ test("the View chips list Technical first, carry a caption and say where each on
   await expect(chips.nth(1)).toBeFocused();
 });
 
+// D-109 / S-06: the shell owns the page's one `main` landmark; a screen inside it is a plain div.
+test("every route has exactly one main landmark, and it is the shell's content region", async ({ page }) => {
+  for (const path of ["/", "/practice", "/screener", "/strategies", "/technicals", "/settings"]) {
+    await openDesk(page, path);
+    await expect(page.locator("main"), path).toHaveCount(1);
+    await expect(page.locator("main#main-content"), path).toHaveCount(1);
+  }
+});
+
 test("the top bar, left rail and status bar show the Technical chrome at the seed clock", async ({ page }) => {
   const compact = test.info().project.name === "desktop-1180";
   await openDesk(page, "/");
@@ -215,4 +224,32 @@ test("the chart's right rail: open at 1440, a collapsed strip with a drawer at 1
     await expect(rail.getByText(COPY.ordersOff, { exact: true })).toBeVisible();
   }
   await expectCleanScreen(page);
+});
+
+// Fix wave 5S, stream 1: the top bar and the 404.
+test("the search keeps its room beside two pills, the market pill drops the repeated prefix, and no top-bar control overflows (D-105, D-107)", async ({ page }) => {
+  await openDesk(page, "/screener");
+  const top = page.locator(".dk-top");
+  const bar = await top.evaluate((node) => ({ over: node.scrollWidth > node.clientWidth + 1 }));
+  expect(bar.over, "the bar does not overflow").toBe(false);
+  if (test.info().project.name === "desktop-1440") {
+    const search = (await top.getByRole("combobox", { name: "Search symbols" }).boundingBox())!;
+    expect(search.width, "the box keeps room for its placeholder").toBeGreaterThanOrEqual(160);
+    await expect(top.getByTitle(/^Market closed · opens /), "the pill keeps the whole text as its title").toBeVisible();
+    await expect(top.getByTitle(/^Market closed · opens /)).not.toContainText("Market closed");
+  }
+});
+
+test("a nav link's focus ring is drawn inside the bar, and the 404 links to Practice (D-108, D-135)", async ({ page }) => {
+  await openDesk(page, "/screener");
+  const link = page.locator(".dk-top").getByRole("navigation", { name: "Primary navigation" }).getByRole("link").first();
+  await link.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(link).toBeFocused();
+  await expect(link).toHaveCSS("outline-offset", "-2px");
+
+  await page.goto("/journal?thread=2");
+  await expect(page.getByRole("heading", { name: "This page does not exist", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Practice" })).toHaveAttribute("href", "/practice");
 });

@@ -2,7 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
-import { THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter } from "./hub-helpers";
+import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
 
 // Switching names on the shared day clock (02o-b2). The stub holds TSLA on Fri 2026-09-25, and three stand-in names that
 // replay TSLA's day at a fraction of its prices (`replay/fixture.py`), so one daily list holds four names. Every session
@@ -46,13 +46,14 @@ async function startTwoNamePlan(page: Page, context: BrowserContext) {
   };
   await saveFilter(context, all);
   const dialog = await openNewPlan(page);
-  await fillNewPlan(dialog, { filter: "Every name" }); // this spec is not about stops (D-060): Stop on every entry is No
+  await fillNewPlan(dialog, { filter: "Every name" });
   // The plan's own limit on names: three is the default, this plan allows two.
   const names = dialog.getByRole("group", { name: PRACTICE_COPY.planMaxSymbols });
   await expect(names.getByRole("button", { name: "3", exact: true })).toHaveAttribute("aria-pressed", "true");
   await names.getByRole("button", { name: "2", exact: true }).click();
-  await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanSubmit, exact: true }).click();
+  await dialog.getByRole("button", { name: START_BUTTON }).click();
   await page.waitForURL(THREAD_URL, { timeout: 90_000 });
+  await setRiskPlan(context, threadIdOf(page)); // this spec is not about stops (D-060): Stop on every entry is No
   await openFirstDay(page);
 }
 
@@ -141,7 +142,10 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("row", { name: /PANW/ }).getByRole("button", { name: "Practice PANW" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Your plan allows 2 names a day · you are on TSLA and LRCX" })).toBeVisible();
     await expect(page.getByTestId("names-today")).toHaveText("2 of 2 names practiced today");
-    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Practice LRCX" })).toHaveText("Resume"); // a name in hand resumes
+    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Practice LRCX" })).toHaveText("Switch"); // a name in hand switches back
+    // Resume is the day's, never a name's: no per-name button says Resume, and the header resumes the whole day on its shared clock.
+    await expect(page.getByRole("button", { name: /^Resume/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /^Resume Day \d+$/ })).toBeVisible();
     await expectCleanScreen(page);
 
     // The whole day ends together: both names score.
@@ -190,7 +194,7 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
 
     // The clock moves on: the old scan says it is older, and a new scan is its own.
-    await page.getByRole("button", { name: "Practice TSLA" }).first().click(); // the name in hand: its button reads Resume
+    await page.getByRole("button", { name: "Practice TSLA" }).first().click(); // the name in hand: its button reads Switch
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await page.keyboard.press("ArrowRight");

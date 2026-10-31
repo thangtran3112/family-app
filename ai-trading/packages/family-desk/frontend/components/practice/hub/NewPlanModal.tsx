@@ -1,40 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SwingSetupSection } from "@/components/practice/swing/SwingSetupSection";
 import { useUniversePreview } from "@/components/practice/swing/useUniversePreview";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
-import { ThreadPlanFields } from "@/components/practice/thread/ThreadPlanFields";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { savePlanPatiently } from "@/lib/desk/patience";
 import { createThread, loadDaily, loadUniverseDays, openNextDay } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { hubSwingText, startBlockedBy, type ThreadMode } from "@/lib/replay/hubSwing";
-import { defaultPlanDraft, effectiveFirstDay, planProblems, validatePlanDraft, type PlanDraft, type PlanProblems } from "@/lib/replay/planSetup";
-import { problemMessage } from "@/lib/replay/setup";
+import { defaultPlanDraft, effectiveFirstDay, livePlanProblems, planProblems, startLabel, validatePlanDraft, type PlanDraft, type PlanProblems } from "@/lib/replay/planSetup";
+import { latestReplayDay, problemMessage } from "@/lib/replay/setup";
 import { defaultSwingDraft, swingProblems, validateSwingDraft, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
-import { MAX_STARTING_BALANCE, MIN_STARTING_BALANCE, defaultThreadDraft, threadProblems, validateThreadDraft, type ThreadDraft } from "@/lib/replay/threadSetup";
+import { defaultThreadDraft, formatBalanceInput, threadProblems, validateThreadDraft, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
 import type { PracticeThread } from "@/lib/replay/threads";
 import { formatWhole, threadName } from "@/lib/replay/threadView";
 import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-v1";
 import { DayPlanFields } from "./DayPlanFields";
+import { Cell, Segments, noteId } from "./FormCells";
 import styles from "./hub.module.css";
 import landing from "./landing.module.css";
 import modal from "./newplan.module.css";
 
-type Problems = SwingProblems & PlanProblems;
+type Problems = SwingProblems & PlanProblems & ThreadProblems;
 /** Where a failed submit stopped: starting the thread or saving its plan. */
 type Stage = "thread" | "plan";
 
 /**
- * The New plan modal (02r2, Paper mock X9Y-0): one form for the thread (a simulated starting balance and its risk plan)
- * and the daily plan (filters, days, list time, window, armed strategies). "Populate data" starts the thread, saves the
- * plan, which starts preparing the data and opens Day 1, then `onSaved` takes her to the thread page. Swing (02p) swaps the daily
- * fields for its universe and calendar and starts the thread from the live universe table.
+ * The New plan modal (02r2, Paper mock X9Y-0; redesigned in fix wave 5S, D-075 and D-076): a modal around three things, the
+ * filter picker, the day and window settings, and one button that starts the practice. The pretend balance and the mode sit
+ * on top. "Start 20-day practice" starts the thread, saves the plan, which starts preparing the data and opens Day 1, then
+ * `onSaved` takes her to the thread page. Swing (02p) swaps the daily fields for its universe and calendar and starts the
+ * thread from the live universe table. The risk plan and the armed strategies are not asked here (D-076): the thread takes
+ * the server's defaults, and its risk plan is edited in the journal.
  *
  * Any number of threads of either mode may be active, so Day and Swing are always offered. With `thread` set the modal only
- * replaces that day thread's plan: its balance and risk plan stay with it. Nothing here reaches IBKR.
+ * replaces that day thread's plan: its balance and risk plan stay with it. The settings are checked as she edits, and a
+ * form she has edited asks before it is thrown away (M-05). Nothing here reaches IBKR.
  */
 export function NewPlanModal({
   thread = null,
@@ -47,8 +50,12 @@ export function NewPlanModal({
   onSaved: (threadId: number) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [now] = useState(() => new Date());
-  const [threadDraft, setThreadDraft] = useState<ThreadDraft>(defaultThreadDraft);
+  const [threadDraft, setThreadDraft] = useState<ThreadDraft>(() => {
+    const fresh = defaultThreadDraft();
+    return { ...fresh, startingBalance: formatBalanceInput(fresh.startingBalance) }; // "50,000" from the first look (M-07)
+  });
   const [plan, setPlan] = useState<PlanDraft>(() => defaultPlanDraft(now));
   const [swingDraft, setSwingDraft] = useState<SwingDraft>(() => defaultSwingDraft(now));
   const [problems, setProblems] = useState<Problems>({});
@@ -61,12 +68,21 @@ export function NewPlanModal({
   // Once the Desk has recorded 20 finished days of its universe, a new plan starts on the first one (02o-b2) unless she has picked a day.
   const recorded = useDeskQuery("practice:universe-days", (signal) => loadUniverseDays({}, { signal }));
   const [dayPicked, setDayPicked] = useState(false);
-  const firstDay = effectiveFirstDay(plan.firstDay, dayPicked, recorded.data?.first_day_default ?? null);
+  const [swingDayPicked, setSwingDayPicked] = useState(false);
+  const recordedDay = recorded.data?.first_day_default ?? null;
+  const firstDay = effectiveFirstDay(plan.firstDay, dayPicked, recordedDay);
+  // A swing thread starts on the same recorded morning (M-04): the guess three months back can lie outside the data.
+  const swingFirstDay = effectiveFirstDay(swingDraft.firstDay, swingDayPicked, recordedDay);
+  const swingNow = useMemo<SwingDraft>(() => (swingFirstDay === swingDraft.firstDay ? swingDraft : { ...swingDraft, firstDay: swingFirstDay }), [swingDraft, swingFirstDay]);
+  // The form as it opened: anything else is an edit, and closing it asks first.
+  const snapshot = JSON.stringify({ threadDraft, plan, swingDraft, dayPicked, swingDayPicked });
+  const [pristine] = useState(snapshot);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
   const planOnly = thread !== null;
   const mode: ThreadMode = planOnly ? "day" : threadDraft.mode;
   const swing = mode === "swing";
-  const preview = useUniversePreview(swingDraft, swing, now);
+  const preview = useUniversePreview(swingNow, swing, now);
   const blocker = swing ? startBlockedBy({ preview: preview.preview, fresh: preview.fresh, problems: preview.problems }) : null;
   const noFilters = !swing && plan.filterIds.length === 0;
 
@@ -79,16 +95,32 @@ export function NewPlanModal({
     return () => previous?.focus();
   }, []);
 
-  // An edit clears the messages of the last try; the live swing ones (first day, sessions, target) come from the preview.
+  // Escape, Close and a click on the dimmed page all ask first once the form has been edited (M-05).
+  const requestClose = () => {
+    if (submitting) return;
+    if (snapshot !== pristine) setConfirmingDiscard(true);
+    else onClose();
+  };
+
+  // An edit clears the messages of the last try; the live ones (first day, days, balance, the swing universe) are read from the draft.
+  const editThread = (next: ThreadDraft) => {
+    setThreadDraft(next);
+    setProblems({});
+  };
+  const editPlan = (next: PlanDraft) => {
+    setPlan(next);
+    setProblems({});
+  };
   const editSwing = (next: SwingDraft) => {
+    if (next.firstDay !== swingFirstDay) setSwingDayPicked(true);
     setSwingDraft(next);
     setProblems({});
   };
 
   async function submit() {
-    const day = swing ? null : validatePlanDraft({ ...plan, firstDay });
+    const day = swing ? null : validatePlanDraft({ ...plan, firstDay }, now);
     const started = planOnly || swing ? null : validateThreadDraft({ ...threadDraft, mode: "day" });
-    const swingResult = swing ? validateSwingDraft(threadDraft, swingDraft, preview.preview?.rows ?? [], now) : null;
+    const swingResult = swing ? validateSwingDraft(threadDraft, swingNow, preview.preview?.rows ?? [], now) : null;
     const found: Problems = {
       ...(day && !day.ok ? day.problems : {}),
       ...(started && !started.ok ? started.problems : {}),
@@ -140,16 +172,25 @@ export function NewPlanModal({
 
   const typed = Number(threadDraft.startingBalance.replaceAll(",", ""));
   const shownBalance = threadDraft.startingBalance.trim() === "" || !Number.isFinite(typed) ? DEFAULT_STARTING_BALANCE : typed;
-  const shown: Problems = swing ? { ...preview.problems, ...problems } : problems;
-  const formError = failure ?? shown.form ?? null;
-  const riskFields = <ThreadPlanFields draft={threadDraft} onDraft={setThreadDraft} problems={shown} idPrefix="new-plan" perWeek={swing} />;
+  // What is wrong, as she edits (the draft read now) with what the last try or the server said on top.
+  const liveThread: ThreadProblems = (() => {
+    if (planOnly) return {};
+    const result = validateThreadDraft({ ...threadDraft, mode: "day" });
+    return result.ok ? {} : result.problems;
+  })();
+  const live: Problems = { ...liveThread, ...(swing ? preview.problems : livePlanProblems({ ...plan, firstDay }, now)) };
+  const shown: Problems = { ...live, ...problems };
+  const { form: formProblem, ...fieldProblems } = shown;
+  const formError = failure ?? formProblem ?? null;
+  const echo = Object.values(fieldProblems).find((text) => text) ?? null;
+  // Why Start is off, in the footer: a problem first, then what is still missing. null means it can start.
+  const held = echo ?? (swing ? blocker : noFilters ? PRACTICE_COPY.planSaveFilterFirst : null);
   const note = swing
-    ? (blocker ?? hubSwingText("startsWith", { balance: formatWhole(shownBalance), n: preview.preview?.rows.length ?? 0 }))
-    : noFilters
-      ? PRACTICE_COPY.planSaveFilterFirst
-      : planOnly
-        ? PRACTICE_COPY.threadPlanFrom
-        : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
+    ? hubSwingText("startsWith", { balance: formatWhole(shownBalance), n: preview.preview?.rows.length ?? 0 })
+    : planOnly
+      ? PRACTICE_COPY.threadPlanFrom
+      : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
+  const status = confirmingDiscard ? PRACTICE_COPY.newPlanDiscardTitle : still ? PRACTICE_COPY.planStillWorking : (held ?? note);
 
   return (
     <dialog
@@ -158,10 +199,11 @@ export function NewPlanModal({
       aria-labelledby="new-plan-title"
       onCancel={(event) => {
         event.preventDefault();
-        if (!submitting) onClose();
+        if (confirmingDiscard) setConfirmingDiscard(false); // Escape on the question keeps the form
+        else requestClose();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget && !submitting) onClose();
+        if (event.target === event.currentTarget) requestClose();
       }}
     >
       <form
@@ -170,112 +212,105 @@ export function NewPlanModal({
         className={modal.dialogForm}
         onSubmit={(event) => {
           event.preventDefault();
-          void submit();
+          if (held === null && !submitting && !confirmingDiscard) void submit();
         }}
       >
         <header className={modal.dialogHead}>
           <h2 id="new-plan-title" className={modal.dialogTitle}>{planOnly ? practiceText("landingNewPlanFor", { name: threadName(thread) }) : PRACTICE_COPY.newPlanTitle}</h2>
-          <button type="button" className={styles.button} disabled={submitting} onClick={onClose}>{PRACTICE_COPY.newPlanClose}</button>
+          <button ref={closeRef} type="button" className={styles.button} disabled={submitting} onClick={requestClose}>{PRACTICE_COPY.newPlanClose}</button>
         </header>
 
         <div className={modal.dialogBody}>
-          <p className={styles.muted}>{planOnly ? PRACTICE_COPY.newPlanIntroPlan : swing ? PRACTICE_COPY.newPlanSwingNote : PRACTICE_COPY.newPlanIntroThread}</p>
+          <p className={modal.help}>{planOnly ? PRACTICE_COPY.newPlanIntroPlan : swing ? PRACTICE_COPY.newPlanSwingNote : PRACTICE_COPY.newPlanIntroThread}</p>
+          <p className={modal.help}>{PRACTICE_COPY.newPlanFooter}</p>
 
           {!planOnly && (
-            <div className={styles.threadTopRow}>
-              <div className={styles.field}>
-                <label htmlFor="new-plan-balance" className={styles.cap}>{PRACTICE_COPY.threadStartingBalance}</label>
+            <div className={modal.topRow}>
+              <Cell
+                id="new-plan-balance"
+                label={PRACTICE_COPY.threadStartingBalance}
+                aside={<SimulatedBadge />}
+                note={PRACTICE_COPY.threadBalanceHint}
+                error={shown.startingBalance}
+                reserve
+              >
                 <div className={styles.moneyBox} data-invalid={shown.startingBalance ? "true" : undefined}>
-                  <span aria-hidden="true" className={styles.hint}>$</span>
+                  <span aria-hidden="true" className={modal.help}>$</span>
                   <input
                     id="new-plan-balance"
-                    type="number"
+                    type="text"
                     inputMode="numeric"
-                    min={MIN_STARTING_BALANCE}
-                    max={MAX_STARTING_BALANCE}
-                    step={1}
                     autoComplete="off"
                     className={styles.moneyInput}
                     value={threadDraft.startingBalance}
                     aria-invalid={shown.startingBalance ? true : undefined}
-                    aria-describedby={shown.startingBalance ? "new-plan-balance-error" : undefined}
-                    onChange={(event) => setThreadDraft({ ...threadDraft, startingBalance: event.target.value })}
+                    aria-describedby={noteId("new-plan-balance")}
+                    onChange={(event) => editThread({ ...threadDraft, startingBalance: event.target.value })}
+                    onBlur={() => editThread({ ...threadDraft, startingBalance: formatBalanceInput(threadDraft.startingBalance) })}
                   />
-                  <SimulatedBadge />
                 </div>
-                {shown.startingBalance && <p id="new-plan-balance-error" role="alert" className={styles.fieldError}>{shown.startingBalance}</p>}
-              </div>
-              <div className={styles.field}>
-                <span id="new-plan-mode-label" className={styles.cap}>{PRACTICE_COPY.threadMode}</span>
-                <div role="group" aria-labelledby="new-plan-mode-label" className={styles.segmented}>
-                  <button
-                    type="button"
-                    className={styles.segment}
-                    aria-pressed={mode === "day"}
-                    onClick={() => setThreadDraft({ ...threadDraft, mode: "day" })}
-                  >
-                    {PRACTICE_COPY.threadModeDay}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.segment}
-                    aria-pressed={swing}
-                    onClick={() => setThreadDraft({ ...threadDraft, mode: "swing" })}
-                  >
-                    {PRACTICE_COPY.swingModeLabel}
-                  </button>
-                </div>
-              </div>
+              </Cell>
+              <Cell id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
+                <Segments
+                  id="new-plan-mode"
+                  value={mode}
+                  options={[{ value: "day", label: PRACTICE_COPY.threadModeDay }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
+                  onChange={(next) => editThread({ ...threadDraft, mode: next })}
+                />
+              </Cell>
             </div>
           )}
 
           {swing ? (
-            <SwingSetupSection draft={swingDraft} onDraft={editSwing} preview={preview} problems={shown} now={now}>
-              {riskFields}
-            </SwingSetupSection>
+            <SwingSetupSection draft={swingNow} onDraft={editSwing} preview={preview} problems={shown} now={now} />
           ) : (
-            <>
-              <DayPlanFields
-                draft={plan}
-                onDraft={setPlan}
-                problems={shown}
-                firstDay={firstDay}
-                firstDayNote={recorded.data?.first_day_note ?? null}
-                onFirstDay={(day) => {
-                  setDayPicked(true);
-                  setPlan({ ...plan, firstDay: day });
-                }}
-              />
-              {!planOnly && (
-                <fieldset className={styles.group}>
-                  <legend className={styles.legend}>{PRACTICE_COPY.newPlanRiskTitle}</legend>
-                  <p className={styles.hint}>{PRACTICE_COPY.threadNewHint}</p>
-                  {riskFields}
-                </fieldset>
-              )}
-            </>
+            <DayPlanFields
+              draft={plan}
+              onDraft={editPlan}
+              problems={shown}
+              firstDay={firstDay}
+              firstDayNote={recorded.data?.first_day_note ?? null}
+              maxDay={latestReplayDay(now)}
+              onFirstDay={(day) => {
+                setDayPicked(true);
+                editPlan({ ...plan, firstDay: day });
+              }}
+            />
           )}
 
-          {still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
-          {formError && <p role="alert" className={styles.fieldError}>{formError}</p>}
-          {startedId !== null && failure !== null && <p className={styles.hint}>{PRACTICE_COPY.newPlanThreadKept}</p>}
+          {formError && <p role="alert" className={modal.fieldError}>{formError}</p>}
+          {startedId !== null && failure !== null && <p className={modal.help}>{PRACTICE_COPY.newPlanThreadKept}</p>}
         </div>
 
         <footer className={modal.dialogFoot}>
-          <div className={modal.footNotes}>
-            <p id="new-plan-note" className={styles.hint}>{note}</p>
-            <p className={styles.hint}>{PRACTICE_COPY.newPlanFooter}</p>
-          </div>
-          <button
-            type="submit"
-            className={`${styles.primary} ${modal.submit}`}
-            disabled={submitting || noFilters || blocker !== null}
-            aria-busy={submitting || undefined}
-            aria-describedby="new-plan-note"
-          >
-            {submitting && <span className={landing.spinner} aria-hidden="true" />}
-            {swing ? (submitting ? PRACTICE_COPY.planSubmitting : PRACTICE_COPY.swingStartThread) : submitting ? PRACTICE_COPY.newPlanSubmitting : PRACTICE_COPY.newPlanSubmit}
-          </button>
+          <p id="new-plan-note" role="status" className={modal.status}>{status}</p>
+          {confirmingDiscard ? (
+            <div className={modal.discard}>
+              <button
+                type="button"
+                className={styles.button}
+                autoFocus
+                onClick={() => {
+                  setConfirmingDiscard(false);
+                  closeRef.current?.focus();
+                }}
+              >
+                {PRACTICE_COPY.newPlanDiscardKeep}
+              </button>
+              <button type="button" className={styles.button} onClick={onClose}>{PRACTICE_COPY.newPlanDiscard}</button>
+            </div>
+          ) : (
+            <button
+              type="submit"
+              className={`${styles.primary} ${modal.submit}`}
+              aria-disabled={held !== null || submitting || undefined}
+              aria-busy={submitting || undefined}
+              aria-describedby="new-plan-note"
+            >
+              {submitting && <span className={landing.spinner} aria-hidden="true" />}
+              {submitting ? PRACTICE_COPY.newPlanSubmitting : startLabel(swing ? swingNow.sessions : plan.sessions, swing)}
+            </button>
+          )}
         </footer>
       </form>
     </dialog>

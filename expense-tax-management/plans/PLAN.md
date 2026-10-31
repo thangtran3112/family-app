@@ -11,7 +11,7 @@
 - VPS encrypted backup/restore tooling merged (#13); production activation (bucket/IAM provisioning, first real backup, operator restore rehearsal) is operator-only and pending.
 - Execute Phase 3D-A, Phase 3D-B, then Phase 3D-C only after Phase 3C completes.
 - Work on `feature/toby` from current `origin/dev`; create a separate worktree only when explicitly requested.
-- Merge only through a pull request to protected `dev`; required quality CI must pass. Integration CI is advisory and must be reported when red.
+- Merge only through a pull request to protected `dev`. No GitHub Actions job runs the suites (2026-10-31, see [ROADMAP.md](ROADMAP.md)): run the quality check locally and report it, and report a red integration run (`pnpm verify:phase-0n`).
 - `main` remains production-only. Merges to `dev` never deploy production.
 - Read `expense-tax-management/AGENTS.md` before implementation.
 - Ordered owner runbook for activating everything below in production: [production-activation-runbook.md](production-activation-runbook.md).
@@ -57,7 +57,7 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 ## Completed Phases
 
 - **Phase 0 - Core baseline:** TypeScript service rebaseline, Personal/Business/tax domain, plans and entitlements, Foundry catalog and quotas, Temporal worker, OCR, uploads, reports/exports, forwarded intake, Capture/Office/Foundry frontends, and UI gates complete.
-- **Phase 1A - Polyglot CI:** Contracts, services, workers, and frontends run in GitHub Actions; integration coverage remains visible as a separate job.
+- **Phase 1A - Polyglot CI:** Contracts, services, workers, and frontends run in GitHub Actions; integration coverage remains visible as a separate job. Retired 2026-10-31: the workflow is deleted and these commands are local gates ([ROADMAP.md](ROADMAP.md)).
 - **Phase 1B - Private production auth/deployment:** Six immutable images deploy to VPS through GitHub OIDC/WIF and one Secret Manager bundle. Clerk identities, PostgreSQL mappings, signed webhook, and authenticated smoke verification complete.
 - **Phase 1C - Gateway hardening:** Cloudflare free-tier Tunnel/DNS, explicit host/path ingress, loopback-only origins, bounded application rate limits/body limits, security headers, and fail-closed route checks complete.
 - **Phase 1D - Protected development:** `dev` is default and protected; `feature/* -> dev` PRs require `Contracts, services, workers, frontends`; integration is advisory; production deployment remains `main`-only.
@@ -106,7 +106,7 @@ Foundry Web ----------> Foundry Service (Fastify/Zod/Kysely)
 
 ### 3D-C Operator Activation (additional, after the 3D-A/3D-B lists above)
 
-3D-C source is feature-complete and phase-verified against real PostgreSQL (`test/integration/app-domain-3d-c-mailbox.test.ts`, gated `PHASE_3D_C_T7_INTEGRATION=1`, wired into the zero-skip CI chain), but production ingestion stays inert until, in addition to the 3D-A/3D-B activation steps above:
+3D-C source is feature-complete and phase-verified against real PostgreSQL (`test/integration/app-domain-3d-c-mailbox.test.ts`, gated `PHASE_3D_C_T7_INTEGRATION=1`, wired into the zero-skip `verify:phase-0n` chain), but production ingestion stays inert until, in addition to the 3D-A/3D-B activation steps above:
 
 1. **Runtime migration Task 7 cutover** has happened — `MailboxMaterializeWorkflow`/`MailboxOcrReceiptWorkflow` run only on the TypeScript `services/workflow-worker`, never the legacy Python worker.
 2. **3D-A activation is complete** (real Clerk mailbox identities, token-vault bootstrap, Google OAuth client, `MAILBOX_FEATURE_ENABLED=true` secret bundle) and **3D-B's schedule reconcile** has run — 3D-C's `ingest` approval is the consumer of a `queued` candidate that only an active, scheduled scan ever produces.

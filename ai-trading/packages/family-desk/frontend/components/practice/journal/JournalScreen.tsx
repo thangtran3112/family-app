@@ -12,6 +12,7 @@ import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { adherenceHint, journalDatesHidden, noTradesText, signalRows, summaryTiles, swingJournalDay, tradeRows } from "@/lib/replay/journalView";
+import { sessionResumeHref } from "@/lib/replay/dayView";
 import { isSwingSession } from "@/lib/replay/playView";
 import type { ReplaySession } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
@@ -94,7 +95,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
       <header className={styles.header}>
         <h1 className={styles.title}>{spec.symbol} · {dayLabel} · attempt {session.attempt} · Practice journal</h1>
         <div className={styles.actions}>
-          {!ended && <Link href={`/practice/replay?id=${session.id}`} className={`${styles.button} ${styles.primary}`}>Resume</Link>}
+          {!ended && <Link href={sessionResumeHref(session)} className={`${styles.button} ${styles.primary}`}>Resume</Link>}
         </div>
       </header>
       {session.thread && <ThreadStrip thread={session.thread} />}

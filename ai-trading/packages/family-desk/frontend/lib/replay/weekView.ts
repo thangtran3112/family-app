@@ -36,11 +36,13 @@ export type WeekHeading = {
   note: string | null;
 };
 
-export function weekHeading(week: Pick<WeekOut, "label" | "to_date" | "status">): WeekHeading {
+export function weekHeading(week: Pick<WeekOut, "label" | "to_date" | "status">, openHolds = 0): WeekHeading {
   const toDate = week.to_date === "yes";
+  // A week can be final while holds ride on: the chip says so (D-130).
+  const final = openHolds > 0 ? practiceText("swingWeekFinalHolds", { n: openHolds, noun: openHolds === 1 ? "hold" : "holds" }) : PRACTICE_COPY.swingWeekFinal;
   return {
     title: week.label,
-    badge: toDate ? PRACTICE_COPY.swingWeekToDate : week.status === "closed" ? PRACTICE_COPY.swingWeekFinal : PRACTICE_COPY.swingWeekOpen,
+    badge: toDate ? PRACTICE_COPY.swingWeekToDate : week.status === "closed" ? final : PRACTICE_COPY.swingWeekOpen,
     note: toDate ? PRACTICE_COPY.swingWeekToDateNote : null,
   };
 }
@@ -344,7 +346,7 @@ export type WeekRowView = {
   label: string;
   /** "4 days" */
   days: string;
-  status: "Closed" | "Week to date";
+  status: "Final" | "Week to date";
   realized: string;
   realizedTone: Tone;
   equityChange: string;
@@ -359,7 +361,7 @@ export function weekRowView(row: WeekRow): WeekRowView {
     weekNo: row.week_no,
     label: row.label,
     days: `${row.days} ${row.days === 1 ? "day" : "days"}`,
-    status: row.status === "closed" ? "Closed" : "Week to date",
+    status: row.status === "closed" ? PRACTICE_COPY.swingWeekFinal : "Week to date",
     realized: formatDayResult(row.realized_usd),
     realizedTone: dayResultTone(row.realized_usd),
     equityChange: formatDayResult(row.equity_change_usd),

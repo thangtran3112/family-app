@@ -19,6 +19,10 @@ export const WEEK_TEXT = {
   threadJournal: "Thread journal",
   summaryTitle: "Week summary",
   backToThread: "Back to your thread",
+  back: "← Thread",
+  weeklyReviewTitle: "Weekly review",
+  dayThreadNoWeeks: "Weekly reviews are for swing threads. This is a day thread, so it has no weeks.",
+  legendClose: "Close of each day",
   backToDay: "Back to Day {n}",
   saveError: "Couldn't save your week notes",
   daysCaption: "Days this week",
@@ -51,6 +55,8 @@ export function parseWeekParams(thread: string | null, week: string | null): { t
 }
 
 export const threadHref = (threadId: number): string => `/practice/journal?thread=${threadId}`;
+/** The thread's page: where "Back to your thread" goes (the journal is `threadHref`). */
+export const threadOverviewHref = (threadId: number): string => `/practice/thread?id=${threadId}`;
 export const dayBoardHref = (dayListId: number): string => `/practice/day?id=${dayListId}`;
 
 // -- header ----------------------------------------------------------------------------------------------------
@@ -155,6 +161,13 @@ export function equityCaption(series: Pick<EquitySeries, "points" | "weekFirstDa
 }
 
 // -- load problems ---------------------------------------------------------------------------------------------
+
+/** A heading and one full sentence for a week that cannot open. The server's reason is a fragment ("swing threads only"), so a day thread gets its own sentence and any other reason is capitalised and ended. */
+export function weekMissingText(message: string, mode: "day" | "swing" | null): { title: string; text: string } {
+  if (mode === "day") return { title: WEEK_TEXT.weeklyReviewTitle, text: WEEK_TEXT.dayThreadNoWeeks };
+  const text = message.trim();
+  return { title: WEEK_TEXT.weeklyReviewTitle, text: `${text.charAt(0).toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}` };
+}
 
 export type WeekProblem = { kind: "missing"; message: string } | { kind: "failed" };
 

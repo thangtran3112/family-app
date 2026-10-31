@@ -30,9 +30,10 @@ import {
   trustedSwingState,
   type PrepStep,
 } from "@/lib/replay/boardView";
-import { isStarred, peekDailyBars, peekOffsets, toggledStars } from "@/lib/replay/dayView";
+import { MAX_STARS, isStarred, peekDailyBars, peekOffsets, toggledStars, watchEmptyText } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
-import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingDatesHidden, swingHeaderLine } from "@/lib/replay/swing";
+import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingBoardTitle, swingDatesHidden } from "@/lib/replay/swing";
+import { formatBalance } from "@/lib/replay/threadView";
 import { continueSwingThread, endAnyDay, isSwingDayList, loadAnyDayList, patchAnyDayList, type BoardRow, type SwingDayList, type SwingPeek, type SwingPlan } from "@/lib/replay/swingApi";
 import dayStyles from "../day/day.module.css";
 import { BoardSummaryStrip } from "./BoardSummaryStrip";
@@ -46,7 +47,7 @@ const PREP_WAIT_MS = 3000;
 /**
  * `/practice/day?id=` for a swing thread (02p d1): the holds pinned at the top, the fixed universe as of the prior close
  * with its figures, her armed filters' matches and an earnings chip, Peek (daily bars only), and the day's buttons.
- * Stars are focus names (at most five). An ended day shows its summary instead of a review. The board keeps its own
+ * Stars are focus names (at most 20). An ended day shows its summary instead of a review. The board keeps its own
  * copy of the day: a star shows at once and rolls back if the server refuses it, and End and Pass answer the new day.
  */
 export function SwingBoard({ initial }: { initial: SwingDayList }) {
@@ -62,6 +63,11 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const latestStar = useRef(0);
   const passButton = useRef<HTMLButtonElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
+  // Arriving, and after Pass has replaced the day's buttons, the keyboard starts at the page heading, not at the skip link (D-093).
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
   // Answers that land after she left the board move nothing; and when the wait for the next day's data began.
   const mounted = useRef(true);
   const prepSince = useRef<number | null>(null);
@@ -180,6 +186,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       setList(answer);
       setConfirmPass(false);
       thread.refresh();
+      requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true }));
     }, PRACTICE_COPY.swingPassError);
 
   const proceed = () =>
@@ -204,7 +211,11 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
     <div className={dayStyles.screen}>
       <BackLink threadId={threadId} />
       <header className={dayStyles.header}>
-        <h1 className={dayStyles.title}>{swingHeaderLine(list, hidden)}</h1>
+        <div className={dayStyles.titleRow}>
+          <h1 ref={titleRef} tabIndex={-1} className={dayStyles.title}>{swingBoardTitle(list, hidden)}</h1>
+          <span className={dayStyles.chip}>{practiceText("swingWeek", { n: list.week_no })}</span>
+          <span className={dayStyles.chip}>{ended ? PRACTICE_COPY.swingDayOver : PRACTICE_COPY.swingAsOfPriorClose}</span>
+        </div>
         <div className={dayStyles.actions}>
           {!ended && (
             <button
@@ -227,6 +238,8 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       </header>
       <div className={styles.strip} role="group" aria-label="Practice thread">
         <span className={styles.stripMain}>
+          {list.thread && <span>{practiceText("swingBalance", { amount: formatBalance(list.thread.balance) })}</span>}
+          {list.thread?.equity_usd != null && <span>{practiceText("swingEquity", { amount: formatBalance(list.thread.equity_usd) })}</span>}
           <span>{freeCashText(freeCash)}</span>
           <span aria-hidden="true">·</span>
           <span>{holdsOpenText(holdsOpen)}</span>
@@ -235,6 +248,8 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
         {threadId !== null && <Link href={`/practice/journal?thread=${threadId}`} className={styles.stripLink}>{PRACTICE_COPY.threadJournal}</Link>}
       </div>
       <div className={dayStyles.body}>
+        {/* The reason Start Day is dim sits right under the button, linked to it, not 220 px lower in the universe section (D-138). */}
+        {!ended && start.kind === "none" && <p id="swing-star-hint" className={dayStyles.muted}>{PRACTICE_COPY.swingBoardStarFirst}</p>}
         {message && <p className={dayStyles.banner} role="alert">{message}</p>}
         {late && !ended && <p className={dayStyles.banner} role="status">{late}</p>}
         {confirmPass && !ended && (
@@ -242,7 +257,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
             <p className={dayStyles.line}>{passDayPrompt({ dayNo: list.day_no, holdsOpen })}</p>
             <div className={dayStyles.actions}>
               <button ref={confirmButton} type="button" className={`${dayStyles.button} ${dayStyles.primary}`} disabled={busy} onClick={() => void pass()}>{PRACTICE_COPY.swingPassDay}</button>
-              <button type="button" className={dayStyles.button} onClick={cancelPass}>Keep practising</button>
+              <button type="button" className={dayStyles.button} onClick={cancelPass}>{PRACTICE_COPY.dayKeepPracticing}</button>
             </div>
           </div>
         )}
@@ -286,7 +301,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
         <section className={dayStyles.section} aria-label="Universe">
           <h2 className={dayStyles.sectionTitle}>{PRACTICE_COPY.swingBoardUniverse}</h2>
-          {!ended && <p id="swing-star-hint" className={dayStyles.muted}>{start.kind === "none" ? PRACTICE_COPY.swingBoardStarFirst : PRACTICE_COPY.swingBoardStarHint}</p>}
+          {!ended && start.kind !== "none" && <p className={dayStyles.muted}>{PRACTICE_COPY.swingBoardStarHint}</p>}
           <UniverseTable list={list} held={held} locked={ended} selected={selected} onSelect={setSelected} onStar={star} />
           <p className={dayStyles.footnote}>{list.label}</p>
           <p className={dayStyles.footnote}>{list.universe.footnote}</p>
@@ -308,7 +323,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
             node: (
               <div className={dayStyles.rail}>
                 {list.watch.length === 0 ? (
-                  <p className={dayStyles.muted}>{PRACTICE_COPY.dayWatchEmpty}</p>
+                  <p className={dayStyles.muted}>{watchEmptyText(MAX_STARS)}</p>
                 ) : (
                   <ul className={dayStyles.watchList}>
                     {list.watch.map((entry) => (

@@ -15,6 +15,7 @@ import {
   startedWithText,
   threadName,
   threadStartedText,
+  summaryHintText,
   threadTiles,
   todayLine,
   todayView,
@@ -40,8 +41,9 @@ test("money is dollars and cents with the sign as the cue, and never prints NaN 
 });
 
 test("the thread card reads in plain words", () => {
-  assert.equal(threadName(activeThread.thread), "October thread");
-  assert.equal(threadName({ ...activeThread.thread, mode: "swing" }), "October swing thread", "a swing thread never reads like the day thread of its month (D-069)");
+  assert.equal(threadName(activeThread.thread), "October thread #1");
+  assert.equal(threadName({ ...activeThread.thread, mode: "swing" }), "October swing thread #1", "a swing thread never reads like the day thread of its month (D-069)");
+  assert.notEqual(threadName({ ...activeThread.thread, id: 2 }), threadName(activeThread.thread), "D-077: two threads of one mode and month never read the same");
   assert.equal(threadStartedText(activeThread.thread), "Started Oct 5");
   assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123.00 so far");
   assert.equal(startedWithText(freshThread.thread), "Started with $50,000 · no change yet");
@@ -58,11 +60,11 @@ test("the thread card reads in plain words", () => {
   assert.equal(weeksInText(4), "4 weeks in");
 });
 
-test("weeks group the days by calendar week in the order she practiced, with skipped days counted", () => {
+test("weeks group the days by calendar week in the order she practiced, with passed days counted", () => {
   const weeks = weeksOf(threadDays);
   assert.deepEqual(weeks.map((week) => [week.label, week.detail, week.pnl]), [
-    ["Week 1", "4 days practiced · 1 skipped", 33],
-    ["Week 2 · latest", "2 days practiced · 1 skipped", 90],
+    ["Week 1", "4 days practiced · 1 passed", 33],
+    ["Week 2 · latest", "2 days practiced · 1 passed", 90],
   ]);
   assert.equal(weeks[0]!.won, 2);
   assert.equal(weeks[0]!.adherencePct, 75);
@@ -139,18 +141,42 @@ test("the TODAY row agrees with the balance: a day with nothing realized yet def
   const ended = { n: 1, day_list_id: 2, day: "2026-07-01", weekday: "Wed", kind: "practiced", trades: 1, pnl_usd: 1564.5, adherence_pct: null, balance: 51564.5 } as const;
   const listed = { day_list_id: 3, day: "2026-07-01", weekday: "Wed", day_no: 1, status: "listed", trades: 0, pnl_usd: 0 } as const;
   // The day just ended, nothing open: its ledger result, not "no day open".
-  assert.deepEqual(todayView(null, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5 });
+  assert.deepEqual(todayView(null, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5, short: "+$1,564.50 · 1 trade" });
   // A new day listed but not started: still the last ended day's result, never the new day's $0.
-  assert.deepEqual(todayView(listed, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5 });
+  assert.deepEqual(todayView(listed, ended), { label: "Last day", line: "+$1,564.50 realized · 1 practice trade", pnl: 1564.5, short: "+$1,564.50 · 1 trade" });
   // The day under way: its own realized figure and count, "so far".
   const practicing = { ...listed, status: "practicing", trades: 2, pnl_usd: 112 } as const;
-  assert.deepEqual(todayView(practicing, ended), { label: "Today", line: "+$112.00 realized so far · 2 practice trades", pnl: 112 });
+  assert.deepEqual(todayView(practicing, ended), { label: "Today", line: "+$112.00 realized so far · 2 practice trades", pnl: 112, short: "+$112.00 · 2 trades" });
   assert.equal(todayView({ ...listed, status: "practicing" }, ended).label, "Today", "a practicing day with no exit yet is still today");
   // A skipped last day carries the balance; nothing is claimed.
-  assert.deepEqual(todayView(null, { ...ended, kind: "skipped", trades: 0, pnl_usd: 0 }), { label: "Last day", line: "Skipped · the balance carried over", pnl: null });
+  // D-082: one word for a day she passed, and no claim that the balance carried over (open holds can move equity).
+  assert.deepEqual(todayView(null, { ...ended, kind: "skipped", trades: 0, pnl_usd: 0 }), { label: "Last day", line: "Passed · no practice trades", pnl: null, short: "Passed" });
   // First day of a fresh thread: nothing earlier to show, so the open day's own line stands.
-  assert.deepEqual(todayView(listed, null), { label: "Today", line: "$0.00 realized so far · 0 practice trades", pnl: 0 });
-  assert.deepEqual(todayView(null, null), { label: "Today", line: "No practice day open · the next list opens when you resume", pnl: null });
+  assert.deepEqual(todayView(listed, null), { label: "Today", line: "$0.00 realized so far · 0 practice trades", pnl: 0, short: "$0.00 · 0 trades" });
+  assert.deepEqual(todayView(null, null), { label: "Today", line: "No practice day open · the next list opens when you resume", pnl: null, short: "—" });
   // The shown figure is the ledger's: it matches the balance change of that day.
   assert.equal(Math.round(ended.balance - 50000), Math.round(ended.pnl_usd));
+});
+
+// D-080: a swing thread's balance counts closed holds only, so "no change yet" beside a higher Equity read as flat.
+test("a swing thread with open holds leads with what is realized and what the open holds add (D-080)", () => {
+  const swing = { holds_open: 2, equity_usd: 50612.5 };
+  assert.equal(startedWithText({ startingBalance: 50000, stats: { ...activeThread.thread.stats, balance: 50000 } }, swing), "Started with $50,000 · realized $0.00 · open holds +$612.50");
+  assert.equal(startedWithText({ startingBalance: 50000, stats: { ...activeThread.thread.stats, balance: 50200 } }, swing), "Started with $50,000 · realized +$200.00 · open holds +$412.50");
+  assert.doesNotMatch(startedWithText({ startingBalance: 50000, stats: { ...activeThread.thread.stats, balance: 50000 } }, swing), /no change yet/);
+  // Nothing open: the thread says what it always said.
+  assert.equal(startedWithText({ startingBalance: 50000, stats: { ...activeThread.thread.stats, balance: 50000 } }, { holds_open: 0, equity_usd: 50000 }), "Started with $50,000 · no change yet");
+});
+
+// D-083: the swing modal and journal say per week; the overview's recap said "a day".
+test("the plan recap counts per week for a swing thread (D-083)", () => {
+  const swing = planRows(activeThread.thread.plan, "swing");
+  assert.deepEqual(swing.slice(3).map((row) => row.label), ["Max loss, pretend dollars a week", "Max trades a week"]);
+  assert.deepEqual(planRows(activeThread.thread.plan).slice(3).map((row) => row.label), ["Max loss, pretend dollars a day", "Max trades a day"], "the default stays per day");
+});
+
+// D-134: "today's day is still open" was printed on every thread, also a closed one and one with no day open.
+test("the summary caption mentions an open day only when one is open (D-134)", () => {
+  assert.match(summaryHintText(true), /today's day is still open$/);
+  assert.equal(summaryHintText(false), "Wins and losses count practice trades");
 });

@@ -5,6 +5,7 @@
 ## Production Sources
 
 - `cloudflare/expense-tax/`: live Cloudflare Tunnel, product DNS/ingress, Clerk DNS, and GCS-backed Terraform state.
+- `tailscale/`: default-deny tailnet policy as code, operator-applied. Tailscale carries admin and CI SSH to the family host only; public traffic stays on the Cloudflare tunnels and never touches the tailnet.
 - `host/bootstrap-cloudflared.sh`: installs the outbound Tunnel connector on an existing VPS (the old `vps/` path keeps a symlink shim until the expense lane is repointed, 0001b-2).
 - `vps/`: reusable SSH hardening, UFW, Docker, and shared-PostgreSQL bootstrap.
 - `temporal/docker-compose.yml`: independently owned shared Temporal server and loopback-only UI.

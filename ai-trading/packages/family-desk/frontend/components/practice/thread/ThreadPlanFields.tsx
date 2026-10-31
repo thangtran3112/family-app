@@ -6,8 +6,9 @@ import type { ThreadDraft, ThreadProblems } from "@/lib/replay/threadSetup";
 import styles from "./thread.module.css";
 
 /** The risk plan of a practice thread (02r, D-007): stop on every entry, trade only on a signal, max loss, max trades and a
- *  note. Shared by the hub's New thread form and the journal's Edit plan form; the parent owns the draft. `idPrefix` keeps
- *  the ids unique when two forms are on screen. `perWeek` (a swing thread, 02p) labels max loss and max trades as weekly. */
+ *  note. The journal's Edit plan form uses it (the New plan modal no longer asks for a risk plan, D-076); the parent owns the
+ *  draft. `idPrefix` keeps the ids unique when two forms are on screen. `perWeek` (a swing thread, 02p) labels max loss and
+ *  max trades as weekly. */
 export function ThreadPlanFields({
   draft,
   onDraft,

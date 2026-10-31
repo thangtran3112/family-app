@@ -169,7 +169,7 @@ afterwards.
 
 | # | Where | Step |
 |---|---|---|
-| 1.1 | GitHub (PR) | Merge `dev` → `main` (required check green, current with `dev`). Triggers `Expense Tax CI` then `Expense Tax Deploy` (`workflow_run` on CI success, `head_branch == 'main'`). |
+| 1.1 | GitHub (PR) | Merge `dev` → `main` (local quality check green, current with `dev`; no CI job checks it). Triggers `Expense Tax Deploy` (`push` to `main`, path-filtered; no test job in front of it). |
 | 1.2 | GitHub Actions UI | Confirm: `build` job succeeds (8 images pushed, incl. `expense-tax-workflow-worker`, `expense-tax-mailbox-broker`); `deploy` job **fails** at `require_shared_temporal` or `is_known_key`. Confirm via VPS `docker ps`/`curl` that the previous release's containers are still running unchanged — `deploy.sh` dies before any `compose pull`/`up`/env-file swap. |
 | 1.3 | — | **STOP: owner approval required.** Next step stops legacy Temporal; downtime begins here. |
 | 1.4 | VPS | Preserve rollback material per `infrastructure/README.md` §"Shared Temporal Activation" step 1: record the last known-good image tag (`/opt/expense-tax-management/app/deployed-image-tag`), copy the current `docker-compose.yml`/`deploy.sh` into a root-only recovery directory. Keep `temporal`/`temporal_visibility` databases and role `expense_temporal` as-is. |

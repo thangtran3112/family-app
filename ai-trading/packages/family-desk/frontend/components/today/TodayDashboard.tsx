@@ -12,7 +12,7 @@ export function TodayDashboard() {
   const [selected, setSelected] = useState<TodaySelection | null>(null);
 
   return (
-    <main className={styles.dashboard}>
+    <div className={styles.dashboard}>
       <header className={styles.dashboardHeading}>
         <div>
           <p className={styles.eyebrow}>MARKET OVERVIEW</p>
@@ -35,6 +35,6 @@ export function TodayDashboard() {
           <DeskRead />
         </aside>
       </div>
-    </main>
+    </div>
   );
 }

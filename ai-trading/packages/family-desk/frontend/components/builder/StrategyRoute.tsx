@@ -34,15 +34,15 @@ export function StrategyRoute() {
   const searchParams = useSearchParams();
   const strategyId = positiveStrategyId(searchParams.get("id"));
   if (strategyId === null) {
-    return <main className={strategiesStyles.page}><StrategyList /></main>;
+    return <div className={strategiesStyles.page}><StrategyList /></div>;
   }
   return (
-    <main className={styles.workspace}>
+    <div className={styles.workspace}>
       <div className={styles.layout}>
         <aside className={styles.listPane} aria-label="Strategies list"><StrategyList /></aside>
         <StrategyBuilder key={strategyId} strategyId={strategyId} />
       </div>
-    </main>
+    </div>
   );
 }
 
