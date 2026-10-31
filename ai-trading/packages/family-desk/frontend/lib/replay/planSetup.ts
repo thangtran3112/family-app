@@ -8,8 +8,8 @@ import { MAX_ARMED, defaultDraft, draftToSpec, fieldOfPath, type ArmedRef, type 
 export const EARLIEST_LIST_DAY = "2017-01-03";
 export const MAX_FILTERS = 3;
 export const SESSION_CHOICES = [5, 10, 20, 30] as const;
-/** The names a day she can choose (the contract's `maxSymbols`, 1 to 20); a new plan starts at 3. */
-export const NAME_CHOICES = [1, 2, 3, 4, 5] as const;
+/** The names a day she can choose (the contract's `maxSymbols`, 1 to 20; the picker is sparse past 5 to fit one row); a new plan starts at 3. */
+export const NAME_CHOICES = [1, 2, 3, 4, 5, 10, 15, 20] as const;
 export const DEFAULT_MAX_SYMBOLS = 3;
 
 /** The list times she is offered: the premarket gap list, the first 15 minutes, the first hour. */
