@@ -137,6 +137,16 @@ def _wait_for_database(
     sys.exit(1)
 
 
+def _log_result(result: JobResult) -> None:
+    """A failed job at warning level so `docker logs` shows it; a skipped (already done today) one at debug."""
+    if not result.ok:
+        logger.warning("job %s failed (ok=%s ran=%s): %s", result.name, result.ok, result.ran, result.error)
+    elif not result.ran:
+        logger.debug("job %s skipped (ok=%s ran=%s)", result.name, result.ok, result.ran)
+    else:
+        logger.debug("job %s ran (ok=%s)", result.name, result.ok)
+
+
 def main() -> None:  # pragma: no cover -- the real loop; exercised through `run_due`'s own tests
     from ai_trading.db.engine import make_engine, make_session_factory
 
@@ -150,7 +160,8 @@ def main() -> None:  # pragma: no cover -- the real loop; exercised through `run
         with factory() as session:
             now = datetime.now(UTC)
             seed_strip(session, sources, now=now)
-            run_due(session, sources, clock, now=now)
+            for result in run_due(session, sources, clock, now=now):
+                _log_result(result)
             session.commit()
         healthcheck.touch(heartbeat)  # F4b: proves this loop iteration to ai_trading.jobs.healthcheck
         _time.sleep(60)
