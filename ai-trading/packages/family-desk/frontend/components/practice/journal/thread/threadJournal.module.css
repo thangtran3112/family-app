@@ -36,6 +36,7 @@
 .button:hover:not(:disabled) { background: var(--color-raised); }
 .button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
 .primary { border-color: var(--color-amber); color: var(--color-amber); }
+.danger { border-color: var(--color-down); color: var(--color-down); }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .link:hover { text-decoration: underline; }
 .button:focus-visible, .link:focus-visible, .threadRow:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
