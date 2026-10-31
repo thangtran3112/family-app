@@ -4,6 +4,18 @@ Adding a provider for a kind is one new line in `REGISTRY` (and, to make it the 
 `DEFAULT_CHAINS`); no caller code changes, because every caller only ever sees a `DataSources`
 built from this module, typed to the `sources.py` Protocols.
 
+Market-data providers added 2026-10-30 (02b §4c) -- selectable only through `DATA_PROVIDERS_QUOTES` and
+`DATA_PROVIDERS_OPTION_CHAIN` (e.g. `tradier,alpaca`), in no `DEFAULT_CHAINS` entry:
+
+- `tradier` (`TRADIER_ACCESS_TOKEN`, `TRADIER_ENVIRONMENT`): `quotes` and `option_chain`; hourly greeks.
+- `marketdata_app` (`MARKETDATA_APP_TOKEN`, `MARKETDATA_APP_QUALITY`): `quotes` and `option_chain`; delay by plan.
+- Longbridge has no entry: its quote API is a socket protocol with no REST schema (02b §4c).
+
+An unconfigured provider raises `NotConfigured` when called, so appending one to the end of a default chain is not a
+no-op: `fallback.first_success` reports the last transient failure, so an earlier provider's `Unavailable` (or a
+`NoData` it collected) would surface as `NotConfigured`. Defaults stay as they are until a key exists and the owner
+makes the switch, which is one `DATA_PROVIDERS_<KIND>` value in Firestore.
+
 **Import note:** `Provider`'s actual definition lives in `_provider.py`, a leaf module with no
 dependency on this module or on `providers/*`, and is re-exported here as
 `ai_trading_common.registry.Provider` (the name §5 fixes). This avoids a `registry.py` <->
@@ -30,7 +42,9 @@ from ai_trading_common.providers import (
     finnhub,
     fred,
     ibkr,
+    marketdata_app,
     sec_edgar,
+    tradier,
 )
 from ai_trading_common.sources import (
     BarsSource,
@@ -289,7 +303,9 @@ REGISTRY: dict[str, Provider] = {
     "finnhub": finnhub.PROVIDER,
     "fred": fred.PROVIDER,
     "ibkr": ibkr.PROVIDER,
+    "marketdata_app": marketdata_app.PROVIDER,
     "sec_edgar": sec_edgar.PROVIDER,
+    "tradier": tradier.PROVIDER,
 }
 
 #: One line per kind, sorted by kind name -- a provider task adds or extends the line(s) for the

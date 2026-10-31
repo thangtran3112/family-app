@@ -1,0 +1,46 @@
+{
+  "http_status": 200,
+  "request": {
+    "symbols": [
+      "AAPL",
+      "MSFT",
+      "ZZZZ"
+    ]
+  },
+  "response": {
+    "quotes": [
+      {
+        "asOf": "2024-05-02T20:30:00Z",
+        "ask": 190.01,
+        "bid": 189.99,
+        "last": 190,
+        "provider": "ibkr",
+        "quality": "REALTIME",
+        "symbol": "AAPL"
+      },
+      {
+        "asOf": "2024-05-02T20:30:00Z",
+        "ask": 190.01,
+        "bid": 189.99,
+        "last": 190,
+        "provider": "ibkr",
+        "quality": "REALTIME",
+        "symbol": "MSFT"
+      },
+      {
+        "asOf": "2024-05-02T20:30:00Z",
+        "ask": 190.01,
+        "bid": 189.99,
+        "last": 190,
+        "provider": "ibkr",
+        "quality": "REALTIME",
+        "symbol": "ZZZZ"
+      }
+    ],
+    "served": {
+      "provider": "ibkr",
+      "quality": "REALTIME"
+    }
+  },
+  "rpc": "GetQuotes"
+}

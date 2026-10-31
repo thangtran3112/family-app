@@ -30,7 +30,7 @@ variable "CLERK_PUBLISHABLE_KEY" {
 }
 
 group "default" {
-  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "vibe-consensus", "vibe-trading", "mirofish-backend", "auth", "desk"]
+  targets = ["web", "ta-terminal", "ta-research", "ahf-terminal", "market-data", "market-data-bridge", "vibe-consensus", "vibe-trading", "mirofish-backend", "auth", "desk"]
 }
 
 target "web" {
@@ -81,6 +81,13 @@ target "ahf-terminal" {
 target "market-data" {
   context = "ai-trading/market-data"
   tags    = ["${REGISTRY}/ai-trading-market-data:${TAG}"]
+}
+
+# 02t B0: the Go gRPC market-data bridge (static binary on distroless).
+target "market-data-bridge" {
+  context = "ai-trading/market-data/bridge"
+  args    = { BUILD_REVISION = TAG }
+  tags    = ["${REGISTRY}/ai-trading-market-data-bridge:${TAG}"]
 }
 
 target "vibe-trading" {

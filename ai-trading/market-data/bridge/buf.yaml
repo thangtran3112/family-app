@@ -1,0 +1,13 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - BASIC
+  except:
+    # The 02t layout puts the file at proto/marketdata/v1/ while the package is
+    # familyapp.marketdata.v1 (02t §3.1/§3.2).
+    - PACKAGE_DIRECTORY_MATCH
+breaking:
+  use:
+    - FILE

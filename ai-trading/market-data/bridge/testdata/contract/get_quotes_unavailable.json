@@ -1,0 +1,33 @@
+{
+  "http_status": 503,
+  "request": {
+    "symbols": [
+      "AAPL"
+    ]
+  },
+  "response": {
+    "code": "unavailable",
+    "details": [
+      {
+        "debug": {
+          "attempts": [
+            {
+              "error": "UNAVAILABLE",
+              "message": "HTTP 503",
+              "provider": "alpaca"
+            },
+            {
+              "error": "UNAVAILABLE",
+              "message": "marked down (unavailable); skipped until the next probe succeeds",
+              "provider": "ibkr"
+            }
+          ]
+        },
+        "type": "familyapp.marketdata.v1.Served",
+        "value": "KhQKBmFscGFjYRACGghIVFRQIDUwMypKCgRpYmtyEAIaQG1hcmtlZCBkb3duICh1bmF2YWlsYWJsZSk7IHNraXBwZWQgdW50aWwgdGhlIG5leHQgcHJvYmUgc3VjY2VlZHM"
+      }
+    ],
+    "message": "no provider answered; alpaca: HTTP 503; ibkr: marked down (unavailable); skipped until the next probe succeeds"
+  },
+  "rpc": "GetQuotes"
+}
