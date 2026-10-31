@@ -57,9 +57,10 @@ test("merging owned preferences preserves unknown top-level and quiet-hours keys
 
 import { readDefaultView, readPauseAll, withDefaultView, withPauseAll } from "./schema.ts";
 
-test("default view and pause-all read safe defaults and write without touching other keys", () => {
+test("default mode and pause-all read safe defaults and write without touching other keys", () => {
   assert.equal(readDefaultView({}), "technical");
   assert.equal(readDefaultView({ default_view: "fundamental" }), "fundamental");
+  assert.equal(readDefaultView({ default_view: "backtest" }), "backtest");
   assert.equal(readDefaultView({ default_view: "nonsense" }), "technical");
   assert.equal(readPauseAll({}), false);
   assert.equal(readPauseAll({ pause_all: true }), true);

@@ -1,0 +1,31 @@
+.anchor {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: var(--z-popover);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-pop);
+}
+
+.panel[data-align="start"] {
+  right: auto;
+  left: 0;
+}
+
+/* A menu is a padded list of rows; a dialog (the alerts panel) lays out its own head, list and foot edge to edge. */
+.panel[role="menu"] {
+  padding: var(--space-1);
+}
+
+.panel[role="dialog"] {
+  overflow: hidden;
+}

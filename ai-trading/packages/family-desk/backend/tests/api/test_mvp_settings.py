@@ -74,20 +74,20 @@ def _test(client, channel: str):
 # --- new settings keys (a3.9) ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("default_view", ["technical", "fundamental"])
-def test_default_view_accepts_the_two_views(client, default_view):
+@pytest.mark.parametrize("default_view", ["technical", "fundamental", "backtest"])
+def test_default_view_accepts_the_three_modes(client, default_view):
     response = _put_settings(client, {"default_view": default_view})
 
     assert response.status_code == 200
     assert response.json() == {"settings": {"default_view": default_view}}
 
 
-@pytest.mark.parametrize("default_view", ["chart", "Technical", "", None, ["technical"]])
+@pytest.mark.parametrize("default_view", ["chart", "Technical", "Backtest", "", None, ["technical"]])
 def test_default_view_rejects_anything_else_before_persistence(client, default_view):
     response = _put_settings(client, {"default_view": default_view})
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "default_view must be technical or fundamental"}
+    assert response.json() == {"detail": "default_view must be technical, fundamental or backtest"}
     assert client.get("/api/desk/settings", headers=auth_headers(OWNER_EMAIL)).json() == {"settings": {}}
 
 
