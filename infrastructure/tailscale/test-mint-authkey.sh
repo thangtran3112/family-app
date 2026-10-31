@@ -22,17 +22,19 @@ workdir="$d/cwd"
 mkdir -p "$tree/infrastructure/tailscale" "$tree/common/config" "$stubs" "$cap" "$values" "$scratch" "$workdir"
 cp "$SCRIPT_DIR/mint-authkey.sh" "$tree/infrastructure/tailscale/mint-authkey.sh"
 
-secret='tskey-client-FAKE-SECRET-DO-NOT-LEAK-91c4'
+secret='tskey-client-FAKE-ENROLL-SECRET-DO-NOT-LEAK-91c4'
 tailnet='fake-tailnet.example'
-client_id='kFAKEclientid'
+client_id='kFAKEenrollclientid'
 access_token='tskey-api-FAKEACCESSTOKEN-5d2e'
 minted_key='tskey-auth-FAKEMINTEDKEY-77ab'
 
+# The Terraform credential (TAILSCALE_TF_*) is deliberately absent: it cannot
+# mint keys, so the script must work from the enrollment credential alone.
 reset_values() {
   rm -f "$values"/*
   printf '%s' "$tailnet" >"$values/TAILSCALE_TAILNET"
-  printf '%s' "$client_id" >"$values/TAILSCALE_TF_OAUTH_CLIENT_ID"
-  printf '%s' "$secret" >"$values/TAILSCALE_TF_OAUTH_CLIENT_SECRET"
+  printf '%s' "$client_id" >"$values/TAILSCALE_ENROLL_OAUTH_CLIENT_ID"
+  printf '%s' "$secret" >"$values/TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET"
 }
 
 cat >"$tree/common/config/family_config.py" <<'SH'
@@ -84,7 +86,7 @@ no_leak() { # no_leak <label> <files...>: no credential or key in the given file
 reset_values
 run X=1
 [[ "$code" == 0 ]] || { cat "$d/err" >&2; fail "mint-authkey.sh exited $code"; }
-ok "mint-authkey.sh exits 0 against stubbed config and curl"
+ok "mint-authkey.sh exits 0 against stubbed config and curl, from the enrollment credential alone"
 
 [[ "$(cat "$d/out")" == "$minted_key" ]] || fail "stdout was: $(cat "$d/out")"
 [[ "$(wc -l <"$d/out" | tr -d ' ')" == 1 && "$(grep -cF "$minted_key" "$d/out")" == 1 ]] || fail "the key is not printed exactly once"
@@ -100,6 +102,8 @@ ok "two curl calls; credentials reach curl on stdin, never in argv"
 
 config1=$(cat "$cap/curl-config-1")
 grep -qxF 'url = "https://api.tailscale.com/api/v2/oauth/token"' <<<"$config1" || fail "token URL wrong: $config1"
+[[ "$(grep -c '^url = ' <<<"$config1")" == 1 ]] || fail "token request config must hold exactly one url line (secret redacted): ${config1//$secret/<secret>}"
+if grep -qi 'authorization' <<<"$config1"; then fail "the token request must carry no Authorization header"; fi
 data1=$(sed -n 's/^data = "\(.*\)"$/\1/p' <<<"$config1")
 [[ "$data1" == "grant_type=client_credentials&client_id=$client_id&client_secret=$secret&scope=auth_keys&tags=tag:family-host" ]] \
   || fail "token request body wrong (secret redacted): ${data1//$secret/<secret>}"
@@ -107,7 +111,10 @@ ok "token request: OAuth client-credentials grant, scope auth_keys, tags tag:fam
 
 config2=$(cat "$cap/curl-config-2")
 grep -qxF "url = \"https://api.tailscale.com/api/v2/tailnet/$tailnet/keys\"" <<<"$config2" || fail "keys URL wrong: $config2"
-grep -qxF "header = \"Authorization: Bearer $access_token\"" <<<"$config2" || fail "bearer header missing"
+[[ "$(grep -c '^url = ' <<<"$config2")" == 1 ]] || fail "key request config must hold exactly one url line: $config2"
+# The second request must authenticate with the access_token the stub returned for the first.
+grep -qxF "header = \"Authorization: Bearer $access_token\"" <<<"$config2" || fail "key request lacks the Bearer access_token: $config2"
+[[ "$(grep -ci '^header = "authorization' <<<"$config2")" == 1 ]] || fail "key request must carry exactly one Authorization header: $config2"
 data2=$(sed -n 's/^data = "\(.*\)"$/\1/p' <<<"$config2")
 # curl config strings unescape \" to "; mirror that, then parse the JSON body.
 python3 -I - "${data2//\\\"/\"}" <<'PY' || fail "key request body is wrong"
@@ -118,12 +125,12 @@ want = {"capabilities": {"devices": {"create": {
     "expirySeconds": 3600}
 assert body == want, body
 PY
-ok "key request: POST body is single-use (reusable false), pre-authorized, tag:family-host, expirySeconds 3600"
+ok "key request: one url line, Bearer access_token from the token call (token call carries none), single-use pre-authorized tag:family-host body, expirySeconds 3600"
 
 [[ -z "$(find "$scratch" "$workdir" -mindepth 1)" ]] || fail "files were left in TMPDIR or the working directory"
 ok "no files are written to TMPDIR or the working directory"
 
-for key in TAILSCALE_TAILNET TAILSCALE_TF_OAUTH_CLIENT_ID TAILSCALE_TF_OAUTH_CLIENT_SECRET; do
+for key in TAILSCALE_TAILNET TAILSCALE_ENROLL_OAUTH_CLIENT_ID TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET; do
   reset_values
   rm -f "$values/$key"
   run X=1
@@ -136,7 +143,7 @@ for key in TAILSCALE_TAILNET TAILSCALE_TF_OAUTH_CLIENT_ID TAILSCALE_TF_OAUTH_CLI
 done
 
 reset_values
-printf '%s\n"; evil = "1' "$secret" >"$values/TAILSCALE_TF_OAUTH_CLIENT_SECRET"
+printf '%s\n"; evil = "1' "$secret" >"$values/TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET"
 run X=1
 [[ "$code" != 0 && ! -e "$cap/curl-count" && ! -s "$d/out" ]] || fail "a value with quotes/newlines should be rejected before curl"
 ok "a credential with quote or newline characters is rejected before curl"

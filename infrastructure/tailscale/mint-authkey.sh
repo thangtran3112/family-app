@@ -2,7 +2,8 @@
 # Mints a one-hour, single-use, pre-authorized auth key tagged tag:family-host
 # and prints it ONCE on stdout, so the operator can pipe it straight into the
 # host. The key is never written to a file or a log; credentials reach curl on
-# stdin, never in argv. Uses the OAuth client in Firestore shared/tailscale.
+# stdin, never in argv. Uses the enrollment OAuth client (auth_keys, tag:family-host)
+# in Firestore shared/tailscale, a different client from the Terraform one.
 # Usage: infrastructure/tailscale/mint-authkey.sh |
 #          ssh <host> 'sudo tailscale up --auth-key=file:/dev/stdin --advertise-tags=tag:family-host'
 # Request shape: https://tailscale.com/docs/features/oauth-clients (token
@@ -29,8 +30,8 @@ get() {
 field() { python3 -I -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"; }
 
 tailnet="$(get TAILSCALE_TAILNET)"
-client_id="$(get TAILSCALE_TF_OAUTH_CLIENT_ID)"
-client_secret="$(get TAILSCALE_TF_OAUTH_CLIENT_SECRET)"
+client_id="$(get TAILSCALE_ENROLL_OAUTH_CLIENT_ID)"
+client_secret="$(get TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET)"
 safe "$TAG" || die "unexpected characters in tag"
 
 # printf is a builtin, so nothing below puts a credential in a process argument list.

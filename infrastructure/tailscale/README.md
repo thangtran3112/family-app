@@ -24,6 +24,8 @@ Firestore group `shared/tailscale` (read only through `common/config/family_conf
 | `TAILSCALE_TAILNET` | Tailnet ID |
 | `TAILSCALE_TF_OAUTH_CLIENT_ID` | Terraform OAuth client ID |
 | `TAILSCALE_TF_OAUTH_CLIENT_SECRET` | Terraform OAuth client secret |
+| `TAILSCALE_ENROLL_OAUTH_CLIENT_ID` | Enrollment OAuth client ID (`mint-authkey.sh`; created after the first apply) |
+| `TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET` | Enrollment OAuth client secret (`mint-authkey.sh`) |
 
 ```bash
 CLI=common/config/family_config.py
@@ -32,14 +34,14 @@ printf '%s' "$VALUE" | $CLI set shared/tailscale TAILSCALE_TAILNET
 
 `run-terraform.sh` reads them, exports `TF_VAR_tailnet`, `TF_VAR_tailscale_oauth_client_id` and `TF_VAR_tailscale_oauth_client_secret` for the one terraform process only, and prints nothing. The secret is never in the environment: `family_config.py with-file` writes it to a `0600` temp file and the variable is `file:<path>`, which the provider reads. (`with-file` replaces only an argument that is exactly `{}`, so `env VAR=file:{}` is not substituted; the script re-runs itself with `--secret-file {}` instead, the pattern of `gcp/family-config/install-reader-key.sh`.) If `GOOGLE_OAUTH_ACCESS_TOKEN` is unset it also takes one from the `personal` gcloud configuration, so the GCS backend never uses the work account.
 
-## Console steps (owner, once)
+## Console steps (owner)
 
-1. In the new tailnet's admin console, open Settings, Trust credentials, create an **OAuth** credential for Terraform with scopes:
-   - `policy_file` (read and write the policy file). Tailscale lists `devices:core:read` and `devices:posture_attributes` as required with it; select `devices:posture_attributes:read` if the console offers it.
-   - `auth_keys`, with tag `tag:family-host`, so `mint-authkey.sh` can mint host keys with the same credential.
-2. Store the three values in `shared/tailscale` (above).
-3. Ordering caveat (not verified): Tailscale says an `auth_keys` client may use tags "in your tailnet", and `tag:family-host` exists only after the first apply. If the console will not offer the tag yet, create the client with `policy_file` first, apply, then add `auth_keys` with `tag:family-host` (edit the client, or replace it and update Firestore).
-4. For CI, create a second OAuth client with scope `auth_keys` and tag `tag:ci`, and keep its credentials in Firestore too (for example `TAILSCALE_CI_OAUTH_CLIENT_ID` and `TAILSCALE_CI_OAUTH_CLIENT_SECRET`). It is not managed here.
+Two OAuth credentials, created in this order. They cannot be one client: the console grants a tag to an OAuth client only after the policy file declares it in `tagOwners`, so an `auth_keys` client for `tag:family-host` cannot exist before the first apply.
+
+1. **Terraform credential (before the first apply).** In the new tailnet's admin console, open Settings, Trust credentials, and create an **OAuth** credential. Under Policy File, select **Write**. The console then switches on Devices › Core (read) and Posture Attributes by itself, because Policy File requires them. Posture Attributes lands as read and write. The resulting scopes are `policy_file`, `devices:core:read` and `devices:posture_attributes`, and nothing else. Store the client ID and secret as `TAILSCALE_TF_OAUTH_CLIENT_ID` and `TAILSCALE_TF_OAUTH_CLIENT_SECRET` in `shared/tailscale` (above).
+2. **Apply** (next section). This publishes `tagOwners`, which creates `tag:family-host` and `tag:ci`.
+3. **Enrollment credential (after the first apply).** Create a second **OAuth** credential with scope `auth_keys` and the tag `tag:family-host`. The console offers the tag only once the policy file declares it, which is why this step comes after the apply. Store the client ID and secret as `TAILSCALE_ENROLL_OAUTH_CLIENT_ID` and `TAILSCALE_ENROLL_OAUTH_CLIENT_SECRET` in `shared/tailscale`.
+4. For CI, create a third OAuth client with scope `auth_keys` and tag `tag:ci`, and keep its credentials in Firestore too (for example `TAILSCALE_CI_OAUTH_CLIENT_ID` and `TAILSCALE_CI_OAUTH_CLIENT_SECRET`). It is not managed here.
 
 ## Apply (operator, with the owner's approval)
 
@@ -55,7 +57,7 @@ rm -f tfplan
 
 ## Why no auth key or OAuth client resources
 
-This root has no `tailscale_tailnet_key` and no `tailscale_oauth_client`. A host auth key created here would sit in Terraform state as a standing secret long before the laptop exists. Instead `mint-authkey.sh` mints a one-hour, single-use, pre-authorized key tagged `tag:family-host` on demand through the Tailscale API, using the Terraform OAuth credential. The CI OAuth client is created once by the owner in the console, and its credentials live in Firestore.
+This root has no `tailscale_tailnet_key` and no `tailscale_oauth_client`. A host auth key created here would sit in Terraform state as a standing secret long before the laptop exists. Instead `mint-authkey.sh` mints a one-hour, single-use, pre-authorized key tagged `tag:family-host` on demand through the Tailscale API, using the separate enrollment OAuth credential (`TAILSCALE_ENROLL_*`), not the Terraform one. The enrollment and CI OAuth clients are created once by the owner in the console, and their credentials live in Firestore.
 
 ## Enroll the host
 
