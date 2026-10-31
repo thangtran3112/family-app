@@ -115,17 +115,17 @@ test("each Fundamental tab opens its route and keeps the Fundamental chrome", as
   }
 });
 
-test("the futures specs page is shared, and its way back stays in the active lane", async ({ page }) => {
+test("the futures specs page is shared, and its way back stays in the active mode", async ({ page }) => {
   await startInFundamental(page);
   await openDesk(page, "/futures/specs");
   const back = page.locator("#main-content").getByRole("link", { name: "Back to futures", exact: true });
   await expect(back).toHaveAttribute("href", "/futures/read");
   await back.click();
   await expect(page).toHaveURL(/\/futures\/read$/);
-  await expect(page.locator("#main-content").getByRole("heading", { name: "This screen belongs to the Technical view" })).toHaveCount(0);
+  await expect(page.locator("#main-content").getByText("This screen belongs to", { exact: false })).toHaveCount(0);
   await expect(page.locator("#main-content").getByTestId("futures-reading-only")).toBeVisible();
-  // The Technical view keeps its own swing screen as the way back.
-  await page.locator(".dk-top").getByRole("radio", { name: "Technical" }).click();
+  // The Technical mode keeps its own swing screen as the way back.
+  await pickMode(page, "Technical");
   await openDesk(page, "/futures/specs");
   await expect(page.locator("#main-content").getByRole("link", { name: "Back to futures swing" })).toHaveAttribute("href", "/futures");
 });
