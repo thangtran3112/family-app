@@ -127,8 +127,3 @@ export function problemsForRow(problems: readonly Problem[], form: Pick<FilterFo
   return form.rows.length === 1 ? problemsFor(problems, "when") : problemsFor(problems, `when.${form.mode}.${index}`);
 }
 
-/** Problems that belong to no field the form shows (so they would otherwise be lost). */
-export function unplacedProblems(problems: readonly Problem[], form: Pick<FilterForm, "mode" | "rows">): Problem[] {
-  const prefixes = ["name", "watch", "assetTypes", "liquidity", "rank", "maxResults", "when"];
-  return problems.filter((problem) => !prefixes.some((prefix) => problem.path === prefix || problem.path.startsWith(`${prefix}.`)) || (form.rows.length === 0 && problem.path.startsWith("when")));
-}

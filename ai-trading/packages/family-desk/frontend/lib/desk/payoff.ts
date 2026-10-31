@@ -1,22 +1,6 @@
 // Chart geometry for the covered-call screens (02n §f: small SVGs with numeric axes, no chart library). Pure: the inputs
 // are the engine's own spot, strike and bid; this only draws them. Per-share values, so the axes are never masked.
-
-/** A "nice" tick step (1, 2, 5 times a power of ten) near `raw`. */
-function niceStep(raw: number): number {
-  const power = 10 ** Math.floor(Math.log10(raw));
-  const fraction = raw / power;
-  return (fraction < 1.5 ? 1 : fraction < 3 ? 2 : fraction < 7 ? 5 : 10) * power;
-}
-
-/** Round-number ticks inside [min, max]: about `target` of them, always including a tick at or below 0 when the range crosses it. */
-export function niceTicks(min: number, max: number, target = 4): number[] {
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [];
-  const step = niceStep((max - min) / target);
-  const first = Math.ceil(min / step - 1e-9) * step;
-  const ticks: number[] = [];
-  for (let value = first; value <= max + step * 1e-9; value += step) ticks.push(Math.round(value / step) * step + 0); // + 0 turns -0 into 0
-  return ticks;
-}
+import { niceTicks } from "./ticks.ts";
 
 /** Maps `value` from the data domain onto the pixel range (the y axis passes a reversed range). */
 export const scaleLinear = (value: number, domain: readonly [number, number], range: readonly [number, number]): number =>
@@ -62,7 +46,7 @@ export function coveredCallPayoff(spot: number | null, strike: number, bid: numb
     strike,
     xDomain,
     yDomain,
-    xTicks: niceTicks(low, high, 4),
-    yTicks: niceTicks(yDomain[0], yDomain[1], 4),
+    xTicks: niceTicks(low, high, { inside: true }),
+    yTicks: niceTicks(yDomain[0], yDomain[1], { inside: true }),
   };
 }

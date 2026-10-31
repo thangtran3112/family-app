@@ -32,7 +32,7 @@ export function queryReducer<T>(state: QueryState<T>, action: QueryAction<T>): Q
   }
 }
 
-/** The state of the live connection for `FreshnessBadge`: refreshing, or failing while old values stay. */
+/** The state of the live connection for `ui/Freshness`: refreshing, or failing while old values stay. */
 export function connectionOf(state: Pick<QueryState<unknown>, "status" | "data" | "error">): Connection {
   if (state.status === "updating") return "updating";
   if (state.data !== null && state.error !== null) return "reconnecting";

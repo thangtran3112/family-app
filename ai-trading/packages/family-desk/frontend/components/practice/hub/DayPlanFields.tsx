@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { formatClock } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -10,7 +11,6 @@ import {
   LIST_TIMES,
   MAX_FILTERS,
   SESSION_CHOICES,
-  clock12,
   listTimeHeld,
   listTimeNeed,
   withFilterToggled,
@@ -54,7 +54,7 @@ export function DayPlanFields({
   // A cadence filter reads bars of the list day itself, so the list time cannot be earlier than its first bar.
   const need = listTimeNeed(draft.filterIds, timings);
   const needNames = (filters.data ?? []).filter((filter) => need.ids.includes(filter.id)).map((filter) => filter.name);
-  const needText = practiceText("planListAtNeeds", { filters: needNames.join(" and "), time: clock12(need.time) });
+  const needText = practiceText("planListAtNeeds", { filters: needNames.join(" and "), time: formatClock(need.time) });
   const anyHeld = LIST_TIMES.some((item) => listTimeHeld(item.value, need));
   const setup = draft.setup;
   const patchSetup = (next: PlanDraft["setup"]) => onDraft({ ...draft, setup: next });

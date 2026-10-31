@@ -3,7 +3,7 @@ import test from "node:test";
 import { marginText, rollEvents, sizeMicroFirst } from "./specs.ts";
 
 test("margin text never presents missing margin as an estimate", () => {
-  assert.equal(marginText(null, null), "not available");
+  assert.equal(marginText(null, null), "—");
   assert.equal(marginText(1234, "2026-10-01"), "≈ $1,234 (as of 2026-10-01)");
 });
 

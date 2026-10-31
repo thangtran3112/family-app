@@ -9,7 +9,7 @@ import type {
   FeedbackStatus,
 } from "../feedback/schemas.ts";
 import type { FeedbackQuery, FeedbackSort } from "./feedback.ts";
-import { EMPTY_VALUE, formatEtDay, formatEtStamp } from "./format.ts";
+import { EMPTY_VALUE, formatAgo, formatEtDay, formatEtStamp } from "./format.ts";
 
 // View logic for the Feedback screens (02s §Frontend): filters, labels, the status timeline, the agent lines and the
 // filing form's rules. Everything here is plain text in and out, so the node tests cover it without a browser.
@@ -118,18 +118,6 @@ export function formatEtDayTimeShort(iso: string): string {
   return stamp === EMPTY_VALUE ? EMPTY_VALUE : `${formatEtDay(iso).slice(0, 3)} ${stamp.slice(-5)} ET`;
 }
 
-/** "just now" / "12 min ago" / "2 h ago" / "3 d ago" (the agent line). */
-export function agoText(iso: string, now: Date): string {
-  const seconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);
-  if (!Number.isFinite(seconds)) return EMPTY_VALUE;
-  if (seconds < 45) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
-}
-
 // ---- the detail rail: timeline and agent lines --------------------------------------------------------------------------
 
 const AGENT_NAME: Partial<Record<FeedbackActor, string>> = { "claude-code": "Claude Code", hermes: "Hermes" };
@@ -197,7 +185,7 @@ export function agentLine(detail: Pick<FeedbackDetail, "status" | "fix_ref" | "u
   if (!last || last.to_status !== detail.status) return null;
   const agent = agentName(last.actor);
   if (detail.status === "in_progress") {
-    return agent ? { tone: "ai", text: `${agent} is working on this · updated ${agoText(detail.updated_at, now)}` } : null;
+    return agent ? { tone: "ai", text: `${agent} is working on this · updated ${formatAgo(detail.updated_at, now)}` } : null;
   }
   if (detail.status === "fixed" && detail.fix_ref) {
     return { tone: agent ? "ai" : "plain", text: `Fixed in ${detail.fix_ref} · shipped ${formatEtDay(last.at)}` };

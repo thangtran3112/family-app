@@ -2,14 +2,13 @@
 // Plain links: full document navigation lets the strategy builder's beforeunload guard run.
 
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Freshness } from "@/components/ui/Freshness";
 import { COPY } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { LANE_HOME, shows } from "@/lib/lanes";
 import { AlertsBell } from "./AlertsBell";
 import { AvatarMenu } from "./AvatarMenu";
 import { useReplayBadge } from "./PracticeChrome";
-import { MarketStatusPill } from "./MarketStatusPill";
 import { MaskToggle } from "./MaskToggle";
 import { ModeMenu } from "./ModeMenu";
 import { PrimaryNav } from "./PrimaryNav";
@@ -39,13 +38,13 @@ export function TopBar({ band }: { band: ShellBand }) {
       {shows(lane, "search") && <SymbolSearch compact={band === "1180"} />}
       {shows(lane, "mask") && <MaskToggle />}
       {/* The live market status says nothing about a replayed day, so it steps aside while a replay runs (and in Backtest always). */}
-      {!replayBadge && shows(lane, "marketPill") && <MarketStatusPill band={band} />}
+      {!replayBadge && shows(lane, "marketPill") && <Freshness variant="pill" band={band} />}
       {replayBadge ? (
-        <span className={`${styles.pill} ${styles.topBadge} ${styles.replayBadge}`} role="status" title={replayBadge}>{replayBadge}</span>
+        <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="amber" />
       ) : !shows(lane, "freshness") ? null : failed ? (
-        <span className={`${styles.pill} ${styles.topBadge}`} role="status">{COPY.statusUnavailable}</span>
+        <Freshness variant="note" className={styles.topBadge} label={COPY.statusUnavailable} />
       ) : (
-        <FreshnessBadge className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
+        <Freshness className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
       )}
       {shows(lane, "alertsBell") && <AlertsBell />}
       <AvatarMenu />

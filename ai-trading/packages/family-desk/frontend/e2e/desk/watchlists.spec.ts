@@ -223,7 +223,8 @@ test.describe("technical-alerts seed", () => {
     const table = symbolTable(page);
     expect(await tableFit(table)).toEqual({ overflow: 0, cellsPast: [], cellsCut: [] });
     const amd = table.getByRole("row", { name: /^AMD/ });
-    await amd.hover();
+    // DenseTable shows row actions by default: no hover needed (DS-2), so touch and sight can reach them.
+    await expect(amd.getByRole("link", { name: "+ Alert" })).toHaveCSS("opacity", "1");
     await expect(amd.getByRole("link", { name: "+ Alert" })).toBeInViewport({ ratio: 1 });
     await expectCleanScreen(page);
   });

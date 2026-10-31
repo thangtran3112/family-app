@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
+import { formatClock } from "../desk/format.ts";
 import {
   LIST_TIMES,
-  clock12,
   defaultFirstDay,
   defaultPlanDraft,
   effectiveFirstDay,
@@ -121,9 +121,9 @@ test("the earliest list time of a filter is the one the server enforces", () => 
     ["weekly", "regular", "04:30"],
   ];
   for (const [run_on, session, expected] of rows) assert.equal(earliestListAt({ run_on, session }), expected, `${run_on} ${session}`);
-  assert.equal(clock12("10:00"), "10:00 AM");
-  assert.equal(clock12("12:05"), "12:05 PM");
-  assert.equal(clock12("08:30"), "8:30 AM");
+  assert.equal(formatClock("10:00"), "10:00 AM");
+  assert.equal(formatClock("12:05"), "12:05 PM");
+  assert.equal(formatClock("08:30"), "8:30 AM");
 });
 
 const timings: FilterTimings = new Map([

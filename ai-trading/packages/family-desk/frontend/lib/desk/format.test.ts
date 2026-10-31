@@ -66,6 +66,7 @@ test("tones, relative time and initials", () => {
   assert.equal(formatAgo("2026-10-23T20:09:40Z", now), "just now");
   assert.equal(formatAgo("2026-10-23T20:08:00Z", now), "2 min ago");
   assert.equal(formatAgo("2026-10-23T17:10:00Z", now), "3 hr ago");
+  assert.equal(formatAgo("2026-10-20T20:10:00Z", now), "3 days ago", "the feedback agent line used to say \"3 d ago\"; there is one age wording now");
   assert.equal(formatAgo(null, now), "—");
   assert.equal(initialOf("willa"), "W");
   assert.equal(initialOf(null), "?");

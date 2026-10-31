@@ -1,4 +1,5 @@
 import type { Stamp } from "../api/schemas.ts";
+import type { ShellBand } from "./viewport.ts";
 import { formatAgo, formatAsOfText, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
 
 // The single copy table for freshness, session and empty/error wording (02l §c3, 02m §c3). Components
@@ -250,6 +251,27 @@ export function marketPillOpen(session: MarketSession, quotes: Pick<FreshnessVie
 /** The pill at the 1180 band: just the session word, the full text moves to a tooltip. */
 export function marketPillShort(session: MarketSession): string {
   return session === "regular" ? "Open" : session === "pre" ? COPY.marketPre : session === "after" ? COPY.marketAfter : "Closed";
+}
+
+export type MarketPillInput = {
+  /** Null until /status answers. */
+  market: { session: MarketSession; next_open: string | null } | null;
+  quotes: FreshnessInput["stamp"];
+  connection: Connection;
+  /** The first /status load failed and there is nothing to show. */
+  failed: boolean;
+  band: ShellBand;
+  now?: Date;
+};
+
+/** Everything the top-bar market pill shows, decided here: whole text (its title), the text on screen, the green dot and the stale mark. */
+export function marketPillView({ market, quotes, connection, failed, band, now }: MarketPillInput): { full: string; shown: string; open: boolean; stale: boolean } {
+  const full = failed ? "Market status unavailable" : market ? marketPillText(market.session, market.next_open) : "Checking the market…";
+  // The quote badge beside the pill already says "Market closed": the pill drops that prefix and keeps what is new, when it opens (D-107).
+  const shown = market && band === "1180" ? marketPillShort(market.session) : full.replace(/^Market closed · (.)/, (_, first: string) => first.toUpperCase());
+  // "Market open" is true of the market, not of the numbers: the dot goes green only while the quotes are current too (V-Today-01).
+  const feed = resolveFreshness({ stamp: quotes, session: market?.session, connection, feed: true, now });
+  return { full, shown, open: market !== null && marketPillOpen(market.session, feed), stale: market?.session === "regular" && feed.stale };
 }
 
 export type AlertsRuntimeState = "running" | "paused_no_quotes" | "paused_by_user" | "not_started";

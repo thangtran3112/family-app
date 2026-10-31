@@ -206,4 +206,3 @@ export function groupProblems(problems: readonly Problem[]): Record<Step, Proble
   return groups;
 }
 
-export const problemsBanner = (count: number): string | null => (count === 0 ? null : count === 1 ? "1 problem to fix" : `${count} problems to fix`);

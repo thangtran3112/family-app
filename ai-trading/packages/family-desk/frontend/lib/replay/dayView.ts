@@ -12,8 +12,8 @@ import {
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
+import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade } from "./schemas.ts";
-import { formatUsd } from "./journalView.ts";
 import { etHhMm } from "./time.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
@@ -405,7 +405,7 @@ export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string
 /** "Your day: 1 practice trade · +$1,565.00", dollars and cents. */
 export function journalLine(journal: Pick<DayJournal, "trades" | "pnl_usd">): string {
   const trades = journal.trades === 1 ? "1 practice trade" : `${journal.trades} practice trades`;
-  return `${trades} · ${formatUsd(journal.pnl_usd)}`;
+  return `${trades} · ${formatSignedUsd(journal.pnl_usd, { cents: true })}`;
 }
 
 /** "1 win · 0 losses" (a scratch is neither, and is counted only when there is one). */
@@ -436,7 +436,7 @@ export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd">): 
   entryTime: "",
   exit: "",
   exitTime: "",
-  pnl: formatUsd(journal.pnl_usd),
+  pnl: formatSignedUsd(journal.pnl_usd, { cents: true }),
   tone: changeTone(journal.pnl_usd),
 });
 
@@ -458,7 +458,7 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
     entryTime: formatEtTime(line.entry_at),
     exit: formatPrice(line.exit_price),
     exitTime: `${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
-    pnl: formatUsd(line.pnl_usd),
+    pnl: formatSignedUsd(line.pnl_usd, { cents: true }),
     tone: changeTone(line.pnl_usd),
   }));
 }

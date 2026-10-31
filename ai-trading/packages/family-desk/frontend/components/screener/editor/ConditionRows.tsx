@@ -6,6 +6,7 @@ import { OPERATORS, addRow, problemsForRow, removeRow, rowKind, updateRow, type 
 import { OPERAND_CATALOG, choiceOf, operandDef, operandFor, type OperandDef } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
 import styles from "./editor.module.css";
+import { problemText } from "@/lib/desk/problems";
 
 const GROUPS = ["Price", "Indicators", "Levels"] as const;
 type CompareLike = Extract<Condition, { left: Operand; right: Operand }>;
@@ -84,7 +85,7 @@ function ConditionRow({ condition, index, form, onChange, problems }: {
     </button>
   );
   const rowProblems = problemsForRow(problems, form, index).map((problem, position) => (
-    <span key={position} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+    <span key={position} className={styles.problem}>{problemText(problem)}</span>
   ));
   // Nested groups, patterns and time windows, or an operand the picker cannot express, stay read-only text.
   const cond = rowKind(condition) === "static" ? null : (condition as CompareLike);
@@ -146,7 +147,7 @@ export function ConditionRows({ form, onChange, problems }: { form: FilterForm; 
         <ConditionRow key={index} condition={condition} index={index} form={form} onChange={onChange} problems={problems} />
       ))}
       {groupProblems.map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
       <div className={styles.controls}>
         <button type="button" className={styles.button} onClick={() => onChange(addRow(form))}>Add condition</button>

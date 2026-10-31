@@ -7,7 +7,7 @@ import { type AlertForm } from "@/lib/desk/alertForm";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
-import { problemLine } from "@/lib/desk/problemCopy";
+import { problemLine } from "@/lib/desk/problems";
 
 export function DeliverStep({ form, onChange, problems, channels, channelsFailed, onRetryChannels }: {
   form: AlertForm;

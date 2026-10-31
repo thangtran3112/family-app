@@ -8,7 +8,7 @@ import { formatEtTimeZone } from "@/lib/desk/format";
 import { loadDayList, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { portfolioRows, portfolioTotal, positionText, type PortfolioRow } from "@/lib/replay/dayView";
-import { formatUsd } from "@/lib/replay/journalView";
+import { formatSignedUsd } from "@/lib/desk/mask";
 import type { OpenTrade } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayResultTone } from "@/lib/replay/threadView";
@@ -68,8 +68,8 @@ export function Portfolio({ dayListId, from, revision = 0 }: { dayListId: number
       {rows.length > 0 && (
         <p className={styles.portfolioTotal} data-testid="portfolio-total">
           <span>{PRACTICE_COPY.dayPortfolioTotal}</span>
-          <span className={toneClass(total.total)}>{formatUsd(total.total)}</span>
-          <span className={styles.muted}>{practiceText("dayPortfolioSplit", { realized: formatUsd(total.realized), open: formatUsd(total.open) })}</span>
+          <span className={toneClass(total.total)}>{formatSignedUsd(total.total, { cents: true })}</span>
+          <span className={styles.muted}>{practiceText("dayPortfolioSplit", { realized: formatSignedUsd(total.realized, { cents: true }), open: formatSignedUsd(total.open, { cents: true }) })}</span>
         </p>
       )}
       {message && <p className={styles.problem} role="alert">{message}</p>}
@@ -85,10 +85,10 @@ function PortfolioRowView({ row, inert, busy, onOpen }: { row: PortfolioRow; ine
       <span className={styles.portfolioLine}>
         <span className={styles.armedName}>{row.symbol}</span>
         <span className={styles.portfolioPosition}>{positionText(row)}</span>
-        <span className={`${styles.portfolioPnl} ${toneClass(row.dayPnl)}`}>{formatUsd(row.dayPnl)}</span>
+        <span className={`${styles.portfolioPnl} ${toneClass(row.dayPnl)}`}>{formatSignedUsd(row.dayPnl, { cents: true })}</span>
       </span>
       <span className={styles.portfolioMeta}>
-        {row.position !== null && row.unrealized !== null && <span>unrealized {formatUsd(row.unrealized)}</span>}
+        {row.position !== null && row.unrealized !== null && <span>unrealized {formatSignedUsd(row.unrealized, { cents: true })}</span>}
         {row.trades > 0 && <span>{row.trades === 1 ? "1 trade" : `${row.trades} trades`}</span>}
         {row.current && <span className={styles.chip} data-tone="up">{PRACTICE_COPY.dayOnNow}</span>}
         {row.behind && <span className={styles.chip}>{PRACTICE_COPY.dayBehind}</span>}

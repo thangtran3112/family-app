@@ -1,3 +1,4 @@
+import { withPriorities } from "../desk/columns.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { SortValue } from "../desk/sort.ts";
 import type { ListColumn } from "./daily.ts";
@@ -22,21 +23,17 @@ export type BoardColumn = ListColumn & {
   priority?: number;
 };
 
-/** Columns that go first at 1180, ranked by how little the board loses without them. */
-const DROPPED_AT_1180: Readonly<Record<string, number>> = { avg_dollar_volume_20d: 1, vs_50d_avg_pct: 2, chg_5d_pct: 3, rsi_14: 4 };
-
-/** The API's columns in its order, then the earnings chip (a row field, not a metric column). */
+/** The API's columns in its order, then the earnings chip (a row field, not a metric column). The ones that drop at 1180 are registered as `boardView` in `lib/desk/columns.ts`. */
 export function boardColumns(columns: readonly ListColumn[]): BoardColumn[] {
-  return [...columns, { key: "earnings", label: "Earnings", format: "text" }].map((column) => {
-    const priority = DROPPED_AT_1180[column.key];
-    return {
+  return withPriorities(
+    [...columns, { key: "earnings", label: "Earnings", format: "text" }].map((column) => ({
       ...column,
-      align: column.format === "text" ? "left" : "right",
+      align: column.format === "text" ? ("left" as const) : ("right" as const),
       // Numbers and the match count read biggest first; the source order and the soonest report read first-to-last.
-      firstSort: column.key === "source" || column.key === "earnings" ? "asc" : "desc",
-      ...(priority === undefined ? {} : { priority }),
-    };
-  });
+      firstSort: column.key === "source" || column.key === "earnings" ? ("asc" as const) : ("desc" as const),
+    })),
+    "boardView",
+  );
 }
 
 /** What a header click sorts by. A gap in the data is empty and always goes last. */

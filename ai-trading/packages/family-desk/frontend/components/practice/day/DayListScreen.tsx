@@ -375,7 +375,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   </div>
                 </EmptyBlock>
               }
-              alwaysShowActions
               rowActions={(row) => {
                 const here = opening === row.symbol;
                 return (

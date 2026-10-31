@@ -5,6 +5,7 @@ import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { loadWatchlists } from "@/lib/desk/watchlists";
 import styles from "./editor.module.css";
+import { problemText } from "@/lib/desk/problems";
 
 export function UniverseFields({ form, onChange, problems }: { form: FilterForm; onChange: (next: FilterForm) => void; problems: readonly Problem[] }) {
   const watchlists = useDeskQuery("watchlists", (signal) => loadWatchlists({ signal }), { enabled: form.universe === "watchlist" });
@@ -55,7 +56,7 @@ export function UniverseFields({ form, onChange, problems }: { form: FilterForm;
         </label>
       )}
       {problemsFor(problems, "watch.universe").map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
       <div role="group" aria-label="Asset types" className={styles.controls}>
         <label className={styles.option}>
@@ -68,7 +69,7 @@ export function UniverseFields({ form, onChange, problems }: { form: FilterForm;
         </label>
       </div>
       {problemsFor(problems, "assetTypes").map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
     </fieldset>
   );

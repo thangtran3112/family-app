@@ -111,7 +111,7 @@ test("valuation methods, their inputs in words and the engine's fallback sentenc
   assert.ok(rows[2]!.inputs.includes("Forward P/E 28.4"));
   assert.deepEqual(rows[2]!.fallbacks, ["EBITDA multiple: the sector median, no five-year history"]);
   assert.equal(methodRows([{ id: "dcf", value: null, inputs: { growth_pct: null }, fallbacks: [] }])[0]!.value, "Not enough data");
-  assert.equal(methodRows([{ id: "dcf", value: null, inputs: { growth_pct: null }, fallbacks: [] }])[0]!.inputs[0], "Growth: not available");
+  assert.equal(methodRows([{ id: "dcf", value: null, inputs: { growth_pct: null }, fallbacks: [] }])[0]!.inputs[0], "Growth: —");
   assert.equal(inputLabel("something_new_pct"), "Something new");
   const blend = blendView(valuation.blend, valuation.price)!;
   assert.deepEqual([blend.blend, blend.price, blend.word, blend.blendPct], ["$253.92", "$231.40", "Blend is above the price", 100]);

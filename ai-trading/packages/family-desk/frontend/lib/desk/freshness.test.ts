@@ -14,6 +14,7 @@ import {
   marketDataLine,
   marketPillOpen,
   marketPillShort,
+  marketPillView,
   marketPillText,
   notEnoughHistoryText,
   resolveFreshness,
@@ -196,6 +197,27 @@ test("the market pill is green only while the session is open and the quotes are
   assert.equal(marketPillOpen("regular", topBar), false);
   assert.equal(marketPillOpen("regular", resolveFreshness({ stamp: null, session: "regular", feed: true, now })), true); // still loading: no claim either way
   assert.equal(marketPillOpen("closed", resolveFreshness({ stamp: stamp("closed"), session: "closed", feed: true, now })), false);
+});
+
+test("marketPillView: one place decides the pill's text, short form, dot and stale mark", () => {
+  const closed = { session: "closed" as const, next_open: "2026-10-26T13:30:00Z" };
+  const open = { session: "regular" as const, next_open: null };
+  const base = { quotes: stamp("live", "realtime"), connection: "ok" as const, failed: false, band: "1440" as const, now };
+  // Closed at 1440: the quote badge already says "Market closed", so the pill keeps only when it opens; the title keeps the whole text.
+  const closedWide = marketPillView({ ...base, market: closed });
+  assert.equal(closedWide.full, marketPillText("closed", closed.next_open));
+  assert.match(closedWide.shown, /^Opens /);
+  assert.equal(closedWide.open, false);
+  // 1180 shows the session word only.
+  assert.equal(marketPillView({ ...base, market: closed, band: "1180" }).shown, marketPillShort("closed"));
+  assert.equal(marketPillView({ ...base, market: open, band: "1180" }).shown, "Open");
+  // Open and current: green. Open with the quotes paused: not green, and marked stale.
+  assert.deepEqual([marketPillView({ ...base, market: open }).open, marketPillView({ ...base, market: open }).stale], [true, false]);
+  const paused = marketPillView({ ...base, market: open, quotes: stamp("paused", "delayed-15m", "2026-10-23T19:00:00Z") });
+  assert.deepEqual([paused.open, paused.stale], [false, true]);
+  // Before /status answers, and when it failed.
+  assert.deepEqual(marketPillView({ ...base, market: null, quotes: null }), { full: "Checking the market…", shown: "Checking the market…", open: false, stale: false });
+  assert.equal(marketPillView({ ...base, market: null, quotes: null, failed: true }).full, "Market status unavailable");
 });
 
 test("the wrong-lane interstitial copy is gone: a route from another mode opens in its own mode (ADR-0014)", () => {

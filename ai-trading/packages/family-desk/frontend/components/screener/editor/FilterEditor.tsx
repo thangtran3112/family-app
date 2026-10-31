@@ -9,7 +9,7 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import type { Problem, ScreenerFilterDetail } from "@/lib/api/schemas";
-import { formToSpec, isDirty, problemsFor, specToForm, unplacedProblems, type FilterForm } from "@/lib/desk/filterForm";
+import { formToSpec, isDirty, problemsFor, specToForm, type FilterForm } from "@/lib/desk/filterForm";
 import { createFilter, loadFilterDetail, loadFilters, previewFilter, updateFilter } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { COPY } from "@/lib/desk/freshness";
@@ -24,6 +24,8 @@ import { SessionRunOnFields } from "./SessionRunOnFields";
 import { UniverseFields } from "./UniverseFields";
 import { UnsavedBar } from "./UnsavedBar";
 import styles from "./editor.module.css";
+import { ErrorSummary } from "@/components/ui/ErrorSummary";
+import { formProblems, problemText } from "@/lib/desk/problems";
 
 export function FilterEditor() {
   const param = useSearchParams().get("id");
@@ -100,7 +102,6 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   const defaultForm = defaultSpec ? specToForm(defaultSpec) : null;
   // A save's 422 replaces the live check's problems until the next change.
   const problems = saveProblems.length > 0 ? saveProblems : (preview.data?.problems ?? []);
-  const unplaced = unplacedProblems(problems, form);
 
   useEffect(() => () => clearTimeout(previewTimer.current), []);
 
@@ -176,14 +177,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
           {copyFailed && <span className={styles.problem}>Couldn&apos;t copy · Try again</span>}
         </div>
       )}
-      {problems.length > 0 && (
-        <div className={styles.banner} role="alert">
-          <p className={styles.bannerTitle}>{problems.length === 1 ? "1 problem to fix" : `${problems.length} problems to fix`}</p>
-          {unplaced.map((problem, index) => (
-            <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
-          ))}
-        </div>
-      )}
+      <ErrorSummary problems={formProblems(problems)} />
       {saveNote && <p role="alert" className={styles.problem}>{saveNote}</p>}
       {!readOnly && defaultForm && (
         <div className={styles.row}>
@@ -196,7 +190,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
           <input type="text" maxLength={80} value={form.name} onChange={(event) => change({ ...form, name: event.target.value })} />
         </label>
         {problemsFor(problems, "name").map((problem, index) => (
-          <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+          <span key={index} className={styles.problem}>{problemText(problem)}</span>
         ))}
         <UniverseFields form={form} onChange={change} problems={problems} />
         <LiquidityFields form={form} onChange={change} problems={problems} />
@@ -208,7 +202,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
           <input type="number" min={1} max={100} value={form.maxResults} onChange={(event) => change({ ...form, maxResults: event.target.value })} />
         </label>
         {problemsFor(problems, "maxResults").map((problem, index) => (
-          <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+          <span key={index} className={styles.problem}>{problemText(problem)}</span>
         ))}
       </fieldset>
       {filter === null && (

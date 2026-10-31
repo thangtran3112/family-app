@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { journal, openTrade } from "./fixtures.ts";
-import { clockText, maxLossReached, planChecklist, planNote, practicePnl, sessionFacts, stopMissing, tradeCount } from "./planView.ts";
+import { formatClock } from "../desk/format.ts";
+import { maxLossReached, planChecklist, planNote, practicePnl, sessionFacts, stopMissing, tradeCount } from "./planView.ts";
 import { JournalSchema, OpenTradeSchema } from "./schemas.ts";
 
 const parsedJournal = JournalSchema.parse(journal);
@@ -70,10 +71,10 @@ test("D-022: a missing stop on the open trade offers the one-click fix; a closed
 });
 
 test("the session block names the symbol, the window and the candle interval with the tape's feed", () => {
-  assert.equal(clockText("09:30"), "9:30 AM");
-  assert.equal(clockText("16:00"), "4:00 PM");
-  assert.equal(clockText("12:05"), "12:05 PM");
-  assert.equal(clockText("00:15"), "12:15 AM");
+  assert.equal(formatClock("09:30"), "9:30 AM");
+  assert.equal(formatClock("16:00"), "4:00 PM");
+  assert.equal(formatClock("12:05"), "12:05 PM");
+  assert.equal(formatClock("00:15"), "12:15 AM");
   const spec = { symbol: "NVDA", window: { from: "09:30", to: "16:00" }, session: "regular", interval: "5m" } as const;
   assert.deepEqual(sessionFacts(spec, 1, "sip").map((row) => [row.label, row.value]), [
     ["Symbol · attempt", "NVDA · attempt 1"],

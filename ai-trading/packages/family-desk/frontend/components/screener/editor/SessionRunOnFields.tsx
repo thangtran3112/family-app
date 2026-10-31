@@ -4,6 +4,7 @@ import type { Problem } from "@/lib/api/schemas";
 import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
 import { runOnLabel } from "@/lib/desk/labels";
 import styles from "./editor.module.css";
+import { problemText } from "@/lib/desk/problems";
 
 const RUN_ONS: FilterForm["runOn"][] = ["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"];
 
@@ -30,7 +31,7 @@ export function SessionRunOnFields({ form, onChange, problems }: { form: FilterF
         </select>
       </label>
       {mine.map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
+        <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
     </fieldset>
   );

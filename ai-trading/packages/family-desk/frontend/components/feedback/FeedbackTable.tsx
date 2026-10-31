@@ -66,6 +66,7 @@ export function FeedbackTable({
       <DenseTable
         caption="Feedback reports"
         columns={columns}
+        tight
         rows={items}
         rowKey={(item) => String(item.id)}
         selectedKey={selectedId === null ? null : String(selectedId)}

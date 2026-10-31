@@ -6,7 +6,7 @@ import { type AlertForm } from "@/lib/desk/alertForm";
 import { FREQUENCY_LABEL, runOnLabel } from "@/lib/desk/labels";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
-import { problemLine } from "@/lib/desk/problemCopy";
+import { problemLine } from "@/lib/desk/problems";
 
 const RUN_ON: readonly AlertStrategySpecV1["watch"]["runOn"][] = [
   "bar_close_1m",

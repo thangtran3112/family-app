@@ -1,0 +1,7 @@
+.root { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-3); font-size: var(--text-label); }
+.title { margin: 0; color: var(--color-down); font-size: var(--text-label); font-weight: var(--weight-semibold); }
+.list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.item { display: block; margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: 18px; }
+.link { text-decoration: underline; text-underline-offset: 2px; }
+.link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.root[data-severity="warning"] .title, .root[data-severity="warning"] .item { color: var(--color-amber); }

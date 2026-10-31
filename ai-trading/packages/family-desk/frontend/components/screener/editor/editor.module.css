@@ -117,13 +117,6 @@
   line-height: 18px;
 }
 
-.problemPath {
-  display: block;
-  color: var(--color-muted);
-  font-size: 11px;
-  line-height: 14px;
-}
-
 .banner {
   display: flex;
   flex-direction: column;
@@ -132,13 +125,6 @@
   border-radius: var(--radius-sm);
   padding: var(--space-3);
   font-size: 13px;
-}
-
-.bannerTitle {
-  margin: 0;
-  color: var(--color-down);
-  font-size: 13px;
-  font-weight: var(--weight-semibold);
 }
 
 .editor select,

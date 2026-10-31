@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coveredCallPayoff, niceTicks, payoffAt, scaleLinear } from "./payoff.ts";
+import { coveredCallPayoff, payoffAt, scaleLinear } from "./payoff.ts";
 
 test("the payoff is the stock move plus the premium, capped at the strike", () => {
   // Bought at 231.40, sold the 245 call for 2.85: the most it makes is 245 - 231.40 + 2.85 = 16.45.
@@ -26,12 +26,6 @@ test("a strike beyond the range draws two straight points, and bad inputs draw n
 });
 
 test("axis ticks are round numbers inside the range", () => {
-  assert.deepEqual(niceTicks(0, 100, 4), [0, 20, 40, 60, 80, 100]);
-  assert.deepEqual(niceTicks(0, 790, 4), [0, 200, 400, 600]);
-  assert.deepEqual(niceTicks(-20, 20, 4), [-20, -10, 0, 10, 20]);
-  assert.deepEqual(niceTicks(185, 278, 4), [200, 220, 240, 260]);
-  assert.deepEqual(niceTicks(5, 5), []);
-  assert.deepEqual(niceTicks(Number.NaN, 5), []);
   const payoff = coveredCallPayoff(231.4, 245, 2.85)!;
   for (const tick of payoff.xTicks) assert.ok(tick >= payoff.xDomain[0] && tick <= payoff.xDomain[1]);
   for (const tick of payoff.yTicks) assert.ok(tick >= payoff.yDomain[0] && tick <= payoff.yDomain[1]);

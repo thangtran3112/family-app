@@ -4,6 +4,7 @@ import { changeTone, EMPTY_VALUE, formatEtDay, formatEtTimeZone, formatPct, form
 import { COPY, deskAiStaleText } from "./freshness.ts";
 import { ratingText } from "./fundamentalView.ts";
 import { formatUsd, formatUsdPrice } from "./mask.ts";
+import { niceTicks } from "./ticks.ts";
 import type { TimelineKind } from "./research.ts";
 
 // View models for the Research screens (02n §b3 FD7 to FD10): the API rows turned into display text once, here, so the
@@ -216,7 +217,7 @@ export const inputLabel = (key: string): string => INPUT_LABELS[key] ?? key.repl
 
 function inputText(key: string, value: number | null): string {
   const label = inputLabel(key);
-  if (value === null) return `${label}: not available`;
+  if (value === null) return `${label}: ${EMPTY_VALUE}`;
   return key.endsWith("_pct") ? `${label} ${formatPct(value, 1)}` : `${label} ${value}`;
 }
 
@@ -270,13 +271,8 @@ export function reactionSummary(reaction: NonNullable<Valuation["earnings_reacti
 /** Axis ticks at round steps that cover `maxAbs`, mirrored around zero: step 2 and top 8 give -8, -6 ... 8. */
 export function axisTicks(maxAbs: number): { step: number; top: number; ticks: number[] } {
   const safe = Number.isFinite(maxAbs) && maxAbs > 0 ? maxAbs : 1;
-  const raw = safe / 2;
-  const pow = 10 ** Math.floor(Math.log10(raw));
-  const step = ([1, 2, 5, 10].map((m) => m * pow).find((candidate) => candidate >= raw) ?? raw) as number;
-  const top = Math.ceil(safe / step) * step;
-  const count = Math.round(top / step);
-  const ticks = Array.from({ length: count * 2 + 1 }, (_, index) => Number(((index - count) * step).toFixed(6)));
-  return { step, top, ticks };
+  const ticks = niceTicks(-safe, safe);
+  return { step: ticks[1]! - ticks[0]!, top: ticks[ticks.length - 1]!, ticks };
 }
 
 export type ReactionBar = { date: string; label: string; value: number; text: string; tone: Tone; heightPct: number };
