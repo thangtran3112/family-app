@@ -33,6 +33,7 @@ import {
   listBuiltText,
   listCountsText,
   listWarning,
+  nameActionLabel,
   nameCap,
   practiceWindow,
   namesTodayText,
@@ -41,9 +42,11 @@ import {
   rescanStaleText,
   sourceNote,
   starsFullText,
+  threadDayNo,
   toggledStars,
   universeNote,
 } from "@/lib/replay/dayView";
+import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
@@ -285,7 +288,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         </div>
         <div className={`${styles.actions} ${styles.endWrap}`}>
           {practicing && !ended && (
-            <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>Resume {practicing.symbol}</Link>
+            <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Link>
           )}
           {ended ? (
             finishHref !== null ? (
@@ -383,7 +386,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   aria-label={practiceText("dayPractice", { symbol: row.symbol })}
                   onClick={() => void practice(row.symbol)}
                 >
-                  {opened.has(row.symbol) ? "Resume" : "Practice"}
+                  {nameActionLabel(opened.has(row.symbol))}
                 </button>
               )}
             />

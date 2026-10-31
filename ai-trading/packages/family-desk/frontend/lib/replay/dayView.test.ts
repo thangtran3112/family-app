@@ -24,6 +24,7 @@ import {
   listHeaderText,
   listWarning,
   moveText,
+  nameActionLabel,
   nameCap,
   namesTodayText,
   ordinal,
@@ -42,6 +43,7 @@ import {
   rescanStaleText,
   riskPlanText,
   selectionText,
+  sessionResumeHref,
   sourceNote,
   starsFullText,
   stripRows,
@@ -499,4 +501,10 @@ test("the trade table ends on a total row, and the selection quotes the table's 
   const total = tradeTotalRow({ trades: 2, pnl_usd: 12.5 });
   assert.deepEqual([total.key, total.symbol, total.pnl], ["total", "Total", "+$12.50"]);
   assert.equal(selectionText(endedDayList.review!), "Your names moved +3.11% · list median +1.40% · ranked 1st of 2");
+});
+
+test("Resume belongs to the thread's day, never to one name: a name's button says Practice or Switch, and a day session resumes through its day", () => {
+  assert.deepEqual([nameActionLabel(false), nameActionLabel(true)], ["Practice", "Switch"]);
+  assert.equal(sessionResumeHref({ id: 9, day_list_id: 42 }), "/practice/day?id=42", "a day-list session resumes the whole day, on its shared clock");
+  assert.equal(sessionResumeHref({ id: 9, day_list_id: null }), "/practice/replay?id=9", "a standalone session has no day to resume through");
 });
