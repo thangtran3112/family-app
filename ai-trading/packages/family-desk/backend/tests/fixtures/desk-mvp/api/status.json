@@ -8,8 +8,15 @@
   "unread": 2
  },
  "backups": null,
- "data_sources": "alpaca",
+ "data_sources": {
+  "bars": "alpaca",
+  "option_chain": "alpaca_options",
+  "quotes": "alpaca",
+  "trades": "alpaca",
+  "universe": "alpaca"
+ },
  "gateway": "not_configured",
+ "gateway_reason": null,
  "holdings": {
   "account_scope": "data",
   "imported_at": null,

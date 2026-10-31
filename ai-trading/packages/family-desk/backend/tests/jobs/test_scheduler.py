@@ -31,11 +31,17 @@ def test_due_now_lists_only_jobs_that_are_due(monkeypatch):
         "weekly": False,
         "relogin_reminder": False,
         "refresh_15m": True,
+        "bridge_routing": True,
+        "bridge_shadow": False,
         "watchdog": False,
     }
     monkeypatch.setattr(scheduler, "_DUE_NOW", {name: (lambda now, v=v: v) for name, v in due.items()})
 
-    assert scheduler.due_now(datetime(2026, 10, 6, 13, 30, tzinfo=UTC)) == ["premarket_0830", "refresh_15m"]
+    assert scheduler.due_now(datetime(2026, 10, 6, 13, 30, tzinfo=UTC)) == [
+        "premarket_0830",
+        "refresh_15m",
+        "bridge_routing",
+    ]
 
 
 def test_due_now_includes_relogin_reminder_on_sunday_at_1800_et():

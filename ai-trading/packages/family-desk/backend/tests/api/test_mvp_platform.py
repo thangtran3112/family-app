@@ -44,7 +44,14 @@ def test_status_stub_returns_the_a31_example(client, monkeypatch):
         "scans": {**STUB_STAMP, "freshness": "delayed", "next_run_at": "2026-10-26T12:30:00Z"},
         "alerts": {"state": "running", "unread": 2},
         "gateway": "not_configured",
-        "data_sources": "alpaca",
+        "gateway_reason": None,
+        "data_sources": {
+            "quotes": "alpaca",
+            "bars": "alpaca",
+            "option_chain": "alpaca_options",
+            "trades": "alpaca",
+            "universe": "alpaca",
+        },
         "streaming_slots": {"used": 0, "max": 70},
         "backups": None,
         "reconciliation": None,
@@ -66,7 +73,7 @@ def test_status_real_mode_without_feed_rows_is_unavailable_not_fabricated(client
     body = client.get("/api/desk/status", headers=auth_headers()).json()
     assert body["quotes"] == UNAVAILABLE_STAMP
     assert body["scans"] == {**UNAVAILABLE_STAMP, "next_run_at": None}
-    assert body["data_sources"] == "unknown"
+    assert body["data_sources"]["quotes"] == "unknown"  # nothing has served quotes yet
     assert body["alerts"] == {"state": "not_started", "unread": 0}
     assert body["market"]["session"] in {"pre", "regular", "after", "closed"}
 
@@ -84,7 +91,7 @@ def test_status_real_mode_reads_feed_health_pause_and_unread_alerts(client, db_s
     db_session.commit()
 
     body = client.get("/api/desk/status", headers=auth_headers()).json()
-    assert body["data_sources"] == "alpaca"
+    assert body["data_sources"]["quotes"] == "alpaca"
     assert body["quotes"]["source"] == "alpaca"
     assert body["quotes"]["quality"] == "delayed-15m"
     assert datetime.fromisoformat(body["quotes"]["as_of"].replace("Z", "+00:00")) == last_ok

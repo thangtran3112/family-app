@@ -683,7 +683,7 @@ def test_status_never_reports_gateway_up(client):
     assert body["backups"] is None
     assert body["reconciliation"] is None
     # Additive fields (02m §a3.1): with no feed rows and no alerts, nothing is reported as live.
-    assert body["data_sources"] == "unknown"
+    assert body["data_sources"]["quotes"] == "unknown"
     assert body["quotes"]["quality"] == "unavailable"
     assert body["scans"]["next_run_at"] is None
     assert body["alerts"] == {"state": "not_started", "unread": 0}

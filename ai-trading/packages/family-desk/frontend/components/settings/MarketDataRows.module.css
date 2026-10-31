@@ -1,0 +1,63 @@
+/* Mobile Settings · Market data (02t §6): read-only rows, the same words as the desktop card. */
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  line-height: var(--line-micro);
+  text-transform: uppercase;
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.row {
+  display: grid;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.rowTitle {
+  color: var(--color-text);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-label);
+}
+
+.rowText {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.rowNote,
+.note {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+  line-height: var(--line-label);
+}
+
+.note {
+  margin: 0;
+}

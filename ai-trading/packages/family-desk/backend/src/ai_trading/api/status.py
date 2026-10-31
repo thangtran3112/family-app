@@ -2,6 +2,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from ai_trading_common.quality import Quality
 from ai_trading_common.registry import DataSources
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -38,13 +39,27 @@ class StreamingSlotsOut(BaseModel):
     max: int
 
 
+class DataSourcesOut(BaseModel):
+    quotes: str
+    bars: str
+    option_chain: str
+    trades: str
+    universe: str
+
+
 class StatusOut(BaseModel):
     market: StatusMarketOut
     quotes: Stamp
     scans: StatusScansOut
     alerts: StatusAlertsOut
     gateway: Literal["not_configured", "connected", "reconnecting", "down"]
-    data_sources: Literal["unknown", "alpaca", "ibkr", "mixed"]
+    #: The gateway's own reason vocabulary (02t §5.5, §5.4: `gateway_down`, `edge_unreachable`,
+    #: `competing_session`, `off`, ...), None when the gateway has none to give. Shown as the stamp's
+    #: tooltip, never as a raw token.
+    gateway_reason: str | None
+    #: The serving vendor per data class, instead of one "mixed" guess (02t §5.5). In shadow mode the
+    #: quotes/BARS/option-chain vendors are still the direct providers: the bridge is in no chain.
+    data_sources: DataSourcesOut
     streaming_slots: StreamingSlotsOut
     backups: None
     reconciliation: None
@@ -102,20 +117,14 @@ def _fundamental_status(session: Session, user: AuthedUser) -> dict[str, Any]:
     }
 
 
-@router.get("/status", response_model=StatusOut)
-def status(
-    user: AuthedUser = Depends(get_current_user),
-    session: Session = Depends(get_session),
-    data_sources: DataSources = Depends(get_data_sources),
-) -> StatusOut | dict[str, Any]:
-    if stub_enabled():
-        return {**stub_platform.status(), **_fundamental_status(session, user)}
-    now = datetime.now(UTC)
-    market = market_state(now)
-    gateway = data_sources.gateway_status()
+def quotes_stamp(session: Session, data_sources: DataSources, *, now: datetime) -> tuple[Stamp, Quality | None]:
+    """The quotes stamp and the vendor that served it: the live gateway's own tick when it has one, else the
+    15-minute delayed feed, else the seeded strip's end-of-day row. Shared by `/status` and the Settings
+    card's shadow copy ("the Desk still shows Alpaca", 02t §6), so both name the same vendor and quality."""
     quotes = _delayed_feed_stamp(session, "bars_delayed", now)
     if quotes.as_of is None:
         quotes = _seeded_quotes_stamp(session, now) or quotes
+    gateway = data_sources.gateway_status()
     live = gateway.state == "connected" and gateway.quality is not None and gateway.as_of is not None
     if live:
         # The gateway's own tick: its quality and time, so the stamp never claims more than IBKR said (02m §b4).
@@ -128,6 +137,35 @@ def status(
             last_ok_at=ticked_at,
             now=now,
         )
+    return quotes, quotes.quality
+
+
+def _serving_vendors(data_sources: DataSources, quotes: Stamp) -> DataSourcesOut:
+    """The serving vendor per class (02t §5.5): the quotes stamp's own source when it has one, and for every
+    other class the first enabled rung of the Desk's own chain (`DataSources.serving`, recorded by
+    `from_env`). ``unknown`` when nothing has been recorded, never a guess."""
+    serving = dict(getattr(data_sources, "serving", {}) or {})
+    return DataSourcesOut(
+        quotes=quotes.source or serving.get("quotes", "unknown"),
+        bars=serving.get("bars", "unknown"),
+        option_chain=serving.get("option_chain", "unknown"),
+        trades=serving.get("trades", "unknown"),
+        universe=serving.get("universe", "unknown"),
+    )
+
+
+@router.get("/status", response_model=StatusOut)
+def status(
+    user: AuthedUser = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    data_sources: DataSources = Depends(get_data_sources),
+) -> StatusOut | dict[str, Any]:
+    if stub_enabled():
+        return {**stub_platform.status(), **_fundamental_status(session, user)}
+    now = datetime.now(UTC)
+    market = market_state(now)
+    gateway = data_sources.gateway_status()
+    quotes, _ = quotes_stamp(session, data_sources, now=now)
     scans = _delayed_feed_stamp(session, "scan", now)
     unread = session.execute(
         select(func.count(Alert.id)).where(Alert.user_id == user.id, Alert.read_at.is_(None))
@@ -139,8 +177,8 @@ def status(
         scans=StatusScansOut(**scans.model_dump(), next_run_at=None if scans.as_of is None else next_due(now)),
         alerts=StatusAlertsOut(state=alert_state(session, user.id, now), unread=unread),
         gateway=gateway.state,
-        # Scans and backfill stay on Alpaca, so live IBKR quotes make the Desk "mixed".
-        data_sources="mixed" if live else "alpaca" if quotes.as_of is not None else "unknown",
+        gateway_reason=gateway.reason,
+        data_sources=_serving_vendors(data_sources, quotes),
         streaming_slots=StreamingSlotsOut(used=gateway.lines_used, max=70),
         backups=None,
         reconciliation=None,

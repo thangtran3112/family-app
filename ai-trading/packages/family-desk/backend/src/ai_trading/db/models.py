@@ -5,7 +5,8 @@
 metrics, and feed-health tables (02m §b2 -- Alembic `0003`), the consensus-history tables
 (`consensus_snapshots`, `earnings_results`, `analyst_targets` -- 02n §d, Alembic `0004`), and the replay
 practice tables (02o c3 -- Alembic `0005`), the feedback log (02s -- Alembic `0010`), and the Fundamental lane's
-holdings, covered-call, IV, fundamentals and Desk AI tables (02n §d -- Alembic `0012`). Still out of scope:
+holdings, covered-call, IV, fundamentals and Desk AI tables (02n §d -- Alembic `0012`), and the family-scoped
+market-data routing row the provider toggle reads and writes (02t §3.5 -- Alembic `0013`). Still out of scope:
 `iv_daily`, `order_intents`/`fills` and the rest of 02a §9's later-phase tables (Phase 2a's own D3 ruling -- "a
 table arrives with the phase that first needs it").
 
@@ -26,6 +27,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -350,6 +352,26 @@ class FeedHealth(Base):
     # Null until the first successful pass: a feed that never worked has no last-ok time.
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detail: Mapped[str | None] = mapped_column(String)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MarketDataRouting(Base):
+    """The family-scoped provider preference, one row per data class (02t §3.5, ruling 12).
+
+    The bridge's cached copy is the runtime truth; this table is the Desk's own record, so a bridge
+    restart is re-synced by `jobs/bridge_routing.py` without waiting for anyone to open Settings. One
+    value for the whole family, unlike `users.settings` (per user), hence its own table.
+    """
+
+    __tablename__ = "market_data_routing"
+
+    # "equity_quotes" | "equity_bars" | "option_chain"
+    data_class: Mapped[str] = mapped_column(String, primary_key=True)
+    #: "" and NULL both mean "no preference" (the ladder's first rung answers).
+    preferred: Mapped[str | None] = mapped_column(String)
+    #: The Desk's routing version the bridge was last told; the bridge re-syncs when its own differs.
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    updated_by: Mapped[str | None] = mapped_column(String)  # the owner's verified email, never a token
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
