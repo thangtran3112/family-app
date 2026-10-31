@@ -1,20 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Delta } from "@/components/ui/Delta";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Panel, PanelBody, PanelHeader } from "@/components/ui/Panel";
 import { EmptyBlock } from "@/components/ui/StateBlocks";
 import type { Dashboard } from "@/lib/api/schemas";
 import { withPriorities } from "@/lib/desk/columns";
-import { changeTone, formatPrice, formatRatio, formatSignedPct } from "@/lib/desk/format";
+import { formatPrice, formatRatio } from "@/lib/desk/format";
 import { symbolHref } from "@/lib/desk/listNav";
-import { biasTone } from "@/lib/desk/workspace";
+import { biasUiTone } from "@/lib/desk/workspace";
 import styles from "./dashboard.module.css";
 
 type Row = Dashboard["watchlist"]["rows"][number];
 
-const signed = (value: number | null) => (
-  <span className={styles.tone} data-tone={changeTone(value)}>{formatSignedPct(value)}</span>
-);
+const signed = (value: number | null) => <Delta value={value} />;
 
 // 1180 drops vs VWAP, then RVOL (BOARD_PRIORITIES.dashboard); DenseTable reads the priorities.
 const COLUMNS = withPriorities<DenseColumn<Row>>(
@@ -27,7 +27,7 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
     {
       key: "bias_label",
       label: "Bias",
-      render: (row) => <span className={styles.tone} data-tone={biasTone(row.bias_label)}>{row.bias_label}</span>,
+      render: (row) => <Delta tone={biasUiTone(row.bias_label)}>{row.bias_label}</Delta>,
       sortValue: (row) => row.bias_label,
     },
   ],
@@ -37,17 +37,19 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
 export function WatchlistHeat({ watchlist, dim }: { watchlist: Dashboard["watchlist"]; dim: boolean }) {
   const router = useRouter();
   return (
-    <section className={styles.panel}>
-      <h2 className={styles.panelTitle}>{watchlist.name}</h2>
-      <DenseTable
-        caption="Watchlist heat"
-        columns={COLUMNS}
-        rows={watchlist.rows}
-        rowKey={(row) => row.symbol}
-        onSelect={(row) => router.push(symbolHref(row.symbol))}
-        dim={dim}
-        empty={<EmptyBlock title="Add symbols to start watching" />}
-      />
-    </section>
+    <Panel>
+      <PanelHeader title={watchlist.name} />
+      <PanelBody>
+        <DenseTable
+          caption="Watchlist heat"
+          columns={COLUMNS}
+          rows={watchlist.rows}
+          rowKey={(row) => row.symbol}
+          onSelect={(row) => router.push(symbolHref(row.symbol))}
+          dim={dim}
+          empty={<EmptyBlock title="Add symbols to start watching" />}
+        />
+      </PanelBody>
+    </Panel>
   );
 }

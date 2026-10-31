@@ -3,6 +3,7 @@
 
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { Freshness } from "@/components/ui/Freshness";
+import { Icon } from "@/components/ui/Icon";
 import { COPY } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { LANE_HOME, shows } from "@/lib/lanes";
@@ -24,11 +25,7 @@ export function TopBar({ band }: { band: ShellBand }) {
     <header className={styles.bar} role="banner" data-band={band}>
       <a className={styles.wordmark} href={LANE_HOME[lane]}>
         <span className={styles.mark} aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M9 5v4M9 15v4M15 3v6M15 15v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <rect x="7" y="9" width="4" height="6" rx="1" stroke="currentColor" strokeWidth="2" />
-            <rect x="13" y="9" width="4" height="6" rx="1" stroke="currentColor" strokeWidth="2" />
-          </svg>
+          <Icon name="mark" size={18} />
         </span>
         <span>Family Desk</span>
       </a>
@@ -40,7 +37,7 @@ export function TopBar({ band }: { band: ShellBand }) {
       {/* The live market status says nothing about a replayed day, so it steps aside while a replay runs (and in Backtest always). */}
       {!replayBadge && shows(lane, "marketPill") && <Freshness variant="pill" band={band} />}
       {replayBadge ? (
-        <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="amber" />
+        <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="warn" />
       ) : !shows(lane, "freshness") ? null : failed ? (
         <Freshness variant="note" className={styles.topBadge} label={COPY.statusUnavailable} />
       ) : (

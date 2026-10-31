@@ -1,11 +1,15 @@
 // Display formatting for the desktop screens (02m §a1, §d4). Every function takes API values (ISO UTC
 // strings, numbers or null) and returns text; nothing here ever prints "null", "NaN" or "undefined".
 
+import type { Tone as UiTone } from "../../components/ui/tone.ts";
+
 const ET = "America/New_York";
 const MINUS = "−";
 export const EMPTY_VALUE = "—";
 
+/** Legacy sign tone ("flat"); the new model is components/ui/tone.ts. Retires as each module migrates (design-component-system §7). */
 export type Tone = "up" | "down" | "flat";
+export type SignTone = Extract<UiTone, "up" | "down" | "neutral">;
 export type MetricFormat = "price" | "pct" | "pct_signed" | "compact" | "ratio" | "number" | "time";
 
 const cleanSpaces = (text: string) => text.replace(/[  ]/g, " ");
@@ -134,9 +138,16 @@ export function formatMetric(format: MetricFormat, value: number | string | null
   }
 }
 
-export function changeTone(value: number | null | undefined): Tone {
-  if (!isFiniteNumber(value) || value === 0) return "flat";
+/** The sign of a change as a ui/tone name: up, down, or neutral for zero, a missing value or NaN. */
+export function signTone(value: number | null | undefined): SignTone {
+  if (!isFiniteNumber(value) || value === 0) return "neutral";
   return value > 0 ? "up" : "down";
+}
+
+/** The legacy spelling ("flat" for neutral) for modules not yet moved onto components/ui/tone; each migration wave retires its callers. */
+export function changeTone(value: number | null | undefined): Tone {
+  const tone = signTone(value);
+  return tone === "neutral" ? "flat" : tone;
 }
 
 /** "just now" / "2 min ago" / "3 hr ago" / "2 days ago" */

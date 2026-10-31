@@ -1,0 +1,5 @@
+/* One height for every chip (--size-chip). Tone colours come from var(--tone) (app/globals.css), so no module restates them. */
+.root { display: inline-flex; min-height: var(--size-chip); max-width: 100%; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); white-space: nowrap; }
+.root:not([data-tone="neutral"]) { border-color: var(--tone); color: var(--tone); }
+.root[data-wrap="true"] { padding-block: var(--space-0-5); white-space: normal; }
+.root[data-kind="count"] { min-width: 16px; min-height: 16px; justify-content: center; border: 0; background: var(--tone); padding: 0 var(--space-1); color: var(--color-on-pill); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }

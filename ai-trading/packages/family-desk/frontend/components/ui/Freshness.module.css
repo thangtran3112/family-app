@@ -1,7 +1,7 @@
 /* One chrome for the freshness badge, the top-bar market pill and fixed notes (replay, status unavailable). Tone comes from tokens. */
 .root { display: inline-flex; min-height: var(--size-sm); align-items: center; gap: var(--space-1-5); border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 10px; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); white-space: nowrap; }
 .root[data-tone="up"], .root[data-open="true"] { color: var(--color-text); }
-.root[data-tone="amber"] { border-color: var(--color-amber); color: var(--color-amber); }
+.root[data-tone="warn"] { border-color: var(--color-amber); color: var(--color-amber); }
 .root[data-tone="down"] { border-color: var(--color-down); color: var(--color-down); }
 .root[data-variant="pill"] { flex-shrink: 0; }
 .root[data-variant="note"] { font-variant-numeric: tabular-nums; }

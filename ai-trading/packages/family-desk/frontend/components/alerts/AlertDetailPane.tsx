@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { deleteAlertStrategy, loadAlertFires, loadAlertStrategy } from "@/lib/desk/alerts";
-import { actionError, actionFor, actionLabel, sourceText, statusText } from "@/lib/desk/alertsView";
+import { actionError, actionFor, actionLabel, deliveryTone, sourceText, statusText, statusTone } from "@/lib/desk/alertsView";
 import { formatEtStamp } from "@/lib/desk/format";
 import { channelLabel, deliveryLabel } from "@/lib/desk/labels";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { describeSpec } from "@/lib/spec/describe";
 import { parseAlertSpec } from "@/lib/spec/parse";
-import { deliveryTone } from "./AlertLog";
-import { runRowAction, statusTone } from "./AlertTable";
+import { runRowAction } from "./AlertTable";
 import { FireThumb } from "./FireThumb";
 import styles from "./alerts.module.css";
 
@@ -73,28 +74,28 @@ function AlertDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
     <div className={styles.pane}>
       <h2 className={styles.paneTitle}>{strategy.name}</h2>
       <div className={styles.meta}>
-        <span className={styles.chip} data-tone={statusTone(strategy.status)}>{statusText(strategy)}</span>
+        <Badge tone={statusTone(strategy.status)}>{statusText(strategy)}</Badge>
         <span className={styles.muted}>{sourceText(strategy.source)}</span>
       </div>
       {parsed && <p className={styles.sentence}>{describeSpec(parsed)}</p>}
 
       <div className={styles.actions}>
         {action && (
-          <button type="button" className={styles.button} disabled={busy !== null} onClick={runAction}>
+          <Button disabled={busy !== null} loading={busy === "action"} onClick={runAction}>
             {busy === "action" ? "Working…" : actionLabel(action)}
-          </button>
+          </Button>
         )}
         <Link href={`/alerts/new?edit=${id}`} className={styles.link}>Edit</Link>
         {confirming ? (
           <span className={styles.confirm}>
             Delete this alert strategy?
-            <button type="button" className={`${styles.button} ${styles.danger}`} disabled={busy !== null} onClick={remove}>
+            <Button variant="danger" disabled={busy !== null} loading={busy === "delete"} onClick={remove}>
               {busy === "delete" ? "Deleting…" : "Delete"}
-            </button>
-            <button type="button" className={styles.button} disabled={busy !== null} onClick={() => setConfirming(false)}>Keep</button>
+            </Button>
+            <Button disabled={busy !== null} onClick={() => setConfirming(false)}>Keep</Button>
           </span>
         ) : (
-          <button type="button" className={`${styles.button} ${styles.danger}`} onClick={() => setConfirming(true)}>Delete</button>
+          <Button variant="danger" onClick={() => setConfirming(true)}>Delete</Button>
         )}
       </div>
       {error && <p role="alert" className={styles.error}>{error}</p>}
@@ -116,9 +117,9 @@ function AlertDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
                 <span className={styles.muted}>{formatEtStamp(fire.bar_time)}</span>
                 <span className={styles.meta}>
                   {fire.deliveries.map((delivery) => (
-                    <span key={delivery.channel} className={styles.chip} data-tone={deliveryTone(delivery.status)}>
+                    <Badge key={delivery.channel} tone={deliveryTone(delivery.status)} wrap>
                       {channelLabel(delivery.channel)} · {deliveryLabel(delivery.status)}
-                    </span>
+                    </Badge>
                   ))}
                 </span>
               </div>

@@ -1,21 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { deskFetch } from "@/lib/api/client";
 import {
   StrategiesResponseSchema,
   StrategyVersionsResponseSchema,
 } from "@/lib/api/schemas";
+import { stageLabel, stageTone } from "@/lib/desk/strategyView";
 import styles from "./strategies.module.css";
 
 type Strategy = ReturnType<typeof StrategiesResponseSchema.parse>[number];
 type StrategyVersion = ReturnType<typeof StrategyVersionsResponseSchema.parse>[number];
 type StrategyRow = { strategy: Strategy; currentVersion: StrategyVersion | null };
-
-function stageLabel(stage: string): string {
-  return ({ draft: "Draft", alert_only: "Alert only", paper: "Paper" } as Record<string, string>)[stage]
-    ?? stage.replaceAll("_", " ");
-}
 
 export function StrategyList() {
   const [rows, setRows] = useState<StrategyRow[]>([]);
@@ -63,21 +62,18 @@ export function StrategyList() {
           <p className={styles.eyebrow}>YOUR DESK</p>
           <h1 className={styles.pageTitle}>Strategies</h1>
         </div>
-        <a className={styles.primaryLink} href="/strategies/new">New strategy</a>
+        <Button variant="primary" href="/strategies/new">New strategy</Button>
       </div>
 
       {loading && <p aria-live="polite" className={styles.feedback}>Loading strategies…</p>}
       {error && (
-        <div className={styles.error} role="alert">
-          <span>{error}</span>
-          <button className={styles.secondaryButton} onClick={retry} type="button">Try again</button>
-        </div>
+        <Banner tone="down" action={<Button onClick={retry}>Try again</Button>}>{error}</Banner>
       )}
       {!loading && !error && rows.length === 0 && (
         <div className={styles.emptyState}>
           <h2>No strategies yet</h2>
           <p>Start with a template. New strategies are saved as drafts.</p>
-          <a className={styles.primaryLink} href="/strategies/new">Browse templates</a>
+          <Button variant="primary" href="/strategies/new">Browse templates</Button>
         </div>
       )}
       {!loading && !error && rows.length > 0 && (
@@ -100,9 +96,7 @@ export function StrategyList() {
                     </a>
                   </td>
                   <td data-label="Stage">
-                    <span className={`${styles.stageBadge} ${styles[`stage_${strategy.stage}`] ?? ""}`}>
-                      {stageLabel(strategy.stage)}
-                    </span>
+                    <Badge tone={stageTone(strategy.stage)}>{stageLabel(strategy.stage)}</Badge>
                   </td>
                   <td data-label="Current version">
                     {currentVersion

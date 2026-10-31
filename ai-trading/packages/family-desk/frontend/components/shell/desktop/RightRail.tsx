@@ -2,6 +2,7 @@
 
 import { useContext, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { PanelHeader } from "@/components/ui/Panel";
 import { activeRailTab, activeRailTabs, toggleRailTab, toggleRailTabs } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { RailSlotContext } from "./DeskContext";
@@ -60,7 +61,7 @@ export function RightRail({
       <div className={styles.stack} role="complementary" aria-label={label}>
         {sections.map((section) => (
           <section key={section.id} className={styles.section} aria-labelledby={`rail-${section.id}`}>
-            <h2 id={`rail-${section.id}`} className={styles.sectionTitle}>{section.label}</h2>
+            <PanelHeader variant="label" id={`rail-${section.id}`} title={section.label} />
             {section.node}
           </section>
         ))}
@@ -93,7 +94,7 @@ export function RightRail({
         <RightRailDrawer title={openSections.map((section) => section.label).join(", ")} onClose={close}>
           {openSections.map((section) => (
             <div key={section.id} className={styles.drawerSection}>
-              <h2 className={styles.sectionTitle}>{section.label}</h2>
+              <PanelHeader variant="label" title={section.label} />
               {section.node}
             </div>
           ))}

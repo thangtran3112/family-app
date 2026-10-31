@@ -1,3 +1,4 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import type { MarketChartLevel, MarketChartOverlay, MarketChartPane } from "../../components/charts/MarketChart.tsx";
 import { AlertStrategySpecV1Schema } from "@ai-trading/contracts/alert-strategy";
 import type { Condition, Operand } from "@ai-trading/contracts";
@@ -236,6 +237,12 @@ const SIGNAL_KIND_LABEL: Record<string, string> = {
 };
 export const signalKindLabel = (kind: string): string => SIGNAL_KIND_LABEL[kind] ?? "Signal";
 
-/** Row tone for a bias label. */
-export const biasTone = (label: BiasLabel | string): "up" | "down" | "flat" =>
-  label === "Buy" || label === "Strong Buy" ? "up" : label === "Sell" || label === "Strong Sell" ? "down" : "flat";
+/** Row tone for a bias label, in the components/ui/tone vocabulary. */
+export const biasUiTone = (label: BiasLabel | string): Tone =>
+  label === "Buy" || label === "Strong Buy" ? "up" : label === "Sell" || label === "Strong Sell" ? "down" : "neutral";
+
+/** The legacy spelling ("flat") for modules still styling by class; each migration wave moves its callers to `biasUiTone`. */
+export const biasTone = (label: BiasLabel | string): "up" | "down" | "flat" => {
+  const tone = biasUiTone(label);
+  return tone === "up" || tone === "down" ? tone : "flat";
+};
