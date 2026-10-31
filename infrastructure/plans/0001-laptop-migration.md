@@ -465,8 +465,11 @@ uses neither: it is local (§3.4).
    - `shared/vps-postgres` and `shared/vps-backup` keep their names. Their values describe the
      cluster and the bucket, not the host, and ADR-0007 treats profile names as stable.
 2. **`ai-trading-deploy.yml`:**
-   - Add a dispatch input `target: vps | laptop`, which selects the Firestore group, and
-     `dark: true|false` for staging ([0001c](subplans/0001c-staging-bring-up.md)).
+   - Add dispatch inputs:
+     - `target: vps | laptop`, which selects the Firestore group;
+     - `dark: true|false` for staging ([0001c](subplans/0001c-staging-bring-up.md));
+     - `image_tag`, which reuses a pushed tag and skips the build. Staging and the cutover use
+       it, so the freeze contains no build time.
    - Add the Tailscale step before scp, with OAuth credentials fetched from `shared/tailscale`
      after WIF, masked.
    - Rename "Deploy to the VPS" to "Deploy to the host".
@@ -476,8 +479,10 @@ uses neither: it is local (§3.4).
    - Credentials come as GitHub environment secret **copies** (`TS_CI_OAUTH_CLIENT_ID`,
      `TS_CI_OAUTH_SECRET`), set with `gh secret set` from Firestore. This is the documented
      CI-copy pattern, because the deploy has no GCP auth and a test pins that.
-   - Repoint `vars.VPS_*`, `secrets.VPS_DEPLOY_SSH_KEY` and `VPS_DEPLOY_KNOWN_HOSTS` at cutover.
-   - Add a `workflow_dispatch` with `target` and `dark` for staging. A dispatch to `main` needs
+   - Add laptop copies (`LAPTOP_HOST`, `LAPTOP_PORT` and `LAPTOP_USER` vars;
+     `LAPTOP_DEPLOY_SSH_KEY` and `LAPTOP_DEPLOY_KNOWN_HOSTS` secrets) beside the VPS copies. The
+     push default flips at cutover; 0001f deletes the VPS copies.
+   - Add a `workflow_dispatch` with `target`, `dark` and `image_tag`. A dispatch to `main` needs
      owner confirmation at execution time (expense AGENTS.md).
 4. **Strict host keys stay.** `VPS_SSH_KNOWN_HOSTS` holds the laptop's ed25519 key for
    `[<tailnet-name>]:2222`. Use `StrictHostKeyChecking=yes` and no keyscan in CI. Tailscale SSH
@@ -502,9 +507,11 @@ uses neither: it is local (§3.4).
 | Expense receipts and inbound volumes | Restored from the backup's `receipts.tar` | Final copy during the freeze | Same manifest check |
 | Temporal | Lives in Postgres | Lives in Postgres | Namespace and schedules listed; worker connects |
 
-**Sizes.** To be filled from the 0001d step-0 probe. **Gate:** the measured relay throughput must
-fit the whole cutover copy inside a 30-minute freeze. If it does not, switch the volumes to the
-warm-rsync path, and consider logical replication for Postgres (not expected at family scale).
+**Sizes.** To be filled from the 0001d step-0 probe. **Gate:** at the measured relay throughput,
+the cutover copy must take 30 minutes or less, and the whole freeze (stop, copy, parity, two
+`image_tag` CI dispatches, connector flip) must take 60 minutes or less. If the copy is over
+budget, switch the volumes to the warm-rsync path, and consider logical replication for Postgres
+(not expected at family scale).
 
 ### 7.2 Why a cold physical copy at cutover
 
@@ -551,7 +558,7 @@ change.
 | a | [Laptop bootstrap](subplans/0001a-laptop-bootstrap.md) | Owner Day-0, then agent | SSH over the tailnet with pinned host keys; host bootstrap tests green on the real host |
 | b | [IaC consolidation](subplans/0001b-iac-consolidation.md) | ai-trading/infra lane (b-1), expense lane (b-2) | No-op VPS redeploy of both apps from the moved paths; all pinned-path tests green |
 | c | [Staging bring-up](subplans/0001c-staging-bring-up.md) | Agent | Both stacks healthy **dark** on the laptop through the real CI path (`target=laptop dark=true`) |
-| d | [Data migration and validation](subplans/0001d-data-migration-validation.md) | Agent; owner approves the probe numbers | Full rehearsal passes the parity checks; freeze estimate under 30 minutes |
+| d | [Data migration and validation](subplans/0001d-data-migration-validation.md) | Agent; owner approves the probe numbers | Full rehearsal passes the parity checks; copy 30 minutes or less, total freeze 60 minutes or less |
 | e | [Cutover](subplans/0001e-cutover.md) | Agent plus owner present | Every hostname and every critical flow verified; rollback window opens |
 | f | [VPS decommission](subplans/0001f-vps-decommission.md) | Owner (OVH account) plus agent | Rollback window closed clean; final archive verified |
 | g | [Post-cutover hardening](subplans/0001g-post-cutover-hardening.md) | Agent | Backups, monitoring, update policy and DR runbook live; docs reconciled |
