@@ -27,6 +27,10 @@
 #                            (not needed with --data-from-copy)
 #
 # Optional:
+#   POSTGRES_HOST_BIND=127.0.0.1:5432 - host loopback address:port the cluster is published on.
+#                            Override when something else already owns 5432 on the host (the
+#                            laptop's embedded Hindsight Postgres does). Apps use the
+#                            postgres_default network, never this port.
 #   REQUIRE_IMAGE_DIGEST=1 - fail unless POSTGRES_IMAGE is pinned by digest (@sha256:...).
 #   --data-from-copy       (or DATA_FROM_COPY=1) - the data volume was copied from another
 #                            host (cutover, 0001e): bring the cluster up on that data and STOP.
@@ -140,7 +144,7 @@ services:
       default:
         aliases: [postgres]
     ports:
-      - "127.0.0.1:5432:5432"
+      - "${POSTGRES_HOST_BIND:-127.0.0.1:5432}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: \${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}
