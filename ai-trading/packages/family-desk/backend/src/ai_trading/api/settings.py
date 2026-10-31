@@ -26,7 +26,7 @@ from ai_trading.notify.dispatch import RETRY_DELAYS_SECONDS
 router = APIRouter(prefix="/api/desk/settings", tags=["settings"])
 
 _CHANNELS = {"inbox", "telegram", "slack"}
-_DEFAULT_VIEWS = ("technical", "fundamental")  # a tuple: `in` never hashes an unhashable JSON value
+_DEFAULT_VIEWS = ("technical", "fundamental", "backtest")  # the three modes (ADR-0014); a tuple: `in` never hashes an unhashable JSON value
 _HHMM = re.compile(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]")
 _TEST_TITLE = "Test from Family Desk"
 _TEST_BODY = "This is a test message from Family Desk. No action needed."
@@ -54,7 +54,7 @@ def _validate_owned_settings(settings: dict[str, Any]) -> None:
             raise HTTPException(status_code=422, detail="channels must contain only inbox, telegram, or slack")
 
     if "default_view" in settings and settings["default_view"] not in _DEFAULT_VIEWS:
-        raise HTTPException(status_code=422, detail="default_view must be technical or fundamental")
+        raise HTTPException(status_code=422, detail="default_view must be technical, fundamental or backtest")
 
     if "pause_all" in settings and not isinstance(settings["pause_all"], bool):
         raise HTTPException(status_code=422, detail="pause_all must be true or false")
