@@ -67,7 +67,7 @@ test("AGENTS.md records the Env and Secrets rule", () => {
   assert.match(agents, /common\/config\/family_config\.py/);
 });
 
-test("expense CI runs when family config changes", () => {
-  const ci = readFileSync(join(repoRoot, ".github/workflows/expense-tax-ci.yml"), "utf8");
-  assert.match(ci, /- "common\/config\/\*\*"/);
+test("expense deploy runs when family config changes", () => {
+  const deploy = readFileSync(join(repoRoot, ".github/workflows/expense-tax-deploy.yml"), "utf8");
+  assert.match(deploy, /- "common\/config\/\*\*"/);
 });

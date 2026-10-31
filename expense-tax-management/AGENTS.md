@@ -12,7 +12,7 @@
 
 ## Completed Baseline
 
-Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phase 1C gateway hardening, Phase 1D protected development, and Phase 3B deduplication are complete. Canonical status: `plans/PLAN.md`. Completed implementation detail remains in git history, not live planning files.
+Phase 0 baseline, Phase 1A CI (retired 2026-10-31: the pipeline is deployment-only, see `plans/ROADMAP.md`), Phase 1B private production deployment/auth, Phase 1C gateway hardening, Phase 1D protected development, and Phase 3B deduplication are complete. Canonical status: `plans/PLAN.md`. Completed implementation detail remains in git history, not live planning files.
 
 ## Current Production
 
@@ -70,19 +70,20 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 
 ## Git Safety
 
-- Default working branch is `feature/toby`; work directly on it permanently, across sessions.
-- Use a separate git worktree with its own throwaway `feature/*` branch only when a worktree is explicitly requested for that session.
-- Before starting new work on `feature/toby`: `git fetch origin`, then fast-forward `feature/toby` onto `origin/dev`, or merge `origin/dev` into it when a fast-forward is not possible (other sessions' unmerged commits may be on it).
+- **A git worktree is the default and required place for any coding change** (owner rule, 2026-10-31; root `AGENTS.md`). One worktree per task under `.worktrees/`, on its own `feature/*` branch cut from `origin/dev` after a `git fetch origin`. Never cut it from `feature/toby` or another lane's branch. Every harness and agent — Claude Code, opencode, subagents, and operators — follows this.
+- The main checkout (`/Users/tobytran/personal/family-app`) is the integration and review checkout: it stays on `feature/toby` and is never edited. Uncommitted or untracked files there belong to another session; never stage, commit, stash, discard, or clean them up.
+- Before starting new work: `git fetch origin`, then cut the task's worktree branch from `origin/dev`.
 - Never commit directly on `dev` or `main`.
-- Push `feature/toby` (or the explicitly requested worktree's branch), then open a pull request to `dev`.
+- Push the task's worktree branch (cut from the latest `origin/dev`), then open a pull request to `dev`. The owner's `feature/toby` is his own sync branch: agents never merge into it, reset it, or push it.
 - Unit/quality check must succeed before merge.
-- Integration result is advisory and must be reported when red.
-- GitHub CLI merge is authorized after the required check is green and the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge.
-- After a squash merge, `feature/toby` diverges from its now-merged commits; merge the new `origin/dev` tip into it (a fast-forward when possible) before the next round of work. Never reset or force-push `feature/toby`: other sessions share it, and a reset drops their unmerged commits. Never force-push `dev` or `main`.
+- GitHub Actions runs no expense-tax test job (`expense-tax-ci.yml` removed 2026-10-31; ADR-0013 in `ai-trading/decisions/adr/`). The quality check is a local gate: `pnpm ci:lint`, `pnpm ci:typecheck`, `pnpm ci:test`, `pnpm ci:build`, `pnpm contracts:check`. Run it before you push and report the result.
+- Integration (`pnpm verify:phase-0n` with the `PHASE_*_INTEGRATION` gates, Docker PostgreSQL) is a local, advisory gate. Report it when red.
+- GitHub CLI merge is authorized after the local quality check has passed and been reported, the PR is mergeable, squash merge is enabled, and the branch includes current `origin/dev`; use squash merge. If GitHub still blocks the PR on the removed `Contracts, services, workers, frontends` status check (a `dev` ruleset setting), do not bypass it: tell the owner.
+- After a squash merge, cut the next task's worktree branch from the new `origin/dev` tip. Never force-push `dev` or `main`, and never reset or push the owner's `feature/toby`.
 - Never bypass branch protection.
 - `main` remains outside the development flow until a later release phase.
 - Personal repository standing approval: agents may push `feature/*` branches, open pull requests to `dev`, and squash-merge them into `origin/dev` without execution-time confirmation once the merge conditions above hold.
-- Conserve GitHub Actions minutes: stack commits locally, push only after local verification, and open exactly one pull request per phase; avoid extra pushes to an open pull request unless CI fails.
+- Conserve GitHub Actions minutes: stack commits locally, push only after local verification, and open exactly one pull request per phase; avoid extra pushes to an open pull request unless the change needs it.
 - Every other remote write still needs explicit execution-time confirmation immediately before the command: anything targeting `main`, workflow dispatch, ruleset or default-branch changes, and any force-push.
 - Preserve unrelated worktree changes, especially `plans/mockups/**`; stage exact paths only.
 - Never inspect, print, commit, or expose secrets.
@@ -101,3 +102,9 @@ Phase 0 baseline, Phase 1A CI, Phase 1B private production deployment/auth, Phas
 - Production GCP owns the Cloudflare Terraform WIF and state; family config lives in Firestore `family-config` (`tobytran-portfolio`); Phase 3D mailbox broker runs as a VPS container; no new GCP compute.
 - Temporal database bootstrap remains an explicit operator-only Task 8; normal deploy never runs `bootstrap-temporal-db.sh`.
 - Current infrastructure sources: `infrastructure/vps/`, `infrastructure/cloudflare/expense-tax/`, `.github/workflows/expense-tax-deploy.yml`.
+
+## Tailscale
+
+- The family-app tailnet carries admin and CI SSH only (port 2222 on `tag:family-host`); public traffic stays on the Cloudflare tunnel.
+- All of it is Terraform under `infrastructure/tailscale/`. Rule: `.claude/rules/tailscale.md`; skill: `manage-family-tailscale`.
+- Never the employer tailnet, never a console edit.

@@ -47,7 +47,7 @@ pnpm contracts:check
 
 - `dev` is default and protected.
 - Start coding work from current `origin/dev` in a `feature/*` worktree.
-- Merge through a pull request to `dev`; required quality CI must pass.
-- `main` is production-only and deploys through `.github/workflows/expense-tax-deploy.yml`.
+- Merge through a pull request to `dev`. No GitHub Actions job runs the tests; run the package's local gates first (see its `AGENTS.md`).
+- `main` is production-only and deploys through `.github/workflows/expense-tax-deploy.yml` on a push to `main` (no test job in front of it).
 
 Read `expense-tax-management/AGENTS.md` and `expense-tax-management/plans/PLAN.md` before implementation.

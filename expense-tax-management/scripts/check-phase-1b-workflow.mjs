@@ -22,15 +22,18 @@ function assertEqual(actual, expected, label) {
 }
 
 const trigger = workflow.on ?? workflow["on"];
-assertEqual(trigger?.workflow_run?.workflows?.[0], "Expense Tax CI", "workflow_run workflow name");
-assertEqual(trigger?.workflow_run?.types?.[0], "completed", "workflow_run event type");
-assertIncludes(raw, "github.event.workflow_run.conclusion == 'success'");
-assertIncludes(raw, "github.event.workflow_run.head_branch == 'main'");
-assertIncludes(raw, "github.event.workflow_run.head_repository.full_name == github.repository");
+assertEqual(trigger?.push?.branches?.join(","), "main", "push trigger branches");
+assertIncludes(trigger?.push?.paths?.join("|") ?? "", "expense-tax-management/**", "push path filter");
+assertIncludes(trigger?.push?.paths?.join("|") ?? "", "common/config/**", "push path filter");
+assertEqual(trigger?.workflow_dispatch !== undefined, true, "workflow_dispatch trigger present");
+assertEqual(trigger?.workflow_run, undefined, "no workflow_run trigger (deployment-only pipeline)");
+for (const job of ["build", "deploy"]) {
+  assertEqual(workflow.jobs?.[job]?.if, "github.ref == 'refs/heads/main'", `${job} main-only condition`);
+}
 assertExcludes(raw, "pull_request", "pull-request deployment path");
 
 assertIncludes(raw, "actions/checkout@v7");
-assertIncludes(raw, "ref: ${{ github.event.workflow_run.head_sha }}");
+assertIncludes(raw, "ref: ${{ github.sha }}");
 assertIncludes(raw, "persist-credentials: false");
 assertIncludes(raw, "docker/setup-buildx-action@v3");
 assertIncludes(raw, "docker/login-action@v3");
@@ -64,7 +67,8 @@ assertEqual(
   "build image matrix names",
 );
 for (const image of imageNames) assertIncludes(raw, image, `image ${image}`);
-assertIncludes(raw, "github.event.workflow_run.head_sha");
+assertExcludes(raw, "workflow_run", "removed workflow_run event payload");
+assertIncludes(raw, ":${{ github.sha }}", "image tag from the pushed commit SHA");
 assertExcludes(raw, ":latest", "mutable latest image tag");
 
 assertIncludes(raw, "environment: production");
