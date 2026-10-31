@@ -4,6 +4,11 @@ export type Lane = "technical" | "fundamental";
 export type RouteLane = Lane | "shared";
 export const LANES: readonly Lane[] = ["technical", "fundamental"];
 export const LANE_LABEL: Record<Lane, string> = { technical: "Technical", fundamental: "Fundamental" };
+/** One line per lane for the View chips' tooltips: what clicking the chip switches the app to (5R). */
+export const LANE_SUMMARY: Record<Lane, string> = {
+  technical: "Day and swing practice, screener, alerts",
+  fundamental: "Holdings, covered calls, research",
+};
 
 // Longest matching prefix wins, so "/strategies/library" can differ from "/strategies" if it ever must.
 const ROUTE_LANES: ReadonlyArray<readonly [string, RouteLane]> = [
