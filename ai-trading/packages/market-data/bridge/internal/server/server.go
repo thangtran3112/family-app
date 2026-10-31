@@ -19,6 +19,7 @@ import (
 
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1/marketdatav1connect"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/archive"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/config"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/router"
 )
@@ -33,6 +34,7 @@ var ticker = regexp.MustCompile(`^[A-Z0-9][A-Z0-9.\-]{0,9}$`)
 
 type Options struct {
 	Router     *router.Router
+	Archive    *archive.Archive // H1; nil = archive off, GetBars goes straight to the router
 	Token      string
 	AdminToken string
 	Build      string
@@ -44,6 +46,7 @@ type Options struct {
 type service struct {
 	marketdatav1connect.UnimplementedMarketDataHandler // GetOptionChain: B6
 	r                                                  *router.Router
+	archive                                            *archive.Archive
 	build                                              string
 	log                                                *slog.Logger
 	now                                                func() time.Time
@@ -61,7 +64,7 @@ func Handler(o Options) http.Handler {
 	if o.Heartbeat <= 0 {
 		o.Heartbeat = 5 * time.Second
 	}
-	svc := &service{r: o.Router, build: o.Build, log: o.Log, now: o.Now, heartbeat: o.Heartbeat}
+	svc := &service{r: o.Router, archive: o.Archive, build: o.Build, log: o.Log, now: o.Now, heartbeat: o.Heartbeat}
 	mux := http.NewServeMux()
 	path, h := marketdatav1connect.NewMarketDataHandler(svc,
 		connect.WithInterceptors(newAuth(o.Token, o.AdminToken, o.Log)),
@@ -114,7 +117,13 @@ func (s *service) GetBars(ctx context.Context, req *connect.Request[pb.GetBarsRe
 	}
 	clean := &pb.GetBarsRequest{Symbol: syms[0], Timeframe: m.Timeframe, Start: m.Start, End: m.End,
 		Adjustment: m.Adjustment, PinProvider: m.PinProvider, AsOf: asOf}
-	resp, rerr := s.r.Bars(ctx, clean)
+	bars := s.r.Bars
+	if s.archive != nil {
+		bars = func(ctx context.Context, r *pb.GetBarsRequest) (*pb.GetBarsResponse, error) {
+			return s.archive.Bars(ctx, r, s.r.Bars)
+		}
+	}
+	resp, rerr := bars(ctx, clean)
 	var served *pb.Served
 	if resp != nil {
 		served = resp.Served

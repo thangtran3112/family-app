@@ -73,11 +73,17 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	var arch *archive.Archive
+	if cfg.ArchiveEnabled {
+		if arch, err = openArchive(ctx, cfg.ArchiveURL, log); err != nil {
+			return fmt.Errorf("archive: %w", err)
+		}
+	}
 	go rt.Run(ctx)
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           server.Handler(server.Options{Router: rt, Token: cfg.Token, AdminToken: cfg.AdminToken, Build: buildID(), Log: log}),
+		Handler:           server.Handler(server.Options{Router: rt, Archive: arch, Token: cfg.Token, AdminToken: cfg.AdminToken, Build: buildID(), Log: log}),
 		ReadHeaderTimeout: 10 * time.Second, // no write timeout: WatchStatus streams
 	}
 	ln, err := net.Listen("tcp", cfg.Listen)
@@ -98,6 +104,23 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+// openArchive never fails on an unreachable database: the bridge must boot and serve quotes with
+// the archive down (02u §3.2), and bars then pass through. The schema step is retried by `bridge
+// migrate`; nothing here blocks on it.
+func openArchive(ctx context.Context, url string, log *slog.Logger) (*archive.Archive, error) {
+	pg, err := archive.OpenPostgres(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	mctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := pg.Migrate(mctx); err != nil {
+		log.Warn("archive schema not applied (database down?): bars pass through until it is; run `bridge migrate`", "error", err.Error())
+	}
+	log.Info("archive enabled", "schema", "market_archive")
+	return archive.New(pg, log, nil), nil
 }
 
 // migrate applies the archive schema. It runs with ARCHIVE_ENABLED still off: the deploy order is
