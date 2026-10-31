@@ -11,6 +11,7 @@ import { useSwingContext } from "@/components/practice/swing/useSwingContext";
 import { BackLink } from "@/components/practice/hub/BackLink";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
+import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
@@ -24,7 +25,8 @@ import { buildChartSeries } from "@/lib/desk/workspace";
 import { endDay, placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
 import { sessionOverText } from "@/lib/replay/journalView";
 import { briefLine } from "@/lib/replay/threadView";
-import { actionForKey, markActionFor, type ReplayAction } from "@/lib/replay/keys";
+import { readChartPrefs, togglePref, writeChartPrefs, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
+import { actionForKey, layerToClose, markActionFor, type ReplayAction } from "@/lib/replay/keys";
 import { exitMark, type MarkDraft } from "@/lib/replay/markInput";
 import { entrySince, levelRows, markRows, openSide } from "@/lib/replay/marks";
 import { maxLossReached, planChecklist, planNote, practicePnl, sessionFacts, stopMissing, tradeCount } from "@/lib/replay/planView";
@@ -53,6 +55,7 @@ import { endAnyDay } from "@/lib/replay/swingApi";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
 import { chartBars, type ReplayView } from "@/lib/replay/feedState";
 import { ArmedStrategiesList } from "./ArmedStrategiesList";
+import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { DayNames } from "./DayNames";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
@@ -117,6 +120,21 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [draft, setDraft] = useState<MarkDraft>({ shares: swing ? undefined : String(spec.shares), stopPrice: "" });
   const [composer, setComposer] = useState<Composer>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // The chart's own view settings (design-replay-chart §b): one object for this browser, read once (the desktop shell mounts on the client only).
+  const [prefs, setPrefs] = useState<ChartPrefs>(() => readChartPrefs(window.localStorage));
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const updatePrefs = (next: ChartPrefs) => {
+    setPrefs(next);
+    writeChartPrefs(window.localStorage, next);
+  };
+  // Full screen is a view state of this route, never a navigation: the shell hides its top bar, left rail and status bar while it is on,
+  // and it is reset when this screen goes away (Back, another name, End day), so the shell is never left in focus mode.
+  const [full, setFull] = useState(false);
+  const { setChartFocus } = useDeskUi();
+  useEffect(() => {
+    setChartFocus(full);
+    return () => setChartFocus(false);
+  }, [full, setChartFocus]);
   // At the 1180 band the right rail is a tab strip; each tab opens its own drawer and none closes another (D-020).
   const [railOpen, setRailOpen] = useState<string[]>([]);
   // "Show date" is the viewer's own choice for this view; the chart stays on clock ticks (D-023).
@@ -177,9 +195,15 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       case "note": openComposer("note"); break;
       case "undo": api.undo(); break;
       case "help": setHelpOpen((open) => !open); break;
+      case "toggle_full": setFull((on) => !on); break;
+      case "chart_settings": setSettingsOpen((open) => !open); break;
       case "close":
-        if (helpOpen) setHelpOpen(false);
-        else if (composer) setComposer(null);
+        switch (layerToClose({ settings: settingsOpen, help: helpOpen, composer: composer !== null, full })) {
+          case "settings": setSettingsOpen(false); break;
+          case "help": setHelpOpen(false); break;
+          case "composer": setComposer(null); break;
+          case "full": setFull(false); break;
+        }
         break;
       case "blocked": api.notify("info", action.message); break;
     }
@@ -254,6 +278,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   };
   const holdsOpen = stripHoldCount(view.strip);
   const swingDay = swing && session.thread ? swingDayChip(session.thread, spec.day, hidden) : null;
+  // The swing Daily view draws none of the intraday lines, so the settings show those groups switched off.
+  const dailyView = swing && chartMode === "daily" && view.daily !== null;
 
   const armed = session.armed.map((item) => ({
     key: `${item.source}:${item.id}`,
@@ -355,8 +381,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   ) : null;
 
   return (
-    <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
-      <BackLink threadId={session.thread_id ?? session.thread?.id ?? null} />
+    <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined} data-full={full ? "true" : undefined}>
+      {!full && <BackLink threadId={session.thread_id ?? session.thread?.id ?? null} />}
       <ReplayHeader
         symbol={spec.symbol}
         dayLabel={swingDay ?? dayLabel}
@@ -370,7 +396,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         speed={api.player.speed}
         swing={swing && session.thread ? { money: swingMoneyLine(session.thread), tapeNote: tapeNote(session.tape_feed) } : undefined}
       />
-      {session.thread && !swing && <ThreadStrip thread={session.thread} />}
+      {session.thread && !swing && !full && <ThreadStrip thread={session.thread} />}
       {api.toast && (
         <p className={styles.toast} data-tone={api.toast.tone} role={api.toast.tone === "error" ? "alert" : "status"}>
           <span>{api.toast.text}</span>
@@ -388,7 +414,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         </p>
       )}
       <div className={styles.chartSlot}>
-        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
       <TransportBar
         status={api.player.status}
@@ -412,8 +438,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         quick={quick}
         swing={swing}
         chartToggle={swing ? <ChartIntervalToggle mode={chartMode} onMode={pickMode} /> : undefined}
+        view={
+          <>
+            <ChartSettings open={settingsOpen} onOpenChange={setSettingsOpen} prefs={prefs} onChange={updatePrefs} daily={dailyView} />
+            <FullScreenButton full={full} onToggle={() => setFull((on) => !on)} />
+          </>
+        }
       />
-      {dayListId !== null && (
+      {dayListId !== null && !full && (
         <p className={styles.endLine}>
           <Link href={`/practice/day?id=${dayListId}`} className={styles.link}>{PRACTICE_COPY.backToList}</Link>
         </p>

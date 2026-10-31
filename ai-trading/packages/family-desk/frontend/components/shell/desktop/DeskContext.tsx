@@ -57,6 +57,9 @@ export type DeskUiValue = {
   setMaskValues: (masked: boolean) => void;
   leftCollapsed: boolean;
   setLeftCollapsed: (collapsed: boolean) => void;
+  /** The replay chart fills the window: the shell hides the top bar, the left rail and the status bar (`data-focus="chart"`). A view state, never a route. */
+  chartFocus: boolean;
+  setChartFocus: (focus: boolean) => void;
   /** The left rail's lists, bumped by `invalidate` when a screen creates, renames or deletes one. */
   revisions: { watchlists: number; filters: number };
   invalidate: (kind: "watchlists" | "filters") => void;
@@ -89,6 +92,7 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
     setMaskValuesState(masked);
   }, []);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [chartFocus, setChartFocus] = useState(false);
   const [revisions, setRevisions] = useState({ watchlists: 0, filters: 0 });
   const invalidate = useCallback((kind: "watchlists" | "filters") => setRevisions((current) => ({ ...current, [kind]: current[kind] + 1 })), []);
   const setLane = useCallback((next: Lane) => {
@@ -103,8 +107,8 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
   const confirmLeave = useCallback(() => !dirty.current || window.confirm("You have unsaved changes. Leave this page?"), []);
   const rememberLane = useCallback((next: Lane) => writeLanePreference(window.localStorage, next), []);
   const value = useMemo<DeskUiValue>(
-    () => ({ lane, setLane, rememberLane, selectedListId, setSelectedListId, selectedSymbol, setSelectedSymbol, maskValues, setMaskValues, leftCollapsed, setLeftCollapsed, revisions, invalidate, setDirty, confirmLeave }),
-    [lane, setLane, rememberLane, selectedListId, selectedSymbol, maskValues, setMaskValues, leftCollapsed, revisions, invalidate, setDirty, confirmLeave],
+    () => ({ lane, setLane, rememberLane, selectedListId, setSelectedListId, selectedSymbol, setSelectedSymbol, maskValues, setMaskValues, leftCollapsed, setLeftCollapsed, chartFocus, setChartFocus, revisions, invalidate, setDirty, confirmLeave }),
+    [lane, setLane, rememberLane, selectedListId, selectedSymbol, maskValues, setMaskValues, leftCollapsed, chartFocus, revisions, invalidate, setDirty, confirmLeave],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }

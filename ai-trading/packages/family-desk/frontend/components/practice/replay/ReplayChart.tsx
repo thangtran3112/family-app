@@ -7,7 +7,8 @@ import { ChartLegend } from "@/components/workspace/ChartLegend";
 import type { CrosshairPoint } from "@/lib/chart-data";
 import { legendModel, type ChartSeries, type IndicatorId } from "@/lib/desk/workspace";
 import { dailyBlock, type ReplayView } from "@/lib/replay/feedState";
-import { levelLines, practiceMarkers, signalMarkers, stopLevel } from "@/lib/replay/marks";
+import { chartLevels, declutterMarkers, firstDrawBars, practiceMarkers, signalMarkers, stopLevel } from "@/lib/replay/marks";
+import { visibleOverlays, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import { dailyChartModel, dailyLegend, type ChartMode } from "@/lib/replay/playView";
 import type { ReplayBar, ReplayMark } from "@/lib/replay/schemas";
 import styles from "./replay.module.css";
@@ -25,6 +26,10 @@ export type ReplayChartProps = {
   hideDates: boolean;
   focus: { time: string; at: number } | null;
   dimmed?: boolean;
+  /** What she chose to see (design-replay-chart §b): the series type, the lines and the levels. */
+  prefs: ChartPrefs;
+  /** A click on an overlay in the legend hides or shows it. */
+  onTogglePref: (id: PrefId) => void;
   /** Swing session only (02p d2): `daily` plots the rebased daily bars and today's forming candle in place of the intraday bars. */
   swing?: { mode: ChartMode };
 };
@@ -42,7 +47,7 @@ export function ReplayChart(props: ReplayChartProps) {
  * entry marker and stop line across the days. With dates hidden the axis prints no date and the legend names a bar "D-3"
  * or "Today" (the chart component draws no tick text for a stand-in timeline).
  */
-function DailyChart({ symbol, view, hideDates, dimmed }: ReplayChartProps) {
+function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
   const { daily, dailyForming } = view;
   const model = useMemo(() => {
@@ -61,6 +66,7 @@ function DailyChart({ symbol, view, hideDates, dimmed }: ReplayChartProps) {
           quality="eod"
           asOf={null}
           levels={model.levels}
+          chartType={prefs.type}
           markers={model.markers}
           volume
           onCrosshair={setCrosshair}
@@ -77,14 +83,18 @@ function DailyChart({ symbol, view, hideDates, dimmed }: ReplayChartProps) {
   );
 }
 
-function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, dimmed }: ReplayChartProps) {
+function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, dimmed, prefs, onTogglePref }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
-  const markers = useMemo(() => [...practiceMarkers(marks, bars), ...signalMarkers(view.signals, bars)], [marks, bars, view.signals]);
-  const levels = useMemo(() => [...levelLines(view.levels), ...stopLevel(view.openTrade)], [view.levels, view.openTrade]);
+  // Marker labels that would print over each other lose their text; the shapes stay (D-099).
+  const markers = useMemo(() => declutterMarkers([...practiceMarkers(marks, bars), ...signalMarkers(view.signals, bars)], bars), [marks, bars, view.signals]);
+  // Her toggles filter what is drawn; the practice stop is her risk line, not a preference, so it always shows.
+  const levels = useMemo(() => [...chartLevels(view.levels, prefs), ...stopLevel(view.openTrade)], [view.levels, view.openTrade, prefs]);
   // The legend names VWAP and the EMAs. The chart's own series tags ("EMA 9") would sit over the newest bars, where a practice
-  // marker lands, so they are left off the chart (D-028).
-  const untagged = useMemo(() => series.overlays.map((overlay) => ({ ...overlay, label: "" })), [series.overlays]);
-  const legend = legendModel(symbol, view.interval, bars, series.overlays, crosshair);
+  // marker lands, so they are left off the chart (D-028). Every overlay is still computed (the header reads VWAP from `series`);
+  // only the visible ones go to the chart, and the legend keeps the hidden ones listed so a click turns them back on.
+  const untagged = useMemo(() => visibleOverlays(series.overlays, prefs).map((overlay) => ({ ...overlay, label: "" })), [series.overlays, prefs]);
+  const hidden = new Set(series.overlays.filter((overlay) => !prefs.on[overlay.id as PrefId]).map((overlay) => overlay.id));
+  const legend = legendModel(symbol, view.interval, bars, series.overlays, crosshair, hidden);
 
   return (
     <div className={styles.chartArea}>
@@ -97,17 +107,19 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
         overlays={untagged}
         panes={series.panes}
         levels={levels}
+        chartType={prefs.type}
         markers={markers}
-        volume={series.volume}
+        volume={series.volume && prefs.on.volume}
         onCrosshair={setCrosshair}
         chrome="bare"
         height="fill"
         follow
+        firstDraw={firstDrawBars(view.interval)}
         hideDates={hideDates}
         focus={focus}
         dimmed={dimmed}
       />
-      <div className={styles.legend}><ChartLegend model={legend} /></div>
+      <div className={styles.legend}><ChartLegend model={legend} onToggle={(id) => onTogglePref(id as PrefId)} /></div>
     </div>
   );
 }
