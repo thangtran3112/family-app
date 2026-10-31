@@ -287,6 +287,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
               if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
             }}
             scrollX
+            alwaysShowActions
             empty={
               <EmptyBlock title={noMatchText(list)}>
                 {PRACTICE_COPY.dayNoNames}

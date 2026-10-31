@@ -21,6 +21,13 @@ th.sticky { z-index: 2; }
 .actions { width: 1%; text-align: right; }
 .actions > * { opacity: 0; }
 .row:hover .actions > *, .row:focus-within .actions > *, .actions > *:focus-visible { opacity: 1; }
+/* alwaysShowActions (the practice day list): visible without a hover, pinned to the scroller's right edge so a 1590 px table keeps its action in view. */
+.actionsPinned .actions > * { opacity: 1; }
+.actionsPinned .actions, .actionsPinned .actionsHead { position: sticky; right: 0; background: var(--color-ground); box-shadow: -1px 0 0 var(--color-hairline); }
+.actionsPinned .actions { z-index: 1; }
+.actionsPinned .actionsHead { z-index: 2; }
+.actionsPinned .row:hover .actions { background: var(--color-raised); }
+.actionsPinned .selected .actions { background: var(--color-panel); }
 .wrap[data-dim="true"] td { opacity: 0.55; }
 .empty { padding: var(--space-6) var(--space-4); color: var(--color-muted); }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

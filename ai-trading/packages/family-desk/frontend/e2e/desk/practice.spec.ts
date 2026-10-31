@@ -788,3 +788,34 @@ test.describe("Practice", () => {
     await expectCleanScreen(page);
   });
 });
+
+// Fix wave 5S, stream 1: the day list.
+test.describe("Practice day list · fix wave 5S", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  /** A day thread's Day 1 list open on the stub day (one candidate: TSLA). */
+  async function openDayList(page: Page, context: BrowserContext) {
+    await startThread(page, context);
+    await openFirstDay(page);
+    await expect(page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ })).toBeVisible();
+  }
+
+  test("the Practice action of a listed name is visible without a hover and sits inside the scroller's visible width (D-090)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await openDayList(page, context);
+    const button = page.getByRole("table", { name: "Candidates" }).getByRole("button", { name: "Practice TSLA" });
+    await expect(button).toBeVisible();
+    await expect(button, "no hover needed").toHaveCSS("opacity", "1");
+    // The table is wider than its scroller: the action is pinned to the right edge instead of sitting off-screen in the last column.
+    const fits = await button.evaluate((node) => {
+      const wrap = node.closest("table")!.parentElement!;
+      const [b, w] = [node.getBoundingClientRect(), wrap.getBoundingClientRect()];
+      return { overflow: wrap.scrollWidth > wrap.clientWidth, inside: b.left >= w.left - 1 && b.right <= w.right + 1 };
+    });
+    expect(fits.inside, "the Practice action is inside the visible part of the table").toBe(true);
+    await button.click();
+    await page.waitForURL(SESSION_URL);
+  });
+});

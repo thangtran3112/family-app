@@ -34,6 +34,8 @@ export type DenseTableProps<R> = {
   onSelect?: (row: R) => void;
   /** Hover actions in a trailing cell; they are real buttons, so keyboard focus reveals them too. */
   rowActions?: (row: R) => ReactNode;
+  /** Opt-in (the practice day list, D-090): the actions show without a hover and, in a `scrollX` table, stay pinned to the scroller's right edge. Off by default: the screener and watchlists keep their hover actions. */
+  alwaysShowActions?: boolean;
   /** Screener only: horizontal scroll with the first column pinned. */
   scrollX?: boolean;
   initialSort?: SortState | null;
@@ -53,6 +55,7 @@ export function DenseTable<R>({
   selectedKey = null,
   onSelect,
   rowActions,
+  alwaysShowActions = false,
   scrollX = false,
   initialSort = null,
   dim = false,
@@ -81,7 +84,7 @@ export function DenseTable<R>({
   }
 
   return (
-    <div className={`${styles.wrap} ${scrollX ? styles.scrollX : ""}`} data-density={density} data-dim={dim ? "true" : undefined}>
+    <div className={`${styles.wrap} ${scrollX ? styles.scrollX : ""} ${alwaysShowActions && rowActions ? styles.actionsPinned : ""}`} data-density={density} data-dim={dim ? "true" : undefined}>
       <table className={styles.table} aria-label={caption}>
         <thead>
           <tr>
