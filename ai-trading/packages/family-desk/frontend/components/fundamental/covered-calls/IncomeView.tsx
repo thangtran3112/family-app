@@ -7,7 +7,7 @@ import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { HoldingAccount, Income, ShortCall } from "@/lib/api/fundamentalSchemas";
 import { withPriorities } from "@/lib/desk/columns";
-import { accountLabel, formatDelta, incomeView, NEEDS_TRADES_TEXT, NO_INCOME_TEXT, topRisk } from "@/lib/desk/coveredCallsView";
+import { accountLabel, formatDelta, incomeView, mostUrgentCall, NEEDS_TRADES_TEXT, NO_INCOME_TEXT, topRisk } from "@/lib/desk/coveredCallsView";
 import { loadIncome, loadShortCalls } from "@/lib/desk/coveredCalls";
 import { formatSignedPct } from "@/lib/desk/format";
 import { formatUsdPrice, maskedQuantity, maskedUsd } from "@/lib/desk/mask";
@@ -24,7 +24,8 @@ export function IncomeView({ accounts }: { accounts: readonly HoldingAccount[] }
   const income = useDeskQuery("cc-income", (signal) => loadIncome(12, { signal }));
   const [chosenId, setChosenId] = useState<number | null>(null);
   const rows = calls.data ?? [];
-  const selected = rows.find((item) => item.id === chosenId) ?? rows[0] ?? null;
+  // The urgent call opens first (most risks, then nearest expiry); the table keeps the API order.
+  const selected = rows.find((item) => item.id === chosenId) ?? mostUrgentCall(rows);
   const symbol = selected?.symbol ?? null;
 
   useEffect(() => {
@@ -47,7 +48,8 @@ export function IncomeView({ accounts }: { accounts: readonly HoldingAccount[] }
         label: "Risk",
         render: (c) => (
           <span className={local.riskCell} title={c.risks.map((risk) => risk.text).join(" · ") || undefined}>
-            {topRisk(c.risks)}{c.risks.length > 1 ? ` +${c.risks.length - 1}` : ""}
+            {topRisk(c.risks)}
+            {c.risks.length > 1 && <span className={local.riskMore}>+{c.risks.length - 1} more</span>}
           </span>
         ),
       },

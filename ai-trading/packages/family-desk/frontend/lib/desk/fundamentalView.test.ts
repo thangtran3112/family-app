@@ -3,7 +3,7 @@ import test from "node:test";
 import { loadFundamentalFixture } from "../fixtures/desk-fundamental/load.ts";
 import { HoldingsSchema, ImportStateSchema } from "../api/fundamentalSchemas.ts";
 import { containsBannedTerm } from "./freshness.ts";
-import { hasHoldingsData, importLine, ratingText } from "./fundamentalView.ts";
+import { hasHoldingsData, importLine, ratingText, setupLinkParts } from "./fundamentalView.ts";
 
 const base = { source: "ibkr_flex", account_scope: "data", statement_date: "2026-10-23", imported_at: "2026-10-24T09:15:00Z", lots: 21, state: "ok" } as const;
 
@@ -28,4 +28,12 @@ test("the frozen holdings fixture parses and its import line is clean", () => {
   const holdings = HoldingsSchema.parse(loadFundamentalFixture("holdings"));
   assert.equal(containsBannedTerm(importLine(holdings.import).text), false);
   assert.equal(ratingText("buy"), "Buy");
+});
+
+test("the not-connected sentence splits so the setup step can be a link to Settings; other lines stay plain text", () => {
+  const parts = setupLinkParts(importLine({ ...base, state: "not_configured", statement_date: null, lots: 0 }).text);
+  assert.deepEqual(parts, { lead: "Holdings aren't connected yet · ", link: "set up the IBKR import in Settings", href: "/settings" });
+  assert.equal(`${parts?.lead}${parts?.link}`, "Holdings aren't connected yet · set up the IBKR import in Settings");
+  assert.equal(setupLinkParts(importLine({ ...base, state: "none", statement_date: null, lots: 0 }).text), null);
+  assert.equal(setupLinkParts(importLine({ ...base, state: "running" }).text), null);
 });

@@ -50,7 +50,7 @@ export function HoldingsImportCard({ disabled }: Readonly<{ disabled: boolean }>
         <p className={styles.helper}>Checking the holdings import…</p>
       ) : (
         <>
-          <ImportLine state={holdings.import} />
+          <ImportLine state={holdings.import} linkSetup={false} />
           <ul className={styles.lines}>
             <li>Source: {IMPORT_SOURCE_TEXT}</li>
             <li>{lastImportText(holdings.import)}</li>
