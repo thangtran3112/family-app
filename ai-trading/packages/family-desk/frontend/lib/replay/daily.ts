@@ -148,14 +148,23 @@ export const DaySessionSchema = z.object({
   revealed_through: timestamp,
   /** Behind the day clock: its next advance catches it up, and it cannot be marked until then. */
   behind_clock: z.boolean(),
-  /** The day holds one open trade at a time: close it before moving to another name. */
+  /** The name holds an open trade: one per name, at most five across the day. */
   has_open_trade: z.boolean(),
   /** Closed trades on this name today, and their P/L. */
   trades: finite.int(),
   realized_usd: finite,
-  /** The open trade marked at the name's own playhead; null when flat. */
+  /** The open trade marked at the DAY CLOCK (not the name's own playhead); null when flat. */
   position: OpenTradeSchema.nullable(),
 }) satisfies z.ZodType<components["schemas"]["DaySessionOut"]>;
+
+/** The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock. */
+export const DayPnlSchema = z.object({
+  realized_usd: finite,
+  open_usd: finite,
+  total_usd: finite,
+  open_count: finite.int(),
+  as_of: timestamp,
+}) satisfies z.ZodType<components["schemas"]["DayPnlOut"]>;
 
 // -- peek -----------------------------------------------------------------------------------------------------
 
@@ -287,6 +296,7 @@ export const DayListSchema = z.object({
   watch_check: WatchCheckSchema,
   clock: timestamp.nullable(),
   sessions: z.array(DaySessionSchema),
+  day_pnl: DayPnlSchema,
   /** The SIMULATED balance and today's realized P/L of the thread this day books into (02r). */
   thread: ThreadBriefSchema.nullable(),
   warnings: z.array(z.string()),

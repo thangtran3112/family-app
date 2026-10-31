@@ -79,6 +79,8 @@ export const OpenTradeSchema = z.object({
   days_held: finite.int().nullish(),
   gap_usd: finite.nullish(),
   price_basis: PriceBasisSchema.nullish(),
+  /** A day's `DaySessionOut.position` only: when play paused because this trade's stop was crossed. Absent while not. */
+  stop_hit_at: timestamp.nullish(),
 }) satisfies z.ZodType<components["schemas"]["OpenTradeOut"]>;
 
 const JournalTotalsSchema = z.object({
