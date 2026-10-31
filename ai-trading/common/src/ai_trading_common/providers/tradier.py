@@ -1,5 +1,9 @@
 """Tradier: latest equity quotes and option chains from Tradier's brokerage market-data REST API (02b §4c).
 
+**Dormant, owner declined 2026-10-31** (02t decision 2): the owner will never open a Tradier brokerage
+account, so this adapter stays in the tree, in no chain and in no `DATA_PROVIDERS_<KIND>` value, is never
+ported to the bridge, and is never given a key. It is not selectable; keep it unbuilt.
+
 Serves two kinds, both with the token `TRADIER_ACCESS_TOKEN` (Firestore `ai-trading/market-data`):
 
 - `quotes`: `GET /v1/markets/quotes?symbols=AAPL,MSFT`, one request for the whole list. Each quote is the last trade

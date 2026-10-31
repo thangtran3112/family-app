@@ -5,11 +5,18 @@ Adding a provider for a kind is one new line in `REGISTRY` (and, to make it the 
 built from this module, typed to the `sources.py` Protocols.
 
 Market-data providers added 2026-10-30 (02b §4c) -- selectable only through `DATA_PROVIDERS_QUOTES` and
-`DATA_PROVIDERS_OPTION_CHAIN` (e.g. `tradier,alpaca`), in no `DEFAULT_CHAINS` entry:
+`DATA_PROVIDERS_OPTION_CHAIN` (e.g. `marketdata_app,alpaca`), in no `DEFAULT_CHAINS` entry:
 
 - `tradier` (`TRADIER_ACCESS_TOKEN`, `TRADIER_ENVIRONMENT`): `quotes` and `option_chain`; hourly greeks.
+  **Dormant, owner declined 2026-10-31** (02t decision 2): the module stays in the tree, in no chain, never
+  ported to the bridge, never given a key. Do not name it in a chain or a `DATA_PROVIDERS_<KIND>` value.
 - `marketdata_app` (`MARKETDATA_APP_TOKEN`, `MARKETDATA_APP_QUALITY`): `quotes` and `option_chain`; delay by plan.
 - Longbridge has no entry: its quote API is a socket protocol with no REST schema (02b §4c).
+
+`bridge` (02t §4.1) is the one provider built even when it is in no chain: `DataSources.from_env` sets
+`DataSources.bridge` whenever `MARKET_DATA_BRIDGE_URL` is set, and stage B2 keeps it out of every chain
+while it is shadowed. It is always a chain's *first* provider once it joins one (a `NotConfigured` at the
+end of a chain would mask an earlier `Unavailable`), never its last.
 
 An unconfigured provider raises `NotConfigured` when called, so appending one to the end of a default chain is not a
 no-op: `fallback.first_success` reports the last transient failure, so an earlier provider's `Unavailable` (or a
@@ -28,7 +35,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from ai_trading_common._provider import Provider
@@ -38,6 +45,7 @@ from ai_trading_common.providers import (
     alpaca,
     alpaca_options,
     alphavantage,
+    bridge,
     eulerpool,
     finnhub,
     fred,
@@ -48,6 +56,7 @@ from ai_trading_common.providers import (
 )
 from ai_trading_common.sources import (
     BarsSource,
+    BridgeSource,
     ConsensusSource,
     EarningsAnnouncementsSource,
     EarningsCalendarSource,
@@ -299,6 +308,7 @@ REGISTRY: dict[str, Provider] = {
     "alpaca": alpaca.PROVIDER,
     "alpaca_options": alpaca_options.PROVIDER,
     "alphavantage": alphavantage.PROVIDER,
+    "bridge": bridge.PROVIDER,
     "eulerpool": eulerpool.PROVIDER,
     "finnhub": finnhub.PROVIDER,
     "fred": fred.PROVIDER,
@@ -347,6 +357,14 @@ class DataSources:
     #: Defaulted only so a `DataSources(...)` written before this kind existed still builds (such a double has no
     #: chain); `from_env` always fills it.
     option_chain: OptionChainSource | None = None
+    #: The bridge's admin/status surface (02t §4.1), never part of a chain: `None` while
+    #: `MARKET_DATA_BRIDGE_URL` is unset, which is also when the registry leaves the provider out of
+    #: every chain. Defaulted so a hand-built `DataSources` (a test double) still constructs.
+    bridge: BridgeSource | None = None
+    #: kind -> the provider that would answer it now (the chain's first enabled rung), recorded by
+    #: `from_env` so `/status` can report the serving vendor per class instead of guessing "mixed"
+    #: (02t §5.5). Empty for a `DataSources` built by hand until one sets it.
+    serving: Mapping[Kind, str] = field(default_factory=dict)
 
     def gateway_status(self) -> GatewayStatus:
         """How the live-quote gateway stands: the first quotes provider that holds one reports it, and
@@ -380,7 +398,15 @@ class DataSources:
                 built[name] = registry[name].build(env, http)
             return built[name]
 
+        # The bridge is built whenever its URL is set, even in no chain (02t §4.1): the card's provider
+        # list, the routing sync and the shadow job all read it directly. Built first, so a later chain
+        # entry naming it reuses this one instance.
+        bridge_source: BridgeSource | None = None
+        if "bridge" in registry and registry["bridge"].enabled(env):
+            bridge_source = adapter_for("bridge")  # type: ignore[assignment]
+
         kinds: dict[Kind, object] = {}
+        serving: dict[Kind, str] = {}
         for kind in _KINDS:
             var = f"DATA_PROVIDERS_{kind.upper()}"
             raw = env.get(var)
@@ -394,9 +420,12 @@ class DataSources:
                 if kind not in registry[name].kinds:
                     raise ValueError(f"{var}: provider {name!r} does not serve {kind!r}")
                 if registry[name].enabled(env):
+                    # The first enabled rung is who would answer the class now, which is what `/status`
+                    # reports per class (02t §5.5).
+                    serving.setdefault(kind, name)
                     providers.append(adapter_for(name))
             if not providers:
                 raise ValueError(f"{var}: every named provider is switched off")
             kinds[kind] = _CHAIN_CLASSES[kind](tuple(providers))
 
-        return DataSources(**kinds)
+        return DataSources(**kinds, bridge=bridge_source, serving=serving)
