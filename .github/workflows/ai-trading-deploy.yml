@@ -16,6 +16,9 @@ on:
       # 0001b-1: production compose, Caddyfile, deploy.sh, health-check.sh,
       # render-env.sh and the MiroFish scripts live here now.
       - "infrastructure/apps/ai-trading/**"
+      # Docs and the offline tests are not deployed; same rule as ai-trading/** above.
+      - "!infrastructure/apps/ai-trading/**/*.md"
+      - "!infrastructure/apps/ai-trading/tests/**"
   workflow_dispatch:
     inputs:
       deploy_app:
