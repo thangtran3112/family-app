@@ -302,8 +302,8 @@ const at = (iso: string | null): number => (iso === null ? Number.POSITIVE_INFIN
 
 /** The day's portfolio: a row for every name she opened. A crossed stop comes first (the earlier crossing first), then the
  *  other open trades, oldest entry first, then the flat names in the order she opened them. `from` is the name she is on in
- *  the replay with its playhead and live open trade (null when she just exited, undefined on the day page): another name
- *  whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+ *  the replay with the thread's clock (`threadClock`, not that name's own older playhead) and live open trade (null when she just
+ *  exited, undefined on the day page): another name whose playhead is earlier than that clock is behind it, which the list read may not know yet. */
 export function portfolioRows(
   list: Pick<DayList, "sessions">,
   from?: { symbol: string; playhead: string; openTrade?: OpenTrade | null },

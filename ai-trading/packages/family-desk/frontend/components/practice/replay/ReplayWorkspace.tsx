@@ -173,7 +173,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [clockSeen, setClockSeen] = useState(view.revealedThrough);
   if (!playing && clockSeen !== view.revealedThrough) setClockSeen(view.revealedThrough);
   const dayList = useDayPortfolio(swing ? null : dayListId, session.marks.length * 2 + (behind ? 1 : 0) + Math.floor(Date.parse(clockSeen) / 1000));
-  const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade });
+  const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: clock, openTrade: view.openTrade });
 
   // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
   const masked = hidden && !dateShown && !(ended && !swing);
@@ -399,7 +399,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       <PortfolioPanel
         dayListId={dayListId}
         query={dayList}
-        from={{ symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade }}
+        from={{ symbol: spec.symbol, playhead: clock, openTrade: view.openTrade }}
         onLeave={() => {
           if (api.player.status === "playing") api.togglePlay();
         }}
@@ -524,7 +524,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           ending
             .then(() => router.push(`/practice/day?id=${dayListId}`))
             .catch(() => {
-              api.notify("error", swing ? PRACTICE_COPY.swingEndError : PRACTICE_COPY.markError);
+              api.notify("error", swing ? PRACTICE_COPY.swingEndError : PRACTICE_COPY.dayEndError);
               setDayBusy(false);
             });
         }}
