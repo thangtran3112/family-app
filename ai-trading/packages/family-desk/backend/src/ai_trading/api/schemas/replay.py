@@ -93,8 +93,9 @@ class OrderOut(BaseModel):
 
 
 class OpenTradeOut(SwingOptional):
-    """The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
-    four last fields say how long it has been held and which price it is valued at; a day session leaves them out."""
+    """The name's open position: shares and `entry_price`, their average cost, however many fills built it. For a swing
+    session it is the name's practice hold (`trade_no` is the hold id) and the four last fields say how long it has been
+    held and which price it is valued at; a day session leaves them out."""
 
     swing_only: ClassVar[tuple[str, ...]] = (
         "opened_day_no",
@@ -709,7 +710,7 @@ class DaySessionOut(BaseModel):
     status: SessionStatus
     revealed_through: datetime
     behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
-    has_open_trade: bool  # the name holds an open trade (one per name, at most five across the day)
+    has_open_trade: bool  # the name holds an open position (one average-cost position per name, however many fills)
     trades: int  # closed trades on this name today
     realized_usd: FiniteFloat  # the closed trades' P/L (swing sessions report none here: their holds are scored weekly)
     position: OpenTradeOut | None  # the open trade marked at the DAY CLOCK, not the name's playhead; null when flat

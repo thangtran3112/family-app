@@ -1,7 +1,8 @@
 """Several open practice positions in one day (the multi-position follow-up to the Practice Portfolio): N positions are
-N names, each with at most one open trade. The day clock is shared, the open trades are priced at it, a stop crossed on
-any open name pauses play, the max loss is one day rule over realized plus open, and End day flattens every open trade
-at the clock. Real Postgres; the synthetic world of `tests/daily_world.py`.
+N names, each one average-cost position (`test_positions.py` covers many fills in one name). The day clock is shared,
+the open trades are priced at it, a stop crossed on any open name pauses play, the max loss is one day rule over
+realized plus open, and End day flattens every open trade at the clock. Real Postgres; the synthetic world of
+`tests/daily_world.py`.
 
 The world on 2026-09-28: GAPPER sits at 110 from the open to 11:30, FLAT at 50 all day, SPLITTER at 100 (it splits
 after the third day). Tests bend a name's minute bars to make a stop cross or a position lose."""
@@ -53,7 +54,7 @@ def _sessions(db_session, user_id, svc, row) -> dict[str, dict]:
     return {s["symbol"]: s for s in out["sessions"]}
 
 
-# -- N names, one open trade each --------------------------------------------------------------------------------
+# -- N names, one position each ----------------------------------------------------------------------------------
 
 
 def test_three_names_hold_open_trades_at_once(db_session, user_id, svc, world) -> None:
@@ -82,9 +83,8 @@ def test_three_names_hold_open_trades_at_once(db_session, user_id, svc, world) -
     assert sum(s["has_open_trade"] for s in _sessions(db_session, user_id, svc, row).values()) == 6
     _mark(db_session, user_id, svc, sixth.id, "long_exit")
 
-    with pytest.raises(ReplayProblem) as same_name:  # one open trade per name is still the rule
-        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)
-    assert same_name.value.message == "Close the open practice trade first"
+    again = _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # the same name adds to its position
+    assert again["open_trade"]["shares"] == 6 and again["open_trade"]["trade_no"] == 1
 
     _mark(db_session, user_id, svc, gapper.id, "long_exit")
     assert _mark(db_session, user_id, svc, sixth.id, "long_entry", shares=1)["mark"]["kind"] == "long_entry"

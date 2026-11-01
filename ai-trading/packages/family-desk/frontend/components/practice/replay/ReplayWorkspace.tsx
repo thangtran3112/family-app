@@ -210,14 +210,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       if (accepted && shownPause?.symbol === spec.symbol) answerPause();
     });
   };
-  const byLetter = (letter: "b" | "s" | "x") => {
-    // With a position open, the opposite side closes it at the market. A limit, stop or stop-limit ticket is not that, so it says so.
-    if (side !== "flat" && letter !== "x" && ticket.type !== "market") {
-      api.notify("info", PRACTICE_COPY.tradeAlreadyOpen);
-      return;
-    }
-    perform(markActionFor(letter, side));
-  };
+  const byLetter = (letter: "b" | "s" | "x") => perform(markActionFor(letter, side));
 
   const perform = (action: ReplayAction) => {
     switch (action.type) {

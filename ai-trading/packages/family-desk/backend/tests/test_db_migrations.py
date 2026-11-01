@@ -89,12 +89,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0016() -> None:
+def test_migration_chain_has_a_single_head_at_0017() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0016"]
-    assert script.get_revision("0016").down_revision == "0015"
+    assert script.get_heads() == ["0017"]
+    assert script.get_revision("0017").down_revision == "0016"
     assert script.get_revision("0015").down_revision == "0014"
     assert script.get_revision("0014").down_revision == "0013"
     assert script.get_revision("0013").down_revision == "0012"
@@ -166,7 +166,7 @@ def test_0014_adds_two_nullable_columns_and_downgrade_drops_exactly_those(db_eng
         command.downgrade(_alembic_config(url), "0013")
         after_sessions, after_marks = _columns(db_engine, "replay_sessions"), _columns(db_engine, "practice_marks")
         assert set(sessions) - set(after_sessions) == {"stop_hit_at", "orders"}  # 0016's column comes off on the way
-        assert set(marks) - set(after_marks) == {"day_pnl_usd"}
+        assert set(marks) - set(after_marks) == {"day_pnl_usd", "position_before"}  # 0017's column comes off too
         assert "away" in after_sessions and "price" in after_marks  # nothing else moved
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "replay_sessions")) == set(sessions)
@@ -186,6 +186,28 @@ def test_0016_adds_the_orders_column_with_an_empty_list_default_and_downgrade_dr
         assert set(sessions) - set(_columns(db_engine, "replay_sessions")) == {"orders"}
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "replay_sessions")) == set(sessions)
+    finally:
+        command.upgrade(_alembic_config(url), "head")
+
+
+def test_0017_adds_the_position_columns_and_keeps_the_one_open_hold_per_name_index(db_engine: Engine) -> None:
+    """Practice positions (0017): `practice_marks.position_before` (JSONB, nullable) and `practice_holds.part_exit`
+    (boolean NOT NULL, false for every existing row). The partial unique index (one OPEN hold per symbol in a thread) is
+    the name's one average-cost position, so it stays; a closed slice may repeat a symbol, an open row may not."""
+    url = db_engine.url.render_as_string(hide_password=False)
+    marks, holds = _columns(db_engine, "practice_marks"), _columns(db_engine, "practice_holds")
+    assert marks["position_before"]["nullable"] and marks["position_before"]["default"] is None
+    assert not holds["part_exit"]["nullable"] and "false" in str(holds["part_exit"]["default"]).lower()
+    index = next(i for i in inspect(db_engine).get_indexes("practice_holds") if i["unique"])
+    assert index["name"] == "uq_practice_holds_thread_id_symbol_open"
+    assert index["column_names"] == ["thread_id", "symbol"]
+    try:
+        command.downgrade(_alembic_config(url), "0016")
+        assert set(marks) - set(_columns(db_engine, "practice_marks")) == {"position_before"}
+        assert set(holds) - set(_columns(db_engine, "practice_holds")) == {"part_exit"}
+        command.upgrade(_alembic_config(url), "head")
+        assert set(_columns(db_engine, "practice_marks")) == set(marks)
+        assert set(_columns(db_engine, "practice_holds")) == set(holds)
     finally:
         command.upgrade(_alembic_config(url), "head")
 

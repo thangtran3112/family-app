@@ -88,7 +88,7 @@ test.describe("Practice: switching names", () => {
     await expect(playhead(page)).toContainText("9:33");
     const tslaPlayhead = (await playhead(page).textContent()) ?? "";
     await page.keyboard.press("b");
-    await expect(await marks(page)).toContainText("Practice long");
+    await expect(await marks(page)).toContainText("Practice buy");
 
     // The portfolio shows it: TSLA is on now and Long.
     let portfolio = await portfolioPanel(page);
@@ -137,7 +137,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
     await expectCleanScreen(page);
     await page.keyboard.press("b");
-    await expect((await marks(page)).getByText("Practice long")).toHaveCount(2); // the first trade and the one after the lift
+    await expect((await marks(page)).getByText("Practice buy")).toHaveCount(2); // the first trade and the one after the lift
     await page.keyboard.press("x");
 
     // Past the old two-name limit: a third and a fourth name open, and a name in hand switches back.
@@ -195,11 +195,11 @@ test.describe("Practice: switching names", () => {
     for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
     await expect(playhead(page)).toContainText("9:33");
     await page.keyboard.press("b");
-    await expect(await marks(page)).toContainText("Practice long");
+    await expect(await marks(page)).toContainText("Practice buy");
     await openName(page, dayUrl, "LRCX");
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
     await page.keyboard.press("s");
-    await expect(await marks(page)).toContainText("Practice short");
+    await expect(await marks(page)).toContainText("Practice sell");
     // Move the clock so both trades have a P/L worth adding up.
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
@@ -270,10 +270,10 @@ test.describe("Practice: switching names", () => {
     for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
     await expect(playhead(page)).toContainText("9:33");
     await page.keyboard.press("b");
-    await expect(await marks(page)).toContainText("Practice long");
+    await expect(await marks(page)).toContainText("Practice buy");
     await openName(page, dayUrl, "TSLA");
     await page.keyboard.press("b");
-    await expect(await marks(page)).toContainText("Practice long");
+    await expect(await marks(page)).toContainText("Practice buy");
     await page.keyboard.press("t");
     const stop = page.getByRole("form", { name: "Stop" });
     await stop.getByRole("textbox").fill("372");

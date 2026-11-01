@@ -692,9 +692,9 @@ def _session_brief(
     last: float | None = None,
 ) -> dict[str, Any]:
     """A name in the day's portfolio: its status, how far it is revealed, whether it is behind the shared day clock
-    (its next advance catches it up), whether it holds an open trade (a day holds one per name), and its P/L: the
-    closed trades booked so far and the open trade marked at `last` (the price at the day clock) with when play
-    paused on its stop. A swing session passes no `book` (its holds are read elsewhere)."""
+    (its next advance catches it up), whether it holds an open position (one average-cost position per name), and its
+    P/L: the closed trades booked so far and the open position marked at `last` (the price at the day clock) with when
+    play paused on its stop. A swing session passes no `book` (its holds are read elsewhere)."""
     clock = None if row.revealed_through is None else _utc(row.revealed_through)
     closed, open_ = book if book is not None else ([], None)
     position = journal_mod.open_trade_out(open_, last)
@@ -1107,8 +1107,8 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
 
 def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc: Services) -> ReplaySession:
     """The day's practice session on a name from the list, built from the plan's setup: a new name opens at the shared
-    day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds any number of names
-    and one open trade per name (refused on the entry mark), so a switch never needs a trade
+    day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds any number of names,
+    each with one average-cost position that takes any number of fills, so a switch never needs a trade
     closed first. A name resumed behind the clock is lifted to it, the span she was away is recorded, and she can mark
     at once."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
