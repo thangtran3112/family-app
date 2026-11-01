@@ -1299,6 +1299,12 @@ deploy_tag() {
   # Desk database migrations: after the new image is pulled but BEFORE any
   # container is swapped (see migrate_desk_db above).
   migrate_desk_db
+  # Second check, same function: nothing renews the 600 s drain lease while the
+  # migration runs, so a long one can let it lapse and reopen chat admission.
+  # The check above stays so a refusal never costs a migration.
+  if [[ "$tag" == "$TARGET_IMAGE_TAG" ]]; then
+    verify_vibe_gate_before_switch || return 1
+  fi
   # Task 5 (app-controls): explicit, catalog-driven selection -- never a
   # blanket `up` (which would silently revive an intentionally disabled
   # group) and never `--remove-orphans` (this phase defines no removed

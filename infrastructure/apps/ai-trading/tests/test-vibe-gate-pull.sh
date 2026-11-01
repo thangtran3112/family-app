@@ -19,6 +19,8 @@
 #   5  a failing pull still reaches the caller's ERR trap with the pull's own
 #      exit status, and no heartbeat outlives the call
 #   6  begin_vibe_release_gate / wait_for_vibe_idle name each failing branch
+#   7  a lease that lapses during the Desk migration (nothing renews it there)
+#      aborts before the container switch, and says why
 #
 # The fake Vibe server keeps its lease deadline in a file (real seconds, a
 # TTL of FAKE_TTL) because every drain request runs in a command substitution.
@@ -323,6 +325,36 @@ d6="$(new_dir case6)"
   vibe_container_ids() { printf 'a\nb\n'; }
   expect none 'more than one running Vibe container'
 ) || fail "case6: a begin_vibe_release_gate branch failed silently"
+
+echo "=== Case 7 (RED): a lease that lapses during the Desk migration aborts before the switch ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+d7="$(new_dir case7)"
+rc7=0
+(
+  load_lib "$d7"
+  FAKE_TTL=60
+  shims "$d7"
+  gate_open
+  # The migration outlives the lease: Vibe forgets it, admission is open again.
+  migrate_desk_db() { echo migrate >>"$D/steps.log"; rm -f "$D/deadline"; }
+  deploy_tag "$IMAGE_TAG" 2>"$d7/stderr.log"
+) || rc7=$?
+[[ "$rc7" != 0 ]] || fail "case7: a lease lost during the migration must abort deploy_tag"
+[[ "$(cat "$d7/steps.log" 2>/dev/null)" == migrate ]] || fail "case7: expected the migration to run and the switch not to: $(cat "$d7/steps.log" 2>/dev/null)"
+grep -q 'deploy: vibe gate: lease renew rejected before switch' "$d7/stderr.log" || fail "case7: missing the specific cause: $(cat "$d7/stderr.log")"
+# A rollback's older tag has no live forward lease: its migration is not re-gated.
+d7b="$(new_dir case7b)"
+rc7b=0
+(
+  load_lib "$d7b"
+  FAKE_TTL=60
+  shims "$d7b"
+  gate_open
+  migrate_desk_db() { echo migrate >>"$D/steps.log"; rm -f "$D/deadline"; }
+  deploy_tag 1111111111111111111111111111111111111111 2>"$d7b/stderr.log"
+) || rc7b=$?
+[[ "$rc7b" == 0 ]] || fail "case7: a non-forward tag must not be re-gated after the migration: $(cat "$d7b/stderr.log")"
+[[ "$(cat "$d7b/steps.log" 2>/dev/null)" == $'migrate\napp-up' ]] || fail "case7: a non-forward tag must still switch: $(cat "$d7b/steps.log" 2>/dev/null)"
 
 echo
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
