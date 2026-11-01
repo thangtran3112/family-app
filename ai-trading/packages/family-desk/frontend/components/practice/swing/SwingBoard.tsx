@@ -266,7 +266,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
           <div className={styles.after}>
             {after.notice && <p className={styles.notice} role="status">{after.notice}</p>}
             {threadId !== null && after.waiting && (
-              <Button href={`/practice/week?thread=${threadId}&week=${after.waiting.weekNo}`} variant="primary">
+              <Button client href={`/practice/week?thread=${threadId}&week=${after.waiting.weekNo}`} variant="primary">
                 {after.waiting.label}
               </Button>
             )}

@@ -96,7 +96,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
       <header className={styles.header}>
         <h1 className={styles.title}>{spec.symbol} · {dayLabel} · attempt {session.attempt} · Practice journal</h1>
         <div className={styles.actions}>
-          {!ended && <Button href={sessionResumeHref(session)} variant="primary">Resume</Button>}
+          {!ended && <Button client href={sessionResumeHref(session)} variant="primary">Resume</Button>}
         </div>
       </header>
       {session.thread && <ThreadStrip thread={session.thread} />}
@@ -140,9 +140,9 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
                   {session.day_list_id === null ? (
                     <Button variant="primary" disabled={again.busy} onClick={replayAgain}>Replay this day again</Button>
                   ) : (
-                    <Button href={`/practice/day?id=${session.day_list_id}`} variant="primary">{PRACTICE_COPY.backToList}</Button>
+                    <Button client href={`/practice/day?id=${session.day_list_id}`} variant="primary">{PRACTICE_COPY.backToList}</Button>
                   )}
-                  <Button href="/practice">New session</Button>
+                  <Button client href="/practice">New session</Button>
                 </div>
                 {again.message && <p className={styles.muted} role="alert">{again.message}</p>}
               </div>

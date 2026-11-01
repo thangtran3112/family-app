@@ -64,7 +64,7 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
         <>
           <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
           <div className={styles.dayActions}>
-            <Button href={`/practice/journal?thread=${thread.id}`} variant="primary">{PRACTICE_COPY.threadOpenJournal}</Button>
+            <Button client href={`/practice/journal?thread=${thread.id}`} variant="primary">{PRACTICE_COPY.threadOpenJournal}</Button>
             <Link href="/practice" className={styles.secondaryLink}>{PRACTICE_COPY.threadStartNew}</Link>
           </div>
         </>
@@ -73,7 +73,7 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
           <div className={styles.dayActions}>
             {gate ? (
               <div className={styles.resumeAction}>
-                <Button href={`/practice/week?thread=${thread.id}&week=${gate.weekNo}`} variant="primary">{gate.step}</Button>
+                <Button client href={`/practice/week?thread=${thread.id}&week=${gate.weekNo}`} variant="primary">{gate.step}</Button>
               </div>
             ) : (
               !finished && (

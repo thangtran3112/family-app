@@ -186,7 +186,7 @@ function ThreadRow({
       <td className={styles.actionCell}>
         <div className={styles.actions}>
           {closed ? (
-            <Button href={`/practice/journal?thread=${thread.id}`} variant="primary" {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Button>
+            <Button client href={`/practice/journal?thread=${thread.id}`} variant="primary" {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Button>
           ) : dayActive && daily.loading ? (
             <Skeleton width={84} height={32} className={styles.skelEnd} />
           ) : (

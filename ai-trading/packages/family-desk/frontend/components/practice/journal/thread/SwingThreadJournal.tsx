@@ -92,7 +92,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
             <div className={styles.nextRow}>
               <p className={`${styles.muted} ${styles.nextText}`}>{nextText}</p>
               {view.action.kind === "review" && view.action.weekNo !== null && view.action.label !== null && (
-                <Button href={`/practice/week?thread=${id}&week=${view.action.weekNo}`} variant="primary">{view.action.label}</Button>
+                <Button client href={`/practice/week?thread=${id}&week=${view.action.weekNo}`} variant="primary">{view.action.label}</Button>
               )}
               {(view.action.kind === "start" || view.action.kind === "continue") && view.action.label !== null && (
                 <SwingContinue threadId={id} label={view.action.label} onChanged={onChanged} />

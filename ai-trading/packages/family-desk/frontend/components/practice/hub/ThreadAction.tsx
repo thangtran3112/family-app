@@ -56,7 +56,7 @@ export function ThreadAction({
   }
 
   if (today !== null) {
-    return <Button href={`/practice/day?id=${today.day_list_id}`} variant="primary" {...lockLink(busy)}>{dayActionLabel(today, plan?.thread_id === thread.id ? plan : null)}</Button>;
+    return <Button client href={`/practice/day?id=${today.day_list_id}`} variant="primary" {...lockLink(busy)}>{dayActionLabel(today, plan?.thread_id === thread.id ? plan : null)}</Button>;
   }
   if (!planOpensIn(plan, thread)) {
     return onNewPlan ? (

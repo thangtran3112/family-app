@@ -130,7 +130,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
           {action.kind === "start" ? (
             <Button variant="primary" disabled={start.busy} onClick={startWeek}>{action.label}</Button>
           ) : (
-            action.href !== null && <Button href={action.href} variant="primary">{action.label}</Button>
+            action.href !== null && <Button client href={action.href} variant="primary">{action.label}</Button>
           )}
         </div>
       </header>

@@ -280,11 +280,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         </div>
         <div className={`${styles.actions} ${styles.endWrap}`}>
           {practicing && !ended && (
-            <Button href={`/practice/replay?id=${practicing.id}`} variant="primary">{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Button>
+            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Button>
           )}
           {ended ? (
             finishHref !== null ? (
-              <Button href={finishHref} variant="primary">{PRACTICE_COPY.dayFinishPlan}</Button>
+              <Button client href={finishHref} variant="primary">{PRACTICE_COPY.dayFinishPlan}</Button>
             ) : (
               <Button ref={nextRef} variant="primary" disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</Button>
             )
