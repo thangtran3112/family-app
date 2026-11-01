@@ -253,6 +253,11 @@ services:
     command: ["tunnel", "--metrics", "0.0.0.0:2000", "run"]
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/cloudflared.env
+    # SSH ingress reaches the host from inside this container, so the origin
+    # must resolve from here: host-gateway maps host.docker.internal to the
+    # host. Required by the ssh:// origin in infrastructure/cloudflare/ai-trading
+    # (laptop-ssh.tf); without it the Access SSH endpoint cannot connect.
+    extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [hub, gateway]
     mem_limit: 128m
     security_opt: ["no-new-privileges:true"]

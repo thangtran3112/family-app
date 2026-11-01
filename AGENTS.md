@@ -36,6 +36,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 - **Claude Code** loads `.claude/rules/*.md` natively: the ones in the working directory and above it at launch, and a subdirectory's own rules on demand. An optional `paths:` list in the frontmatter scopes a file to matching globs; omit it when the rule covers the whole component. Only `paths` is read, and the frontmatter is stripped before the rule enters context. Skills at the root are found from a package directory too; this is checked, not assumed.
 - **OpenCode** has no native support for these paths: the root `opencode.json` lists `"instructions": ["AGENTS.md", ".claude/rules/*.md"]` once for the whole repository, and a package `opencode.json` lists its own `AGENTS.md` plus any package rule glob it has. OpenCode resolves the root config and the package config separately, so both apply from inside a package. A package that adds a rule without adding the glob will not load it in OpenCode.
 - Put a rule in `AGENTS.md` when it applies to every session; put it in `.claude/rules/` when it applies to one area; make it a skill when it is a procedure with commands.
+- **The laptop is reached passwordlessly, never by prompt.** Skill `laptop-access` is the only documented path to the family-app host: a valid key from Firestore, `ssh -o BatchMode=yes`, `sudo -n`. sshd has no password path and `sudo` without `-n` is a bug. No harness may ever ask the owner for this machine's password.
 
 ## Everywhere
 
