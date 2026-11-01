@@ -1,6 +1,6 @@
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
 import type { OrderBody } from "../desk/replay.ts";
-import { entryMark } from "./markInput.ts";
+import { DECIMAL, SHARES_MAX, SHARES_TOO_BIG, entryMark } from "./markInput.ts";
 import type { PracticeOrder } from "./schemas.ts";
 
 // The order ticket of the replay workspace: a side, a quantity and an order type, with the price fields that type needs
@@ -47,7 +47,7 @@ export type TicketAction = { kind: "mark"; mark: PracticeMarkV1 } | { kind: "ord
 export type TicketBuild = { ok: true; action: TicketAction } | { ok: false; field: TicketField | "type"; message: string };
 
 const price = (text: string): number | null => {
-  const value = text.trim() === "" ? Number.NaN : Number(text);
+  const value = DECIMAL.test(text.trim()) ? Number(text.trim()) : Number.NaN;
   return Number.isFinite(value) && value > 0 ? value : null;
 };
 
@@ -57,6 +57,7 @@ export function buildTicket(draft: TicketDraft): TicketBuild {
   if (option.unavailable) return { ok: false, field: "type", message: option.unavailable };
   if (!/^\d+$/.test(draft.shares.trim()) || Number(draft.shares) < 1) return { ok: false, field: "shares", message: MESSAGES.shares };
   const shares = Number(draft.shares);
+  if (shares > SHARES_MAX) return { ok: false, field: "shares", message: SHARES_TOO_BIG };
   const limitPrice = option.limit ? price(draft.limitPrice) : undefined;
   if (limitPrice === null) return { ok: false, field: "limitPrice", message: MESSAGES.limitPrice };
   const stopPrice = option.stop ? price(draft.stopPrice) : undefined;

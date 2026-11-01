@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Swatch } from "@/components/workspace/ChartLegend";
+import { chartPalette } from "@/lib/desk/chartPalette";
 import { OVERLAY_LOOK } from "@/lib/desk/workspace";
 import { useDismiss } from "@/lib/desk/useDismiss";
 import {
@@ -21,7 +22,7 @@ const OVERLAY_ROWS: ReadonlyArray<{ id: OverlayId; label: string; color: string;
   { id: "vwap", label: "VWAP", color: OVERLAY_LOOK.vwap.color },
   { id: "ema9", label: "EMA 9", color: OVERLAY_LOOK.ema9.color },
   { id: "ema21", label: "EMA 21", color: OVERLAY_LOOK.ema21.color, dashed: true },
-  { id: "volume", label: "Volume", color: "#30D15899" },
+  { id: "volume", label: "Volume", color: chartPalette.upHalf },
 ];
 
 const LEVEL_ROWS: ReadonlyArray<{ id: LevelId; label: string }> = [
@@ -49,6 +50,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
   const button = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const popoverId = useId();
+  const noteId = useId();
 
   const close = (refocus: boolean) => {
     onOpenChange(false);
@@ -81,7 +83,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
         title="Chart settings (C)"
         onClick={() => onOpenChange(!open)}
       >
-        Chart ▾
+        Chart <span aria-hidden="true">▾</span>
       </Button>
       {open && (
         <div id={popoverId} ref={popover} className={styles.chartPopover} role="dialog" aria-label="Chart settings" onKeyDown={onKeyDown}>
@@ -96,7 +98,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
               ))}
             </div>
           </fieldset>
-          <fieldset className={styles.setGroup} disabled={daily}>
+          <fieldset className={styles.setGroup} disabled={daily} aria-describedby={daily ? noteId : undefined}>
             <legend>Overlays</legend>
             {OVERLAY_ROWS.map((row) => (
               <label key={row.id} className={styles.toggle}>
@@ -106,7 +108,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
               </label>
             ))}
           </fieldset>
-          <fieldset className={styles.setGroup} disabled={daily}>
+          <fieldset className={styles.setGroup} disabled={daily} aria-describedby={daily ? noteId : undefined}>
             <legend>Levels</legend>
             {LEVEL_ROWS.map((row) => (
               <label key={row.id} className={styles.toggle}>
@@ -116,7 +118,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
               </label>
             ))}
           </fieldset>
-          <p className={styles.footnote}>{daily ? "The daily view has no intraday lines." : "The practice stop and your marks always show."}</p>
+          <p id={noteId} className={styles.footnote}>{daily ? "The daily view has no intraday lines." : "The practice stop and your marks always show."}</p>
           <div className={styles.settingsFoot}>
             <button type="button" className={styles.linkButton} onClick={() => onChange(defaultChartPrefs())}>Reset to defaults</button>
             <span className={styles.footnote}>Saved in this browser</span>

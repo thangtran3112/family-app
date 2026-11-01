@@ -2,7 +2,7 @@
 Postgres (`scripts/test-db.sh`); the history comes from `tests/daily_world.py`, no network. The background prep is
 skipped in a test client (no session factory), so the tests run `plan.run_prep` themselves."""
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -11,6 +11,7 @@ from daily_world import DAYS, NOW, SYMBOLS, make_services
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from ai_trading.api import replay as replay_api
 from ai_trading.api.app import app
 from ai_trading.api.replay import get_services
 from ai_trading.api.schemas.replay import DayListPatch
@@ -451,3 +452,27 @@ def test_day_list_sessions_carry_position_and_realized(daily, db_session) -> Non
     assert (done["position"], done["trades"], done["realized_usd"], done["has_open_trade"]) == (None, 1, 200.0, False)
     ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
     assert ended.json()["journal"]["pnl_usd"] == done["realized_usd"]  # the same figure the ledger books
+
+
+# -- a prep that died restarts from the overview's poll --------------------------------------------------------
+
+
+def test_the_poll_of_a_stranded_prep_starts_it_again_once(daily, db_session, monkeypatch) -> None:
+    client, _, user_id = daily
+    started: list[int] = []
+    monkeypatch.setattr(replay_api, "_prep_in_background", lambda app, services, plan_id: started.append(plan_id))
+    _start_plan(daily, db_session)
+    started.clear()  # the plan's own first start
+    plan = db_session.execute(select(PracticePlan).where(PracticePlan.owner_user_id == user_id)).scalar_one()
+    thread_id = plan.thread_id
+
+    assert client.get(f"{BASE}/daily?threadId={thread_id}", headers=auth_headers()).status_code == 200
+    assert started == []  # prep reported a moment ago: nothing to do
+
+    plan.prep = {**plan.prep, "updated_at": (NOW - timedelta(minutes=10)).isoformat()}  # the process died
+    db_session.commit()
+    polled = client.get(f"{BASE}/daily?threadId={thread_id}", headers=auth_headers())
+    assert polled.status_code == 200 and polled.json()["plan"]["prep"]["state"] == "running"
+    assert started == [plan.id]
+    client.get(f"{BASE}/daily?threadId={thread_id}", headers=auth_headers())
+    assert started == [plan.id]  # the claim moved updated_at: the next poll sees a live prep

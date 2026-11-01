@@ -1,10 +1,10 @@
-import { changeTone, formatPrice } from "@/lib/desk/format";
+import { FactList, type Fact } from "@/components/ui/FactList";
+import { formatPrice, signTone } from "@/lib/desk/format";
 import { formatSignedUsd } from "@/lib/desk/mask";
 import { formatR } from "@/lib/replay/journalView";
 import { SWING_PLAY_COPY } from "@/lib/replay/playView";
 import type { OpenTrade } from "@/lib/replay/schemas";
 import { daysHeldText, gapText, holdEntryLabel, priceBasisLabel, sideLabel } from "@/lib/replay/swing";
-import { dayResultTone } from "@/lib/replay/threadView";
 import styles from "./play.module.css";
 
 /**
@@ -15,19 +15,15 @@ import styles from "./play.module.css";
 export function SwingOpenTradeCard({ trade, tape }: { trade: OpenTrade | null; tape: "on" | "off" }) {
   if (!trade) return <p className={styles.muted}>{SWING_PLAY_COPY.noOpenHold}</p>;
   const gap = gapText(trade.gap_usd);
-  return (
-    <dl className={styles.card} aria-label={SWING_PLAY_COPY.holdOpenCardLabel}>
-      <div><dt>Side</dt><dd>{sideLabel(trade.side)} {trade.shares}</dd></div>
-      <div>
-        <dt>Entry</dt>
-        <dd>{trade.opened_day_no == null ? formatPrice(trade.entry_price) : holdEntryLabel({ entry_day_no: trade.opened_day_no, entry_price: trade.entry_price })}</dd>
-      </div>
-      {trade.days_held != null && <div><dt className="sr-only">Held</dt><dd>{daysHeldText(trade.days_held)}</dd></div>}
-      {gap !== null && <div><dt className="sr-only">Overnight move</dt><dd data-tone={dayResultTone(trade.gap_usd)}>{gap}</dd></div>}
-      <div><dt>Stop</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
-      <div><dt>Price</dt><dd>{priceBasisLabel(trade.price_basis, trade.last_price, tape)}</dd></div>
-      <div><dt>Unrealized</dt><dd data-tone={changeTone(trade.unrealized_usd)}>{formatSignedUsd(trade.unrealized_usd, { cents: true })}</dd></div>
-      {trade.r != null && <div><dt>R</dt><dd data-tone={changeTone(trade.r)}>{formatR(trade.r)}</dd></div>}
-    </dl>
-  );
+  const facts: Fact[] = [
+    { id: "side", label: "Side", value: `${sideLabel(trade.side)} ${trade.shares}` },
+    { id: "entry", label: "Entry", value: trade.opened_day_no == null ? formatPrice(trade.entry_price) : holdEntryLabel({ entry_day_no: trade.opened_day_no, entry_price: trade.entry_price }) },
+    ...(trade.days_held != null ? [{ id: "held", label: "Held", value: daysHeldText(trade.days_held) }] : []),
+    ...(gap !== null ? [{ id: "gap", label: "Overnight move", value: gap, tone: signTone(trade.gap_usd) }] : []),
+    { id: "stop", label: "Stop", value: trade.stop_price == null ? "None" : formatPrice(trade.stop_price) },
+    { id: "price", label: "Price", value: priceBasisLabel(trade.price_basis, trade.last_price, tape) },
+    { id: "unrealized", label: "Unrealized", value: formatSignedUsd(trade.unrealized_usd, { cents: true }), tone: signTone(trade.unrealized_usd) },
+    ...(trade.r != null ? [{ id: "r", label: "R", value: formatR(trade.r), tone: signTone(trade.r) }] : []),
+  ];
+  return <FactList label={SWING_PLAY_COPY.holdOpenCardLabel} columns={2} facts={facts} />;
 }

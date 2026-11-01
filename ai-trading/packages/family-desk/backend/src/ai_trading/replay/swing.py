@@ -910,6 +910,9 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         # A name opened earlier fell behind the shared day clock while she played another one. Returning to it lifts it
         # to the clock (what lies between is already revealed on the strip and cannot be marked), exactly as an
         # `advance` would; every advance scanned all holds' stops, so nothing is skipped by the lift.
+        session_mod.settle_away_orders(
+            db, svc, created, plan_mod._utc(created.revealed_through), plan_mod._utc(row.revealed_through)
+        )  # a working order the tape would have filled in the skipped span is cancelled, not filled behind her back
         created.revealed_through = row.revealed_through
         created.updated_at = svc.now()
     db.flush()

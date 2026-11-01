@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SwingSetupSection } from "@/components/practice/swing/SwingSetupSection";
 import { useUniversePreview } from "@/components/practice/swing/useUniversePreview";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -29,6 +29,8 @@ type Problems = SwingProblems & PlanProblems & ThreadProblems;
 /** Where a failed submit stopped: starting the thread or saving its plan. */
 type Stage = "thread" | "plan";
 
+const SLOW_START_MS = 10_000;
+
 /**
  * The New plan modal (02r2, Paper mock X9Y-0; redesigned in fix wave 5S, D-075 and D-076): a modal around three things, the
  * filter picker, the day and window settings, and one button that starts the practice. The pretend balance and the mode sit
@@ -41,7 +43,7 @@ type Stage = "thread" | "plan";
  *
  * Any number of threads of either mode may be active, so Day and Swing are always offered. With `thread` set the modal only
  * replaces that day thread's plan: its balance and risk plan stay with it. The settings are checked as she edits, and a
- * form she has edited asks before it is thrown away (M-05). Nothing here reaches IBKR.
+ * form she has edited asks before it is thrown away (M-05). Nothing here reaches a broker.
  */
 export function NewPlanModal({
   thread = null,
@@ -66,6 +68,8 @@ export function NewPlanModal({
   const [failure, setFailure] = useState<string | null>(null);
   // Set while the gateway has cut a slow save short and the screen is waiting for the plan to show up (D-058).
   const [still, setStill] = useState(false);
+  // Starting a swing thread fetches its bars inside the request, which can take over a minute with nothing else on screen: after 10 s the footer says it is still working (F-03).
+  const [slow, setSlow] = useState(false);
   // The thread started by an earlier try whose plan did not save: a retry continues with it instead of starting another.
   const [startedId, setStartedId] = useState<number | null>(null);
   // Once the Desk has recorded 20 finished days of its universe, a new plan starts on the first one (02o-b2) unless she has picked a day.
@@ -88,6 +92,12 @@ export function NewPlanModal({
   const preview = useUniversePreview(swingNow, swing, now);
   const blocker = swing ? startBlockedBy({ preview: preview.preview, fresh: preview.fresh, problems: preview.problems }) : null;
   const noFilters = !swing && plan.filterIds.length === 0;
+
+  useEffect(() => {
+    if (!submitting) return;
+    const timer = setTimeout(() => setSlow(true), SLOW_START_MS);
+    return () => clearTimeout(timer);
+  }, [submitting]);
 
   // Escape, Close and a click on the dimmed page all ask first once the form has been edited (M-05).
   const requestClose = () => {
@@ -127,6 +137,7 @@ export function NewPlanModal({
     setProblems({});
     setFailure(null);
     setStill(false);
+    setSlow(false);
     setSubmitting(true);
     let stage: Stage = "thread";
     try {
@@ -144,14 +155,19 @@ export function NewPlanModal({
       if (threadId === null) return;
       stage = "plan";
       const id = threadId;
-      const before = await loadDaily({ threadId: id }).then((daily) => daily.plan?.id ?? null, () => null);
-      await savePlanPatiently(
-        () => openNextDay(day.spec, { threadId: id }),
-        () => openNextDay(undefined, { threadId: id }),
-        () => loadDaily({ threadId: id }).then((daily) => daily.plan?.id ?? null),
-        before,
-        { onWaiting: () => setStill(true) },
-      );
+      // The plan id before the save is how a gateway cut is told from a saved plan. A failed read leaves that unknown, and "no plan" would
+      // look the same as "unknown" (the old plan would then pass for the new one), so with no id to compare the save is sent plainly.
+      const before = await loadDaily({ threadId: id }).then((daily) => ({ id: daily.plan?.id ?? null }), () => null);
+      const save = () => openNextDay(day.spec, { threadId: id });
+      if (before === null) await save();
+      else
+        await savePlanPatiently(
+          save,
+          () => openNextDay(undefined, { threadId: id }),
+          () => loadDaily({ threadId: id }).then((daily) => daily.plan?.id ?? null),
+          before.id,
+          { onWaiting: () => setStill(true) },
+        );
       onSaved(id);
     } catch (error) {
       if (error instanceof DeskApiError && error.status === 422 && error.problems.length > 0) {
@@ -160,6 +176,7 @@ export function NewPlanModal({
         setFailure(problemMessage(error, swing ? PRACTICE_COPY.swingStartThreadError : stage === "thread" ? PRACTICE_COPY.threadStartError : PRACTICE_COPY.newPlanError));
       }
       setStill(false);
+      setSlow(false);
       setSubmitting(false);
     }
   }
@@ -184,7 +201,7 @@ export function NewPlanModal({
     : planOnly
       ? PRACTICE_COPY.threadPlanFrom
       : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
-  const status = confirmingDiscard ? PRACTICE_COPY.newPlanDiscardTitle : still ? PRACTICE_COPY.planStillWorking : (held ?? note);
+  const status = confirmingDiscard ? PRACTICE_COPY.newPlanDiscardTitle : still ? PRACTICE_COPY.planStillWorking : submitting && slow ? PRACTICE_COPY.planSlowStart : (held ?? note);
 
   return (
     <Dialog

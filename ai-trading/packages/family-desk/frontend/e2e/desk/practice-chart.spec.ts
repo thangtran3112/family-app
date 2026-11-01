@@ -13,7 +13,7 @@ import { createSwingThread, openNextDay, replayRail, send } from "./swing-helper
 const STORE_KEY = "desk.replayChart";
 
 const legendButton = (page: Page, name: string) => page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
-const chartSettings = (page: Page) => page.getByRole("button", { name: "Chart ▾" });
+const chartSettings = (page: Page) => page.getByRole("button", { name: "Chart", exact: true });
 const popover = (page: Page) => page.getByRole("dialog", { name: "Chart settings" });
 const fullScreen = (page: Page) => page.getByRole("button", { name: "Full screen" });
 const shell = (page: Page) => page.locator(".dk-shell");

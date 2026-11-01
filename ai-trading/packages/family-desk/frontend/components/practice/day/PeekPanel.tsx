@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { EMPTY_VALUE, formatPrice, formatSignedPct, signTone } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { Candidate, Peek } from "@/lib/replay/daily";
@@ -12,6 +13,7 @@ import styles from "./day.module.css";
 import { FactList } from "@/components/ui/FactList";
 
 const AMBER = "#FFB020";
+const PEEK_TABS_ID = "peek-view";
 
 function levelLines(peek: Peek, view: "daily" | "today"): MarketChartLevel[] {
   const { levels } = peek;
@@ -63,14 +65,17 @@ export function PeekPanel({
       <div className={styles.peekHead}>
         <h3 className={styles.peekTitle}>{peek.symbol}</h3>
         {hideDates && <Badge tone="neutral">Dates hidden</Badge>}
-        <div role="tablist" aria-label="Peek view" className={styles.tabs}>
-          {(["today", "daily"] as const).map((tab) => (
-            <button key={tab} type="button" role="tab" aria-selected={view === tab} className={styles.tab} onClick={() => setView(tab)}>
-              {tab === "today" ? PRACTICE_COPY.dayPeekToday : "Daily"}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          idBase={PEEK_TABS_ID}
+          label="Peek view"
+          size="md"
+          track={false}
+          value={view}
+          tabs={[{ id: "today", label: PRACTICE_COPY.dayPeekToday }, { id: "daily", label: "Daily" }]}
+          onChange={setView}
+        />
       </div>
+      <TabPanel idBase={PEEK_TABS_ID} id={view}>
       {showToday ? (
         <MarketChart
           symbol={peek.symbol}
@@ -100,6 +105,7 @@ export function PeekPanel({
           height={260}
         />
       )}
+      </TabPanel>
       <p className={styles.muted}>{view === "daily" || !showToday ? PRACTICE_COPY.dayPeekDaily : PRACTICE_COPY.dayPeekMinutes}</p>
       {row && <PeekFacts row={row} />}
     </div>

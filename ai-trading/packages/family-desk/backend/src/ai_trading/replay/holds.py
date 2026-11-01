@@ -171,7 +171,8 @@ def check_buying_power(*, shares: int, price: float, free_cash_usd: float) -> No
     if shares < 1:
         raise HoldProblem("Shares must be at least 1", path="shares")
     if shares * price > free_cash_usd:
-        raise HoldProblem(f"Not enough practice cash · ${free_cash_usd:,.0f} free", path="shares")
+        # Whole dollars, rounded DOWN: $450.60 free reads "$450", never "$451" (an amount she could not spend).
+        raise HoldProblem(f"Not enough practice cash · ${max(0, floor(free_cash_usd)):,} free", path="shares")
 
 
 def check_stop(hold_side: Side, stop_price: float, last_price: float | None) -> None:

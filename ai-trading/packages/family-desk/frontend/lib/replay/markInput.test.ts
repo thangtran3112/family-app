@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { entryMark, exitMark, markForAction, noteMark, stopMark } from "./markInput.ts";
+import { entryMark, exitMark, markForAction, noteMark, SHARES_TOO_BIG, stopMark } from "./markInput.ts";
 
 test("entries carry shares and a stop only when typed", () => {
   assert.deepEqual(entryMark("long_entry", {}), { ok: true, mark: { schemaVersion: 1, kind: "long_entry" } });
@@ -31,4 +31,17 @@ test("exits, stops and notes build their contract kinds", () => {
 test("a key action reads the shares and stop fields for entries only", () => {
   assert.deepEqual(markForAction("long_entry", { shares: "10", stopPrice: "1" }), { ok: true, mark: { schemaVersion: 1, kind: "long_entry", shares: 10, stopPrice: 1 } });
   assert.deepEqual(markForAction("long_exit", { shares: "10", stopPrice: "1" }), { ok: true, mark: { schemaVersion: 1, kind: "long_exit" } });
+});
+
+test("a price is plain decimals: hex, exponent and Infinity are refused, not read by Number()", () => {
+  for (const text of ["0x10", "1e2", "Infinity", "1,5", "--1", "1.2.3"]) {
+    assert.deepEqual(stopMark(text), { ok: false, message: "Stop price: a number above 0" }, text);
+  }
+  assert.deepEqual(stopMark("  186.90 "), { ok: true, mark: { schemaVersion: 1, kind: "stop", stopPrice: 186.9 } });
+  assert.deepEqual(stopMark(".5"), { ok: true, mark: { schemaVersion: 1, kind: "stop", stopPrice: 0.5 } });
+});
+
+test("a quantity past the 32-bit column says where the top is, not \"1 or more\"", () => {
+  assert.deepEqual(entryMark("long_entry", { shares: "2147483648" }), { ok: false, message: SHARES_TOO_BIG });
+  assert.equal(entryMark("long_entry", { shares: "2147483647" }).ok, true);
 });

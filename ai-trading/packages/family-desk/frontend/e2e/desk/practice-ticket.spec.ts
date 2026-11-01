@@ -6,8 +6,10 @@ import { replayRail } from "./swing-helpers";
 
 // The Practice order ticket (owner directive): a broker-style ticket with a side, a quantity and an order type; Market, Limit,
 // Stop and Stop-limit placed from it; a stop that is only ever optional; Close position beside the position. The stub day is TSLA
-// on Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars. A standalone session has no account, so the cash rule is
-// covered in practice.spec.ts (a thread session) and here only the shape of a ticket is.
+// on Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars (TSLA near 380). A standalone session has an account of its own
+// ($50,000, the thread default), so cash is the only size rule here as in a thread: the size and the prices below fit it, and the
+// last test spends past it. A working order holds its notional back (at its limit, else its stop), so the orders a test leaves
+// working must fit the $50,000 together.
 
 async function openTicket(page: Page, context: Parameters<typeof createStubSession>[0]) {
   const id = await createStubSession(context);
@@ -35,13 +37,13 @@ test.describe("Practice order ticket", () => {
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
     await expect(page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) })).toHaveCount(0); // no stop, no refusal (the route announcer is an alert too, so only the message toast counts)
     await expect(practice.getByText(/^Long · 5 shares/)).toBeVisible();
-    await expect(practice.getByRole("definition").filter({ hasText: "none" })).toBeVisible(); // the position's stop reads "none"
+    await expect(practice.getByRole("definition").filter({ hasText: "None" })).toBeVisible(); // the position's stop reads "None"
     await expectCleanScreen(page);
 
     // The stop is added afterwards, to the position, and stays optional.
     await practice.getByRole("button", { name: "Set stop" }).click();
     const form = practice.getByRole("form", { name: "Stop" });
-    await form.getByRole("textbox", { name: "Stop price" }).fill("1");
+    await form.getByRole("textbox", { name: "Stop loss" }).fill("1");
     await form.getByRole("button", { name: "Save" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "1.00" }).first()).toBeVisible();
 
@@ -123,18 +125,43 @@ test.describe("Practice order ticket", () => {
     await type.selectOption("stop");
     await practice.getByRole("textbox", { name: "Stop price" }).fill("1");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
+    // The server names the field it refused (stopPrice), so the sentence sits at that field once, not again in the message line.
     await expect(page.getByRole("alert").filter({ hasText: "A buy stop goes above the last price" })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
-    await practice.getByRole("textbox", { name: "Stop price" }).fill("100000");
+    await expect(practice.getByRole("textbox", { name: "Stop price" })).toHaveAttribute("aria-invalid", "true");
+    // A stop above the market (about 380) that the account can carry: 10 shares at 400 is $4,000 of the $50,000, and the stop-limit
+    // below holds another $4,010, so both stay working.
+    await practice.getByLabel("Quantity").fill("10");
+    await practice.getByRole("textbox", { name: "Stop price" }).fill("400");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
-    await expect(orders(practice).getByText("Buy 100 · Stop 100000.00")).toBeVisible();
+    await expect(orders(practice).getByText("Buy 10 · Stop 400.00")).toBeVisible();
 
     await type.selectOption("stop_limit");
-    await practice.getByRole("textbox", { name: "Stop price" }).fill("100000");
-    await practice.getByRole("textbox", { name: "Limit price" }).fill("100001");
+    await practice.getByRole("textbox", { name: "Stop price" }).fill("400");
+    await practice.getByRole("textbox", { name: "Limit price" }).fill("401");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
-    await expect(orders(practice).getByText("Buy 100 · Stop-limit 100000.00 / 100001.00")).toBeVisible();
+    await expect(orders(practice).getByText("Buy 10 · Stop-limit 400.00 / 401.00")).toBeVisible();
     await expect(orders(practice).getByText("Working")).toHaveCount(2);
+  });
+
+  test("a standalone session has its own cash: a stop the account cannot carry is refused at the quantity, and a second order is held to what the first leaves", async ({ page, context }) => {
+    const practice = await openTicket(page, context);
+    const type = practice.getByRole("combobox", { name: "Order type" });
+    const refusal = page.getByRole("alert").filter({ hasText: /^Not enough practice cash/ });
+    await type.selectOption("stop");
+    await practice.getByRole("textbox", { name: "Stop price" }).fill("100000");
+    await practice.getByRole("button", { name: "Buy", exact: true }).click(); // 100 shares at 100,000 is $10,000,000
+    await expect(refusal).toHaveText("Not enough practice cash · $50,000 free");
+    await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
+    await expect(orders(practice).getByText("Working")).toHaveCount(0);
+
+    // 100 shares at 400 is $40,000: it fits, and it holds that cash back, so the same order again has only $10,000 left.
+    await practice.getByRole("textbox", { name: "Stop price" }).fill("400");
+    await practice.getByRole("button", { name: "Buy", exact: true }).click();
+    await expect(orders(practice).getByText("Buy 100 · Stop 400.00")).toBeVisible();
+    await practice.getByRole("textbox", { name: "Stop price" }).fill("400"); // a placed order clears the price box
+    await practice.getByRole("button", { name: "Buy", exact: true }).click();
+    await expect(refusal).toHaveText("Not enough practice cash · $10,000 free");
+    await expect(orders(practice).getByText("Working")).toHaveCount(1);
   });
 
   test("the ticket carries no guidance copy and no required-stop wording", async ({ page, context }) => {

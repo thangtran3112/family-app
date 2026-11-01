@@ -1145,6 +1145,8 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         # to the clock, as an `advance` does: what lies between is revealed but was never in front of her (an away
         # span), and every advance scanned all open trades' stops, so nothing is skipped by the lift.
         created.away = add_span(list(created.away or []), _utc(created.revealed_through), _utc(row.revealed_through))
+        # A working order the tape would have filled inside that span is cancelled, not filled behind her back.
+        session_mod.settle_away_orders(db, svc, created, _utc(created.revealed_through), _utc(row.revealed_through))
         created.revealed_through, created.updated_at = row.revealed_through, svc.now()
     db.flush()
     return created
@@ -1230,6 +1232,31 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
 # -- the hub ----------------------------------------------------------------------------------------------------
 
 
+def restart_stale_prep(db: Session, user_id: int, now: datetime, thread_id: int | None = None) -> PracticePlan | None:
+    """Claim the restart of a prep that died with its process. `open_next` restarts one that has not reported for
+    `PREP_STALE`, but the screen hides its Next button while prep says "running" (and a thread with no day yet has
+    nothing else to press), so a prep that died stranded the thread on "Preparing 0/130". The overview polls the hub
+    while it waits; that poll calls this, and a stale prep is claimed under the plan's row lock (its `updated_at`
+    moves, so exactly one poll wins and the others find a live prep). The caller then starts `run_prep` again; the
+    write-once blob cache makes the rerun resume where it stopped. None: nothing is stale (the usual answer)."""
+    if thread_id is not None:
+        thread = threads_mod.get_thread(db, user_id, thread_id)
+    else:
+        thread = threads_mod.active_thread(db, user_id)
+    if thread is None:
+        return None
+    swing = thread.mode == "swing"
+    plan = _swing()._thread_plan(db, thread.id) if swing else active_plan(db, user_id, thread_id=thread.id)
+    if plan is None or not _prep_stale(plan, now):
+        return None
+    db.refresh(plan, with_for_update=True)  # read the row again under its lock: another poll may have claimed it
+    if not _prep_stale(plan, now):
+        return None
+    plan.prep = {**plan.prep, "updated_at": now.isoformat()}
+    db.flush()
+    return plan
+
+
 def hub(db: Session, user_id: int, thread_id: int | None = None) -> dict[str, Any]:
     """Her plan and thread card: thread `thread_id` (404 when it is not hers) with its own plan, else her most recently
     started active day thread. The card is the daily plan's, so a swing thread has a card and no plan here."""
@@ -1263,6 +1290,7 @@ __all__ = (
     "practice_universe",
     "relist",
     "rescan",
+    "restart_stale_prep",
     "run_prep",
     "start_session",
 )

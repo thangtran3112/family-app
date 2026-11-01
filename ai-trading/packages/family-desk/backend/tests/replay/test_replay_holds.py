@@ -258,6 +258,15 @@ def test_a_cash_shortfall_is_refused_for_a_long_or_a_short_the_same_way():
     assert err.value.message == "Not enough practice cash · $8,240 free"  # 200 * 50 = 10,000 > 8,240.40
 
 
+def test_the_free_cash_in_a_refusal_never_rounds_up_to_money_she_does_not_have():
+    with pytest.raises(HoldProblem) as err:
+        check_buying_power(shares=10, price=50.0, free_cash_usd=450.6)
+    assert err.value.message == "Not enough practice cash · $450 free"  # not "$451"
+    with pytest.raises(HoldProblem) as err:
+        check_buying_power(shares=1, price=50.0, free_cash_usd=-12.5)
+    assert err.value.message == "Not enough practice cash · $0 free"
+
+
 def test_a_fill_needs_at_least_one_share():
     with pytest.raises(HoldProblem) as err:
         check_buying_power(shares=0, price=50.0, free_cash_usd=1_000.0)

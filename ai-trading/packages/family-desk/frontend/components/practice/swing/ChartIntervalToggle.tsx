@@ -10,5 +10,5 @@ export function ChartIntervalToggle({ mode, onMode }: { mode: ChartMode; onMode:
     label: chartModeLabel(value),
     title: value === "daily" ? "Daily candles through the prior close and today's forming candle" : `${value} candles`,
   }));
-  return <ChipToggleGroup label="Chart interval" options={options} pressed={[mode]} onToggle={onMode} />;
+  return <ChipToggleGroup label="Chart interval" size="md" options={options} pressed={[mode]} onToggle={onMode} />;
 }
