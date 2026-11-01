@@ -357,6 +357,22 @@ test.describe("Practice thread page · fix wave 5S", () => {
     await expect(card.getByRole("link", { name: PRACTICE_COPY.threadStartNew })).toHaveAttribute("href", "/practice");
   });
 
+  test("the swing curve's axis is labelled at one regular step over the whole span, and no label prints over another (D-123)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context);
+    await openDesk(page, overviewUrl(threadId));
+    const curve = page.getByRole("img", { name: /^Balance and equity at the close of each day/ });
+    for (const tick of ["Start", "D5", "D10", "D15"]) await expect(curve.getByText(tick, { exact: true })).toHaveCount(1);
+    await expect(curve.getByText("D1", { exact: true })).toHaveCount(0); // 5 of 15 days are played: D1 is no tick, D10 and D15 are
+    const boxes = await curve.locator("text").evaluateAll((nodes) => nodes.map((node) => ({ text: node.textContent, ...node.getBoundingClientRect().toJSON() })));
+    const crossed = boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom).map((b) => `${a.text} / ${b.text}`));
+    expect(crossed, "no two labels of the curve overlap").toEqual([]);
+    // The balance rests on the bottom tick here: its label goes above the line, not into the row of the day labels.
+    const label = (await curve.getByText(/^Balance \$/).boundingBox())!;
+    const axis = (await curve.getByText("Start", { exact: true }).boundingBox())!;
+    expect(label.y + label.height, "the end label is clear of the day labels").toBeLessThanOrEqual(axis.y);
+  });
+
   test("a week's link in the overview is stretched over its row, like the landing's (D-122)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);

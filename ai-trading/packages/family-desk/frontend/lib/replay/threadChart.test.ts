@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { balanceTicks, barsLayout, curveLayout, type Box } from "./threadChart.ts";
+import { balanceTicks, barsLayout, curveLayout, dayTickStep, type Box } from "./threadChart.ts";
 import { thread, threadCurve, threadDays } from "./threadFixtures.ts";
 import { weeksOf } from "./threadView.ts";
 
@@ -71,4 +71,12 @@ test("days that all ended flat still get a readable axis with no repeated figure
   assert.ok(layout.slots.every((slot) => slot.barHeight === 0));
   // A few dollars of spread never makes the step finer than a whole dollar.
   assert.ok(balanceTicks(0, 2).every((value) => Number.isInteger(value)));
+});
+
+test("an x axis labels days at one regular step: every day up to ten, then every 5, 10, 25 or 50 (D-123)", () => {
+  assert.deepEqual([1, 3, 10].map(dayTickStep), [1, 1, 1]);
+  assert.deepEqual([11, 15, 20, 23, 50].map(dayTickStep), [5, 5, 5, 5, 5]);
+  assert.deepEqual([51, 100].map(dayTickStep), [10, 10]);
+  assert.deepEqual([101, 250, 500].map(dayTickStep), [25, 25, 50]);
+  assert.equal(dayTickStep(0), 1, "a thread with no day yet still has a step");
 });
