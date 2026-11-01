@@ -54,7 +54,8 @@ export function needsYouFeed({ holdings, shortCalls, today }: { holdings: Holdin
   const items: FeedItem[] = [];
   if (holdings) {
     const line = importLine(holdings.import);
-    if (line.tone === "problem" || line.tone === "empty") {
+    // A good or running import needs nothing; a failed, not-connected or empty one does (the tone no longer tells these apart).
+    if (holdings.import.state === "failed" || holdings.import.state === "not_configured" || holdings.import.state === "none") {
       items.push({ kind: "import", symbol: null, title: line.text, detail: "Holdings import", at: holdings.import.imported_at ?? today, href: "/settings" });
     }
   }

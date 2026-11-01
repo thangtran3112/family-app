@@ -1,6 +1,8 @@
 "use client";
 
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Delta } from "@/components/ui/Delta";
+import type { Tone } from "@/components/ui/tone";
 import { withPriorities } from "@/lib/desk/columns";
 import type { SortValue } from "@/lib/desk/sort";
 import { holdingViews, type HoldingView } from "@/lib/desk/holdingsView";
@@ -8,10 +10,9 @@ import { METRIC_META, metricCell, metricLabel } from "@/lib/desk/metricColumns";
 import type { HoldingRow } from "@/lib/api/fundamentalSchemas";
 import type { MetricKey } from "@/lib/settings/fundamental";
 import { AiRatingChip } from "../shared/AiRatingChip";
-import fund from "../fundamental.module.css";
 import styles from "./holdings.module.css";
 
-const tone = (value: { text: string; tone: "up" | "down" | "flat" }) => <span className={fund.tone} data-tone={value.tone}>{value.text}</span>;
+const tone = (value: { text: string; tone: Tone }) => <Delta tone={value.tone}>{value.text}</Delta>;
 
 function SymbolCell({ view }: { view: HoldingView }) {
   return (
@@ -73,7 +74,7 @@ export function FundamentalsTable({ rows, chosen, masked, selected, onSelect }: 
       render: (row) => {
         const cell = metricCell(key, row.fundamentals, masked);
         if (cell.rating) return <AiRatingChip rating={cell.rating} />;
-        return cell.tone ? <span className={fund.tone} data-tone={cell.tone}>{cell.text}</span> : cell.text;
+        return cell.tone ? <Delta tone={cell.tone}>{cell.text}</Delta> : cell.text;
       },
     })),
   ];
