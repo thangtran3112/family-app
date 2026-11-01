@@ -515,6 +515,8 @@ export const PRACTICE_COPY = {
   dayPeekEarningsNone: "None flagged before the open",
   dayPeekDaily: "Daily bars on the same share basis as the list",
   dayPeekToday: "Up to list time",
+  dayPeekLevels: "Key levels",
+  dayPeekClose: "Close",
   dayReported: "Reported before the open",
   dayNoValue: "Not in this list's data",
   dayStartError: "Couldn't start the practice · Try again",

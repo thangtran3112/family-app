@@ -324,13 +324,43 @@ test.describe("Practice", () => {
     await expect(page.locator("body")).not.toContainText(DAY);
     await expectCleanScreen(page);
 
-    // Peek: the chart before the open, from the row's own button. It adds nothing to the portfolio and starts no clock.
-    await table.getByRole("row", { name: /TSLA/ }).getByRole("button", { name: "Peek at TSLA" }).click();
-    await expect(page.getByRole("heading", { name: "TSLA", level: 3 })).toBeVisible();
-    await expect(page.getByRole("tab", { name: PRACTICE_COPY.dayPeekToday })).toBeVisible(); // D-019: no "Today so far" on a replay day
+    // Peek: the chart before the open, from the row's own button, in a wide drawer. It adds nothing to the portfolio and starts no clock.
+    const peekButton = table.getByRole("row", { name: /TSLA/ }).getByRole("button", { name: "Peek at TSLA" });
+    await peekButton.click();
+    const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPeek });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: "TSLA", level: 3 })).toBeVisible();
+    await expect(drawer.getByRole("tab", { name: PRACTICE_COPY.dayPeekToday })).toBeVisible(); // D-019: no "Today so far" on a replay day
     await expect(page.getByText("Today so far")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /star/i })).toHaveCount(0); // practice = portfolio: no star
     await expectCleanScreen(page);
+    // The drawer is wider than the 320 px rail it replaced, so the chart is readable; its levels are named in a legend in normal
+    // flow above the plot (never printed over the candles), and no two entries touch.
+    const chartBox = (await drawer.getByRole("region", { name: "TSLA 1m market chart" }).boundingBox())!;
+    expect(chartBox.width, "the Peek chart is wider than the old 320 px rail").toBeGreaterThan(500);
+    expect(chartBox.height, "the Peek chart is taller than the old 260 px").toBeGreaterThanOrEqual(380);
+    const legend = drawer.getByTestId("peek-levels");
+    await expect(legend).toContainText(PRACTICE_COPY.dayPeekLevels);
+    await expect(legend).toContainText("List price");
+    const entries = await legend.locator(":scope > div > span").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON() as { left: number; right: number; top: number; bottom: number }));
+    expect(entries.length, "List price and at least one more level").toBeGreaterThanOrEqual(2);
+    entries.forEach((a, i) => {
+      expect(a.right, `legend entry ${i} stays inside the drawer`).toBeLessThanOrEqual(chartBox.x + chartBox.width + 1);
+      expect(a.bottom, `legend entry ${i} sits above the plot, not over it`).toBeLessThanOrEqual(chartBox.y + 1);
+      entries.slice(i + 1).forEach((b, j) => {
+        const apart = a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5;
+        expect(apart, `legend entries ${i} and ${i + 1 + j} do not overlap`).toBe(true);
+      });
+    });
+    // Escape closes it and hands focus back to the row's Peek button; the Close button does the same.
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(peekButton).toBeFocused();
+    await peekButton.click();
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("button", { name: PRACTICE_COPY.dayPeekClose }).click();
+    await expect(drawer).toHaveCount(0);
+    await expect(peekButton).toBeFocused();
 
     // Click the row: the practice chart opens at the window start, with a way back to the list.
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
