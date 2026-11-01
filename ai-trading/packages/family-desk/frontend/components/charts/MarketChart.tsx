@@ -14,6 +14,7 @@ import type {
 } from "lightweight-charts";
 import { formatPrice } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
+import { nearestLevel, roundToCents } from "@/lib/replay/chartOrder";
 import type { ChartType } from "@/lib/replay/chartPrefs";
 import {
   attachPinchZoom,
@@ -117,6 +118,10 @@ export type MarketChartProps = {
   moneyAxis?: MarketChartMoneyAxis;
   /** Start time of a bar to bring into view with the crosshair on it (a click in the signals rail). `at` changes on every click, so the same bar can be asked for twice. */
   focus?: { time: string; at: number } | null;
+  /** Replay: a level line carries no title, only its number on the price axis; its name (`label`) shows in a tooltip while the cursor is on the line. */
+  levelTips?: boolean;
+  /** Replay click-to-order: a click on the price pane picks a price (snapped onto a level line when it is on one) and draws what this returns beside the click, with a dashed line at the price. `close` dismisses it. Escape and a press elsewhere dismiss it too. */
+  renderPick?: (price: number, close: () => void) => ReactNode;
   /** One legend per indicator pane (same order as `panes`), drawn at the top of its pane wherever the layout puts it. */
   paneLegends?: ReactNode[];
 };
@@ -130,6 +135,10 @@ const FOLLOW_RIGHT_PAD = 10;
 const { up: UP, down: DOWN, price: PRICE, clear: CLEAR } = chartPalette;
 
 const DEFAULT_PANE_HEIGHT = 120;
+
+/** The room the click-to-order popover takes beside a click (the stylesheet's width; the height is its usual): it opens to the left of the click, or higher, to stay inside the chart. */
+const PICK_WIDTH = 232;
+const PICK_HEIGHT = 152;
 
 /** Indicator panes keep their pixel height while there is room and the price pane takes the rest, never less than
  * PRICE_PANE_SHARE of the chart (`paneHeights`). `setHeight` on one pane rescales the others, so the second call shrank
@@ -233,6 +242,8 @@ export function MarketChart({
   moneyAxis,
   focus = null,
   paneLegends,
+  levelTips = false,
+  renderPick,
 }: MarketChartProps) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
@@ -254,10 +265,24 @@ export function MarketChart({
   const paneLayout = useRef(panes);
   const [ready, setReady] = useState(false);
   const [paneTops, setPaneTops] = useState<number[]>([]);
+  // Level tooltips and click-to-order read the newest levels from inside the chart's own event handlers.
+  const levelsRef = useRef(levels);
+  const levelTipsRef = useRef(levelTips);
+  const pickEnabled = useRef(false);
+  const pickBox = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [pick, setPick] = useState<{ price: number; left: number; top: number } | null>(null);
+  if (renderPick === undefined && pick !== null) setPick(null); // ordering became unavailable: an old pick must not come back with it
 
   useEffect(() => {
     crosshairCallback.current = onCrosshair;
   }, [onCrosshair]);
+
+  useEffect(() => {
+    levelsRef.current = levels;
+    levelTipsRef.current = levelTips;
+    pickEnabled.current = renderPick !== undefined;
+  }, [levels, levelTips, renderPick]);
 
   useEffect(() => {
     paneLayout.current = panes;
@@ -312,7 +337,15 @@ export function MarketChart({
       resizeWatch.observe(container.current);
       mainKind.current = "Candlestick";
       main.current = addMainSeries(module, currentChart, mainKind.current);
+      const levelAt = (y: number) => {
+        const series = main.current;
+        return series ? nearestLevel(levelsRef.current, y, (price) => series.priceToCoordinate(price)) : null;
+      };
       currentChart.subscribeCrosshairMove((param) => {
+        if (levelTipsRef.current) {
+          const hit = param.point && (param.paneIndex ?? 0) === 0 ? levelAt(param.point.y) : null;
+          setTip(hit && param.point ? { x: param.point.x, y: param.point.y, text: hit.label } : null);
+        }
         const callback = crosshairCallback.current;
         if (!callback || !main.current) return;
         if (!param.time || !param.point) {
@@ -329,6 +362,19 @@ export function MarketChart({
           volumeEntry as Parameters<typeof crosshairPoint>[2],
           values,
         ));
+      });
+      currentChart.subscribeClick((param) => {
+        const series = main.current;
+        if (!pickEnabled.current || !series || !param.point || (param.paneIndex ?? 0) !== 0) return;
+        const price = levelAt(param.point.y)?.price ?? series.coordinateToPrice(param.point.y);
+        if (price === null || !(price > 0)) return;
+        const wrap = container.current;
+        const { x, y } = param.point;
+        setPick({
+          price: roundToCents(price),
+          left: wrap && x + 12 + PICK_WIDTH > wrap.clientWidth ? Math.max(0, x - 12 - PICK_WIDTH) : x + 12,
+          top: Math.max(0, Math.min(y - 24, (wrap?.clientHeight ?? 0) - PICK_HEIGHT)),
+        });
       });
       setReady(true);
     });
@@ -488,7 +534,7 @@ export function MarketChart({
       if (price === null || !Number.isFinite(price)) return [];
       return [mainSeries.createPriceLine({
         price,
-        title: label,
+        title: levelTips ? "" : label,
         color: color ?? chartPalette.muted,
         lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
         lineWidth: 1,
@@ -556,7 +602,40 @@ export function MarketChart({
       else currentChart.timeScale().scrollToRealTime();
     }
     lastIndex.current = count - 1;
-  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, hideDates, clockTicks, chartType, moneyAxis]);
+  }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, hideDates, clockTicks, chartType, moneyAxis]);
+
+  // Click-to-order: a dashed line with its price on the axis at the picked price, for as long as the pick is open. Declared after
+  // the data effect, whose series swap (a chart-type change) it follows: the cleanup removes the line from the old series first.
+  const pickPrice = renderPick !== undefined && pick !== null ? pick.price : null;
+  useEffect(() => {
+    const series = main.current;
+    const chartLibrary = library.current;
+    if (pickPrice === null || !ready || !series || !chartLibrary) return;
+    const line = series.createPriceLine({ price: pickPrice, title: "", color: chartPalette.text, lineStyle: chartLibrary.LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true });
+    return () => {
+      if (main.current === series) series.removePriceLine(line);
+    };
+  }, [pickPrice, ready, chartType]);
+
+  // Escape closes the pick before the workspace's own Escape (full screen, a form) sees it; a press anywhere else closes it too.
+  useEffect(() => {
+    if (pickPrice === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopImmediatePropagation();
+      setPick(null);
+    };
+    const onDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && pickBox.current?.contains(event.target)) return;
+      setPick(null);
+    };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [pickPrice]);
 
   // Move the crosshair to the asked-for bar, scrolling it into view when it is off screen. Never touches the data.
   useEffect(() => {
@@ -599,6 +678,12 @@ export function MarketChart({
           <div key={panes[index]?.id ?? index} className={styles.paneLegend} style={{ top: paneTops[index] + 4 }}>{node}</div>
         ))}
         {bars.length === 0 && <p className={styles.empty} role="status">No closed bars available for this symbol and timeframe.</p>}
+        {levelTips && tip && <div className={styles.levelTip} role="tooltip" style={{ left: tip.x + 12, top: Math.max(0, tip.y - 32) }}>{tip.text}</div>}
+        {renderPick && pick && (
+          <div ref={pickBox} className={styles.pick} style={{ left: pick.left, top: pick.top }}>
+            {renderPick(pick.price, () => setPick(null))}
+          </div>
+        )}
       </div>
       {!bare && <div className={styles.currentValues} aria-label="Latest chart values">
         <span>Last close <strong>{formatValue(lastBar?.c)}</strong></span>

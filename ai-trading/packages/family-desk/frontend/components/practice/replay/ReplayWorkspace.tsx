@@ -51,6 +51,7 @@ import type { Paused, ReplaySession } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
 import { replayStatusLine } from "@/lib/replay/statusLine";
 import { freeCashText } from "@/lib/replay/swing";
+import { chartOrderDraft } from "@/lib/replay/chartOrder";
 import { buildTicket, initialTicket, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
 import { whenReady } from "@/lib/desk/patience";
 import { endAnyDay } from "@/lib/replay/swingApi";
@@ -194,30 +195,37 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     if (next && band === "1180") setRailOpen((open) => openRailTab(open, "practice"));
   };
 
-  /** Buy or Sell as the ticket stands: a market entry, or a limit, stop or stop-limit order that waits on the tape. */
-  const submitTicket = (chosen: "buy" | "sell") => {
-    const built = buildTicket({ ...ticket, side: chosen });
+  /**
+   * Buy or Sell as the ticket stands: a market entry, or a limit, stop or stop-limit order that waits on the tape. A click on the
+   * chart's price (`chartDraft`) sends the ticket's quantity with the type and price that click means, through this same path, and
+   * leaves the ticket's own draft as she had it. Resolves true when the server took it.
+   */
+  const submitTicket = (chosen: "buy" | "sell", chartDraft?: TicketDraft): Promise<boolean> => {
+    const built = buildTicket(chartDraft ?? { ...ticket, side: chosen });
     if (!built.ok) {
-      setTicket((current) => ({ ...current, side: chosen }));
+      if (!chartDraft) setTicket((current) => ({ ...current, side: chosen }));
       setTicketError({ field: built.field, message: built.message });
       if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the message sits at the field
-      return;
+      return Promise.resolve(false);
     }
     setTicketError(null);
     // The server names the field it refused (not enough cash is the Quantity's): the message then sits at that field, as a typed one does.
+    // A chart order's price is not a ticket field the ticket shows (its type is market), so a refused price is the message line's.
     const refused = (path: string, message: string) => {
-      if (path !== "shares" && path !== "limitPrice" && path !== "stopPrice") return false;
-      setTicketError({ field: path, message });
+      const shown = chartDraft ? path === "shares" : path === "shares" || path === "limitPrice" || path === "stopPrice";
+      if (!shown) return false;
+      setTicketError({ field: path as TicketField, message });
       if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the field is in the drawer
       return true;
     };
-    void api.ticket(built.action, refused).then((accepted) => {
-      if (accepted) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
+    return api.ticket(built.action, refused).then((accepted) => {
+      if (accepted && !chartDraft) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
+      return accepted;
     });
   };
   const placeMark = (kind: Parameters<ReplaySessionApi["mark"]>[0]) => {
     if (kind === "long_entry" || kind === "short_entry") {
-      submitTicket(kind === "long_entry" ? "buy" : "sell");
+      void submitTicket(kind === "long_entry" ? "buy" : "sell");
       return;
     }
     void api.mark(kind, {}).then((accepted) => {
@@ -344,6 +352,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // The panel opens and closes only when she asks, so a mark never moves the chart (D-146). A panel left closed still names the
   // newest mark in its tab row, so a mark she just placed is visible without Expand (D-028).
   const newestMark = markRows(session.marks)[0] ?? null;
+
+  // Click-to-order on the chart: only while she could use the ticket's buttons, and once there is a print to price against.
+  const lastPrice = view.last?.price ?? null;
+  const chartOrder = ended || behind || lastPrice === null
+    ? undefined
+    : { shares: ticket.shares, place: (chosen: "buy" | "sell", price: number) => submitTicket(chosen, chartOrderDraft(ticket, chosen, price, lastPrice)) };
 
   const controls = (
     <PracticeControls
@@ -480,7 +494,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         </p>
       )}
       <div className={styles.chartSlot} data-testid="chart-slot">
-        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
       <ChartToolbar
         symbol={spec.symbol}

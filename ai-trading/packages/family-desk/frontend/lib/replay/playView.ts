@@ -1,5 +1,5 @@
 import type { MarketChartLevel } from "../../components/charts/MarketChart.tsx";
-import type { ChartBar, ChartMarkerInput, CrosshairPoint } from "../chart-data.ts";
+import type { ChartBar, CrosshairPoint } from "../chart-data.ts";
 import { formatPrice } from "../desk/format.ts";
 import { PRACTICE_COPY } from "../desk/freshness.ts";
 import type { LegendModel } from "../desk/workspace.ts";
@@ -53,9 +53,7 @@ const MUTED = "#9B9BA1";
 export type DailyChartModel = {
   /** The rebased bars through the prior close, then today's forming candle. Dates are a stand-in timeline while hidden. */
   bars: ChartBar[];
-  /** Her hold's entry marker on the bar of the day she entered (none when that day is older than the chart). */
-  markers: ChartMarkerInput[];
-  /** Her entry and stop as price lines across all the days. */
+  /** Her entry and stop as price lines across all the days: a number on the chart, the name on hover. No entry arrow or label is drawn. */
   levels: MarketChartLevel[];
   /** While dates are hidden, "D-12 … D-1, Today" per bar; null when dates show. */
   offsets: string[] | null;
@@ -68,7 +66,7 @@ const offsetLabel = (back: number): string => (back <= 0 ? SWING_PLAY_COPY.today
 /**
  * The Daily chart's data from the API's `daily` block (the rebased frame through the prior close, the forming candle, her
  * hold). With dates hidden the real dates give way to a stand-in timeline (the last real date would name the day), and the
- * hold marker is placed by the bar's INDEX, found through the real date before it is replaced.
+ * entry and stop lines are prices, so they need no date.
  */
 export function dailyChartModel(block: DailyBlock, hidden: boolean): DailyChartModel {
   const raw = block.forming ? [...block.bars, block.forming] : [...block.bars];
@@ -76,21 +74,14 @@ export function dailyChartModel(block: DailyBlock, hidden: boolean): DailyChartM
   const bars: ChartBar[] = raw.map((bar, index) => ({ t: dates[index]!, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v }));
   const today = block.forming ? raw.length - 1 : raw.length;
   const hold = block.holds[0];
-  const at = hold ? raw.findIndex((bar) => bar.t === hold.entry_t) : -1;
-  // The chart snaps a marker to the ET day of its instant: noon UTC is the same ET day all year.
-  const markers: ChartMarkerInput[] =
-    hold && at >= 0
-      ? [{ time: `${dates[at]}T12:00:00Z`, kind: hold.side === "long" ? "practice_long" : "practice_short", label: `Practice ${hold.side} ${formatPrice(hold.entry_price)}` }]
-      : [];
   const levels: MarketChartLevel[] = hold
     ? [
-        { label: "Practice entry", price: hold.entry_price, color: MUTED, style: "dotted" },
-        ...(hold.stop_price != null ? [{ label: "Practice stop", price: hold.stop_price, color: AMBER, style: "dashed" as const }] : []),
+        { label: "Entry", price: hold.entry_price, color: MUTED, style: "dotted" },
+        ...(hold.stop_price != null ? [{ label: "Stop", price: hold.stop_price, color: AMBER, style: "dashed" as const }] : []),
       ]
     : [];
   return {
     bars,
-    markers,
     levels,
     offsets: hidden ? raw.map((_, index) => offsetLabel(today - index)) : null,
     note: block.forming ? SWING_PLAY_COPY.dailyNote : SWING_PLAY_COPY.dailyNotePrior,

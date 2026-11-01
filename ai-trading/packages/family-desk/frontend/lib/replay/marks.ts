@@ -1,12 +1,13 @@
 import type { MarketChartLevel } from "../../components/charts/MarketChart.tsx";
 import type { ChartMarkerInput } from "../chart-data.ts";
+import { chartPalette } from "../desk/chartPalette.ts";
 import { formatEtClock, formatPrice } from "../desk/format.ts";
 import type { ChartPrefs, LevelId } from "./chartPrefs.ts";
 import type { OpenTrade, ReplayBar, ReplayLevels, ReplayMark, ReplaySignal } from "./schemas.ts";
 import { ms } from "./time.ts";
 
-// Practice marks and replayed signals to chart inputs (02o §d). Every label says Practice: these are journal
-// annotations on a finished past day, never orders.
+// Practice marks and replayed signals to chart inputs (02o §d). The journal chart draws the marks with their "Practice" labels
+// (annotations on a finished past day, never orders); the live replay chart draws none of them, so it reads as a broker's chart.
 
 const AMBER = "#FFB020";
 const MUTED = "#9B9BA1";
@@ -49,9 +50,19 @@ export function signalMarkers(signals: readonly ReplaySignal[], bars: readonly R
   });
 }
 
-/** The practice stop of the open trade as an amber dashed level; none when no stop note exists. */
+/** The stop of the open trade as an amber dashed level; none when no stop note exists. On the chart it is only a number; the name is the hover tooltip. */
 export function stopLevel(trade: Pick<OpenTrade, "stop_price"> | null): MarketChartLevel[] {
-  return trade?.stop_price != null ? [{ label: "Practice stop", price: trade.stop_price, color: AMBER, style: "dashed" }] : [];
+  return trade?.stop_price != null ? [{ label: "Stop", price: trade.stop_price, color: AMBER, style: "dashed" }] : [];
+}
+
+/**
+ * The open position as a dashed line at its average price, green for a long and red for a short: how a broker's chart shows what
+ * she holds, now that the chart draws no entry arrows or labels. Its tooltip reads "Long 100 · avg 184.20".
+ */
+export function positionLevel(trade: Pick<OpenTrade, "side" | "shares" | "entry_price"> | null): MarketChartLevel[] {
+  if (trade === null) return [];
+  const side = trade.side === "long" ? "Long" : "Short";
+  return [{ label: `${side} ${trade.shares} · avg ${formatPrice(trade.entry_price)}`, price: trade.entry_price, color: trade.side === "long" ? chartPalette.up : chartPalette.down, style: "dashed" }];
 }
 
 /** Key levels as dotted muted lines (prior close, session high and low, opening range). `id` is what the chart settings filter by. */

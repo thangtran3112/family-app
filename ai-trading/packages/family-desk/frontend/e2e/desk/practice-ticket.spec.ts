@@ -164,6 +164,68 @@ test.describe("Practice order ticket", () => {
     await expect(orders(practice).getByText("Working")).toHaveCount(1);
   });
 
+  // Click-to-order (owner directive 2026-11-01): a click on a price of the chart offers Buy and Sell there, each named for the order it
+  // places against the last print, and the order goes through the ticket's own path (its quantity, its cash rule, its refusals).
+  const plotBox = async (page: Page) => (await page.locator("section[aria-label='TSLA 1m market chart'] canvas").first().boundingBox())!;
+  const chartOrder = (page: Page) => page.getByRole("group", { name: "Chart order" });
+
+  test("a click above the last print offers Buy stop and Sell limit at that price; Sell limit becomes a working order with the ticket's quantity", async ({ page, context }) => {
+    const practice = await openTicket(page, context);
+    await practice.getByLabel("Quantity").fill("5");
+    const box = await plotBox(page);
+    await expect(chartOrder(page)).toHaveCount(0);
+    await page.mouse.click(box.x + box.width * 0.4, box.y + 20);
+    const popup = chartOrder(page);
+    await expect(popup).toBeVisible();
+    const price = (await popup.getByText(/^TSLA \d/).innerText()).replace("TSLA ", "");
+    await expect(popup.getByRole("button", { name: `Buy stop ${price}` })).toBeVisible();
+    await expect(popup.getByRole("button", { name: `Sell limit ${price}` })).toBeVisible();
+    await expect(popup.getByText("Quantity 5 · set in the ticket")).toBeVisible();
+    await expectCleanScreen(page);
+
+    await popup.getByRole("button", { name: `Sell limit ${price}` }).click();
+    await expect(chartOrder(page)).toHaveCount(0); // taken: the popup goes
+    await expect(orders(practice).getByText(`Sell 5 · Limit ${price}`)).toBeVisible();
+    await expect(orders(practice).getByText("Working")).toHaveCount(1);
+    await expect(practice.getByLabel("Quantity"), "the ticket keeps its own draft").toHaveValue("5");
+  });
+
+  test("a click below the last print offers Buy limit and Sell stop; Escape closes the popup and nothing else", async ({ page, context }) => {
+    const practice = await openTicket(page, context);
+    const box = await plotBox(page);
+    await page.mouse.click(box.x + box.width * 0.4, box.y + box.height - 6);
+    const popup = chartOrder(page);
+    await expect(popup).toBeVisible();
+    const price = (await popup.getByText(/^TSLA \d/).innerText()).replace("TSLA ", "");
+    await expect(popup.getByRole("button", { name: `Buy limit ${price}` })).toBeVisible();
+    await expect(popup.getByRole("button", { name: `Sell stop ${price}` })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(popup).toHaveCount(0);
+    await expect(orders(practice).getByText("Working")).toHaveCount(0); // a pick is not an order
+    // The chart stays where it was: a second click opens a second popup, and a press outside the chart closes it.
+    await page.mouse.click(box.x + box.width * 0.6, box.y + 20);
+    await expect(popup).toBeVisible();
+    await page.getByRole("heading", { name: "TSLA", level: 1 }).click();
+    await expect(popup).toHaveCount(0);
+  });
+
+  test("a chart order the account cannot carry is refused at the ticket's Quantity, as a typed one is, and the popup stays for another try", async ({ page, context }) => {
+    const practice = await openTicket(page, context);
+    await practice.getByLabel("Quantity").fill("100000"); // far beyond the $50,000
+    const box = await plotBox(page);
+    await page.mouse.click(box.x + box.width * 0.4, box.y + box.height - 6);
+    const popup = chartOrder(page);
+    await popup.getByRole("button", { name: /^Buy limit / }).click();
+    await expect(page.getByRole("alert").filter({ hasText: /^Not enough practice cash/ })).toHaveText("Not enough practice cash · $50,000 free");
+    await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
+    await expect(popup).toBeVisible();
+    await expect(orders(practice).getByText("Working")).toHaveCount(0);
+    await practice.getByLabel("Quantity").fill("5");
+    await popup.getByRole("button", { name: /^Buy limit / }).click();
+    await expect(chartOrder(page)).toHaveCount(0);
+    await expect(orders(practice).getByText("Working")).toHaveCount(1);
+  });
+
   test("the ticket carries no guidance copy and no required-stop wording", async ({ page, context }) => {
     const practice = await openTicket(page, context);
     for (const text of [/type a stop price first/i, /your plan asks for a stop/i, /sizing hint/i, /required/i]) {
