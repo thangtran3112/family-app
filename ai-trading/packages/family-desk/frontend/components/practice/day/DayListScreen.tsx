@@ -50,7 +50,7 @@ import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
-import { BackLink } from "@/components/practice/hub/BackLink";
+import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { PortfolioPanel, useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -281,7 +281,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
-      <BackLink threadId={list.thread?.id ?? list.plan.thread_id} />
+      <PracticeTabs threadId={list.thread?.id ?? list.plan.thread_id} active="day" mode={list.thread?.mode} />
       <header className={styles.header}>
         <div className={styles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={styles.title}>{title}</h1>

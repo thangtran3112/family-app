@@ -196,8 +196,11 @@ test.describe("Practice landing", () => {
 
     await openFirstDay(page);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5");
-    // The day screen has a way back to the thread's page.
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", `/practice/thread?id=${id}`);
+    // The day screen wears the thread's tab strip: Summary is the way back to the thread's page, the back link goes to the thread list.
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", "/practice");
+    await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
+    await page.waitForURL(`**/practice/thread?id=${id}`);
+    await page.goBack();
 
     // Back on the landing: the thread has a row whose action opens today's day.
     await openDesk(page, "/practice");

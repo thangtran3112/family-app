@@ -323,7 +323,7 @@ test.describe("Practice: switching names", () => {
 
     // The hub's Today line adds the open trades, with the same open figure and its SIMULATED badge.
     const [, , open] = amounts(await total.textContent());
-    await page.getByRole("link", { name: `← ${PRACTICE_COPY.backToPractice}` }).click();
+    await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
     await page.waitForURL(THREAD_URL);
     const todayOpen = page.getByRole("region", { name: "Practice day" }).getByTestId("today-open");
     await expect(todayOpen).toContainText("2 open");
