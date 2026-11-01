@@ -658,10 +658,14 @@ class ReplayDayList(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Alembic 0018: the re-scan in flight or last run on this day (`plan.start_rescan`): state, the clock it runs at,
+    # symbols read of total, a run token. Null until the first re-scan.
+    rescan_job: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class ReplayDayScan(Base):
-    """A re-scan of a day list's filters at the day clock (02o-b2). The frozen list stays as it was: a scan is a row."""
+    """One re-scan of a day list's filters at the day clock (02o-b2): what that scan saw, labelled with the clock.
+    The scan also repopulates the day list (`plan.run_rescan`); these rows are the history behind it."""
 
     __tablename__ = "replay_day_scans"
     __table_args__ = (UniqueConstraint("day_list_id", "seq", name="uq_replay_day_scans_day_list_id_seq"),)

@@ -20,7 +20,7 @@ import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
-import type { Candidate, DayList, Rescan } from "@/lib/replay/daily";
+import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
   canRescan,
   cellText,
@@ -39,7 +39,10 @@ import {
   nameActionLabel,
   practiceWindow,
   rescanCounts,
+  rescanCurrent,
   rescanLabel,
+  rescanProgressText,
+  rescanRunning,
   rescanStaleText,
   sourceNote,
   threadDayNo,
@@ -64,6 +67,9 @@ import { ReviewPanel } from "./ReviewPanel";
 import { UniverseFootnote } from "./UniverseFootnote";
 import styles from "./day.module.css";
 import { Skeleton } from "@/components/ui/StateBlocks";
+
+/** The day list is read again this often while a re-scan is running, so its count of names read moves. */
+const RESCAN_POLL_MS = 1000;
 
 /** `/practice/day?id=`: the day's candidate list before the open, then the review after it (02o-b v1). Reads the URL, so the page wraps it in Suspense. */
 export function DayListScreen() {
@@ -156,10 +162,13 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The name a click is opening.
   const [opening, setOpening] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  // The gateway cut a slow open or re-scan short and the screen is asking again; the server is still finishing (D-058, D-059).
-  const [still, setStill] = useState<"open" | "rescan" | "end" | null>(null);
+  // The gateway cut a slow open or end short and the screen is asking again; the server is still finishing (D-058, D-059).
+  const [still, setStill] = useState<"open" | "end" | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  // The re-scan click is on its way to the server; from its answer on, the day list's `rescan_job` says how far it is.
   const [scanning, setScanning] = useState(false);
+  // A scan this screen watched run has finished: say so until the next one starts.
+  const [scanDone, setScanDone] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   // "Skip this day" (an empty list) ends the day like End day does, so it asks first too (F-11).
   const [confirmSkip, setConfirmSkip] = useState(false);
@@ -257,12 +266,15 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       onChanged();
     }, PRACTICE_COPY.dayRelistError);
 
+  // A re-scan runs on the server in the background: the click only starts it, and the day list (polled while the job says
+  // "running") carries how far it has read. Asking twice is safe: a scan already running is joined, never doubled.
   const rescan = (): Promise<void> =>
     run(
       async () => {
         setScanning(true);
+        setScanDone(false);
         try {
-          await whenReady(() => rescanDay(list.id), { onWaiting: () => setStill("rescan") });
+          await rescanDay(list.id);
         } finally {
           setScanning(false);
         }
@@ -271,6 +283,19 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       PRACTICE_COPY.dayRescanError,
       () => void rescan(),
     );
+  const scanRunning = rescanRunning(list);
+  useEffect(() => {
+    if (!scanRunning) return;
+    // Remember that this screen saw it run, so its end can be told ("Re-scan finished"), not just shown as a new label.
+    setScanDone(false);
+    const timer = setInterval(() => {
+      if (!document.hidden) onChanged();
+    }, RESCAN_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      setScanDone(true);
+    };
+  }, [scanRunning, onChanged]);
 
   // The server builds the next list before it answers, so the button says it is opening and stays disabled until the new
   // day's screen replaces this one (D-046): no second click, and no look of nothing happening.
@@ -356,7 +381,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       <div className={styles.body}>
         <p className={styles.line}>
           {listCountsText(list)}
-          <span className={styles.built}>{listBuiltText(list)}</span>
+          {list.rescan ? (
+            <span className={styles.built} data-testid="rescan-label">{rescanLabel(list.rescan)}</span>
+          ) : (
+            <span className={styles.built}>{listBuiltText(list)}</span>
+          )}
         </p>
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>{PRACTICE_COPY.planFilters}</span>
@@ -455,25 +484,38 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
             {!ended && (
               <div className={styles.actions}>
-                <Button disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{scanning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}</Button>
-                <span className={styles.muted} role={still === "rescan" ? "status" : undefined}>{still === "rescan" ? PRACTICE_COPY.dayRescanStillWorking : canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
+                <Button disabled={busy || scanning || scanRunning || !canRescan(list) || rescanCurrent(list)} onClick={() => void rescan()}>
+                  {scanning || scanRunning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}
+                </Button>
+                {!scanRunning && (
+                  <span className={styles.muted} data-testid="rescan-hint">
+                    {!canRescan(list) ? PRACTICE_COPY.dayRescanNeedsClock : rescanCurrent(list) ? PRACTICE_COPY.dayRescanCurrent : PRACTICE_COPY.dayRescanHint}
+                  </span>
+                )}
               </div>
+            )}
+            {list.rescan_job?.state === "running" && (
+              <div className={styles.scanProgress} data-testid="rescan-progress">
+                <progress
+                  className={styles.scanBar}
+                  max={Math.max(list.rescan_job.total, 1)}
+                  value={list.rescan_job.total === 0 ? undefined : list.rescan_job.done}
+                  aria-label={PRACTICE_COPY.dayRescanProgressLabel}
+                  aria-valuetext={rescanProgressText(list.rescan_job)}
+                />
+                <span className={styles.muted} data-testid="rescan-progress-text">{rescanProgressText(list.rescan_job)}</span>
+              </div>
+            )}
+            {list.rescan_job?.state === "failed" && !ended && (
+              <p className={styles.banner} role="alert" data-testid="rescan-failed">{list.rescan_job.message ?? PRACTICE_COPY.dayRescanError}</p>
+            )}
+            {scanDone && list.rescan_job?.state === "done" && list.rescan && (
+              <p className={styles.muted} role="status" data-testid="rescan-done">{practiceText("dayRescanDone", { seq: list.rescan.seq })}</p>
             )}
             {list.rescan && (
               <>
-                <p className={styles.line} data-testid="rescan-label">{rescanLabel(list.rescan)}</p>
-                <p className={styles.muted} data-testid="rescan-counts">{rescanCounts(list.rescan)}</p>
+                <p className={styles.muted} data-testid="rescan-counts">{rescanCounts(list)}</p>
                 {!ended && rescanStaleText(list) && <p className={styles.muted} role="status" data-testid="rescan-stale">{rescanStaleText(list)}</p>}
-                <DenseTable
-                  caption="Re-scan"
-                  columns={withPriorities(rescanColumnsOf(list.rescan), "practiceList")}
-                  rows={list.rescan.candidates}
-                  rowKey={(row) => row.symbol}
-                  scrollX
-                  empty={<EmptyBlock title={PRACTICE_COPY.dayNoNames} />}
-                />
-                <UniverseFootnote text={list.rescan.universe.footnote} />
-                {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayRescanReadOnly}</p>}
               </>
             )}
           </section>
@@ -540,8 +582,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   );
 }
 
-/** The re-scan's table: symbol (with the new-since-list tag), the filters that matched, and the scan's own columns. Read-only: no open. */
-function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]>[] {
+function columnsOf(list: DayList): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
@@ -550,26 +591,10 @@ function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]
         <span>
           <span className={styles.symbol}>{row.symbol}</span>
           {row.new_since_list && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanNew}</Badge>}
-          {row.reported_before_open && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayReported}</Badge>}
+          {row.held_over && <Badge tone="neutral" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanHeld}</Badge>}
         </span>
       ),
     },
-    { key: "filters", label: "Filters", render: (row) => filtersText(row) },
-    ...scan.columns.map((column): DenseColumn<Rescan["candidates"][number]> => ({
-      key: column.key,
-      label: column.label,
-      align: column.format === "time" ? "left" : "right",
-      render: (row) => {
-        const tone = cellTone(column, row);
-        return <span className={tone ? styles[tone] : undefined}>{cellText(column, row)}</span>;
-      },
-    })),
-  ];
-}
-
-function columnsOf(list: DayList): DenseColumn<Candidate>[] {
-  return [
-    { key: "symbol", label: "Symbol", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
     { key: "filters", label: "Filters", render: (row) => filtersText(row) },
     ...dayColumns(list).map((column): DenseColumn<Candidate> => ({
       key: column.key,

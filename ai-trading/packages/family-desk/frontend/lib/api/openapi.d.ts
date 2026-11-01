@@ -847,9 +847,13 @@ export interface paths {
         put?: never;
         /**
          * Rescan Day
-         * @description Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,
-         *     labelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is
-         *     practised (no clock yet) and after the day ends. A second scan at the same clock returns the first.
+         * @description Start a re-scan of the day's filters at the day clock (02o-b2) and answer at once: the day list with
+         *     `rescan_job` `running` and its `done` of `total` symbols read. Poll `GET /day-lists/{id}` while it runs. When
+         *     `state` is `done` the scan has REPOPULATED the list (its names, columns and counts are the scan's) and `rescan`
+         *     labels it with the clock it ran at. Stars, the day's sessions and the review stay; a name she opened or starred
+         *     that the scan no longer matches stays on the list as `held_over`. A scan already running is joined, not doubled;
+         *     a second scan at the same clock starts nothing. A 409 before the first name is practised (no clock yet) and
+         *     after the day ends.
          */
         post: operations["rescan_day_api_desk_replay_day_lists__day_list_id__rescan_post"];
         delete?: never;
@@ -2483,6 +2487,11 @@ export interface components {
         CandidateOut: {
             /** Filters */
             filters: string[];
+            /**
+             * Held Over
+             * @default false
+             */
+            held_over: boolean;
             /** List Price */
             list_price: number;
             /**
@@ -2494,6 +2503,11 @@ export interface components {
             metrics: {
                 [key: string]: number | null;
             };
+            /**
+             * New Since List
+             * @default false
+             */
+            new_since_list: boolean;
             /** Operands */
             operands: {
                 [key: string]: number | null;
@@ -2990,6 +3004,7 @@ export interface components {
             rating: number | null;
             relist: components["schemas"]["RelistOfferOut"] | null;
             rescan: components["schemas"]["RescanOut"] | null;
+            rescan_job: components["schemas"]["RescanJobOut"] | null;
             review: components["schemas"]["ReviewOut"] | null;
             screen: components["schemas"]["DayScreenOut"];
             /** Sessions */
@@ -5367,49 +5382,33 @@ export interface components {
             source: "alert_strategy" | "filter";
         };
         /**
-         * RescanCandidateOut
-         * @description A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised).
+         * RescanJobOut
+         * @description A re-scan's progress, for the screen to poll while `state` is `running`: `done` of `total` symbols read
+         *     (`total` is 0 until the job has counted them), at the day clock `as_of`. `failed` carries a plain `message`.
          */
-        RescanCandidateOut: {
-            /** Filters */
-            filters: string[];
-            /** List Price */
-            list_price: number;
+        RescanJobOut: {
             /**
-             * Matched Since
+             * As Of
              * Format: date-time
              */
-            matched_since: string;
-            /** Metrics */
-            metrics: {
-                [key: string]: number | null;
-            };
-            /** New Since List */
-            new_since_list: boolean;
-            /** Operands */
-            operands: {
-                [key: string]: number | null;
-            };
+            as_of: string;
+            /** Done */
+            done: number;
+            /** Message */
+            message: string | null;
             /**
-             * Price At
-             * Format: date-time
+             * State
+             * @enum {string}
              */
-            price_at: string;
-            /** Prior Close */
-            prior_close: number | null;
-            /** Rank */
-            rank: number;
-            /** Rank Value */
-            rank_value: number | null;
-            /** Reported Before Open */
-            reported_before_open: boolean;
-            /** Symbol */
-            symbol: string;
+            state: "running" | "done" | "failed";
+            /** Total */
+            total: number;
         };
         /**
          * RescanOut
          * @description The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.
-         *     It is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans.
+         *     Its names ARE the day list above (the scan repopulated it); this is the label: which scan, the clock it ran at, the
+         *     time its data stops, and how many names it added. `seq` counts the day's scans.
          */
         RescanOut: {
             /**
@@ -5417,10 +5416,6 @@ export interface components {
              * Format: date-time
              */
             as_of: string;
-            /** Candidates */
-            candidates: components["schemas"]["RescanCandidateOut"][];
-            /** Columns */
-            columns: components["schemas"]["ListColumnOut"][];
             /**
              * Created At
              * Format: date-time
@@ -5435,7 +5430,6 @@ export interface components {
             new_count: number;
             /** Seq */
             seq: number;
-            universe: components["schemas"]["ListUniverseOut"];
         };
         /** ResearchOut */
         ResearchOut: {

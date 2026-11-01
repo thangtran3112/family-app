@@ -10,8 +10,8 @@ import {
   type MetricFormat,
   type Tone,
 } from "../desk/format.ts";
-import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayJournal, DayList, DayPnl, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
+import { PRACTICE_COPY, practiceText, prepPercent } from "../desk/freshness.ts";
+import type { Candidate, DayJournal, DayList, DayPnl, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, RescanJob, ReviewRow } from "./daily.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade } from "./schemas.ts";
 import { etHhMm, ms } from "./time.ts";
@@ -456,9 +456,33 @@ export const canRescan = (list: Pick<DayList, "status" | "clock" | "list_at">): 
 export const rescanLabel = (scan: Pick<Rescan, "seq" | "as_of" | "data_through">): string =>
   practiceText("dayRescanLabel", { seq: scan.seq, clock: formatEtTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
 
-/** "2 of 2 matched · 1 new since your list". */
-export const rescanCounts = (scan: Pick<Rescan, "universe" | "new_count">): string =>
-  practiceText("dayRescanCounts", { shown: scan.universe.shown, matched: scan.universe.matches_total, fresh: scan.new_count });
+/** The names the repopulated list kept because she opened or starred them and the scan no longer matches them. */
+export const heldOverCount = (list: Pick<DayList, "candidates">): number => list.candidates.filter((candidate) => candidate.held_over).length;
+
+/** "2 of 2 matched · 1 new in this scan", then "· 1 kept because you opened or starred them" when the list kept names. */
+export function rescanCounts(list: Pick<DayList, "universe" | "rescan" | "candidates">): string {
+  const base = practiceText("dayRescanCounts", { shown: list.universe.shown, matched: list.universe.matches_total, fresh: list.rescan?.new_count ?? 0 });
+  const held = heldOverCount(list);
+  return held > 0 ? `${base} · ${practiceText("dayRescanKept", { held })}` : base;
+}
+
+/** A re-scan is reading right now: the screen polls the day list until it is not. */
+export const rescanRunning = (list: Pick<DayList, "rescan_job">): boolean => list.rescan_job?.state === "running";
+
+/** The list already shows a scan run at the day clock (or later): another scan now would read the same thing. */
+export const rescanCurrent = (list: Pick<DayList, "clock" | "rescan">): boolean =>
+  list.rescan !== null && list.clock !== null && Date.parse(list.clock) <= Date.parse(list.rescan.as_of);
+
+/** Whole percent of the symbols read (0 until the job has counted them). */
+export const rescanPercent = (job: Pick<RescanJob, "done" | "total">): number => prepPercent(job.done, job.total);
+
+/** The running scan in words that move: counting the names, "read 37 of 134 names (27%)", then applying the filters once all are read. */
+export function rescanProgressText(job: Pick<RescanJob, "as_of" | "done" | "total">): string {
+  const clock = formatEtTimeZone(job.as_of);
+  if (job.total === 0) return practiceText("dayRescanCounting", { clock });
+  if (job.done >= job.total) return practiceText("dayRescanFiltering", { clock, total: job.total });
+  return practiceText("dayRescanProgress", { clock, done: job.done, total: job.total, pct: rescanPercent(job) });
+}
 
 /** The day clock has moved since the scan ran: the scan is older than the screen's clock. */
 export function rescanStaleText(list: Pick<DayList, "clock" | "rescan">): string | null {
