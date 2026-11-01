@@ -78,6 +78,8 @@ INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/replay/sessions/{}/feed"),
     ("POST", "/api/desk/replay/sessions/{}/marks"),
     ("DELETE", "/api/desk/replay/sessions/{}/marks/{}"),
+    ("POST", "/api/desk/replay/sessions/{}/orders"),
+    ("DELETE", "/api/desk/replay/sessions/{}/orders/{}"),
     ("POST", "/api/desk/replay/sessions/{}/end"),
     # Rows 64-69: daily-list practice, 02o-b v1.
     ("GET", "/api/desk/replay/daily"),
@@ -137,6 +139,13 @@ INVENTORY: list[tuple[str, str]] = [
 #: `PUT /watchlists/{id}/order` reorders symbols (02m §a2 row 25). It is the one route whose path may
 #: contain the word "order": the guard below is about placing orders.
 REORDER_ROUTE = "/api/desk/watchlists/{}/order"
+#: The Practice lane's simulated limit, stop and stop-limit entries (owner decision, 2026-11-01: the practice ticket is
+#: a broker ticket). They wait on a replayed past day and touch no broker, account or live data. These two paths are
+#: the only others allowed to say "order"; any other route that does still fails the guard below.
+PRACTICE_ORDER_ROUTES = {
+    "/api/desk/replay/sessions/{}/orders",
+    "/api/desk/replay/sessions/{}/orders/{}",
+}
 _FORBIDDEN = re.compile(r"order|position|broker", re.IGNORECASE)
 
 
@@ -154,12 +163,14 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 111
+    assert len(INVENTORY) == 113
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:
     offenders = [
-        f"{method} {path}" for method, path in _desk_routes() if _FORBIDDEN.search(path) and path != REORDER_ROUTE
+        f"{method} {path}"
+        for method, path in _desk_routes()
+        if _FORBIDDEN.search(path) and path != REORDER_ROUTE and path not in PRACTICE_ORDER_ROUTES
     ]
     assert offenders == []
 

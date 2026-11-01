@@ -7,8 +7,7 @@
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .link:hover { text-decoration: underline; }
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
-.hint { margin: 0; color: var(--color-amber); font-size: var(--text-micro); }
-.footnote { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.footnote { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 
 /* Header */
 /* The header is two fixed rows: the identity and the player pill, then the readouts of P2 (playhead, last, VWAP, prior close, P/L). The pill has its own cell, so a wider P/L never pushes it onto a row of its own and the chart top does not move (D-146). */
@@ -41,11 +40,10 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .linkButton:focus-visible, .link:focus-visible, .control:focus-visible, .tab:focus-visible, .menuItem:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 /* Messages */
-.toast, .warning, .endLine { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0; min-height: 28px; padding: 0 var(--space-4); font-size: var(--text-label); }
+.toast, .warning { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0; min-height: 28px; padding: 0 var(--space-4); font-size: var(--text-label); }
 .toast { border-bottom: 1px solid var(--color-hairline); background: var(--color-panel); }
 .toast[data-tone="error"] { color: var(--color-down); }
 .warning { border-bottom: 1px solid var(--color-amber); color: var(--color-amber); }
-.endLine { border-top: 1px solid var(--color-hairline); color: var(--color-muted); }
 .errorLine { margin: 0; color: var(--color-down); font-size: var(--text-label); }
 
 /* Chart */
@@ -95,15 +93,21 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 
 /* Right rail */
 .tapeSlot { display: flex; height: clamp(260px, 50dvh, 540px); min-height: 0; flex-direction: column; margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-3)) 0; }
-.controls { display: flex; flex-direction: column; gap: var(--space-2); }
-.fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
-.buttonRow { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.controls { display: flex; flex-direction: column; gap: var(--space-4); }
+/* The order ticket and the position share one two-column track, so the fields and the buttons line up on both edges. */
+.ticket, .position, .orders { display: flex; flex-direction: column; gap: var(--space-2); }
+.fields, .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.summary { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); font-variant-numeric: tabular-nums; }
+.submit { width: 100%; }
+/* A hotkey chip inside a button: shown, never read (the button carries aria-keyshortcuts). */
+.key { display: inline-flex; min-width: 20px; min-height: 20px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--color-raised); padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+.sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.footRow { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 .composer { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-2); }
 .openTrade { display: flex; flex-direction: column; gap: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
 .tradeHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .tradeTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tradeLine { margin: 0; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); }
-.nudgeLine { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); color: var(--color-amber); font-size: var(--text-label); line-height: var(--line-label); }
 .tradeCard { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-3); margin: 0; font-variant-numeric: tabular-nums; }
 .tradeCard div { display: flex; flex-direction: column; }
 .tradeCard dt { color: var(--color-muted); font-size: var(--text-micro); }
@@ -127,3 +131,14 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .setGroup:disabled .toggle { cursor: default; }
 .dotted { width: 10px; height: 0; flex: 0 0 10px; border-top: 2px dotted var(--color-muted); }
 .settingsFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* The foot of the workspace: Back to the day list and End day side by side, one width, one height, one gutter. */
+.endBar { flex: 0 0 auto; border-top: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
+.endNote { margin: 0 0 var(--space-2); color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.endRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.endCell { position: relative; display: grid; min-width: 0; min-height: var(--size-touch); }
+/* The End confirm opens over the chart above its button instead of in the column, so the plot is not squeezed when it shows (D-146). */
+.endAnchor { position: absolute; right: 0; bottom: calc(100% + var(--space-1)); width: min(520px, calc(100vw - 2 * var(--space-4))); }
+@media (max-width: 640px) {
+  .endRow { grid-template-columns: minmax(0, 1fr); }
+}

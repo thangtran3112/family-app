@@ -356,35 +356,54 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     await expect(page.locator("h1").locator("xpath=..")).toContainText(/2026-09-25/);
   });
 
-  // D-101: the Shares and Stop price inputs had no explicit label link, and the reason Long and Short wait was only an amber line.
-  test("Shares and Stop price are named by a label link, and the amber hint describes the stop field (R-05)", async ({ page, context }) => {
+  // D-101, reworked: the ticket's fields are named by a real label link, and a plan that asks for a stop never disables or warns on Buy or Sell.
+  test("the ticket's fields are named by a label link, and a plan that asks for a stop never disables Buy or Sell (R-05)", async ({ page, context }) => {
     const id = await createStopRequiredSession(context);
     await openReplay(page, id);
     const practice = await replayRail(page, "Practice");
-    const shares = practice.getByRole("textbox", { name: "Shares" });
-    const stop = practice.getByRole("textbox", { name: "Stop price (required)" });
-    const sharesId = await shares.getAttribute("id");
-    expect(sharesId, "the Shares input has an id").toBeTruthy();
-    await expect(page.locator(`label[for="${sharesId}"]`)).toContainText("Shares");
-    const stopId = await stop.getAttribute("id");
-    expect(stopId, "the Stop price input has an id").toBeTruthy();
-    await expect(page.locator(`label[for="${stopId}"]`)).toContainText("Stop price (required)");
+    const quantity = practice.getByRole("textbox", { name: "Quantity" });
+    const quantityId = await quantity.getAttribute("id");
+    expect(quantityId, "the Quantity input has an id").toBeTruthy();
+    await expect(page.locator(`label[for="${quantityId}"]`)).toContainText("Quantity");
+    const orderType = practice.getByRole("combobox", { name: "Order type" });
+    const typeId = await orderType.getAttribute("id");
+    expect(typeId, "the Order type select has an id").toBeTruthy();
+    await expect(page.locator(`label[for="${typeId}"]`)).toContainText("Order type");
 
-    await expect(stop).toHaveAccessibleDescription(PRACTICE_COPY.stopFirst);
-    for (const name of ["Long (B)", "Short (S)"]) {
-      await expect(practice.getByRole("button", { name })).toBeDisabled();
-      await expect(practice.getByRole("button", { name })).toHaveAccessibleDescription(PRACTICE_COPY.stopFirst);
-    }
-    await stop.fill("100");
-    await expect(practice.getByRole("button", { name: "Long (B)" })).toBeEnabled();
-    await expect(stop).toHaveAccessibleDescription("");
-    await expect(practice.getByText(PRACTICE_COPY.stopFirst)).toHaveCount(0);
+    // A market ticket asks for nothing but a side and a quantity: no stop field, no hint, nothing waiting on one.
+    await expect(practice.getByRole("textbox", { name: /stop/i })).toHaveCount(0);
+    await expect(practice.getByRole("textbox", { name: /limit/i })).toHaveCount(0);
+    const buy = practice.getByRole("button", { name: "Buy" });
+    await expect(buy).toBeEnabled();
+    await expect(buy).toHaveAccessibleDescription("Buy 100 TSLA · Market");
+    await practice.getByRole("radio", { name: "Sell" }).click();
+    await expect(practice.getByRole("button", { name: "Sell" })).toBeEnabled();
+    await expect(practice.getByRole("radio", { name: "Sell" })).toBeChecked();
   });
 
-  test("the Practice panel says what an entry resets (R-06)", async ({ page, context }) => {
+  // The broker ticket (owner directive): each order type shows exactly the price fields it needs, and Bracket is named but not offered.
+  test("the order type picks the price fields: Market none, Limit a limit, Stop a stop, Stop-limit both, Bracket is not simulated", async ({ page, context }) => {
     await openReplay(page, await createStubSession(context));
     const practice = await replayRail(page, "Practice");
-    await expect(practice.getByText(PRACTICE_COPY.entryResets)).toBeVisible();
+    const orderType = practice.getByRole("combobox", { name: "Order type" });
+    const fields = async () => ({
+      limit: await practice.getByRole("textbox", { name: "Limit price" }).count(),
+      stop: await practice.getByRole("textbox", { name: "Stop price" }).count(),
+    });
+    expect(await fields()).toEqual({ limit: 0, stop: 0 });
+    for (const [type, expected] of [["limit", { limit: 1, stop: 0 }], ["stop", { limit: 0, stop: 1 }], ["stop_limit", { limit: 1, stop: 1 }], ["market", { limit: 0, stop: 0 }]] as const) {
+      await orderType.selectOption(type);
+      expect(await fields(), type).toEqual(expected);
+    }
+    await expect(orderType.locator("option", { hasText: "Bracket" })).toBeDisabled();
+    await expect(orderType.locator("option", { hasText: "Bracket" })).toHaveText("Bracket · not simulated yet");
+    await expect(practice.getByRole("textbox", { name: /target/i })).toHaveCount(0);
+  });
+
+  test("the Practice panel carries one honest footnote about replayed prices (R-06)", async ({ page, context }) => {
+    await openReplay(page, await createStubSession(context));
+    const practice = await replayRail(page, "Practice");
+    await expect(practice.getByText(PRACTICE_COPY.priceFootnote)).toBeVisible();
   });
 
   // D-146: the header wrapped when P/L widened, and the End confirm shrank the plot.

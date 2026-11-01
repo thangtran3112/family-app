@@ -100,7 +100,7 @@ test("the swing block and the create body carry the contract's names and no empt
 
   const body = swingCreateBody(defaultThreadDraft(), draft(), rows) as Record<string, unknown>;
   assert.deepEqual([body.schemaVersion, body.mode, body.startingBalance], [1, "swing", 50000]);
-  assert.deepEqual(body.plan, { stopNoteOnEntry: "yes", tradeOnlyOnSignal: "no" });
+  assert.deepEqual(body.plan, { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" });
   assert.equal(PracticeThreadCreateV1Schema.safeParse(body).success, true, "the body is a PracticeThreadCreateV1");
 });
 

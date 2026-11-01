@@ -1034,6 +1034,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/replay/sessions/{session_id}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Place Order
+         * @description Place a limit, stop or stop-limit practice entry. It fills only on a later one-minute bar of the replayed tape
+         *     (or at once at the last print when a limit already accepts it); a market entry is a mark.
+         */
+        post: operations["place_order_api_desk_replay_sessions__session_id__orders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/sessions/{session_id}/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cancel Order
+         * @description Cancel a working practice order (409 once it has filled or been cancelled).
+         */
+        delete: operations["cancel_order_api_desk_replay_sessions__session_id__orders__order_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/replay/threads": {
         parameters: {
             query?: never;
@@ -1851,10 +1892,17 @@ export interface components {
             daily_forming?: components["schemas"]["DailyBarOut"] | null;
             /** Day Clock */
             day_clock: string | null;
+            /** Fills */
+            fills?: components["schemas"]["MarkOut"][] | null;
             forming: components["schemas"]["FormingBarOut"] | null;
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            /**
+             * Orders
+             * @default []
+             */
+            orders: components["schemas"]["OrderOut"][];
             paused?: components["schemas"]["PausedOut"] | null;
             prints: components["schemas"]["PrintsOut"];
             /** Quiet S */
@@ -3158,6 +3206,8 @@ export interface components {
             daily_forming?: components["schemas"]["DailyBarOut"] | null;
             /** Day Clock */
             day_clock: string | null;
+            /** Fills */
+            fills?: components["schemas"]["MarkOut"][] | null;
             forming: components["schemas"]["FormingBarOut"] | null;
             /**
              * Interval
@@ -3167,6 +3217,11 @@ export interface components {
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            /**
+             * Orders
+             * @default []
+             */
+            orders: components["schemas"]["OrderOut"][];
             paused?: components["schemas"]["PausedOut"] | null;
             prints: components["schemas"]["PrintsOut"];
             /** Quiet S */
@@ -4477,6 +4532,70 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /** OrderCancelOut */
+        OrderCancelOut: {
+            order: components["schemas"]["OrderOut"];
+            /** Orders */
+            orders: components["schemas"]["OrderOut"][];
+        };
+        /**
+         * OrderOut
+         * @description A practice order that was not filled at once, and what became of it (the fill rules are in the orders module).
+         *     A fill is also an entry mark (`mark_id`).
+         */
+        OrderOut: {
+            /** Closed At */
+            closed_at: string | null;
+            /** Fill Price */
+            fill_price: number | null;
+            /** Id */
+            id: number;
+            /** Limit Price */
+            limit_price: number | null;
+            /** Mark Id */
+            mark_id: number | null;
+            /**
+             * Placed At
+             * Format: date-time
+             */
+            placed_at: string;
+            /** Reason */
+            reason: string | null;
+            /** Shares */
+            shares: number;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "buy" | "sell";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "filled" | "cancelled";
+            /** Stop Price */
+            stop_price: number | null;
+            /** Triggered At */
+            triggered_at: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "limit" | "stop" | "stop_limit";
+        };
+        /** OrderResultOut */
+        OrderResultOut: {
+            hold?: components["schemas"]["HoldOut"] | null;
+            journal: components["schemas"]["JournalOut"];
+            mark: components["schemas"]["MarkOut"] | null;
+            open_trade: components["schemas"]["OpenTradeOut"] | null;
+            order: components["schemas"]["OrderOut"];
+            /** Orders */
+            orders: components["schemas"]["OrderOut"][];
+            thread?: components["schemas"]["ThreadBriefOut"] | null;
+            /** Warning */
+            warning: string | null;
+        };
         /**
          * PaceOut
          * @description Eligible prints and shares per market second over the last `window_s` seconds before the playhead.
@@ -5081,6 +5200,11 @@ export interface components {
             /** Notes */
             notes: string | null;
             open_trade: components["schemas"]["OpenTradeOut"] | null;
+            /**
+             * Orders
+             * @default []
+             */
+            orders: components["schemas"]["OrderOut"][];
             /** Rating */
             rating: number | null;
             /**
@@ -9240,6 +9364,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarkUndoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_order_api_desk_replay_sessions__session_id__orders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_order_api_desk_replay_sessions__session_id__orders__order_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderCancelOut"];
                 };
             };
             /** @description Validation Error */

@@ -312,24 +312,70 @@ def test_a_carried_holds_pnl_at_the_window_end_equals_the_day_summary_to_the_cen
     assert swing.state(db_session, thread)["equity_series"][-1]["equity_usd"] == summary["equity_usd"]
 
 
-def test_a_swing_entry_without_a_stop_is_refused_when_the_plan_asks_for_one(db_session, owner, world, svc) -> None:
-    """D-067: the same rule as the day replay. The stop typed with the entry is the hold's stop and its R basis."""
+def test_a_swing_entry_without_a_stop_is_accepted_when_the_plan_asks_for_one(db_session, owner, world, svc) -> None:
+    """A stop is optional: the plan's "stop on every entry" is scored, never a refusal. A stop typed with the entry is
+    the hold's stop and its R basis; a stop set later moves the line only."""
     thread, _ = ready_thread(db_session, owner, svc, plan={"stopNoteOnEntry": "yes"})
     _, (session,) = _day(db_session, owner, svc, thread, "S01")
     _advance(db_session, owner, svc, session, "10:00")
-    problem = _rejected(
-        session_mod.place_mark, db_session, owner, session.id, svc, {"kind": "long_entry", "shares": 10}
-    )
-    assert (problem.message, problem.path, problem.status) == (session_mod.STOP_REQUIRED, "stopPrice", 422)
-    assert (
-        db_session.execute(select(PracticeHold)).first() is None
-        and db_session.execute(select(PracticeMark)).first() is None
-    )
+    price = bar_close(world, "S01", D1, "09:59")
+    bare = _mark(db_session, owner, svc, session, "long_entry", shares=10)
+    assert bare["hold"]["stop_price"] is None and bare["hold"]["stop_at_entry"] is None
+    late = _mark(db_session, owner, svc, session, "stop", stopPrice=off(price, -2))  # the Stop key adds one
+    assert late["hold"]["stop_price"] == off(price, -2) and late["hold"]["stop_at_entry"] is None
+    assert db_session.execute(select(PracticeHold)).scalar_one().stop_at_entry is None
+
+
+def test_a_swing_entry_with_a_stop_keeps_it_as_the_r_basis(db_session, owner, world, svc) -> None:
+    thread, _ = ready_thread(db_session, owner, svc)
+    _, (session,) = _day(db_session, owner, svc, thread, "S01")
+    _advance(db_session, owner, svc, session, "10:00")
     price = bar_close(world, "S01", D1, "09:59")
     out = _mark(db_session, owner, svc, session, "long_entry", shares=10, stopPrice=off(price, -1))
     assert out["hold"]["stop_price"] == off(price, -1) and out["hold"]["stop_at_entry"] == off(price, -1)
     moved = _mark(db_session, owner, svc, session, "stop", stopPrice=off(price, -2))  # the Stop key places a stop too
     assert moved["hold"]["stop_price"] == off(price, -2) and moved["hold"]["stop_at_entry"] == off(price, -1)
+
+
+def test_a_swing_limit_order_fills_from_the_tape_into_a_hold_and_checks_the_cash_again(
+    db_session, owner, world, svc
+) -> None:
+    price = bar_close(world, "S01", D1, "09:59")
+    limit = off(price, -0.5)
+    _dip(world, "S01", D1, "10:30", off(price, -3))  # before the day's bars are first read (they are cached after)
+    thread, _ = ready_thread(db_session, owner, svc, balance=50_000)
+    _, (a, b) = _day(db_session, owner, svc, thread, "S01", "S02")
+    _advance(db_session, owner, svc, a, "10:00")
+    placed = session_mod.place_order(
+        db_session, owner, a.id, svc, {"side": "buy", "orderType": "limit", "limitPrice": limit, "shares": 20}
+    )
+    db_session.commit()
+    assert placed["mark"] is None and placed["order"]["status"] == "working"
+    assert db_session.execute(select(PracticeHold)).first() is None  # nothing is held until the tape fills it
+    out = _advance(db_session, owner, svc, a, "10:45")
+    (fill,) = out["fills"]
+    assert fill["kind"] == "long_entry" and fill["price"] <= limit and fill["at"] <= et(D1, "10:31")
+    hold = _hold(db_session, thread, "S01")
+    assert (hold.status, hold.shares, hold.entry_mark_id) == ("open", 20, fill["id"])
+    assert float(hold.entry_price) == fill["price"]
+    assert out["orders"][0]["status"] == "filled"
+
+    # B's order was affordable when placed (20 * limit) and is not once A's hold and a big mark have spent the cash.
+    _advance(db_session, owner, svc, b, "10:45")
+    price_b = bar_close(world, "S02", D1, "10:44")
+    session_mod.place_order(
+        db_session,
+        owner,
+        b.id,
+        svc,
+        {"side": "buy", "orderType": "limit", "limitPrice": off(price_b, -0.5), "shares": 10},
+    )
+    db_session.commit()
+    problem = _rejected(
+        session_mod.place_order, db_session, owner, b.id, svc,
+        {"side": "buy", "orderType": "limit", "limitPrice": off(price_b, -0.5), "shares": 10_000},
+    )  # fmt: skip
+    assert problem.path == "shares" and problem.message.startswith("Not enough practice cash")
 
 
 def test_the_swing_feed_at_the_open_serves_only_bars_that_have_closed_by_the_playhead(
@@ -382,7 +428,7 @@ def test_an_entry_creates_the_mark_and_the_hold_and_credits_nothing(db_session, 
     assert swing.day_list_out(db_session, owner, row.id, svc)["holds"][0]["id"] == hold.id
 
 
-def test_a_second_entry_on_a_held_symbol_is_a_422_and_the_sixth_hold_is_a_409(db_session, owner, svc) -> None:
+def test_a_second_entry_on_a_held_symbol_is_a_422_and_a_sixth_hold_is_accepted(db_session, owner, svc) -> None:
     thread, _ = ready_thread(db_session, owner, svc)
     row, sessions = _day(db_session, owner, svc, thread, "S01", "S02", "S03", "S04", "S05")
     for session in sessions:
@@ -393,9 +439,8 @@ def test_a_second_entry_on_a_held_symbol_is_a_422_and_the_sixth_hold_is_a_409(db
     plan_mod.patch_day_list(db_session, owner, row.id, svc, watch=["S06"], notes=None, rating=None, fields={"watch"})
     sixth = swing.start_session(db_session, owner, row.id, "S06", svc)
     _advance(db_session, owner, svc, sixth, "10:00")
-    problem = _rejected(session_mod.place_mark, db_session, owner, sixth.id, svc, {"kind": "long_entry", "shares": 10})
-    assert (problem.message, problem.status) == ("Five practice holds is the most at once", 409)
-    assert len(hold_rows.open_holds(db_session, thread.id)) == 5
+    _mark(db_session, owner, svc, sixth, "long_entry", shares=10)  # no cap on how many names: cash is the only rule
+    assert len(hold_rows.open_holds(db_session, thread.id)) == 6
 
 
 @pytest.mark.parametrize("side", ["long", "short"])

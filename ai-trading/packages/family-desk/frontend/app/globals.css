@@ -54,7 +54,7 @@
   --line-heading: 24px;
   --space-0-5: 2px;
   --space-1-5: 6px;
-  /* Control and row heights. --size-touch is for the mobile shell only. */
+  /* Control and row heights. --size-touch is for the mobile shell and the Practice order ticket's main controls. */
   --size-chip: 20px;
   --size-sm: 24px;
   --size-md: 28px;

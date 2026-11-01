@@ -11,10 +11,10 @@ import pandas as pd
 import pytest
 
 from ai_trading.replay.holds import (
-    HARD_CAP,
     Crossing,
     Hold,
     HoldProblem,
+    check_buying_power,
     check_entry,
     check_stop,
     closed_pnl,
@@ -272,27 +272,34 @@ def test_check_entry_refuses_a_second_hold_on_a_symbol():
     check_entry(open_holds=[hold(symbol="AAA")], symbol="BBB", shares=1, price=1.0, free_cash_usd=1_000.0)
 
 
-def test_the_cap_of_five_is_a_409_and_a_sixth_name_is_refused():
-    five = [hold(symbol=name, id=i) for i, name in enumerate("ABCDE", start=1)]
-    assert HARD_CAP == 5
-    check_entry(open_holds=five[:4], symbol="F", shares=1, price=1.0, free_cash_usd=100.0)
-    with pytest.raises(HoldProblem) as err:
-        check_entry(open_holds=five, symbol="F", shares=1, price=1.0, free_cash_usd=100.0)
-    assert err.value.message == "Five practice holds is the most at once" and err.value.status == 409
+def test_there_is_no_cap_on_how_many_names_are_held():
+    many = [hold(symbol=f"N{i}", id=i) for i in range(1, 13)]
+    check_entry(open_holds=many, symbol="Z", shares=1, price=1.0, free_cash_usd=100.0)  # the thirteenth name: fine
 
 
-def test_check_entry_order_is_shares_then_duplicate_then_cap_then_cash():
-    five = [hold(symbol=name, id=i) for i, name in enumerate("ABCDE", start=1)]
+def test_check_entry_order_is_shares_then_duplicate_then_cash():
+    held = [hold(symbol=name, id=i) for i, name in enumerate("ABCDE", start=1)]
     broke = {"price": 100.0, "free_cash_usd": 1.0}
-    with pytest.raises(HoldProblem) as err:  # duplicate beats the cap and the cash
-        check_entry(open_holds=five, symbol="A", shares=10, **broke)
+    with pytest.raises(HoldProblem) as err:  # duplicate beats the cash
+        check_entry(open_holds=held, symbol="A", shares=10, **broke)
     assert err.value.message.startswith("Close your open A")
-    with pytest.raises(HoldProblem) as err:  # the cap beats the cash
-        check_entry(open_holds=five, symbol="F", shares=10, **broke)
-    assert err.value.status == 409
+    with pytest.raises(HoldProblem) as err:  # cash is the only size rule
+        check_entry(open_holds=held, symbol="F", shares=10, **broke)
+    assert err.value.message == "Not enough practice cash · $1 free" and err.value.status == 422
     with pytest.raises(HoldProblem) as err:  # shares beat the duplicate
-        check_entry(open_holds=five, symbol="A", shares=0, **broke)
+        check_entry(open_holds=held, symbol="A", shares=0, **broke)
     assert err.value.path == "shares" and not err.value.message.startswith("Close your")
+
+
+def test_buying_power_is_shares_and_cash_and_nothing_else():
+    check_buying_power(shares=10_000, price=1.0, free_cash_usd=10_000.0)  # exactly affordable: fine
+    check_buying_power(shares=25_000, price=1.0, free_cash_usd=25_000.0)  # no share-count ceiling
+    with pytest.raises(HoldProblem) as err:
+        check_buying_power(shares=10_001, price=1.0, free_cash_usd=10_000.0)
+    assert (err.value.message, err.value.path) == ("Not enough practice cash · $10,000 free", "shares")
+    with pytest.raises(HoldProblem) as err:
+        check_buying_power(shares=0, price=1.0, free_cash_usd=10_000.0)
+    assert err.value.message == "Shares must be at least 1"
 
 
 @pytest.mark.parametrize(

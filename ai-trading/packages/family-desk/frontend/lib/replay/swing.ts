@@ -13,8 +13,6 @@ import { sourceLabel } from "./universeView.ts";
 // cover it. A swing payload names days by number and weekday; dates stay hidden by the thread's `hideDates` rule. Every
 // dollar figure is SIMULATED, and the lines that join money say so in words.
 
-/** The most shares a mark can carry (the contract's bound), so a sizing hint never asks for more. */
-export const MAX_MARK_SHARES = 10_000;
 
 const joinAnd = (parts: readonly string[]): string => (parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 const wholeNumber = (value: number) => value.toLocaleString("en-US");
@@ -131,42 +129,11 @@ export function holdRowView(hold: Hold, tape: "on" | "off" = "on"): HoldRowView 
   };
 }
 
-// -- cash and sizing --------------------------------------------------------------------------------------------
+// -- cash --------------------------------------------------------------------------------------------
 
 /** "Free cash $8,240". */
 export const freeCashText = (usd: number | null | undefined): string =>
   usd === null || usd === undefined ? EMPTY_VALUE : practiceText("swingFreeCash", { amount: formatBalance(usd) });
-
-/** The risk a sizing hint uses: `riskPerHoldUsd` when set, else the thread plan's max loss (02p b2). */
-export const sizingRiskUsd = (swing: { riskPerHoldUsd?: number | null } | null | undefined, plan: { maxLossUsd?: number | null } | null | undefined): number | undefined =>
-  swing?.riskPerHoldUsd ?? plan?.maxLossUsd ?? undefined;
-
-export type SizingHint = { shares: number; limitedBy: "risk" | "cash"; text: string };
-
-/**
- * shares = risk ÷ |last − stop|, capped by free cash ÷ last and by the 10,000 a mark can carry. A hint only: nothing
- * blocks a bigger size. Null with no risk, no stop or no price to size from.
- */
-export function sizingHint(input: { riskUsd: number | null | undefined; last: number | null | undefined; stop: number | null | undefined; freeCash?: number | null }): SizingHint | null {
-  const { riskUsd, last, stop, freeCash } = input;
-  if (riskUsd == null || last == null || stop == null || !(riskUsd > 0) || !(last > 0)) return null;
-  const perShare = Math.abs(last - stop);
-  if (!(perShare > 0)) return null;
-  const byRisk = Math.floor(riskUsd / perShare);
-  const byCash = freeCash == null ? Number.POSITIVE_INFINITY : Math.floor(Math.max(freeCash, 0) / last);
-  const shares = Math.min(byRisk, byCash, MAX_MARK_SHARES);
-  const limitedBy = byCash < byRisk ? "cash" : "risk";
-  if (shares < 1) {
-    const text = limitedBy === "cash" ? PRACTICE_COPY.swingSizingNoCash : practiceText("swingSizingTooBig", { risk: formatBalance(riskUsd) });
-    return { shares: 0, limitedBy, text };
-  }
-  const noun = shares === 1 ? "share" : "shares";
-  const text =
-    limitedBy === "cash"
-      ? practiceText("swingSizingCash", { shares: wholeNumber(shares), noun })
-      : practiceText("swingSizingRisk", { shares: wholeNumber(shares), noun, risk: formatBalance(riskUsd) });
-  return { shares, limitedBy, text };
-}
 
 // -- the stop pause -------------------------------------------------------------------------------------------
 

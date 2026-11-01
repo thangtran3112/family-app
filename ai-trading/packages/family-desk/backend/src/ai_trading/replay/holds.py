@@ -18,7 +18,6 @@ from typing import Any, Literal
 
 import pandas as pd
 
-HARD_CAP = 5  # open holds at once (409)
 SPLIT_TOLERANCE = 0.001  # |k - 1| below this is "no split": dividends are not in the split-adjusted series
 MINUTE = pd.Timedelta(minutes=1)
 
@@ -160,18 +159,23 @@ def restate(hold: Hold, k: float, day: date) -> Hold:
 # -- the entry and stop rules -------------------------------------------------------------------------------
 
 
-def check_entry(*, open_holds: Sequence[Hold], symbol: str, shares: int, price: float, free_cash_usd: float) -> None:
-    """Raises `HoldProblem` for the first broken rule: shares, a second hold on the symbol, the cap, then cash. Long and
-    short count the same (cash-secured, no margin)."""
+def check_buying_power(*, shares: int, price: float, free_cash_usd: float) -> None:
+    """The one size rule of a practice entry, like a broker's margin check: at least one share, and the notional fits
+    the free cash. Long and short count the same (cash-secured, no margin). Nothing else limits how many names or
+    entries she may hold."""
     if shares < 1:
         raise HoldProblem("Shares must be at least 1", path="shares")
-    holds = _open(open_holds)
-    if any(h.symbol == symbol for h in holds):
-        raise HoldProblem(f"Close your open {symbol} practice hold first")
-    if len(holds) >= HARD_CAP:
-        raise HoldProblem("Five practice holds is the most at once", status=409)
     if shares * price > free_cash_usd:
         raise HoldProblem(f"Not enough practice cash · ${free_cash_usd:,.0f} free", path="shares")
+
+
+def check_entry(*, open_holds: Sequence[Hold], symbol: str, shares: int, price: float, free_cash_usd: float) -> None:
+    """Raises `HoldProblem` for the first broken rule: shares, a second hold on the symbol, then cash."""
+    if shares < 1:
+        raise HoldProblem("Shares must be at least 1", path="shares")
+    if any(h.symbol == symbol for h in _open(open_holds)):
+        raise HoldProblem(f"Close your open {symbol} practice hold first")
+    check_buying_power(shares=shares, price=price, free_cash_usd=free_cash_usd)
 
 
 def check_stop(hold_side: Side, stop_price: float, last_price: float | None) -> None:

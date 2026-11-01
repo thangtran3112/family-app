@@ -515,6 +515,9 @@ class ReplaySession(Base):
     )
     # Alembic 0009 (02o-b2): the spans `[from, to]` (ISO) in which she was not on this name; see `replay/model.py`.
     away: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list)
+    # Alembic 0016: the practice orders that were not filled at once (a limit, stop or stop-limit entry waiting on the
+    # tape) with what became of them; see replay/orders.py.
+    orders: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list)
     # Alembic 0014: when play last paused on this session's open trade because its stop was crossed (a day holds one
     # open trade per name, so one flag). A new entry, stop note or exit clears it.
     stop_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

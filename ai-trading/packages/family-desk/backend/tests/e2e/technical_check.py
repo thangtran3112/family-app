@@ -286,7 +286,13 @@ def test_no_order_object_is_ever_built(world, monkeypatch):
 
     paths = [path for path in app.openapi()["paths"] if path.startswith("/api/desk")]
     named = [path for path in paths if any(word in path for word in ("order", "position", "broker"))]
-    assert paths and named == ["/api/desk/watchlists/{watchlist_id}/order"]  # reordering symbols, the one exception
+    # Reordering symbols, and the Practice lane's simulated limit/stop/stop-limit entries on a replayed past day (owner
+    # decision, 2026-11-01; `tests/api/test_mvp_routes.py` names the same paths): no other route says order.
+    assert paths and sorted(named) == [
+        "/api/desk/replay/sessions/{session_id}/orders",
+        "/api/desk/replay/sessions/{session_id}/orders/{order_id}",
+        "/api/desk/watchlists/{watchlist_id}/order",
+    ]
     with app.state.e2e_engine.connect() as connection:
         tables = inspect(connection).get_table_names()
     assert not [name for name in tables if any(word in name for word in ("order", "position", "broker", "fill"))]

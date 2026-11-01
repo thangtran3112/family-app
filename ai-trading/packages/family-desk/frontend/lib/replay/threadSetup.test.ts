@@ -15,7 +15,7 @@ import {
   validateThreadDraft,
 } from "./threadSetup.ts";
 
-test("the New thread form starts at 50,000 with a stop on every entry, day trading, and no optional limit", () => {
+test("the New thread form starts at 50,000 with no stop rule, day trading, and no optional limit", () => {
   const draft = defaultThreadDraft();
   assert.equal(draft.startingBalance, "50000");
   assert.equal(draft.mode, "day");
@@ -23,7 +23,7 @@ test("the New thread form starts at 50,000 with a stop on every entry, day tradi
     schemaVersion: 1,
     mode: "day",
     startingBalance: 50000,
-    plan: { stopNoteOnEntry: "yes", tradeOnlyOnSignal: "no" },
+    plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" },
   });
   const result = validateThreadDraft(draft);
   assert.equal(result.ok, true);
@@ -35,7 +35,7 @@ test("optional limits and the note go in only when typed; commas in the balance 
     schemaVersion: 1,
     mode: "day",
     startingBalance: 25000,
-    plan: { stopNoteOnEntry: "yes", tradeOnlyOnSignal: "no", maxLossUsd: 600, maxTrades: 3, planNote: "VWAP only" },
+    plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no", maxLossUsd: 600, maxTrades: 3, planNote: "VWAP only" },
   });
 });
 

@@ -8,7 +8,7 @@
   },
   "session": "regular",
   "interval": "5m",
-  "shares": 10001,
+  "shares": 2147483648,
   "armed": [
     {
       "source": "alert_strategy",

@@ -26,6 +26,7 @@ export function Segmented<T extends string>({
   label,
   labelledBy,
   size = "lg",
+  fill = false,
   disabled = false,
   className,
 }: {
@@ -35,8 +36,10 @@ export function Segmented<T extends string>({
   /** The group's name when no visible label points at it. */
   label?: string;
   labelledBy?: string;
-  /** md 28 px (a toolbar), lg 32 px (a form). */
-  size?: "md" | "lg";
+  /** md 28 px (a toolbar), lg 32 px (a form), touch 44 px (the order ticket's side). */
+  size?: "md" | "lg" | "touch";
+  /** The group is as wide as its column and the segments share it equally. */
+  fill?: boolean;
   /** The whole group is off (nothing to choose yet): every segment is natively disabled, not just `aria-disabled`. */
   disabled?: boolean;
   /** Layout only (grid-area, margin, width); never colour, size or type. */
@@ -65,6 +68,7 @@ export function Segmented<T extends string>({
       aria-describedby={field?.describedBy}
       className={`${styles.root} ${className ?? ""}`}
       data-size={size}
+      data-fill={fill ? "true" : undefined}
     >
       {options.map((option, index) => {
         const reasonId = option.reasonId ?? `${base}-${index}-reason`;
