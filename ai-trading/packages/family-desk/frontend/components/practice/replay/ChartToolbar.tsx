@@ -28,7 +28,7 @@ export function ChartToolbar({ symbol, interval, onInterval, quick, chartToggle,
     <div className={styles.chartToolbar} role="group" aria-label={`${symbol} chart`} data-testid="chart-toolbar">
       <div className={styles.toolbarRow}>
         <span className={styles.chartLabel} aria-hidden="true">{symbol} chart</span>
-        {chartToggle ?? <ChipToggleGroup label="Chart interval" options={INTERVAL_CHIPS} pressed={[interval]} onToggle={onInterval} />}
+        {chartToggle ?? <ChipToggleGroup label="Chart interval" size="md" options={INTERVAL_CHIPS} pressed={[interval]} onToggle={onInterval} />}
         {quick}
         {view}
       </div>

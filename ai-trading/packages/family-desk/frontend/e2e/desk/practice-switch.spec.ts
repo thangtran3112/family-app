@@ -17,6 +17,8 @@ const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the t
 /** The marks she has placed on the name on screen (the bottom panel is collapsed at 1180 until its tab opens). */
 async function marks(page: Page) {
   await page.getByRole("tab", { name: "Marks" }).click();
+  // A focused tab owns the arrow keys (ui/Tabs moves between tabs): hand the keyboard back to the replay, whose → steps.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   return page.getByRole("tabpanel");
 }
 

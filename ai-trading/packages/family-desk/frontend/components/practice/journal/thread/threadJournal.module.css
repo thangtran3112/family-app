@@ -58,17 +58,17 @@
 /* Balance curve and day bars (SVG) */
 .zeroLine { stroke: var(--color-muted); stroke-width: 1; }
 .hairline { stroke: var(--color-hairline); stroke-width: 1; }
-.axis { fill: var(--color-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+.axis { fill: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
 .below { fill: var(--color-down); fill-opacity: 0.18; }
 .line { fill: none; stroke: var(--color-text); stroke-width: 2; stroke-linejoin: round; }
 .dot { fill: var(--color-text); }
 .dotOpen { fill: var(--color-ground); stroke: var(--color-text); stroke-width: 1.5; }
 .dotNow { fill: var(--color-amber); }
-.nowLabel { fill: var(--color-text); font-size: var(--text-meta); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
-.lowLabel { fill: var(--color-down); font-size: var(--text-meta); font-weight: var(--weight-semibold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.nowLabel { fill: var(--color-text); font-size: var(--text-micro); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.lowLabel { fill: var(--color-down); font-size: var(--text-micro); font-weight: var(--weight-semibold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
 .skipBox { fill: none; stroke: var(--color-muted); stroke-width: 1; stroke-dasharray: 4 3; }
-.skipLabel { fill: var(--color-muted); font-size: var(--text-meta); paint-order: stroke; stroke: var(--color-ground); stroke-width: 4px; }
-.valueLabel { font-size: var(--text-meta); font-weight: var(--weight-semibold); }
+.skipLabel { fill: var(--color-muted); font-size: var(--text-micro); paint-order: stroke; stroke: var(--color-ground); stroke-width: 4px; }
+.valueLabel { font-size: var(--text-micro); font-weight: var(--weight-semibold); }
 
 /* Summary tiles: a grid that wraps to fewer columns as the centre narrows. */
 /* The closed-thread banner: the sentence, then the link as its own item (D-121). */
@@ -102,7 +102,7 @@
 .equityValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
 .equityLine { fill: none; stroke: var(--color-amber); stroke-width: 2; stroke-linejoin: round; stroke-dasharray: 6 3; }
 .dotEquity { fill: var(--color-amber); }
-.equityLabel { fill: var(--color-amber); font-size: var(--text-meta); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.equityLabel { fill: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
 .keyList { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
 .keyLine { display: inline-block; width: 20px; height: 0; flex-shrink: 0; border-top: 2px solid var(--color-text); }
 .keyBalance { border-top-color: var(--color-text); }

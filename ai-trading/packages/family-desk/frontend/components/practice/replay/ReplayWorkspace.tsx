@@ -206,7 +206,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     setTicketError(null);
     // The server names the field it refused (not enough cash is the Quantity's): the message then sits at that field, as a typed one does.
     const refused = (path: string, message: string) => {
-      if (path === "shares" || path === "limitPrice" || path === "stopPrice") setTicketError({ field: path, message });
+      if (path !== "shares" && path !== "limitPrice" && path !== "stopPrice") return false;
+      setTicketError({ field: path, message });
+      if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the field is in the drawer
+      return true;
     };
     void api.ticket(built.action, refused).then((accepted) => {
       if (accepted) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed

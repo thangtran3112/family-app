@@ -70,11 +70,12 @@ export type ReplaySessionApi = {
 /** A plain note clears itself after this long; an error stays until it is dismissed (WCAG 2.2.1: nothing she must read disappears on a timer). */
 const DISMISS_MS = 4500;
 
-/** Told which ticket field the server refused: its `path` (shares, limitPrice, stopPrice) and its sentence. */
-export type Refusal = (path: string, message: string) => void;
-const refusedAt = (error: unknown, refused: Refusal | undefined) => {
+/** Told which ticket field the server refused: its `path` (shares, limitPrice, stopPrice) and its sentence. Returns true when the message now sits at that field. */
+export type Refusal = (path: string, message: string) => boolean;
+/** True when the refusal named a ticket field and the screen put the sentence there: it is then not said a second time in the message line. */
+const refusedAt = (error: unknown, refused: Refusal | undefined): boolean => {
   const problem = error instanceof DeskApiError ? error.problems[0] : undefined;
-  if (problem && refused) refused(problem.path, problem.message);
+  return problem !== undefined && refused !== undefined && refused(problem.path, problem.message);
 };
 
 /** The speed is the shared clock's, so a switch to another name (a new session, a new hook) keeps the one she chose. */
@@ -351,8 +352,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         } catch (error) {
           if (!alive.current) return false;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-          say("error", problemMessage(error, PRACTICE_COPY.markError));
-          refusedAt(error, refused);
+          if (!refusedAt(error, refused)) say("error", problemMessage(error, PRACTICE_COPY.markError));
           return false;
         }
       });
@@ -387,8 +387,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         } catch (error) {
           if (!alive.current) return false;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-          say("error", problemMessage(error, PRACTICE_COPY.markError));
-          refusedAt(error, refused);
+          if (!refusedAt(error, refused)) say("error", problemMessage(error, PRACTICE_COPY.markError));
           return false;
         }
       });

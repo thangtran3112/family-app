@@ -331,8 +331,8 @@ export const PRACTICE_COPY = {
   statusBalanceAsOf: "Balance as of day {day}",
   statusBalanceStart: "Balance at the start · no day ended yet",
   statusSignals: "Would-fire signals only · nothing is delivered",
-  badge: "Practice · {day} · {time}",
-  badgeHidden: "Practice · hidden day · {time}",
+  badge: "Replay · {day} · {time}",
+  badgeHidden: "Replay · hidden day · {time}",
   hiddenDay: "Hidden day",
   feedSip: "Consolidated tape · all US exchanges",
   feedIex: "IEX prints only · about 4% of volume · bar volume is consolidated",
@@ -954,7 +954,7 @@ export function practiceBandText(day: string | null, hidden = false, pastDays = 
   return day ? practiceText("band", { day: formatEtDay(day) }) : PRACTICE_COPY.bandHub;
 }
 
-/** The top-bar badge during a replay: "Practice · Fri 2026-10-23 · 10:07 AM ET" or "Practice · hidden day · 10:07 AM ET". */
+/** The top-bar badge during a replay: "Replay · Fri 2026-10-23 · 10:07 AM ET" or "Replay · hidden day · 10:07 AM ET". */
 export function replayBadgeText(day: string, playhead: string | null, hidden: boolean): string {
   const time = formatEtTimeZone(playhead);
   return hidden ? practiceText("badgeHidden", { time }) : practiceText("badge", { day: formatEtDay(day), time });

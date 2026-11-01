@@ -164,7 +164,7 @@ test.describe("Swing practice", () => {
     await practice.getByLabel("Quantity").fill("1000");
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
+    await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
     await practice.getByLabel("Quantity").fill("100");
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();

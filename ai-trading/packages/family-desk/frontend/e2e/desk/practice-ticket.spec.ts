@@ -123,8 +123,9 @@ test.describe("Practice order ticket", () => {
     await type.selectOption("stop");
     await practice.getByRole("textbox", { name: "Stop price" }).fill("1");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
+    // The server names the field it refused (stopPrice), so the sentence sits at that field once, not again in the message line.
     await expect(page.getByRole("alert").filter({ hasText: "A buy stop goes above the last price" })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
+    await expect(practice.getByRole("textbox", { name: "Stop price" })).toHaveAttribute("aria-invalid", "true");
     await practice.getByRole("textbox", { name: "Stop price" }).fill("100000");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
     await expect(orders(practice).getByText("Buy 100 · Stop 100000.00")).toBeVisible();
