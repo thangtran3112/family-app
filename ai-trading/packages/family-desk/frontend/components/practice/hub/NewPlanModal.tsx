@@ -18,7 +18,8 @@ import type { PracticeThread } from "@/lib/replay/threads";
 import { formatWhole, threadName } from "@/lib/replay/threadView";
 import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-v1";
 import { DayPlanFields } from "./DayPlanFields";
-import { Cell, Segments, noteId } from "./FormCells";
+import { Field, Input } from "@/components/ui/Field";
+import { Segments } from "./FormCells";
 import styles from "./hub.module.css";
 import landing from "./landing.module.css";
 import modal from "./newplan.module.css";
@@ -226,7 +227,7 @@ export function NewPlanModal({
 
           {!planOnly && (
             <div className={modal.topRow}>
-              <Cell
+              <Field
                 id="new-plan-balance"
                 label={PRACTICE_COPY.threadStartingBalance}
                 aside={<SimulatedBadge />}
@@ -234,30 +235,23 @@ export function NewPlanModal({
                 error={shown.startingBalance}
                 reserve
               >
-                <div className={styles.moneyBox} data-invalid={shown.startingBalance ? "true" : undefined}>
-                  <span aria-hidden="true" className={modal.help}>$</span>
-                  <input
-                    id="new-plan-balance"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    className={styles.moneyInput}
-                    value={threadDraft.startingBalance}
-                    aria-invalid={shown.startingBalance ? true : undefined}
-                    aria-describedby={noteId("new-plan-balance")}
-                    onChange={(event) => editThread({ ...threadDraft, startingBalance: event.target.value })}
-                    onBlur={() => editThread({ ...threadDraft, startingBalance: formatBalanceInput(threadDraft.startingBalance) })}
-                  />
-                </div>
-              </Cell>
-              <Cell id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
+                <Input
+                  adornment="$"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={threadDraft.startingBalance}
+                  onChange={(event) => editThread({ ...threadDraft, startingBalance: event.target.value })}
+                  onBlur={() => editThread({ ...threadDraft, startingBalance: formatBalanceInput(threadDraft.startingBalance) })}
+                />
+              </Field>
+              <Field id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
                 <Segments
                   id="new-plan-mode"
                   value={mode}
                   options={[{ value: "day", label: PRACTICE_COPY.threadModeDay }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
                   onChange={(next) => editThread({ ...threadDraft, mode: next })}
                 />
-              </Cell>
+              </Field>
             </div>
           )}
 

@@ -127,6 +127,11 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }
 
+/** The shell's UI state, or null outside the desktop shell (the mobile shell has none), for a component that works in both. */
+export function useDeskUiOptional(): DeskUiValue | null {
+  return useContext(UiContext);
+}
+
 export function useDeskUi(): DeskUiValue {
   const value = useContext(UiContext);
   if (!value) throw new Error("useDeskUi must be used inside the desktop shell");

@@ -33,3 +33,37 @@ export function panelHeadingTag(level: number | undefined): "h2" | "h3" | "h4" {
 export function iconA11y(label: string | undefined): { "aria-hidden": true; role?: undefined; "aria-label"?: undefined } | { "aria-hidden"?: undefined; role: "img"; "aria-label": string } {
   return label ? { role: "img", "aria-label": label } : { "aria-hidden": true };
 }
+
+export type FieldWiring = {
+  /** The id of the message line under the control; null when the field has none (so `aria-describedby` points at nothing). */
+  messageId: string | null;
+  describedBy: string | undefined;
+  invalid: true | undefined;
+  message: string | null;
+  /** An error announces itself (`role="alert"`); a note does not. */
+  alert: boolean;
+};
+
+/**
+ * One field's accessibility wiring from one id: the message line is `${id}-error` while there is an error and `${id}-note`
+ * otherwise, and it is the control's `aria-describedby`. An error replaces the note in the same line, so the form never
+ * grows when it fails; `reserve` keeps the line (empty) for fields whose note comes and goes.
+ */
+export function fieldWiring({ id, note, error, reserve = false }: { id: string; note?: string | null; error?: string | null; reserve?: boolean }): FieldWiring {
+  if (error) return { messageId: `${id}-error`, describedBy: `${id}-error`, invalid: true, message: error, alert: true };
+  if (note) return { messageId: `${id}-note`, describedBy: `${id}-note`, invalid: undefined, message: note, alert: false };
+  return { messageId: reserve ? `${id}-note` : null, describedBy: undefined, invalid: undefined, message: null, alert: false };
+}
+
+/** The cue beside a label: "Required", "Optional", then any hint, joined with a middle dot. Required wins over optional. */
+export function requirementText({ required = false, optional = false, hint }: { required?: boolean; optional?: boolean; hint?: string }): string | null {
+  const parts = [required ? "Required" : optional ? "Optional" : null, hint ?? null].filter((part): part is string => part !== null && part !== "");
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
+export const UNSAVED_TEXT = "You have unsaved changes";
+
+/** What the form bar says on the left: the screen's own status, else "You have unsaved changes" while dirty, else nothing. */
+export function formBarStatus<T>({ dirty = false, status }: { dirty?: boolean; status?: T | null }): T | string | null {
+  return status ?? (dirty ? UNSAVED_TEXT : null);
+}

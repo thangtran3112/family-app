@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
+import { Field, Input } from "@/components/ui/Field";
 import { moveActive } from "@/lib/desk/listNav";
 import { searchSymbols } from "@/lib/desk/status";
 import styles from "./hub.module.css";
@@ -14,7 +15,6 @@ export function SymbolField({ value, onChange, error }: { value: string; onChang
   const baseId = useId();
   const inputId = `${baseId}-input`;
   const listId = `${baseId}-list`;
-  const errorId = `${baseId}-error`;
   const optionId = (index: number) => `${baseId}-option-${index}`;
   const query = value.trim();
   const [answer, setAnswer] = useState<Answer | null>(null);
@@ -64,14 +64,10 @@ export function SymbolField({ value, onChange, error }: { value: string; onChang
   }
 
   return (
-    <div className={styles.field}>
-      <label htmlFor={inputId} className={styles.label}>Symbol</label>
+    <Field id={inputId} label="Symbol" error={error}>
       <div className={styles.combo}>
-        <input
-          id={inputId}
-          type="text"
+        <Input
           role="combobox"
-          className={styles.control}
           placeholder="NVDA"
           autoComplete="off"
           spellCheck={false}
@@ -80,8 +76,6 @@ export function SymbolField({ value, onChange, error }: { value: string; onChang
           aria-expanded={listOpen}
           aria-controls={listId}
           aria-activedescendant={listOpen && active >= 0 ? optionId(active) : undefined}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
           onChange={(event) => {
             onChange(event.target.value.toUpperCase());
             setOpen(true);
@@ -112,7 +106,6 @@ export function SymbolField({ value, onChange, error }: { value: string; onChang
         )}
         {note && <div className={`${styles.popover} ${styles.note}`} role="status">{note}</div>}
       </div>
-      {error && <p id={errorId} role="alert" className={styles.fieldError}>{error}</p>}
-    </div>
+    </Field>
   );
 }

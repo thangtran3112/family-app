@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StrategyList } from "@/components/strategies/StrategyList";
+import { Button } from "@/components/ui/Button";
+import { FormActionBar } from "@/components/ui/FormActionBar";
 import { deskFetch } from "@/lib/api/client";
 import {
   StrategiesResponseSchema,
@@ -19,7 +21,7 @@ import { positiveStrategyId } from "@/lib/strategy/id";
 import { STRATEGY_TEMPLATES } from "@/lib/templates";
 import type { StrategyVersion } from "./types";
 import { JsonView } from "./JsonView";
-import { SaveBar } from "./SaveBar";
+import { saveBarCopy } from "@/lib/strategy/saveBar";
 import { SpecForm, validateSpecForm } from "./SpecForm";
 import { StageControl } from "./StageControl";
 import { VersionList } from "./VersionList";
@@ -107,16 +109,6 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load, loadAttempt]);
-
-  useEffect(() => {
-    if (!dirty) return;
-    function guardUnload(event: BeforeUnloadEvent) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-    window.addEventListener("beforeunload", guardUnload);
-    return () => window.removeEventListener("beforeunload", guardUnload);
-  }, [dirty]);
 
   const selectedVersion = loaded?.versions.find((version) => version.id === selectedVersionId) ?? null;
   const currentVersionId = loaded?.strategy.current_version_id ?? null;
@@ -276,18 +268,27 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
       )}
       {saveError && <p className={styles.error} role="alert">{saveError}</p>}
       {form && (
-        <SaveBar
-          stage={stage as StrategyStage}
-          nextVersion={nextVersion}
+        <FormActionBar
+          label="Save strategy"
           dirty={dirty}
-          hasVersion={hasVersion}
-          valid={canSave}
-          readOnly={readOnly}
-          blocked={formError !== ""}
-          saving={saving}
-          onSave={() => void saveVersion()}
+          status={<SaveBarStatus {...saveBarCopy({ dirty, hasVersion, valid: canSave, readOnly, stage, nextVersion })} />}
+          primary={
+            <Button variant="primary" disabled={!(canSave && !readOnly && formError === "" && (dirty || !hasVersion))} loading={saving} onClick={() => void saveVersion()}>
+              {saving ? "Saving…" : `Save as v${nextVersion}`}
+            </Button>
+          }
         />
       )}
     </section>
+  );
+}
+
+/** The bar's two lines: what the form is, and why Save is or is not available. */
+function SaveBarStatus({ title, note }: { title: string; note: string | null }) {
+  return (
+    <>
+      <strong>{title}</strong>
+      {note && <p>{note}</p>}
+    </>
   );
 }

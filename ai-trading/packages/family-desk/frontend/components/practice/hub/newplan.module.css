@@ -22,17 +22,11 @@
 .legend { padding: 0 var(--space-1); color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-bold); }
 .help { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
 .grid { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3) var(--space-4); }
-.cell { display: flex; min-width: 0; flex-direction: column; gap: var(--space-1); }
 .span { grid-column: 1 / -1; }
-.label { color: var(--color-muted); font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); }
-.note { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
-.note[data-error="true"] { color: var(--color-down); }
-.reserve { min-height: calc(2 * var(--line-label)); }
 .fieldError { margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: var(--line-label); }
 
 /* The top row: the pretend balance and the mode. The balance box carries its own "$"; SIMULATED sits on the label line, not inside the input. */
 .topRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3) var(--space-4); }
-.labelRow { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: var(--space-2); }
 
 /* Names left out of a swing universe: one row each, with its own Remove. */
 .leftOut { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); padding: 0; list-style: none; }

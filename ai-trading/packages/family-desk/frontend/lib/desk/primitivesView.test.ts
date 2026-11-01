@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { TONES } from "../../components/ui/tone.ts";
 import { signTone } from "./format.ts";
-import { bannerRole, buttonState, countText, deltaView, iconA11y, panelHeadingTag, statTileTag } from "./primitivesView.ts";
+import { bannerRole, buttonState, countText, deltaView, fieldWiring, formBarStatus, iconA11y, panelHeadingTag, requirementText, statTileTag, UNSAVED_TEXT } from "./primitivesView.ts";
+import { warnBeforeUnload } from "./unsavedGuard.ts";
 
 test("tone: every tone has a colour in globals.css, and a sign maps onto the model", () => {
   const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
@@ -44,4 +45,38 @@ test("Panel: the title is an h2 unless asked for h3 or h4", () => {
 test("Icon: decoration is hidden from assistive tech, a labelled icon is an image", () => {
   assert.deepEqual(iconA11y(undefined), { "aria-hidden": true });
   assert.deepEqual(iconA11y("Unread"), { role: "img", "aria-label": "Unread" });
+});
+
+test("Field: one id wires the label, the message line and the control; an error replaces the note and is announced", () => {
+  assert.deepEqual(fieldWiring({ id: "plan-days" }), { messageId: null, describedBy: undefined, invalid: undefined, message: null, alert: false });
+  assert.deepEqual(fieldWiring({ id: "plan-days", note: "Sessions to replay" }), { messageId: "plan-days-note", describedBy: "plan-days-note", invalid: undefined, message: "Sessions to replay", alert: false });
+  assert.deepEqual(fieldWiring({ id: "plan-days", note: "Sessions to replay", error: "Pick 1 to 20" }), { messageId: "plan-days-error", describedBy: "plan-days-error", invalid: true, message: "Pick 1 to 20", alert: true });
+  assert.equal(fieldWiring({ id: "x", error: "" }).invalid, undefined, "an empty error is no error");
+  assert.deepEqual(fieldWiring({ id: "x", reserve: true }), { messageId: "x-note", describedBy: undefined, invalid: undefined, message: null, alert: false }, "a reserved line exists but says nothing");
+});
+
+test("Field: the cue next to the label names what is asked, in one order", () => {
+  assert.equal(requirementText({}), null);
+  assert.equal(requirementText({ required: true }), "Required");
+  assert.equal(requirementText({ optional: true }), "Optional");
+  assert.equal(requirementText({ optional: true, hint: "bugs only" }), "Optional · bugs only");
+  assert.equal(requirementText({ required: true, hint: "label and URL" }), "Required · label and URL");
+  assert.equal(requirementText({ required: true, optional: true }), "Required", "required wins over optional");
+});
+
+test("FormActionBar: a dirty form says so unless the screen has something more specific to say", () => {
+  assert.equal(UNSAVED_TEXT, "You have unsaved changes");
+  assert.equal(formBarStatus({ dirty: true }), UNSAVED_TEXT);
+  assert.equal(formBarStatus({ dirty: false }), null);
+  assert.equal(formBarStatus({}), null);
+  assert.equal(formBarStatus({ dirty: true, status: "Saving…" }), "Saving…");
+  assert.equal(formBarStatus({ dirty: false, status: "Sent" }), "Sent");
+});
+
+test("unsaved guard: leaving the page is interrupted, in the way every browser asks for", () => {
+  let prevented = 0;
+  const event: { preventDefault(): void; returnValue?: unknown } = { preventDefault: () => { prevented += 1; } };
+  warnBeforeUnload(event);
+  assert.equal(prevented, 1);
+  assert.equal(event.returnValue, "");
 });

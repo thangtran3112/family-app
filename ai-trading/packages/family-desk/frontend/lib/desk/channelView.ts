@@ -1,3 +1,4 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import type { SettingsChannel } from "../api/schemas.ts";
 
 // Channel rows for Settings (D11) and the Deliver step (D10): what is connected, and what she can do about it.
@@ -58,3 +59,6 @@ export function testResultText(status: "sent" | "not_connected" | "failed" | "er
     default: return "Couldn't send the test · Try again";
   }
 }
+
+/** The tone of a channel's status badge: green only when it can deliver. */
+export const channelStatusTone = (status: ChannelRowState["status"]): Tone => (status === "connected" ? "up" : "neutral");

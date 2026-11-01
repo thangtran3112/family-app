@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Field, FieldRow, NumberInput } from "@/components/ui/Field";
 import type { DeskApiProblem } from "@/lib/api/client";
 import {
   COVERED_CALL_DEFAULTS, withCoveredCallSettings,
@@ -44,49 +46,27 @@ export function ScanFiltersCard({ settings, disabled, serverProblems, onSave }: 
       <h2 id="settings-scan-filters" className={styles.eyebrow}>Covered-call scan filters</h2>
       <p className={styles.helper}>The scan keeps only calls inside these limits. The defaults are the Desk&apos;s own: {COVERED_CALL_DEFAULTS.min_dte} to {COVERED_CALL_DEFAULTS.max_dte} days, delta {COVERED_CALL_DEFAULTS.min_delta} to {COVERED_CALL_DEFAULTS.max_delta}, cover up to {COVERED_CALL_DEFAULTS.cap_pct}% of the shares.</p>
       <div className={styles.fieldGrid}>
-        {SCAN_FIELDS.map((field) => {
-          const problem = problems[field.key] ?? server[field.key];
-          return (
-            <div className={styles.field} key={field.key}>
-              <label className={styles.fieldLabel} htmlFor={`scan-${field.key}`}>{field.label}</label>
-              <input
-                id={`scan-${field.key}`}
-                data-testid={`scan-${field.key}`}
-                className={styles.input}
-                type="number"
-                inputMode="decimal"
-                step={field.step}
-                value={draft[field.key]}
-                disabled={disabled}
-                aria-invalid={problem ? true : undefined}
-                aria-describedby={problem ? `scan-${field.key}-problem` : undefined}
-                onChange={(event) => edit(field.key, event.currentTarget.value)}
-              />
-              {problem && <p className={styles.fieldError} id={`scan-${field.key}-problem`} role="alert">{problem}</p>}
-            </div>
-          );
-        })}
+        {SCAN_FIELDS.map((field) => (
+          <Field key={field.key} id={`scan-${field.key}`} label={field.label} error={problems[field.key] ?? server[field.key]}>
+            <NumberInput
+              data-testid={`scan-${field.key}`}
+              inputMode="decimal"
+              step={field.step}
+              value={draft[field.key]}
+              disabled={disabled}
+              onChange={(event) => edit(field.key, event.currentTarget.value)}
+            />
+          </Field>
+        ))}
       </div>
-      <div className={styles.inline}>
-        <button
-          type="button"
-          className={`${styles.button} ${styles.primary}`}
-          data-testid="scan-save"
-          disabled={disabled || invalid || !changed}
-          onClick={() => onSave((base) => withCoveredCallSettings(base, scanSettingsOfDraft(draft)))}
-        >
+      <FieldRow>
+        <Button variant="primary" data-testid="scan-save" disabled={disabled || invalid || !changed} onClick={() => onSave((base) => withCoveredCallSettings(base, scanSettingsOfDraft(draft)))}>
           Save filters
-        </button>
-        <button
-          type="button"
-          className={styles.button}
-          data-testid="scan-reset"
-          disabled={disabled}
-          onClick={() => { setDraft(scanDefaultsDraft()); setDismissed(serverProblems); }}
-        >
+        </Button>
+        <Button data-testid="scan-reset" disabled={disabled} onClick={() => { setDraft(scanDefaultsDraft()); setDismissed(serverProblems); }}>
           Reset to defaults
-        </button>
-      </div>
+        </Button>
+      </FieldRow>
     </section>
   );
 }

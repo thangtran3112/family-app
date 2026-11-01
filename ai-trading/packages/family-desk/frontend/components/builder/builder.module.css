@@ -27,7 +27,6 @@
 .detailHeader,
 .detailActions,
 .blockHeading,
-.saveBar,
 .stageOptions,
 .inlineFields {
   display: flex;
@@ -62,7 +61,6 @@
 .backLink,
 .button,
 .secondaryButton,
-.saveButton,
 .versionButton,
 .selectedVersion,
 .currentStage,
@@ -91,7 +89,6 @@
 .backLink:hover,
 .button:hover,
 .secondaryButton:hover,
-.saveButton:not(:disabled):hover,
 .versionButton:not(:disabled):hover,
 .stageButton:not(:disabled):hover,
 .removeButton:not(:disabled):hover {
@@ -151,7 +148,6 @@
 .versionButton:disabled,
 .button:disabled,
 .secondaryButton:disabled,
-.saveButton:disabled,
 .stageButton:disabled,
 .removeButton:disabled {
   cursor: not-allowed;
@@ -325,7 +321,6 @@
 .jsonView summary:focus-visible,
 .button:focus-visible,
 .secondaryButton:focus-visible,
-.saveButton:focus-visible,
 .versionButton:focus-visible,
 .selectedVersion:focus-visible,
 .stageButton:focus-visible,
@@ -447,31 +442,6 @@
   font-size: var(--text-label);
 }
 
-.saveBar {
-  position: sticky;
-  z-index: 1;
-  bottom: 8px;
-  margin-top: 16px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-md);
-  background: var(--color-raised);
-  padding: 12px 14px;
-}
-
-.saveBar p {
-  margin: 4px 0 0;
-  color: var(--color-amber);
-  font-size: var(--text-label);
-}
-
-.saveButton {
-  flex-shrink: 0;
-  border-color: transparent;
-  background: var(--color-text);
-  color: var(--color-on-pill);
-  font-weight: var(--weight-bold);
-}
-
 .feedback {
   margin: 14px 0;
   color: var(--color-muted);
@@ -517,16 +487,7 @@
     grid-template-columns: 1fr;
   }
 
-  .detailHeader,
-  .saveBar {
+  .detailHeader {
     align-items: flex-start;
-  }
-
-  .saveBar {
-    flex-direction: column;
-  }
-
-  .saveButton {
-    width: 100%;
   }
 }

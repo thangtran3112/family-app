@@ -1,5 +1,6 @@
 "use client";
 
+import { Field, Select } from "@/components/ui/Field";
 import { SCREEN_OPTIONS, type Captured } from "@/lib/desk/feedbackContext";
 import { formatEtDayTime } from "@/lib/desk/feedbackView";
 import { EMPTY_VALUE } from "@/lib/desk/format";
@@ -32,13 +33,11 @@ export function CapturedContext({ captured, screen, onScreenChange }: { captured
             </div>
           ))}
         </dl>
-        <div className={styles.screenRow}>
-          <label className={styles.screenLabel} htmlFor="feedback-screen">Which screen?</label>
-          <select id="feedback-screen" className={styles.select} value={screen} onChange={(event) => onScreenChange(event.target.value)}>
+        <Field id="feedback-screen" label="Which screen?" note="Change it if the capture is wrong." className={styles.screenField}>
+          <Select value={screen} onChange={(event) => onScreenChange(event.target.value)}>
             {options.map((option) => <option key={option} value={option}>{option}</option>)}
-          </select>
-          <span className={styles.hint}>Change it if the capture is wrong.</span>
-        </div>
+          </Select>
+        </Field>
       </div>
     </section>
   );

@@ -2,6 +2,7 @@
 
 import type { Problem } from "@/lib/api/schemas";
 import { nameFor, type AlertForm, type SourceKind } from "@/lib/desk/alertForm";
+import { ChoiceGroup, Field, FieldError, FieldGroup, Input, Radio, Select } from "@/components/ui/Field";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
 import { problemLine } from "@/lib/desk/problems";
@@ -22,54 +23,44 @@ export function SourceStep({ form, onChange, problems, lists, filters }: {
   return (
     <section className={styles.card} aria-labelledby="alert-step-source">
       <h2 id="alert-step-source" className={styles.stepTitle}>Source</h2>
-      <label className={editorStyles.field}>
-        <span>Name <span className={editorStyles.note}>(optional)</span></span>
-        <input type="text" maxLength={80} placeholder={nameFor(form)} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
-      </label>
-      <fieldset className={editorStyles.group}>
-        <legend>Watch</legend>
-        <div className={editorStyles.controls}>
+      <Field id="alert-name" label="Name" optional>
+        <Input maxLength={80} placeholder={nameFor(form)} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
+      </Field>
+      <FieldGroup legend="Watch">
+        <ChoiceGroup label="Watch source">
           {SOURCES.map(([kind, label]) => (
-            <label key={kind} className={editorStyles.option}>
-              <input type="radio" name="alert-watch" checked={form.sourceKind === kind} onChange={() => onChange({ ...form, sourceKind: kind })} />
-              {label}
-            </label>
+            <Radio key={kind} name="alert-watch" label={label} checked={form.sourceKind === kind} onChange={() => onChange({ ...form, sourceKind: kind })} />
           ))}
-        </div>
+        </ChoiceGroup>
         {form.sourceKind === "symbol" && (
-          <label className={editorStyles.field}>
-            <span>Symbols (comma separated)</span>
-            <input type="text" placeholder="NVDA, AMD" value={form.symbol} onChange={(event) => onChange({ ...form, symbol: event.target.value })} />
-          </label>
+          <Field id="alert-symbols" label="Symbols (comma separated)">
+            <Input placeholder="NVDA, AMD" value={form.symbol} onChange={(event) => onChange({ ...form, symbol: event.target.value })} />
+          </Field>
         )}
         {form.sourceKind === "watchlist" &&
           (lists.length === 0 ? (
             <p className={editorStyles.note}>Create a watchlist first</p>
           ) : (
-            <label className={editorStyles.field}>
-              <span>Watchlist</span>
-              <select value={form.watchlist} onChange={(event) => onChange({ ...form, watchlist: event.target.value })}>
+            <Field id="alert-watchlist" label="Watchlist">
+              <Select value={form.watchlist} onChange={(event) => onChange({ ...form, watchlist: event.target.value })}>
                 <option value="">Choose</option>
                 {lists.map((list) => <option key={list.id} value={list.name}>{list.name}</option>)}
-              </select>
-            </label>
+              </Select>
+            </Field>
           ))}
         {form.sourceKind === "filter" &&
           (filters.length === 0 ? (
             <p className={editorStyles.note}>No screener filters yet</p>
           ) : (
-            <label className={editorStyles.field}>
-              <span>Screener filter</span>
-              <select value={form.filter} onChange={(event) => onChange({ ...form, filter: event.target.value })}>
+            <Field id="alert-filter" label="Screener filter">
+              <Select value={form.filter} onChange={(event) => onChange({ ...form, filter: event.target.value })}>
                 <option value="">Choose</option>
                 {filters.map((filter) => <option key={filter.id} value={filter.name}>{filter.name}</option>)}
-              </select>
-            </label>
+              </Select>
+            </Field>
           ))}
-      </fieldset>
-      {problems.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
-      ))}
+      </FieldGroup>
+      {problems.map((problem, index) => <FieldError key={index}>{problemLine(problem)}</FieldError>)}
     </section>
   );
 }

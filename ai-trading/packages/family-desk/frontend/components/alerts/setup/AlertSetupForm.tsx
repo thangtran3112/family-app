@@ -4,10 +4,13 @@ import type { AlertStrategySpecV1 } from "@ai-trading/contracts/alert-strategy";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import editorStyles from "@/components/screener/editor/editor.module.css";
+import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
+import { FieldError, FieldRow } from "@/components/ui/Field";
+import { FormActionBar } from "@/components/ui/FormActionBar";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import type { Problem, SettingsChannel } from "@/lib/api/schemas";
@@ -106,7 +109,6 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
   const [form, setForm] = useState(original);
   // The spec the live check runs on; null until the first change, so a fresh form does not open with errors.
   const [specJson, setSpecJson] = useState<string | null>(() => (hasSource(original) ? JSON.stringify(alertFormToSpec(original)) : null));
-  const { setDirty } = useDeskUi();
   const [createdId, setCreatedId] = useState<number | null>(null);
   const targetId = editId ?? createdId;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -129,18 +131,6 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
   const channelsFailed = channels.data === null && channels.error !== null;
 
   useEffect(() => () => clearTimeout(timer.current), []);
-
-  useEffect(() => {
-    setDirty(dirty);
-    return () => setDirty(false);
-  }, [dirty, setDirty]);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
 
   // Every change goes through here: the form updates now, the live check follows 500 ms after the last change.
   function change(next: AlertForm) {
@@ -191,13 +181,13 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
       {saved && (
         <div className={styles.saved} role="status">
           <p>{saved}</p>
-          <div className={editorStyles.controls}>
+          <FieldRow>
             <Link href="/alerts" className={styles.link}>View alerts</Link>
             <Link href="/alerts/new" className={styles.link}>Set up another</Link>
-          </div>
+          </FieldRow>
         </div>
       )}
-      {saveNote && <p role="alert" className={editorStyles.problem}>{saveNote}</p>}
+      {saveNote && <FieldError>{saveNote}</FieldError>}
       {(listsFailed || filtersFailed) && (
         <ErrorBlock
           message="Couldn't load your watchlists or filters · Try again"
@@ -218,28 +208,36 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
         channelsFailed={channelsFailed}
         onRetryChannels={channels.refresh}
       />
-      <div className={editorStyles.unsaved}>
-        {dirty && <p>You have unsaved changes</p>}
-        <div className={editorStyles.actions}>
-          {editId !== null ? (
-            <button type="button" className={`${editorStyles.button} ${editorStyles.primary}`} disabled={saving !== null} onClick={() => void save("edit")}>
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-          ) : (
+      <FormActionBar
+        label="Save alert"
+        dirty={dirty}
+        status={
+          dirty || (editId === null && turn.reason) ? (
             <>
-              <button type="button" className={`${editorStyles.button} ${editorStyles.primary}`} disabled={saving !== null} onClick={() => void save("draft")}>
-                {saving === "draft" ? "Saving…" : createdId !== null ? "Save changes" : "Save draft"}
-              </button>
-              <div className={styles.turn}>
-                <button type="button" className={editorStyles.button} disabled={saving !== null || !turn.enabled} onClick={() => void save("on")}>
-                  {saving === "on" ? "Saving…" : "Turn on"}
-                </button>
-                {turn.reason && <p className={editorStyles.note}>{turn.reason}</p>}
-              </div>
+              {dirty && <p>You have unsaved changes</p>}
+              {editId === null && turn.reason && <p className={editorStyles.note}>{turn.reason}</p>}
             </>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+        secondary={
+          editId === null ? (
+            <Button disabled={saving !== null || !turn.enabled} onClick={() => void save("on")}>
+              {saving === "on" ? "Saving…" : "Turn on"}
+            </Button>
+          ) : undefined
+        }
+        primary={
+          editId !== null ? (
+            <Button variant="primary" disabled={saving !== null} onClick={() => void save("edit")}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={saving !== null} onClick={() => void save("draft")}>
+              {saving === "draft" ? "Saving…" : createdId !== null ? "Save changes" : "Save draft"}
+            </Button>
+          )
+        }
+      />
       <RightRail
         label="Alert summary"
         sections={[

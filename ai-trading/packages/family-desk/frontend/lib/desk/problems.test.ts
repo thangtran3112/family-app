@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { StrategySpecV1Schema } from "@ai-trading/contracts";
-import { fieldLabel, formProblems, plainMessage, plainProblem, problemLine, problemsByField, problemsTitle } from "./problems.ts";
+import { fieldError, fieldLabel, formProblems, plainMessage, plainProblem, problemLine, problemsByField, problemsTitle } from "./problems.ts";
 
 test("V-ALERTS-01: the empty-symbols error reads as an instruction, with no schema words or JSON path", () => {
   const server = { path: "watch.universe.symbols", message: "List should have at least 1 item after validation, not 0" };
@@ -109,4 +109,12 @@ test("problemsTitle counts the problems; problemsByField groups them under the p
   assert.deepEqual([count, title], [3, "3 problems to fix"]);
   assert.deepEqual(byPath["watch.universe.symbols"]!.map((problem) => problem.text), ["Fill this in.", "Enter a number."]);
   assert.deepEqual(Object.keys(byPath), ["watch.universe.symbols", "name"]);
+});
+
+test("fieldError is the one line under a field: the plain sentences, each once, null with none", () => {
+  assert.equal(fieldError([]), null);
+  assert.equal(fieldError([{ path: "maxResults", message: "Input should be greater than or equal to 1" }]), "Must be 1 or more.");
+  const twice = { path: "watch.universe.symbols", message: "Field required" };
+  assert.equal(fieldError([twice, twice, { path: "watch.universe.symbols", message: "Input should be a valid number" }]), "Fill this in. Enter a number.");
+  assert.equal(fieldError([{ path: "name", message: "Traceback: undefined" }]), "Check this field.");
 });
