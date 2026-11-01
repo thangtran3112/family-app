@@ -376,6 +376,7 @@ a:focus-visible {
 
 /* A Practice screen that has not filled its left slot yet (loading, an error, no thread picked) leaves no empty column. */
 .dk-left:has(> aside:empty) { border-right: 0; }
+.dk-left > aside:empty { display: none; }
 .dk-shell:has(.dk-left > aside:empty) { grid-template-columns: 0 minmax(0, 1fr) 320px; }
 .dk-shell:has(.dk-left > aside:empty):has(.dk-right:empty) { grid-template-columns: 0 minmax(0, 1fr) 0; }
 @media (min-width: 1100px) and (max-width: 1439px) {
