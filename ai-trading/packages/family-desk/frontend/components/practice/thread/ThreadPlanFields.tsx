@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Segments } from "@/components/practice/hub/FormCells";
+import { Field, NumberInput, Textarea } from "@/components/ui/Field";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { ThreadDraft, ThreadProblems } from "@/lib/replay/threadSetup";
 import styles from "./thread.module.css";
@@ -31,75 +32,25 @@ export function ThreadPlanFields({
       </div>
       <div className={styles.row}>
         <Field id={id("max-loss")} label={perWeek ? PRACTICE_COPY.swingMaxLossWeek : PRACTICE_COPY.threadMaxLoss} error={problems.maxLossUsd}>
-          <input
-            id={id("max-loss")}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={100000}
-            step={1}
-            placeholder="Optional"
-            className={styles.control}
-            value={draft.maxLossUsd}
-            aria-invalid={problems.maxLossUsd ? true : undefined}
-            aria-describedby={problems.maxLossUsd ? `${id("max-loss")}-error` : undefined}
-            onChange={(event) => onDraft({ ...draft, maxLossUsd: event.target.value })}
-          />
+          <NumberInput fill inputMode="numeric" min={1} max={100000} step={1} placeholder="Optional" value={draft.maxLossUsd} onChange={(event) => onDraft({ ...draft, maxLossUsd: event.target.value })} />
         </Field>
         <Field id={id("max-trades")} label={perWeek ? PRACTICE_COPY.swingMaxTradesWeek : PRACTICE_COPY.threadMaxTrades} error={problems.maxTrades}>
-          <input
-            id={id("max-trades")}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={50}
-            step={1}
-            placeholder="Optional"
-            className={styles.control}
-            value={draft.maxTrades}
-            aria-invalid={problems.maxTrades ? true : undefined}
-            aria-describedby={problems.maxTrades ? `${id("max-trades")}-error` : undefined}
-            onChange={(event) => onDraft({ ...draft, maxTrades: event.target.value })}
-          />
+          <NumberInput fill inputMode="numeric" min={1} max={50} step={1} placeholder="Optional" value={draft.maxTrades} onChange={(event) => onDraft({ ...draft, maxTrades: event.target.value })} />
         </Field>
       </div>
       {perWeek && <p className={styles.hint}>{PRACTICE_COPY.swingPerWeekNote}</p>}
-      <Field id={id("note")} label={`${PRACTICE_COPY.threadPlanNote} · 500 characters`} error={problems.planNote} wide>
-        <textarea
-          id={id("note")}
-          rows={3}
-          maxLength={500}
-          className={styles.textarea}
-          value={draft.planNote}
-          aria-invalid={problems.planNote ? true : undefined}
-          aria-describedby={problems.planNote ? `${id("note")}-error` : undefined}
-          onChange={(event) => onDraft({ ...draft, planNote: event.target.value })}
-        />
+      <Field id={id("note")} label={`${PRACTICE_COPY.threadPlanNote} · 500 characters`} error={problems.planNote} className={styles.wide}>
+        <Textarea rows={3} maxLength={500} value={draft.planNote} onChange={(event) => onDraft({ ...draft, planNote: event.target.value })} />
       </Field>
     </div>
   );
 }
 
-function Field({ id, label, error, wide, children }: { id: string; label: string; error?: string; wide?: boolean; children: ReactNode }) {
-  return (
-    <div className={wide ? `${styles.field} ${styles.wide}` : styles.field}>
-      <label htmlFor={id} className={styles.label}>{label}</label>
-      {children}
-      {error && <p id={`${id}-error`} role="alert" className={styles.fieldError}>{error}</p>}
-    </div>
-  );
-}
-
-/** A yes-or-no pair of toggle buttons (aria-pressed), grouped under the question. */
+/** A yes-or-no question: the kit's labelled group around a two-option segmented control. */
 function YesNo({ id, label, value, error, onChange }: { id: string; label: string; value: boolean; error?: string; onChange: (value: boolean) => void }) {
   return (
-    <div className={styles.field}>
-      <span id={`${id}-label`} className={styles.label}>{label}</span>
-      <div role="group" aria-labelledby={`${id}-label`} className={styles.segmented}>
-        <button type="button" className={styles.segment} aria-pressed={value} onClick={() => onChange(true)}>Yes</button>
-        <button type="button" className={styles.segment} aria-pressed={!value} onClick={() => onChange(false)}>No</button>
-      </div>
-      {error && <p role="alert" className={styles.fieldError}>{error}</p>}
-    </div>
+    <Field id={id} label={label} group error={error}>
+      <Segments id={id} value={value ? "yes" : "no"} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={(next) => onChange(next === "yes")} />
+    </Field>
   );
 }

@@ -5,6 +5,7 @@ import { SymbolField } from "@/components/practice/hub/SymbolField";
 import hub from "@/components/practice/hub/hub.module.css";
 import modal from "@/components/practice/hub/newplan.module.css";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Field, NumberInput } from "@/components/ui/Field";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadFilters } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -195,23 +196,9 @@ export function UniverseBuilder({
             {PRACTICE_COPY.swingAddByLiquidity}
           </label>
           <p className={modal.help}>{PRACTICE_COPY.swingAddByLiquidityHint}</p>
-          <div className={hub.field}>
-            <label htmlFor="swing-target" className={hub.label}>{PRACTICE_COPY.swingTarget}</label>
-            <input
-              id="swing-target"
-              type="number"
-              inputMode="numeric"
-              min={10}
-              max={50}
-              step={1}
-              className={`${hub.control} ${styles.targetBox}`}
-              value={draft.target}
-              aria-invalid={targetError ? true : undefined}
-              aria-describedby={targetError ? "swing-target-error" : undefined}
-              onChange={(event) => onDraft({ ...draft, target: event.target.value })}
-            />
-            {targetError && <p id="swing-target-error" role="alert" className={modal.fieldError}>{targetError}</p>}
-          </div>
+          <Field id="swing-target" label={PRACTICE_COPY.swingTarget} error={targetError}>
+            <NumberInput inputMode="numeric" min={10} max={50} step={1} value={draft.target} onChange={(event) => onDraft({ ...draft, target: event.target.value })} />
+          </Field>
         </fieldset>
       </div>
 

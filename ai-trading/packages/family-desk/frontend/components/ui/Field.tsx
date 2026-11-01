@@ -108,15 +108,29 @@ function controlProps(field: Wired | null, own: { id?: string; "aria-describedby
   };
 }
 
-/** A one-line text control at the Desk's control height. Inside a `Field` it takes the field's id and message wiring. */
-export function Input({ className, ...props }: Layout & Omit<ComponentPropsWithoutRef<"input">, "className">) {
-  return <input type="text" {...props} {...controlProps(useFieldControl(), props)} className={join(styles.control, className)} />;
+/**
+ * A one-line text control at the Desk's control height. Inside a `Field` it takes the field's id and message wiring.
+ * `adornment` ("$") shows before the value inside the same box, and the value reads right-aligned.
+ */
+export function Input({ adornment, className, ...props }: Layout & Omit<ComponentPropsWithoutRef<"input">, "className"> & { adornment?: string }) {
+  const wired = controlProps(useFieldControl(), props);
+  if (adornment === undefined) return <input type="text" {...props} {...wired} className={join(styles.control, className)} />;
+  return (
+    <span className={join(styles.adorned, className)} data-invalid={wired["aria-invalid"] ? "true" : undefined}>
+      <span aria-hidden="true" className={styles.unit}>{adornment}</span>
+      <input type="text" {...props} {...wired} className={styles.bare} />
+    </span>
+  );
 }
 
-/** A number control: `min`, `max`, `step` and `inputMode` are the caller's, a `unit` shows after it. Values stay strings so a half-typed number is not lost. */
-export function NumberInput({ unit, className, ...props }: Layout & Omit<ComponentPropsWithoutRef<"input">, "className" | "type"> & { unit?: string }) {
+/**
+ * A number control: `min`, `max`, `step` and `inputMode` are the caller's, a `unit` shows after it. Values stay strings so a
+ * half-typed number is not lost. It is a short box (7rem) unless `fill` makes it as wide as its field, for a form grid whose
+ * text and number controls share one column width.
+ */
+export function NumberInput({ unit, fill = false, className, ...props }: Layout & Omit<ComponentPropsWithoutRef<"input">, "className" | "type"> & { unit?: string; fill?: boolean }) {
   const input = <input type="number" {...props} {...controlProps(useFieldControl(), props)} className={styles.control} />;
-  return <span className={join(styles.numberWrap, className)}>{input}{unit && <span className={styles.unit}>{unit}</span>}</span>;
+  return <span className={join(styles.numberWrap, className)} data-fill={fill ? "true" : undefined}>{input}{unit && <span className={styles.unit}>{unit}</span>}</span>;
 }
 
 export function Select({ className, ...props }: Layout & Omit<ComponentPropsWithoutRef<"select">, "className">) {

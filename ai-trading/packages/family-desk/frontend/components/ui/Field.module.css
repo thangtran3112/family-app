@@ -23,6 +23,8 @@
 textarea.control { height: auto; min-height: calc(var(--size-lg) * 2); resize: vertical; padding: var(--space-2); }
 .numberWrap { display: inline-flex; align-items: center; gap: var(--space-1-5); }
 .numberWrap > .control { width: 7rem; }
+.numberWrap[data-fill="true"] { display: flex; }
+.numberWrap[data-fill="true"] > .control { width: 100%; }
 .unit { color: var(--color-muted); font-size: var(--text-meta); }
 
 .choice { display: flex; min-height: var(--size-sm); align-items: center; gap: var(--space-2); color: var(--color-text); font-size: var(--text-label); }
@@ -42,3 +44,11 @@ textarea.control { height: auto; min-height: calc(var(--size-lg) * 2); resize: v
 .switch:checked::after { background: var(--color-on-pill); transform: translate(var(--space-4), -50%); }
 .switch:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .switch:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.adorned { display: flex; min-width: 0; height: var(--size-lg); align-items: center; gap: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); }
+.adorned:hover { border-color: var(--color-muted); }
+.adorned[data-invalid="true"] { border-color: var(--color-down); }
+.adorned:focus-within { outline: var(--focus-ring); outline-offset: 2px; }
+.bare { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; text-align: right; }
+.bare:focus { outline: none; }
+.bare:disabled { color: var(--color-muted); }
