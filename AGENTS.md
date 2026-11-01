@@ -23,7 +23,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 | `ai-trading/` | Trading Hub (open-source apps) and the Family Desk | `ai-trading/AGENTS.md` |
 | `expense-tax-management/` | Expense and tax apps | `expense-tax-management/AGENTS.md` |
 | `infrastructure/` | Terraform, VPS bootstrap, shared compose, backups | `infrastructure/README.md` |
-| `infrastructure/tailscale/` | Tailnet policy for CI/CD deploys only (operator SSH is Cloudflare Access) | `infrastructure/tailscale/README.md` |
+| `infrastructure/tailscale/` | Tailnet policy for CI/CD deploys and break-glass admin (operator SSH is Cloudflare Access) | `infrastructure/tailscale/README.md` |
 | `common/config/` | Firestore `family-config` CLI | `common/config/README.md` |
 | `docs/superpowers/` | Cross-app specs and plans | n/a |
 
