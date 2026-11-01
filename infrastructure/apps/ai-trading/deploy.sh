@@ -128,6 +128,13 @@ ADMISSION_MARKER_ACTIVE=0
 VIBE_GATE_MODE=none
 VIBE_GATE_CONTAINER_ID=""
 VIBE_DRAIN_LEASE=""
+# The server drops a drain lease 600s after its last renewal. Between the idle
+# check and the Vibe switch this deploy runs far longer than that on a cold
+# image pull (the MiroFish backend alone took 11 minutes on 2026-11-01), so a
+# background loop renews the lease every VIBE_LEASE_RENEW_SECONDS until
+# release_vibe_drain() stops it.
+VIBE_LEASE_RENEW_SECONDS=60
+VIBE_LEASE_KEEPALIVE_PID=""
 FORWARD_SWITCH_STARTED=0
 MIROFISH_WAS_RUNNING=0
 DEPLOY_COMMITTED=0
@@ -1052,6 +1059,32 @@ except Exception:
 ' "$action" 2>/dev/null
 }
 
+# Renews only; it never opens admission or proves idleness, so the pre-switch
+# check below still renews, re-reads the counts and fails closed on a lapsed
+# lease. A failed renew is retried next round (one slow request must not end the
+# loop), the loop ends when this shell is gone (an orphan must not hold the
+# pause open) or when the 3900s admission window that the pre-switch check
+# enforces is over (a hung-but-alive deploy must not hold chat closed forever),
+# and it gets no lock FD, stdin or output of its own.
+start_vibe_lease_keepalive() {
+  local owner="$BASHPID" container_id="$VIBE_GATE_CONTAINER_ID" lease="$VIBE_DRAIN_LEASE"
+  local until=$((SECONDS + 3900))
+  (
+    trap - ERR EXIT
+    while sleep "$VIBE_LEASE_RENEW_SECONDS" && kill -0 "$owner" 2>/dev/null && ((SECONDS < until)); do
+      vibe_drain_request "$container_id" renew "$lease" >/dev/null || true
+    done
+  ) 9>&- </dev/null >/dev/null 2>&1 &
+  VIBE_LEASE_KEEPALIVE_PID=$!
+}
+
+stop_vibe_lease_keepalive() {
+  [[ -n "$VIBE_LEASE_KEEPALIVE_PID" ]] || return 0
+  kill "$VIBE_LEASE_KEEPALIVE_PID" 2>/dev/null || true
+  wait "$VIBE_LEASE_KEEPALIVE_PID" 2>/dev/null || true
+  VIBE_LEASE_KEEPALIVE_PID=""
+}
+
 begin_vibe_release_gate() {
   local desired container_id probe_code probe_reply start_reply lease
   VIBE_GATE_MODE=none
@@ -1093,41 +1126,55 @@ except (KeyError, TypeError, ValueError):
       VIBE_DRAIN_LEASE="$lease"
       VIBE_GATE_MODE=runtime
       wait_for_vibe_idle "$container_id" "$lease" || return 1
-      arm_vibe_admission_marker
+      arm_vibe_admission_marker || return 1
+      start_vibe_lease_keepalive
       ;;
     *) return 1 ;;
   esac
 }
 
+# A refusal names the check that failed (never the lease or key): a silent
+# return 1 here cost a debugging round when the lease had lapsed. The checks set
+# $why (the wrapper's local, by bash dynamic scope) just before each step.
 verify_vibe_gate_before_switch() {
-  local current reply counts now
+  local why="unknown check"
   [[ "$VIBE_GATE_MODE" == none ]] && return 0
+  check_vibe_gate_before_switch || { echo "deploy: Vibe pre-switch check failed: $why" >&2; return 1; }
+}
+
+check_vibe_gate_before_switch() {
+  local current reply counts now
+  why="the Vibe container list could not be read"
   current="$(vibe_container_ids)" || return 1
+  why="the Vibe container is gone or changed since the drain"
   [[ -n "$current" && "$current" == "$VIBE_GATE_CONTAINER_ID" ]] || return 1
+  why="the admission marker is missing or not this run's"
+  legacy_marker_owned || return 1
+  why="the clock could not be read"
+  now="$(vibe_monotonic_seconds)" || return 1
+  [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
+  why="the admission window is over"
+  ((now < BOOTSTRAP_STARTED + 3900)) || return 1
   case "$VIBE_GATE_MODE" in
     runtime)
-      legacy_marker_owned || return 1
-      now="$(vibe_monotonic_seconds)" || return 1
-      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
-      ((now < BOOTSTRAP_STARTED + 3900)) || return 1
+      why="the drain lease could not be renewed (expired, or the Vibe container is unreachable)"
       vibe_drain_request "$current" renew "$VIBE_DRAIN_LEASE" >/dev/null || return 1
+      why="the drain status could not be read"
       reply="$(vibe_drain_request "$current" status "$VIBE_DRAIN_LEASE")" || return 1
       counts="$(vibe_drain_counts <<<"$reply")" || return 1
-      [[ "$counts" == '0 0' ]]
       ;;
     legacy)
-      legacy_marker_owned || return 1
-      now="$(vibe_monotonic_seconds)" || return 1
-      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
-      ((now < BOOTSTRAP_STARTED + 3900)) || return 1
+      why="the active-run counts could not be read"
       counts="$(legacy_active_counts "$current")" || return 1
-      [[ "$counts" == '0 0' ]]
       ;;
     *) return 1 ;;
   esac
+  why="Vibe research is active again"
+  [[ "$counts" == '0 0' ]]
 }
 
 release_vibe_drain() {
+  stop_vibe_lease_keepalive
   [[ "$VIBE_GATE_MODE" == runtime && -n "$VIBE_DRAIN_LEASE" ]] || return 0
   local current
   current="$(vibe_container_ids)" || return 1

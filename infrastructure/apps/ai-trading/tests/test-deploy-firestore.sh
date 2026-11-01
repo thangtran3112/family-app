@@ -3421,6 +3421,65 @@ grep -q 'DEPLOY_DARK must be 0 or 1' "$s76/stderr.log" || fail "case76: missing 
 [[ ! -e "$s76/app/docker.log" ]] || fail "case76: docker was reached despite a malformed DEPLOY_DARK"
 [[ ! -e "$s76/secrets/cloudflared.env" ]] || fail "case76: a secret was installed despite a malformed DEPLOY_DARK"
 
+echo "=== Case 77 (SP5, RED, 2026-11-01 deploy): a drain lease outliving a long pull stays valid through the switch check, and a lapsed one still fails closed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s77="$(new_scratch case77)"
+mkdir -p "$s77/run"
+(
+  APP_DIR="$s77/app"
+  AI_TRADING_SECRETS_DIR="$s77/secrets"
+  APP_CONFIG_STAGING_DIR="$s77/config-staging"
+  IMAGE_TAG=0000000000000000000000000000000000000000
+  export APP_DIR AI_TRADING_SECRETS_DIR APP_CONFIG_STAGING_DIR IMAGE_TAG
+  # shellcheck source=/dev/null
+  source "$LIB_FILE"
+  VIBE_ADMISSION_MARKER="$s77/run/vibe-admission-paused"
+  # The real server lets a lease lapse 600s after its last renewal; scale that
+  # to 3s of wall clock so the fake server genuinely expires it. Read by the
+  # sourced library's keepalive.
+  # shellcheck disable=SC2034
+  VIBE_LEASE_RENEW_SECONDS=1
+  fake_lease=fake-private-lease-abcdef1234567890
+  fake_expiry_file="$s77/lease-expires-at"
+  read_desired_vibe() { echo true; }
+  vibe_container_ids() { echo old-vibe-container; }
+  systemd-run() { return 0; }
+  systemctl() { return 0; }
+  lease_valid() { [[ -f "$fake_expiry_file" ]] && (($(date +%s) < $(<"$fake_expiry_file"))); }
+  vibe_drain_request() {
+    case "$2" in
+      probe) printf '{"http_status":409}\n' ;;
+      start) echo "$(($(date +%s) + 3))" >"$fake_expiry_file"; printf '{"lease":"%s"}\n' "$fake_lease" ;;
+      renew) lease_valid || return 1; echo "$(($(date +%s) + 3))" >"$fake_expiry_file"; echo renew >>"$s77/renews.log" ;;
+      status) lease_valid || return 1; printf '{"active_chat":0,"active_private_committees":0}\n' ;;
+      release) lease_valid || return 1; rm -f "$fake_expiry_file" ;;
+      *) return 1 ;;
+    esac
+  }
+  # A: the lease is held across a pull longer than its lifetime.
+  begin_vibe_release_gate || exit 1
+  [[ "$VIBE_GATE_MODE" == runtime && -n "$VIBE_LEASE_KEEPALIVE_PID" ]] || exit 1
+  keeper="$VIBE_LEASE_KEEPALIVE_PID"
+  sleep 5
+  verify_vibe_gate_before_switch 2>"$s77/verify-held.err" || { cat "$s77/verify-held.err" >&2; exit 1; }
+  [[ "$(wc -l <"$s77/renews.log")" -ge 3 ]] || exit 1
+  # Releasing stops the loop first, then reopens admission.
+  release_vibe_drain || exit 1
+  ! kill -0 "$keeper" 2>/dev/null || exit 1
+  [[ ! -e "$fake_expiry_file" && "$VIBE_GATE_MODE" == none && -z "$VIBE_LEASE_KEEPALIVE_PID" ]] || exit 1
+  clear_vibe_admission_marker || exit 1
+  # B: without the keepalive the same wait lapses the lease. The check must
+  # refuse, say which check refused, and print neither lease nor key.
+  begin_vibe_release_gate || exit 1
+  stop_vibe_lease_keepalive
+  sleep 4
+  if verify_vibe_gate_before_switch 2>"$s77/verify-lapsed.err"; then exit 1; fi
+  grep -q 'Vibe pre-switch check failed: the drain lease could not be renewed' "$s77/verify-lapsed.err" || exit 1
+  if grep -qF "$fake_lease" "$s77/verify-lapsed.err"; then exit 1; fi
+  clear_vibe_admission_marker || exit 1
+  true
+) || fail "case77: the lease must outlive a slow step (keepalive) and an unrenewed one must still fail closed with a named reason"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
