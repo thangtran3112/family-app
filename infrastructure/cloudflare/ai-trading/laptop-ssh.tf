@@ -67,6 +67,11 @@ resource "cloudflare_zero_trust_access_application" "laptop_ssh" {
   session_duration     = "168h"
   app_launcher_visible = false
 
+  # Which identity providers the Access login page offers. Empty = every
+  # configured IdP. Pinned here to the passkeys IdP so the email one-time-PIN
+  # method is not offered; the OTP IdP object stays as a dormant fallback.
+  allowed_idps = var.laptop_ssh_allowed_idps
+
   policies = concat(
     [
       {
