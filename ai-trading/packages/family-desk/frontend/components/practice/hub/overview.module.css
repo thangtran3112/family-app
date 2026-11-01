@@ -31,3 +31,10 @@
 .stat { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .stat dd { margin: 0; font-size: var(--text-row); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .statHint { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
+
+/* The thread clock on the Summary (ADR-0018): the time, a thin progress line, and a wrapping row of controls. Tokens only. */
+.clockTime { margin: 0; font-size: var(--text-title); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.clockTrack { height: var(--space-1); overflow: hidden; border-radius: var(--radius-full); background: var(--color-hairline); }
+.clockFill { height: 100%; background: var(--color-amber); }
+.clockControls { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.clockSub { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); }

@@ -1155,6 +1155,34 @@ export interface paths {
         patch: operations["patch_thread_api_desk_replay_threads__thread_id__patch"];
         trace?: never;
     };
+    "/api/desk/replay/threads/{thread_id}/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Clock
+         * @description The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the
+         *     simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the
+         *     answer whether or not anyone was looking in between. Poll it; it is idempotent.
+         */
+        get: operations["get_thread_clock_api_desk_replay_threads__thread_id__clock_get"];
+        put?: never;
+        /**
+         * Control Thread Clock
+         * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump
+         *     it to a time. Forward only; a step or jump stops at a crossed stop or the close like Play does. 409 before the day
+         *     has started or when Play is asked at the close. Time then runs on the server until she pauses it.
+         */
+        post: operations["control_thread_clock_api_desk_replay_threads__thread_id__clock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/replay/threads/{thread_id}/close": {
         parameters: {
             query?: never;
@@ -1234,6 +1262,27 @@ export interface paths {
         get: operations["get_thread_ledger_api_desk_replay_threads__thread_id__ledger_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/{thread_id}/skip-day": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Thread Day
+         * @description Skip to the next day: the clock runs to the window end, the day ends (every open position flattens at that close)
+         *     and the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.
+         */
+        post: operations["skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1871,9 +1920,11 @@ export interface components {
         };
         /**
          * AdvanceIn
-         * @description Exactly one of `to` and `step`. `to` at or before `revealed_through` answers an empty delta; `to` past
+         * @description Exactly one of `to`, `step` and `sync`. `to` at or before `revealed_through` answers an empty delta; `to` past
          *     the window end is clamped and `at_end` is true. `step: "next_signal"` reveals through the next would-fire bar
-         *     close (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422.
+         *     close (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422. `sync: true` is
+         *     the day-trade screen following the thread's server-side clock (ADR-0018): it brings a running clock to now, then
+         *     reveals this name through that clock, wherever it is; it moves nothing itself.
          */
         AdvanceIn: {
             /** Interval */
@@ -1895,6 +1946,11 @@ export interface components {
             min_size: number;
             /** Step */
             step?: ("bar" | "next_signal") | null;
+            /**
+             * Sync
+             * @default false
+             */
+            sync: boolean;
             /** To */
             to?: string | null;
         };
@@ -1939,6 +1995,7 @@ export interface components {
             stamp: components["schemas"]["Stamp"];
             /** Strip */
             strip?: components["schemas"]["StripRowOut"][] | null;
+            thread_clock?: components["schemas"]["ThreadClockStateOut"] | null;
         };
         /** AiContextOut */
         AiContextOut: {
@@ -2580,6 +2637,74 @@ export interface components {
             symbol: string;
             /** Timeframe */
             timeframe: string;
+        };
+        /**
+         * ClockAccountOut
+         * @description The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its
+         *     cost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. Computed on the server, never past the
+         *     clock.
+         */
+        ClockAccountOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Balance */
+            balance: number;
+            /** Day Pnl Usd */
+            day_pnl_usd: number;
+            /** Equity Usd */
+            equity_usd: number;
+            /** Open Pnl Usd */
+            open_pnl_usd: number;
+            /** Positions */
+            positions: number;
+        };
+        /**
+         * ClockIn
+         * @description Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
+         *     its UTC offset). Any mix, at least one; a step or jump is forward only and stops at a crossed stop or the close.
+         */
+        ClockIn: {
+            /** Running */
+            running?: boolean | null;
+            /** Speed */
+            speed?: (1 | 2 | 5 | 10) | null;
+            /** Step */
+            step?: ("bar" | "next_signal") | null;
+            /** To */
+            to?: string | null;
+        };
+        /**
+         * ClockPauseOut
+         * @description Why a running clock stopped: a stop crossed on an open name (`kind: "stop"`, with the name, the stop, the price
+         *     an Exit would book and `crossing` "cross" or "gap") or the window end (`kind: "close"`).
+         */
+        ClockPauseOut: {
+            /**
+             * Also
+             * @default []
+             */
+            also: string[];
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Crossing */
+            crossing?: ("cross" | "gap") | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "stop" | "close";
+            /** Price */
+            price?: number | null;
+            /** Stop Price */
+            stop_price?: number | null;
+            /** Symbol */
+            symbol?: string | null;
         };
         /** ConsensusOut */
         ConsensusOut: {
@@ -3258,6 +3383,7 @@ export interface components {
             stamp: components["schemas"]["Stamp"];
             /** Strip */
             strip?: components["schemas"]["StripRowOut"][] | null;
+            thread_clock?: components["schemas"]["ThreadClockStateOut"] | null;
             /**
              * Window Start
              * Format: date-time
@@ -5976,6 +6102,18 @@ export interface components {
              */
             time: string;
         };
+        /**
+         * SkipDayOut
+         * @description Skip day: the day that ended and the next one (null while its data is still being prepared, or when the plan is
+         *     done: poll the hub), with the clock as it stands.
+         */
+        SkipDayOut: {
+            clock: components["schemas"]["ThreadClockOut"];
+            /** Ended Day List Id */
+            ended_day_list_id: number;
+            /** Next Day List Id */
+            next_day_list_id: number | null;
+        };
         /** SourceQualityOut */
         SourceQualityOut: {
             /** Median Return Pct */
@@ -6710,6 +6848,56 @@ export interface components {
             today_pnl_usd: number | null;
             /** Week No */
             week_no?: number | null;
+        };
+        /**
+         * ThreadClockOut
+         * @description The day-trade thread's clock (ADR-0018). `clock` is the simulated time at `server_now` (a running clock was
+         *     settled before this was built); a client may extrapolate it with `speed` between polls but never owns it.
+         */
+        ThreadClockOut: {
+            account: components["schemas"]["ClockAccountOut"] | null;
+            /** Clock */
+            clock: string | null;
+            /** Day List Id */
+            day_list_id: number | null;
+            /** Day No */
+            day_no: number | null;
+            /** Label */
+            label: string;
+            pause: components["schemas"]["ClockPauseOut"] | null;
+            /** Running */
+            running: boolean;
+            /**
+             * Server Now
+             * Format: date-time
+             */
+            server_now: string;
+            /**
+             * Speed
+             * @enum {integer}
+             */
+            speed: 1 | 2 | 5 | 10;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "no_day" | "listed" | "paused" | "running" | "at_close";
+            /** Thread Id */
+            thread_id: number;
+            /** Window End */
+            window_end: string | null;
+            /** Window Start */
+            window_start: string | null;
+        };
+        /** ThreadClockStateOut */
+        ThreadClockStateOut: {
+            /** Running */
+            running: boolean;
+            /**
+             * Speed
+             * @enum {integer}
+             */
+            speed: 1 | 2 | 5 | 10;
         };
         /**
          * ThreadDayOut
@@ -9688,6 +9876,72 @@ export interface operations {
             };
         };
     };
+    get_thread_clock_api_desk_replay_threads__thread_id__clock_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadClockOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    control_thread_clock_api_desk_replay_threads__thread_id__clock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClockIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadClockOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     close_thread_api_desk_replay_threads__thread_id__close_post: {
         parameters: {
             query?: never;
@@ -9805,6 +10059,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadLedgerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkipDayOut"];
                 };
             };
             /** @description Validation Error */

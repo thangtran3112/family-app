@@ -602,6 +602,9 @@ def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = 
         watch=[],
         revealed_through=None,
         status="listed",
+        clock_speed=1
+        if latest is None
+        else latest.clock_speed,  # the speed she chose carries to the next day (ADR-0018)
         journal=None,
         review=None,
         notes=None,
@@ -892,6 +895,7 @@ def day_list_out(
     assert plan is not None
     if _is_swing(plan):
         return _swing().day_list_out(db, user_id, day_list_id, svc, peek=peek)
+    session_mod.settle_day(db, svc, row.id)  # a running thread clock has moved since it was last read (ADR-0018)
     ended = row.status == "ended"
     sessions = _sessions_of(db, row.id)
     books = session_mod.day_books(db, row.id)
@@ -1121,6 +1125,9 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     assert plan is not None
     if _is_swing(plan):
         return _swing().start_session(db, user_id, day_list_id, symbol, svc)
+    session_mod.settle_locked(
+        db, svc, row
+    )  # a name opened now starts at the clock as it is now, not as it was last read
     if row.status == "ended":
         raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
     if symbol not in {c["symbol"] for c in row.candidates}:
@@ -1201,6 +1208,8 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
     assert plan is not None
     if _is_swing(plan):
         return _swing().end_day(db, user_id, day_list_id, svc)
+    session_mod.settle_locked(db, svc, row)  # the exits book at the clock as it is now
+    row.clock_running, row.clock_anchor_at = False, None  # a day that ended has no clock to run
     sessions = _sessions_of(db, row.id)
     for s in sessions:
         if s.status == "active":

@@ -389,7 +389,9 @@ export const ReplayDeltaSchema = z.object({
   stamp: ReplayStampSchema,
   /** Working orders the tape filled inside this advance, as the entry marks they became; absent when none. */
   fills: z.array(MarkSchema).nullish(),
-  /** Swing only: play stopped at a crossed stop (the clock is at that minute's close). */
+  /** The day thread's server-side clock while it RUNS (ADR-0018); absent when it is not (and for swing or standalone sessions). */
+  thread_clock: z.object({ running: z.boolean(), speed: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }).nullish(),
+  /** Play stopped at a crossed stop (the clock is at that minute's close). */
   paused: PausedSchema.nullish(),
   /** Swing only: the day strip at the day clock. */
   strip: z.array(StripRowSchema).nullish(),

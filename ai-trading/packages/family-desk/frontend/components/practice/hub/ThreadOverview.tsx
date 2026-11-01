@@ -10,6 +10,7 @@ import { loadDaily, loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { parseThreadTab } from "@/lib/replay/practiceTabs";
 import { threadName } from "@/lib/replay/threadView";
+import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { DayOverview } from "./DayOverview";
 import { NewPlanModal } from "./NewPlanModal";
 import { OverviewChips, OverviewShell } from "./OverviewParts";
@@ -43,6 +44,16 @@ export function ThreadOverview() {
   const query = useDeskQuery(`practice-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null, revision });
   const daily = useDeskQuery(`replay-daily:${id}`, (signal) => loadDaily({ threadId: id ?? 0, signal }), { enabled: id !== null, revision });
   const plan = daily.data?.plan ?? null;
+  // The day thread's clock runs on the server (ADR-0018); this page only reads it every two seconds and asks for changes.
+  const clock = useThreadClock(query.data?.thread.mode === "day" && query.data.thread.status === "active" ? id : null);
+  // A day that ended, or the next one that opened (Skip day, or End day from the chart), moves the Summary on.
+  const clockDay = clock.clock === null ? undefined : clock.clock.day_list_id;
+  const seenDay = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (clockDay === undefined) return;
+    if (seenDay.current !== undefined && seenDay.current !== clockDay) changed();
+    seenDay.current = clockDay;
+  }, [clockDay, changed]);
   const preparing = plan?.prep.state === "running" && query.data !== null && planOpensIn(plan, query.data.thread);
   useEffect(() => {
     if (!preparing) return;
@@ -77,11 +88,11 @@ export function ThreadOverview() {
     >
       <TabPanel idBase={PRACTICE_TABS_ID} id={tab}>
         {tab === "portfolio" ? (
-          <PortfolioTab summary={summary} />
+          <PortfolioTab summary={summary} clockRevision={clock.revision} />
         ) : thread.mode === "swing" && summary.swing ? (
           <SwingOverview summary={summary} plan={plan} onChanged={changed} />
         ) : (
-          <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setReplacing(true)} />
+          <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setReplacing(true)} clock={clock} />
         )}
       </TabPanel>
       {replacing && (

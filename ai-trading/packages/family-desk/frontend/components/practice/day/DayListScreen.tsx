@@ -19,6 +19,7 @@ import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList, Rescan } from "@/lib/replay/daily";
 import {
@@ -201,7 +202,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const opened = new Set(list.sessions.map((session) => session.symbol));
   const columns = columnsOf(list);
   // The portfolio re-reads whenever the day page's own data moves (a name opened, the day ended).
-  const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
+  // The thread clock runs on the server (ADR-0018), so while the day is open the Portfolio is read again whenever it moves.
+  const liveClock = useThreadClock(!ended && list.thread?.mode === "day" ? threadId : null);
+  const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0) + liveClock.revision;
   // One read of the day list serves the rail's Portfolio and the End-day confirm, so both name the same open trades.
   const portfolio = useDayPortfolio(list.id, portfolioRevision);
   const exits = endDayExitText(portfolioRows(portfolio.data ?? list), list.clock);

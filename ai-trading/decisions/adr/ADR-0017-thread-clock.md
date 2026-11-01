@@ -1,6 +1,6 @@
 # ADR-0017: A day-trade thread has one clock, and its controls sit above every name
 
-Status: accepted 2026-11-01, owner's directive (built on `feature/thread-clock-fix`).
+Status: accepted 2026-11-01, owner's directive (built on `feature/thread-clock-fix`). **Placement superseded 2026-11-01 by [ADR-0018](ADR-0018-server-thread-clock.md):** the clock moved to the server and its controls to the Summary; "one clock per thread", the lazy lift of a name's session and "no eager scoring" still stand.
 
 Decision: the time of a day-trade thread is ONE clock for every ticker on its list. Play, Pause, Step, speed, Jump and the time readout belong to the thread. They never sit under, inside or beside one name's chart, and nothing at the name level fast-forwards.
 

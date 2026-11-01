@@ -4,9 +4,11 @@ every payload that carries a balance says it is simulated. Real Postgres (`scrip
 from `tests/daily_world.py`, no network."""
 
 import json
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers
 from daily_world import DAYS, NOW, SYMBOLS, make_services
@@ -342,6 +344,76 @@ def test_the_thread_fills_list_every_buy_and_sell_with_shares_price_and_time(wor
     assert sorted(e["shares"] for e in ledger) == [4, 6]
     # the day's end auto-exit of nothing adds nothing; a stranger and a swing thread get 404
     assert client.get(f"{BASE}/threads/{tid + 999}/fills", headers=auth_headers()).status_code == 404
+
+
+def test_the_thread_clock_routes_play_sync_skip_and_refuse(world, db_session) -> None:
+    client, services, _ = world
+    wall = [NOW]
+    services.wall = lambda: wall[0]  # the thread clock's own wall clock; `now` stays pinned to a finished day
+    list_id = _day_one(world, db_session)
+    tid = client.get(f"{BASE}/daily", headers=auth_headers()).json()["thread"]["thread"]["id"]
+    clock_url = f"{BASE}/threads/{tid}/clock"
+
+    # Before any name is opened the day is listed: no clock, an account, and Play is a plain 409.
+    listed = client.get(clock_url, headers=auth_headers()).json()
+    assert (listed["state"], listed["clock"], listed["day_list_id"], listed["running"]) == (
+        "listed",
+        None,
+        list_id,
+        False,
+    )
+    assert listed["account"]["balance"] == 50_000.0 and "Simulated" in listed["label"]
+    assert client.post(clock_url, json={"running": True}, headers=auth_headers()).status_code == 409
+
+    sid = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()).json()[
+        "id"
+    ]
+    paused = client.get(clock_url, headers=auth_headers()).json()
+    assert paused["state"] == "paused" and pd.Timestamp(paused["clock"]) == et(DAYS[0], "09:30")
+    assert pd.Timestamp(paused["window_end"]) == et(DAYS[0], "11:30")
+    assert paused["account"]["equity_usd"] == 50_000.0 and paused["pause"] is None
+
+    # Requests are the contract: something to do, known fields only, a speed from the chips.
+    for body in ({}, {"speed": 3}, {"bogus": 1}, {"running": "later"}):
+        assert client.post(clock_url, json=body, headers=auth_headers()).status_code == 422, body
+    playing = client.post(clock_url, json={"running": True, "speed": 5}, headers=auth_headers())
+    assert playing.status_code == 200 and playing.json()["state"] == "running" and playing.json()["speed"] == 5
+
+    # Two minutes of wall time with nobody calling: the next read is ten market minutes on, and stored.
+    wall[0] += timedelta(minutes=2)
+    later = client.get(clock_url, headers=auth_headers()).json()
+    assert pd.Timestamp(later["clock"]) == et(DAYS[0], "09:40") and later["state"] == "running"
+    assert pd.Timestamp(later["server_now"]) == pd.Timestamp(wall[0])
+
+    # The name's screen follows it: `sync` reveals the name through the clock and reports it running; one rule only.
+    followed = client.post(f"{BASE}/sessions/{sid}/advance", json={"sync": True}, headers=auth_headers())
+    assert followed.status_code == 200, followed.text
+    assert pd.Timestamp(followed.json()["revealed_through"]) == et(DAYS[0], "09:40")
+    assert followed.json()["thread_clock"] == {"running": True, "speed": 5}
+    assert (
+        client.post(
+            f"{BASE}/sessions/{sid}/advance", json={"sync": True, "step": "bar"}, headers=auth_headers()
+        ).status_code
+        == 422
+    )
+    paused_again = client.post(clock_url, json={"running": False}, headers=auth_headers())
+    assert paused_again.json()["state"] == "paused"
+    frame = client.post(f"{BASE}/sessions/{sid}/advance", json={"sync": True}, headers=auth_headers()).json()
+    assert "thread_clock" not in frame  # a clock that is not running is left out of the frame
+
+    # Not hers, or not a day thread: 404 and nothing moves.
+    other = auth_headers(OTHER_EMAIL)
+    assert client.get(clock_url, headers=other).status_code == 404
+    assert client.post(clock_url, json={"running": True}, headers=other).status_code == 404
+    assert client.post(f"{BASE}/threads/{tid}/skip-day", headers=other).status_code == 404
+    assert client.post(f"{BASE}/sessions/{sid}/advance", json={"sync": True}, headers=other).status_code == 404
+
+    skipped = client.post(f"{BASE}/threads/{tid}/skip-day", headers=auth_headers())
+    assert skipped.status_code == 200, skipped.text
+    body = skipped.json()
+    assert body["ended_day_list_id"] == list_id and body["next_day_list_id"] not in (None, list_id)
+    assert body["clock"]["state"] == "listed" and body["clock"]["day_list_id"] == body["next_day_list_id"]
+    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["status"] == "ended"
 
 
 def test_a_standalone_session_has_no_thread_header(world) -> None:

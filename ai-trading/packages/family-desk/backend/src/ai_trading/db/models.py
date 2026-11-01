@@ -634,6 +634,7 @@ class ReplayDayList(Base):
         UniqueConstraint("plan_id", "day", name="uq_replay_day_lists_plan_id_day"),
         Index("ix_replay_day_lists_owner_user_id_day", "owner_user_id", "day"),
         CheckConstraint("status IN ('listed', 'practicing', 'ended')", name="ck_replay_day_lists_status"),
+        CheckConstraint("clock_speed IN (1, 2, 5, 10)", name="ck_replay_day_lists_clock_speed"),
         CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_replay_day_lists_rating"),
     )
 
@@ -658,6 +659,12 @@ class ReplayDayList(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Alembic 0018 (ADR-0018): the thread's server-side clock. `revealed_through` is the simulated time as of
+    # `clock_anchor_at`; while `clock_running` it advances `clock_speed` x wall time since then, settled on read.
+    clock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default=text("1"))
+    clock_anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_pause: Mapped[Any | None] = mapped_column(JSONB)  # why a running clock stopped: a crossed stop or the close
 
 
 class ReplayDayScan(Base):

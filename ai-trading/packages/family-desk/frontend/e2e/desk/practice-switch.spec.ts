@@ -1,18 +1,19 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
+import { stepBar } from "./clock-helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
 import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
 
 // Switching names on the shared day clock (02o-b2). The stub holds TSLA on Fri 2026-09-25, and three stand-in names that
 // replay TSLA's day at a fraction of its prices (`replay/fixture.py`), so one daily list holds four names. Every session
-// replays 09:30 to 09:40 ET at 1-minute bars; ArrowRight is one bar.
+// replays 09:30 to 09:40 ET at 1-minute bars; `stepBar` moves the thread's server-side clock one bar (a chart has no Step).
 
 const DAY = "2026-09-25";
 const FIRST_RECORDED = "2026-09-18"; // 20 finished sessions before the E2E clock
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 
-const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one time, read-only text on every chart
 
 /** The marks she has placed on the name on screen (the bottom panel is collapsed at 1180 until its tab opens). */
 async function marks(page: Page) {
@@ -86,7 +87,7 @@ test.describe("Practice: switching names", () => {
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
     const tslaPlayhead = (await playhead(page).textContent()) ?? "";
     await page.keyboard.press("b");
@@ -109,8 +110,8 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
     await expect(playhead(page)).toHaveText(tslaPlayhead);
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
+    await stepBar(page);
     await expect(playhead(page)).toContainText("9:35");
     const clock = (await playhead(page).textContent()) ?? "";
     await expectCleanScreen(page);
@@ -172,60 +173,54 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
   });
 
-  test("the clock is the thread's: one bar above every name, never under a chart, and a chart's own controls stay with the chart", async ({ page, context }) => {
+  test("the thread's time is text on a chart, never a bar: no Play, Step, speed or Jump under or above any name, and the chart's own controls stay with the chart", async ({ page, context }) => {
     test.setTimeout(240_000);
     await startEveryNamePlan(page, context);
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
 
-    const bar = page.getByTestId("thread-clock");
+    const readout = page.getByTestId("thread-time-readout");
     const slot = page.getByTestId("chart-slot");
     const toolbar = page.getByTestId("chart-toolbar");
-    await expect(bar).toBeVisible();
-    await expect(bar.getByText(PRACTICE_COPY.threadTime, { exact: true })).toBeVisible();
-    // Play, Step, speed and Jump are the thread's...
-    await expect(bar.getByRole("button", { name: "Play" })).toBeVisible();
-    await expect(bar.getByRole("button", { name: "Step", exact: true })).toBeVisible();
-    await expect(bar.getByRole("group", { name: "Replay speed" })).toBeVisible();
-    await expect(bar.getByRole("button", { name: /^Jump/ })).toBeVisible();
-    await expect(bar.getByText(/^Paused at /)).toBeVisible();
-    await expect(bar, "the bar names the thread, not one ticker").not.toContainText("TSLA");
-    for (const name of ["Play", "Step", "Jump"]) {
-      await expect(toolbar.getByRole("button", { name: new RegExp(`^${name}`) }), `${name} is not a chart control`).toHaveCount(0);
-      await expect(slot.getByRole("button", { name: new RegExp(`^${name}`) })).toHaveCount(0);
+    // The thread's time and whether it runs, as plain text with a way to the Summary: nothing to press but that link.
+    await expect(readout).toBeVisible();
+    await expect(readout.getByText(PRACTICE_COPY.threadTime, { exact: true })).toBeVisible();
+    await expect(readout).toContainText("Paused");
+    await expect(readout, "it names the thread, not one ticker").not.toContainText("TSLA");
+    await expect(readout.getByRole("link", { name: PRACTICE_COPY.chartClockLink })).toBeVisible();
+    await expect(readout.getByRole("button")).toHaveCount(0);
+    // Play, Step, speed, Jump and the clock panel are not on the chart: not above it, not under it, not in the toolbar.
+    await expect(page.getByTestId("thread-clock")).toHaveCount(0);
+    for (const name of ["Play", "Pause", "Step", "Jump"]) {
+      await expect(page.getByRole("button", { name: new RegExp(`^${name}`) }), `${name} is not on a chart`).toHaveCount(0);
     }
-    await expect(toolbar.getByRole("group", { name: "Replay speed" })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: "Replay speed" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 }).locator("xpath=ancestor::div[1]")).not.toContainText(/Paused|Playing/);
-    // ...and the interval, Chart settings and Full screen are the chart's.
+    // The interval, Chart settings and Full screen are the chart's, under it.
     await expect(toolbar.getByRole("group", { name: "Chart interval" })).toBeVisible();
     await expect(toolbar.getByRole("button", { name: /^Chart/ })).toBeVisible();
     await expect(toolbar.getByRole("button", { name: "Full screen" })).toBeVisible();
-    await expect(bar.getByRole("group", { name: "Chart interval" })).toHaveCount(0);
-    await expect(bar.getByRole("button", { name: /^Chart/ })).toHaveCount(0);
-    await expect(bar.getByRole("button", { name: "Full screen" })).toHaveCount(0);
 
-    // Placement: the clock is above the name's header and chart; the chart's controls are under the chart.
-    const box = async (locator: typeof bar) => (await locator.boundingBox())!;
-    const [barBox, titleBox, slotBox, toolbarBox] = [await box(bar), await box(page.getByRole("heading", { name: "TSLA", level: 1 })), await box(slot), await box(toolbar)];
-    expect(barBox.y + barBox.height, "the thread bar ends above the ticker header").toBeLessThanOrEqual(titleBox.y);
+    // Placement: the thread's time is above the name's header and chart; the chart's controls are under the chart.
+    const box = async (locator: typeof readout) => (await locator.boundingBox())!;
+    const [readBox, titleBox, slotBox, toolbarBox] = [await box(readout), await box(page.getByRole("heading", { name: "TSLA", level: 1 })), await box(slot), await box(toolbar)];
+    expect(readBox.y + readBox.height, "the thread's time ends above the ticker header").toBeLessThanOrEqual(titleBox.y);
     expect(slotBox.y + slotBox.height, "the chart toolbar sits under the chart").toBeLessThanOrEqual(toolbarBox.y + 1);
-    expect(barBox.y, "the thread bar is above the chart").toBeLessThan(slotBox.y);
+    expect(readBox.y, "the thread's time is above the chart").toBeLessThan(slotBox.y);
 
-    // The Jump panel opens downward from the top bar's button and stays inside the window.
-    const jump = bar.getByRole("button", { name: /^Jump/ });
-    const jumpBox = await box(jump);
-    await jump.click();
-    const menu = page.getByRole("dialog", { name: "Jump forward" });
-    await expect(menu).toBeVisible();
-    const menuBox = await box(menu);
-    expect(menuBox.y, "the menu hangs below the Jump button").toBeGreaterThanOrEqual(jumpBox.y + jumpBox.height - 1);
-    expect(menuBox.y + menuBox.height, "the menu stays inside the window").toBeLessThanOrEqual(page.viewportSize()!.height);
+    // The shortcut list has no Playback keys, and Space says where the controls are instead of playing.
+    await page.keyboard.press("?");
+    const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect(help).toBeVisible();
+    await expect(help.getByText("Playback", { exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
+    await page.keyboard.press("Space");
+    await expect(page.getByText(PRACTICE_COPY.chartClockHint)).toBeVisible();
     await expectCleanScreen(page);
   });
 
-  test("Step moves the thread's one clock: a name left behind shows the thread's time and steps from it", async ({ page, context }) => {
+  test("the thread's clock moves for every name: a chart reopened from its own address opens on the thread's time, and the other name opens at that one time", async ({ page, context }) => {
     test.setTimeout(240_000);
     await startEveryNamePlan(page, context);
     const dayUrl = page.url();
@@ -233,32 +228,26 @@ test.describe("Practice: switching names", () => {
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     const tslaUrl = page.url();
-    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
 
-    // LRCX opens at the thread's time and moves it on two bars; TSLA stays where it was.
+    // LRCX opens at the thread's time and the clock moves on two bars; TSLA, off screen, stays where it was.
     await openName(page, dayUrl, "LRCX");
     await expect(playhead(page)).toContainText("9:33");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page, 2);
     await expect(playhead(page)).toContainText("9:35");
 
-    // TSLA, opened again from its own address, is behind: the bar still shows the thread's time, 9:35, not TSLA's 9:33.
+    // TSLA, opened again from its own address, follows the thread's clock as it loads: 9:35, not its own 9:33, and it can be marked at once.
     await page.goto(tslaUrl);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    await expect(page.getByTestId("behind-clock")).toBeVisible();
     await expect(playhead(page)).toContainText("9:35");
-    await expect(page.getByTestId("thread-clock").getByText(/^Paused at 9:35 AM/)).toBeVisible();
-    await expect(page.locator(".dk-status"), "the status bar reads the thread's clock too").toContainText("Replay clock 9:35");
-    await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeDisabled();
-
-    // One Step is one bar of the thread's clock (9:36), not the catch-up to 9:35 that leaves the time where it was.
-    await page.keyboard.press("ArrowRight");
-    await expect(playhead(page)).toContainText("9:36");
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
+    await expect(page.locator(".dk-status"), "the status bar reads the thread's clock too").toContainText("Replay clock 9:35");
     await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
 
-    // The other name opens at that one time.
+    // One more bar of the thread's clock is 9:36 on every chart.
+    await stepBar(page);
+    await expect(playhead(page)).toContainText("9:36");
     await openName(page, dayUrl, "LRCX");
     await expect(playhead(page)).toContainText("9:36");
     await expectCleanScreen(page);
@@ -286,7 +275,7 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
     await page.keyboard.press("b");
     await expect(await marks(page)).toContainText("Practice buy");
@@ -295,8 +284,8 @@ test.describe("Practice: switching names", () => {
     await page.keyboard.press("s");
     await expect(await marks(page)).toContainText("Practice sell");
     // Move the clock so both trades have a P/L worth adding up.
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
+    await stepBar(page);
     await expect(playhead(page)).toContainText("9:35");
 
     // The Portfolio holds both names, each with its side, and its footer says how many are open and the combined total.
@@ -361,7 +350,7 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /LRCX/ }).getByText("LRCX", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
-    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
     await page.keyboard.press("b");
     await expect(await marks(page)).toContainText("Practice buy");
@@ -374,7 +363,7 @@ test.describe("Practice: switching names", () => {
     await stop.getByRole("button", { name: "Save" }).click();
     await expect(await marks(page)).toContainText("Practice stop");
     await openName(page, dayUrl, "LRCX");
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
     return dayUrl;
   }
 
@@ -446,7 +435,7 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("button", { name: "Open TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    for (let bar = 0; bar < 5; bar += 1) await page.keyboard.press("ArrowRight");
+    await stepBar(page, 5);
     await expect(playhead(page)).toContainText("9:35");
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
@@ -467,8 +456,8 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("button", { name: "Switch to TSLA" }).first().click(); // the name in hand: its button reads Switch
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
+    await stepBar(page);
     await expect(playhead(page)).toContainText("9:37");
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);

@@ -165,6 +165,11 @@ class HoldOut(BaseModel):
     split_note: str | None
 
 
+class ThreadClockStateOut(BaseModel):
+    running: bool
+    speed: Literal[1, 2, 5, 10]
+
+
 class PausedOut(BaseModel):
     """A stop was crossed: the playhead stopped at the close of the first one-minute bar that did (02p b5). It is a
     pause, never an exit. `also` lists every other hold crossed in the same minute."""
@@ -366,12 +371,15 @@ class ReplaySessionPatch(BaseModel):
 
 
 class AdvanceIn(BaseModel):
-    """Exactly one of `to` and `step`. `to` at or before `revealed_through` answers an empty delta; `to` past
+    """Exactly one of `to`, `step` and `sync`. `to` at or before `revealed_through` answers an empty delta; `to` past
     the window end is clamped and `at_end` is true. `step: "next_signal"` reveals through the next would-fire bar
-    close (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422."""
+    close (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422. `sync: true` is
+    the day-trade screen following the thread's server-side clock (ADR-0018): it brings a running clock to now, then
+    reveals this name through that clock, wherever it is; it moves nothing itself."""
 
     to: datetime | None = None
     step: Literal["bar", "next_signal"] | None = None
+    sync: bool = False
     interval: Interval | None = None
     min_size: int = Field(default=0, ge=0, le=1_000_000)
     min_notional: int = Field(default=0, ge=0, le=1_000_000_000)  # USD; the "Big only" chip
@@ -451,7 +459,7 @@ class AdvanceOut(SwingOptional):
     it, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,
     and the levels, last print and open trade at the new playhead."""
 
-    swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming", "fills")
+    swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming", "fills", "thread_clock")
 
     revealed_through: datetime
     day_clock: datetime | None  # the day list's shared clock; null for a standalone session
@@ -469,6 +477,9 @@ class AdvanceOut(SwingOptional):
     stamp: Stamp
     # working orders the tape filled inside this advance, as the entry marks they became. Left out while there are none.
     fills: list[MarkOut] | None = None
+    # the day thread's server-side clock while it RUNS (ADR-0018): the chart follows it and shows a hint when it is not.
+    # Left out of the JSON when the clock is not running (and always for a swing or a standalone session).
+    thread_clock: ThreadClockStateOut | None = None
     # a stop was crossed on any open name of the day: play stopped at the close of its bar (a swing or a day session).
     # Left out of the JSON while there is no pause.
     paused: PausedOut | None = None

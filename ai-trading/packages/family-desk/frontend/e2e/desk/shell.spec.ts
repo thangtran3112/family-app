@@ -227,9 +227,9 @@ test("an owned route opens in its own mode with no wrong-lane screen, and shared
   await expectCleanScreen(page);
 });
 
-// ADR-0014: Backtest is the time-decoupled desk. It has the Practice and Journal tabs and no live-market chrome; Settings, More
+// ADR-0014: Backtest is the time-decoupled desk. It has the Practice and Trades tabs and no live-market chrome; Settings, More
 // and Feedback stay one Account menu away.
-test("Backtest mode: Practice and Journal tabs, no market pill, search or bell, its own status line, and the account pages", async ({ page }) => {
+test("Backtest mode: Practice and Trades tabs, no market pill, search or bell, its own status line, and the account pages", async ({ page }) => {
   const top = page.locator(".dk-top");
   const nav = top.getByRole("navigation", { name: "Primary navigation" });
   await openDesk(page, "/practice");
@@ -245,10 +245,10 @@ test("Backtest mode: Practice and Journal tabs, no market pill, search or bell, 
   await expect(footer).not.toContainText(COPY.alertsNotStarted);
   await expectCleanScreen(page);
 
-  // Only the longest matching tab lights: the journal is Journal, not Practice.
-  await nav.getByRole("link", { name: "Journal" }).click();
+  // Only the longest matching tab lights: the journal is Trades, not Practice.
+  await nav.getByRole("link", { name: "Trades" }).click();
   await expect(page).toHaveURL(/\/practice\/journal$/);
-  await expectBacktestChrome(page, "Journal");
+  await expectBacktestChrome(page, "Trades");
 
   for (const [label, path] of [["Settings", "/settings"], ["More", "/more"], ["Feedback", "/feedback"]] as const) {
     await top.getByRole("button", { name: "Account menu" }).click();

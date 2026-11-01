@@ -8,7 +8,7 @@ plain Pydantic. Every dollar figure is SIMULATED: `label` says so in words where
 from datetime import date, datetime
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, FiniteFloat, field_serializer
+from pydantic import BaseModel, ConfigDict, FiniteFloat, field_serializer, model_validator
 
 from ai_trading.api.schemas.common import SwingOptional
 from ai_trading.contracts.practice_thread import PracticeLedgerEntryV1, PracticeThreadV1
@@ -149,6 +149,78 @@ class ThreadFillsOut(BaseModel):
     thread_id: int
     total: int
     fills: list[FillOut]
+
+
+class ClockPauseOut(BaseModel):
+    """Why a running clock stopped: a stop crossed on an open name (`kind: "stop"`, with the name, the stop, the price
+    an Exit would book and `crossing` "cross" or "gap") or the window end (`kind: "close"`)."""
+
+    kind: Literal["stop", "close"]
+    at: datetime
+    symbol: str | None = None
+    stop_price: FiniteFloat | None = None
+    price: FiniteFloat | None = None
+    crossing: Literal["cross", "gap"] | None = None
+    also: list[str] = []
+
+
+class ClockAccountOut(BaseModel):
+    """The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its
+    cost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. Computed on the server, never past the
+    clock."""
+
+    balance: FiniteFloat
+    open_pnl_usd: FiniteFloat
+    equity_usd: FiniteFloat
+    day_pnl_usd: FiniteFloat
+    positions: int
+    as_of: datetime
+
+
+class ThreadClockOut(BaseModel):
+    """The day-trade thread's clock (ADR-0018). `clock` is the simulated time at `server_now` (a running clock was
+    settled before this was built); a client may extrapolate it with `speed` between polls but never owns it."""
+
+    thread_id: int
+    state: Literal["no_day", "listed", "paused", "running", "at_close"]
+    day_list_id: int | None
+    day_no: int | None
+    running: bool
+    speed: Literal[1, 2, 5, 10]
+    clock: datetime | None
+    window_start: datetime | None
+    window_end: datetime | None
+    server_now: datetime
+    pause: ClockPauseOut | None
+    account: ClockAccountOut | None
+    label: str
+
+
+class ClockIn(BaseModel):
+    """Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
+    its UTC offset). Any mix, at least one; a step or jump is forward only and stops at a crossed stop or the close."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    running: bool | None = None
+    speed: Literal[1, 2, 5, 10] | None = None
+    step: Literal["bar", "next_signal"] | None = None
+    to: datetime | None = None
+
+    @model_validator(mode="after")
+    def _something_to_do(self) -> "ClockIn":
+        if not self.model_fields_set:
+            raise ValueError("Send running, speed, step or to")
+        return self
+
+
+class SkipDayOut(BaseModel):
+    """Skip day: the day that ended and the next one (null while its data is still being prepared, or when the plan is
+    done: poll the hub), with the clock as it stands."""
+
+    ended_day_list_id: int
+    next_day_list_id: int | None
+    clock: ThreadClockOut
 
 
 class ThreadLedgerOut(BaseModel):
