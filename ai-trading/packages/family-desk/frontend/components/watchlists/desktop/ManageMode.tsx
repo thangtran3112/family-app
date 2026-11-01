@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { PanelHeader } from "@/components/ui/Panel";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
 import { createWatchlist, deleteWatchlist, removeWatchlistItem, renameWatchlist, reorderWatchlist } from "@/lib/desk/watchlists";
@@ -73,6 +74,8 @@ export function ManageMode({
   // `draft` is the order she is arranging; null means the saved order.
   const [draft, setDraft] = useState<string[] | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  // Each row has its own Remove button; focus goes back to the one whose question was closed.
+  const removeButtons = useRef(new Map<string, HTMLButtonElement | null>());
   const symbols = useRequest();
   const original = items.map((item) => item.symbol);
   const order = draft ?? original;
@@ -85,6 +88,7 @@ export function ManageMode({
   const createProblem = newName.trim() ? validateListName(newName, names) : null;
 
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteListRef = useRef<HTMLButtonElement>(null);
   const remove = useRequest();
 
   // Any symbol change drops an unsaved arrangement and reloads the table.
@@ -174,15 +178,29 @@ export function ManageMode({
                     {backfilling.has(symbol) && <span className={styles.pending}>Backfilling history</span>}
                     <span className={styles.grow} />
                     {confirmRemove === symbol ? (
-                      <span className={styles.confirm}>
-                        Remove {symbol}?
-                        <Button variant="danger" size="sm" loading={symbols.pending} onClick={() => removeSymbol(symbol)}>
-                          {symbols.pending ? "Removing…" : "Yes, remove"}
-                        </Button>
-                        <Button size="sm" onClick={() => setConfirmRemove(null)}>Cancel</Button>
-                      </span>
+                      <InlineConfirm
+                        label={`Confirm removing ${symbol}`}
+                        prompt={`Remove ${symbol}?`}
+                        size="sm"
+                        tone="danger"
+                        confirmLabel={symbols.pending ? "Removing…" : "Yes, remove"}
+                        cancelLabel="Cancel"
+                        busy={symbols.pending}
+                        returnFocus={() => removeButtons.current.get(symbol) ?? null}
+                        onConfirm={() => removeSymbol(symbol)}
+                        onCancel={() => setConfirmRemove(null)}
+                      />
                     ) : (
-                      <Button size="sm" aria-label={`Remove ${symbol}`} onClick={() => setConfirmRemove(symbol)}>Remove</Button>
+                      <Button
+                        ref={(node) => {
+                          removeButtons.current.set(symbol, node);
+                        }}
+                        size="sm"
+                        aria-label={`Remove ${symbol}`}
+                        onClick={() => setConfirmRemove(symbol)}
+                      >
+                        Remove
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -225,15 +243,19 @@ export function ManageMode({
           <PanelHeader variant="label" level={2} title="Delete this list" />
           <div className={styles.row}>
             {confirmDelete ? (
-              <>
-                <span className={styles.confirm}>Delete {list.name}?</span>
-                <Button variant="danger" loading={remove.pending} onClick={deleteList}>
-                  {remove.pending ? "Deleting…" : "Yes, delete list"}
-                </Button>
-                <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-              </>
+              <InlineConfirm
+                label="Confirm deleting this list"
+                prompt={`Delete ${list.name}?`}
+                tone="danger"
+                confirmLabel={remove.pending ? "Deleting…" : "Yes, delete list"}
+                cancelLabel="Cancel"
+                busy={remove.pending}
+                returnFocus={deleteListRef}
+                onConfirm={deleteList}
+                onCancel={() => setConfirmDelete(false)}
+              />
             ) : (
-              <Button variant="danger" onClick={() => setConfirmDelete(true)}>Delete list</Button>
+              <Button ref={deleteListRef} variant="danger" onClick={() => setConfirmDelete(true)}>Delete list</Button>
             )}
           </div>
           <Status request={remove} />
