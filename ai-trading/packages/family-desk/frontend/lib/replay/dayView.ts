@@ -360,11 +360,16 @@ export function portfolioFooter(pnl: DayPnl): { total: number; split: string; op
 /** "Stop crossed 10:21": the row of a trade whose stop paused play. */
 export const stopCrossedText = (iso: string): string => practiceText("dayStopCrossed", { time: etHhMm(iso) });
 
-/** "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", or null with none open. */
-export function endDayExitText(rows: readonly Pick<PortfolioRow, "symbol" | "holding">[]): string | null {
+/**
+ * "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", or null with none open. A held name that
+ * is behind the day clock shows its own older price, but the exit books at the clock (F-06): with a clock and such a name the
+ * sentence says so instead of promising the price on the chart.
+ */
+export function endDayExitText(rows: readonly (Pick<PortfolioRow, "symbol" | "holding"> & { behind?: boolean })[], clock?: string | null): string | null {
   const held = rows.filter((row) => row.holding);
   if (held.length === 0) return null;
-  return practiceText("dayEndExits", { count: held.length, trades: held.length === 1 ? "trade" : "trades", names: held.map((row) => row.symbol).join(", ") });
+  const key = clock && held.some((row) => row.behind) ? "dayEndExitsClock" : "dayEndExits";
+  return practiceText(key, { count: held.length, trades: held.length === 1 ? "trade" : "trades", clock: clock ? formatEtTimeZone(clock) : "", names: held.map((row) => row.symbol).join(", ") });
 }
 
 /** "2 open +$200.00": the hub's Today line, after the realized result; null with no open trade. */

@@ -17,7 +17,7 @@ import o from "./overview.module.css";
  * The overview of a day thread (5R): the balance and the day it is on, Resume with the daily plan right beside it (so what is
  * armed is above the fold), the history of ended days, the balance curve, and the stats at the side. Every dollar is SIMULATED.
  */
-export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: Thread; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void }) {
+export function DayOverview({ summary, plan, stalled = false, onChanged, onNewPlan }: { summary: Thread; plan: PracticePlan | null; stalled?: boolean; onChanged: () => void; onNewPlan: () => void }) {
   const { thread } = summary;
   const closed = thread.status === "closed";
   // The plan of this thread (a plan bound to another thread is not shown here), with its cursor: "Day 2 of 5 · next: Mon".
@@ -29,7 +29,7 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: 
       <div className={o.main}>
         <PlaceStrip summary={summary} planFinished={planHere?.finished === true} />
         <div className={o.topRow}>
-          <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
+          <NextStep summary={summary} plan={plan} stalled={stalled} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (
             <section className={styles.panel} aria-label="Daily list plan">
               <h2 className={styles.panelTitle}>{PRACTICE_COPY.planTitle}</h2>

@@ -20,12 +20,19 @@ const MESSAGES = {
   note: "Note: 1 to 280 plain characters",
 };
 
-const number = (text: string | undefined): number | undefined => (text === undefined || text.trim() === "" ? undefined : Number(text));
+/** Plain decimals only: `Number()` would also take "0x10", "1e2" and "Infinity". */
+export const DECIMAL = /^(\d+\.?\d*|\.\d+)$/;
+const number = (text: string | undefined): number | undefined => (text === undefined || text.trim() === "" ? undefined : DECIMAL.test(text.trim()) ? Number(text.trim()) : Number.NaN);
 const text = (value: string | undefined): string | undefined => (value === undefined || value.trim() === "" ? undefined : value.trim());
+
+/** The `shares` column is a 32-bit integer: a bigger quantity gets a sentence that names the top, not "1 or more". */
+export const SHARES_MAX = 2_147_483_647;
+export const SHARES_TOO_BIG = "Quantity: a whole number from 1 to 2,147,483,647";
 
 export function entryMark(kind: "long_entry" | "short_entry", draft: MarkDraft): MarkBuild {
   const body: Record<string, unknown> = { schemaVersion: 1, kind };
   const shares = number(draft.shares);
+  if (shares !== undefined && shares > SHARES_MAX) return { ok: false, message: SHARES_TOO_BIG };
   const stopPrice = number(draft.stopPrice);
   const note = text(draft.note);
   if (shares !== undefined) body.shares = shares;

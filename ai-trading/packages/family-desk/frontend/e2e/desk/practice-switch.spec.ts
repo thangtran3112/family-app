@@ -210,11 +210,11 @@ test.describe("Practice: switching names", () => {
     expect(slotBox.y + slotBox.height, "the chart toolbar sits under the chart").toBeLessThanOrEqual(toolbarBox.y + 1);
     expect(barBox.y, "the thread bar is above the chart").toBeLessThan(slotBox.y);
 
-    // The Jump menu opens downward from the top bar's button and stays inside the window.
+    // The Jump panel opens downward from the top bar's button and stays inside the window.
     const jump = bar.getByRole("button", { name: /^Jump/ });
     const jumpBox = await box(jump);
     await jump.click();
-    const menu = page.getByRole("menu", { name: "Jump forward" });
+    const menu = page.getByRole("dialog", { name: "Jump forward" });
     await expect(menu).toBeVisible();
     const menuBox = await box(menu);
     expect(menuBox.y, "the menu hangs below the Jump button").toBeGreaterThanOrEqual(jumpBox.y + jumpBox.height - 1);

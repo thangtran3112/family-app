@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { Badge } from "@/components/ui/Badge";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -37,6 +37,7 @@ export function PortfolioPanel({
   from,
   onExitHere,
   onExited,
+  onLeave,
 }: {
   dayListId: number;
   query: DeskQueryResult<DayList>;
@@ -44,6 +45,8 @@ export function PortfolioPanel({
   onExitHere?: () => void;
   /** A name's trade was closed from its row (the workspace answers a stop pause on it). */
   onExited?: (symbol: string) => void;
+  /** Runs before a row opens another name or exits one: the workspace stops a running replay first, as the day strip does. */
+  onLeave?: () => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export function PortfolioPanel({
   const ended = day.status === "ended";
 
   async function open(symbol: string) {
+    onLeave?.();
     setBusy(symbol);
     setMessage(null);
     try {
@@ -80,6 +84,7 @@ export function PortfolioPanel({
     }
     const built = exitMark(exitKindFor(row.side));
     if (!built.ok) return;
+    onLeave?.();
     setBusy(row.symbol);
     setMessage(null);
     try {
@@ -125,8 +130,9 @@ export function PortfolioPanel({
 }
 
 function PortfolioRowView({ row, inert, busy, onOpen, onExit }: { row: PortfolioRow; inert: boolean; busy: string | null; onOpen: () => void; onExit: () => void }) {
+  const bodyId = useId();
   const body = (
-    <>
+    <span id={bodyId} className={styles.portfolioBody}>
       <span className={styles.portfolioLine}>
         <span className={styles.armedName}>{row.symbol}</span>
         <span className={styles.portfolioPosition}>{positionText(row)}</span>
@@ -134,14 +140,14 @@ function PortfolioRowView({ row, inert, busy, onOpen, onExit }: { row: Portfolio
       </span>
       <span className={styles.portfolioMeta}>
         {row.position !== null && <span>{practiceText("dayPortfolioLast", { price: formatPrice(row.position.last_price) })}</span>}
-        {row.unrealized !== null && <span>unrealized {formatSignedUsd(row.unrealized, { cents: true })}</span>}
+        {row.unrealized !== null && <span>{practiceText("dayPortfolioUnrealized", { amount: formatSignedUsd(row.unrealized, { cents: true }) })}</span>}
         {(row.trades > 0 || row.holding) && <span>{practiceText("dayPortfolioRealized", { amount: formatSignedUsd(row.realized, { cents: true }) })}</span>}
-        {row.trades > 0 && <span>{row.trades === 1 ? "1 trade" : `${row.trades} trades`}</span>}
+        {row.trades > 0 && <span>{row.trades === 1 ? PRACTICE_COPY.dayPortfolioTradeOne : practiceText("dayPortfolioTrades", { count: row.trades })}</span>}
         {row.current && <Badge tone="up">{PRACTICE_COPY.dayOnNow}</Badge>}
         {row.behind && <Badge tone="neutral">{PRACTICE_COPY.dayBehind}</Badge>}
         {row.stopHitAt !== null && <span className={styles.portfolioStop}>{stopCrossedText(row.stopHitAt)}</span>}
       </span>
-    </>
+    </span>
   );
   if (inert) return <div className={styles.portfolioRow} data-inert="true">{body}</div>;
   const disabled = busy !== null;
@@ -154,6 +160,7 @@ function PortfolioRowView({ row, inert, busy, onOpen, onExit }: { row: Portfolio
         aria-disabled={!row.current && disabled ? "true" : undefined}
         aria-busy={busy === row.symbol ? "true" : undefined}
         aria-label={practiceText("daySwitch", { symbol: row.symbol })}
+        aria-describedby={bodyId}
         onClick={() => {
           if (!row.current && !disabled) onOpen();
         }}
@@ -162,7 +169,7 @@ function PortfolioRowView({ row, inert, busy, onOpen, onExit }: { row: Portfolio
       </button>
       {row.holding && (
         <button type="button" className={styles.portfolioExit} disabled={disabled} aria-label={practiceText("dayPortfolioExit", { symbol: row.symbol })} onClick={onExit}>
-          Exit
+          {PRACTICE_COPY.dayPortfolioExitButton}
         </button>
       )}
     </>

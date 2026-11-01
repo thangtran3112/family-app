@@ -20,7 +20,7 @@
 
 /* Text and sections */
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
-.hint { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.hint { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
@@ -46,7 +46,7 @@
 .list { display: flex; min-width: 0; margin: 0; padding: 0; flex-direction: column; list-style: none; }
 .rowMain { display: flex; min-width: 0; flex-direction: column; }
 .rowTitle { font-size: var(--text-label); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.rowMeta { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.rowMeta { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .weekRow { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) 0; }
 .money { flex-shrink: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .legendRow { display: flex; min-height: 24px; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
@@ -58,17 +58,17 @@
 /* Balance curve and day bars (SVG) */
 .zeroLine { stroke: var(--color-muted); stroke-width: 1; }
 .hairline { stroke: var(--color-hairline); stroke-width: 1; }
-.axis { fill: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+.axis { fill: var(--color-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
 .below { fill: var(--color-down); fill-opacity: 0.18; }
 .line { fill: none; stroke: var(--color-text); stroke-width: 2; stroke-linejoin: round; }
 .dot { fill: var(--color-text); }
 .dotOpen { fill: var(--color-ground); stroke: var(--color-text); stroke-width: 1.5; }
 .dotNow { fill: var(--color-amber); }
-.nowLabel { fill: var(--color-text); font-size: var(--text-micro); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
-.lowLabel { fill: var(--color-down); font-size: var(--text-micro); font-weight: var(--weight-semibold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.nowLabel { fill: var(--color-text); font-size: var(--text-meta); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.lowLabel { fill: var(--color-down); font-size: var(--text-meta); font-weight: var(--weight-semibold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
 .skipBox { fill: none; stroke: var(--color-muted); stroke-width: 1; stroke-dasharray: 4 3; }
-.skipLabel { fill: var(--color-muted); font-size: var(--text-micro); paint-order: stroke; stroke: var(--color-ground); stroke-width: 4px; }
-.valueLabel { font-size: var(--text-micro); font-weight: var(--weight-semibold); }
+.skipLabel { fill: var(--color-muted); font-size: var(--text-meta); paint-order: stroke; stroke: var(--color-ground); stroke-width: 4px; }
+.valueLabel { font-size: var(--text-meta); font-weight: var(--weight-semibold); }
 
 /* Summary tiles: a grid that wraps to fewer columns as the centre narrows. */
 /* The closed-thread banner: the sentence, then the link as its own item (D-121). */
@@ -81,7 +81,7 @@
 .tileValue { font-size: clamp(var(--text-body), 11cqi, var(--text-title)); line-height: var(--line-title); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tileValue[data-tone="up"] { color: var(--color-up); }
 .tileValue[data-tone="down"] { color: var(--color-down); }
-.tileSub { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.tileSub { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 
 /* Right rail: improvement and plan */
 .stack { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); }
@@ -102,7 +102,7 @@
 .equityValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
 .equityLine { fill: none; stroke: var(--color-amber); stroke-width: 2; stroke-linejoin: round; stroke-dasharray: 6 3; }
 .dotEquity { fill: var(--color-amber); }
-.equityLabel { fill: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
+.equityLabel { fill: var(--color-amber); font-size: var(--text-meta); font-weight: var(--weight-bold); paint-order: stroke; stroke: var(--color-panel); stroke-width: 4px; stroke-linejoin: round; }
 .keyList { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
 .keyLine { display: inline-block; width: 20px; height: 0; flex-shrink: 0; border-top: 2px solid var(--color-text); }
 .keyBalance { border-top-color: var(--color-text); }

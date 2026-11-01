@@ -1,18 +1,19 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
-import play from "@/components/practice/swing/play.module.css";
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { FactList } from "@/components/ui/FactList";
 import { RailList } from "@/components/ui/RailList";
 import { Segmented } from "@/components/ui/Segmented";
 import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
-import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { formatEtClock, formatPrice, signTone } from "@/lib/desk/format";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { OpenSide } from "@/lib/replay/keys";
 import { formatSignedUsd } from "@/lib/desk/mask";
 import { formatR } from "@/lib/replay/journalView";
+import { noteMark, stopMark } from "@/lib/replay/markInput";
 import type { OpenTrade, PracticeOrder } from "@/lib/replay/schemas";
 import { orderLine, orderStatusText, TICKET_TYPES, ticketSummary, typeOption, type TicketDraft, type TicketField, type TicketSide, type TicketType } from "@/lib/replay/ticket";
 import styles from "./replay.module.css";
@@ -30,7 +31,6 @@ export type PracticeControlsProps = {
   symbol: string;
   side: OpenSide;
   openTrade: OpenTrade | null;
-  lastPrice: number | null;
   ticket: TicketDraft;
   onTicket: (ticket: TicketDraft) => void;
   /** The field the last submit found wrong, with its sentence; cleared when that field changes. */
@@ -49,8 +49,9 @@ export type PracticeControlsProps = {
   composer: Composer;
   onComposer: (composer: Composer) => void;
   onExit: () => void;
-  onStop: (price: string) => void;
-  onNote: (text: string) => void;
+  /** Resolve true when the server took it; the form stays open on a refusal, with what she typed. */
+  onStop: (price: string) => Promise<boolean>;
+  onNote: (text: string) => Promise<boolean>;
   /** No session to mark: loading, or the session already ended. */
   disabled: boolean;
   swing?: SwingControls;
@@ -73,46 +74,66 @@ function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null
         {`${trade.side === "long" ? "Long" : "Short"} · ${trade.shares} shares`}
         {since && <span className={styles.muted}>{` · since ${formatEtClock(since)}`}</span>}
       </p>
-      <dl className={styles.tradeCard} aria-label="Open position">
-        <div><dt>Avg price</dt><dd>{formatPrice(trade.entry_price)}</dd></div>
-        <div><dt>Stop</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
-        <div><dt>Last</dt><dd>{formatPrice(trade.last_price)}</dd></div>
-        <div>
-          <dt>Unrealized</dt>
-          <dd data-tone={changeTone(trade.unrealized_usd)}>{formatSignedUsd(trade.unrealized_usd, { cents: true })}{trade.r != null && ` · ${formatR(trade.r)}`}</dd>
-        </div>
-      </dl>
+      <FactList
+        label="Open position"
+        columns={2}
+        facts={[
+          { id: "avg", label: "Avg price", value: formatPrice(trade.entry_price) },
+          { id: "stop", label: "Stop", value: trade.stop_price == null ? "None" : formatPrice(trade.stop_price) },
+          { id: "last", label: "Last", value: formatPrice(trade.last_price) },
+          { id: "unrealized", label: "Unrealized", value: `${formatSignedUsd(trade.unrealized_usd, { cents: true })}${trade.r != null ? ` · ${formatR(trade.r)}` : ""}`, tone: signTone(trade.unrealized_usd) },
+        ]}
+      />
       <p className={styles.muted}>{`Realized so far ${formatSignedUsd(realized, { cents: true })} · P/L ${formatSignedUsd(pnl, { cents: true })}`}</p>
     </div>
   );
 }
 
-/** The stop or note form. It mounts when opened (key = which one), so its fields start from the last price or empty. */
-function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { composer: Exclude<Composer, null>; lastPrice: number | null; onStop: (price: string) => void; onNote: (text: string) => void; onClose: () => void }) {
-  const [stopText, setStopText] = useState(lastPrice == null ? "" : String(lastPrice));
+/**
+ * The stop or note form. It mounts when opened (key = which one), starts empty (a prefilled last price is a stop that no long can
+ * hold), and stays open until the server answers: a refusal leaves what she typed and the toast says why. Escape closes it from
+ * the field too (the workspace key map ignores keys typed into a text field).
+ */
+function ComposerForm({ composer, onStop, onNote, onClose }: { composer: Exclude<Composer, null>; onStop: (price: string) => Promise<boolean>; onNote: (text: string) => Promise<boolean>; onClose: () => void }) {
+  const [stopText, setStopText] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const stopFieldId = useId();
   const noteFieldId = useId();
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (composer === "stop") onStop(stopText);
-    else onNote(noteText);
+    if (saving) return;
+    const built = composer === "stop" ? stopMark(stopText) : noteMark(noteText);
+    if (!built.ok) {
+      setError(composer === "stop" ? PRACTICE_COPY.stopNeeded : built.message);
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    const accepted = await (composer === "stop" ? onStop(stopText) : onNote(noteText));
+    setSaving(false);
+    if (accepted) onClose();
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
     onClose();
   };
   return (
-    <form className={styles.composer} onSubmit={submit} aria-label={composer === "stop" ? "Stop" : "Practice note"}>
+    <form className={styles.composer} onSubmit={(event) => void submit(event)} onKeyDown={onKeyDown} aria-label={composer === "stop" ? PRACTICE_COPY.stopLabel : "Practice note"}>
       {composer === "stop" ? (
-        <Field id={stopFieldId} label="Stop price" optional>
-          <Input autoFocus inputMode="decimal" value={stopText} onChange={(event) => setStopText(event.target.value)} />
+        <Field id={stopFieldId} label={PRACTICE_COPY.stopLabel} error={error}>
+          <Input autoFocus inputMode="decimal" value={stopText} onChange={(event) => { setStopText(event.target.value); setError(null); }} />
         </Field>
       ) : (
-        <Field id={noteFieldId} label="Note" optional>
-          <Textarea autoFocus rows={3} maxLength={280} value={noteText} onChange={(event) => setNoteText(event.target.value)} />
+        <Field id={noteFieldId} label={PRACTICE_COPY.noteLabel} error={error}>
+          <Textarea autoFocus rows={3} maxLength={280} value={noteText} onChange={(event) => { setNoteText(event.target.value); setError(null); }} />
         </Field>
       )}
       <div className={styles.pair}>
-        <Button type="submit" variant="primary">Save</Button>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button type="submit" variant="primary" size="touch" loading={saving}>Save</Button>
+        <Button size="touch" onClick={onClose}>Cancel</Button>
       </div>
     </form>
   );
@@ -126,7 +147,7 @@ function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { compos
  * playhead; a limit, stop or stop-limit order waits on the replayed tape and fills only on a later bar.
  */
 export function PracticeControls(props: PracticeControlsProps) {
-  const { symbol, side, openTrade, lastPrice, ticket, onTicket, ticketError, composer, onComposer, disabled, swing } = props;
+  const { symbol, side, openTrade, ticket, onTicket, ticketError, composer, onComposer, disabled, swing } = props;
   const option = typeOption(ticket.type);
   const sharesId = useId();
   const typeId = useId();
@@ -135,14 +156,26 @@ export function PracticeControls(props: PracticeControlsProps) {
   const summaryId = useId();
   const errorOf = (field: TicketField) => (ticketError?.field === field ? ticketError.message : null);
   const edit = (changes: Partial<TicketDraft>) => onTicket({ ...ticket, ...changes });
+  const [allOrders, setAllOrders] = useState(false);
   const working = props.orders.filter((order) => order.status === "working");
-  const recent = props.orders.filter((order) => order.status !== "working").slice(-RECENT_ORDERS).reverse();
-  const listed = [...working, ...recent];
+  const finished = props.orders.filter((order) => order.status !== "working").reverse();
+  const earlier = Math.max(0, finished.length - RECENT_ORDERS);
+  const listed = [...working, ...(allOrders ? finished : finished.slice(0, RECENT_ORDERS))];
+  // Focus belongs somewhere after a form closes or a working order goes: the button that opened the form, and the ticket.
+  const stopOpener = useRef<HTMLButtonElement>(null);
+  const noteOpener = useRef<HTMLButtonElement>(null);
+  const ticketRegion = useRef<HTMLElement>(null);
+  const wasComposer = useRef<Composer>(null);
+  useEffect(() => {
+    const was = wasComposer.current;
+    wasComposer.current = composer;
+    if (was !== null && composer === null) (was === "stop" ? stopOpener : noteOpener).current?.focus();
+  }, [composer]);
   const buying = ticket.side === "buy";
   return (
     <div className={styles.controls}>
-      <section className={styles.ticket} aria-label="Order ticket">
-        {swing && <dl className={play.card} aria-label="Free cash"><div><dt>Free cash</dt><dd>{swing.cash.replace(/^Free cash\s+/, "")}</dd></div></dl>}
+      <section ref={ticketRegion} tabIndex={-1} className={styles.ticket} aria-label="Order ticket">
+        {swing && <FactList label="Free cash" facts={[{ id: "cash", label: "Free cash", value: swing.cash.replace(/^Free cash\s+/, "") }]} />}
         <Segmented
           size="touch"
           fill
@@ -204,10 +237,26 @@ export function PracticeControls(props: PracticeControlsProps) {
               label: orderLine(order),
               sub: orderStatusText(order),
               value: order.status === "working" ? (
-                <Button size="md" variant="ghost" disabled={disabled} aria-label={`Cancel order: ${orderLine(order)}`} onClick={() => props.onCancelOrder(order.id)}>Cancel</Button>
+                <Button
+                  size="touch"
+                  variant="ghost"
+                  disabled={disabled}
+                  aria-label={`Cancel order: ${orderLine(order)}`}
+                  onClick={() => {
+                    ticketRegion.current?.focus(); // the row goes when the server answers: keep focus on the ticket, not on the page
+                    props.onCancelOrder(order.id);
+                  }}
+                >
+                  Cancel
+                </Button>
               ) : undefined,
             }))}
           />
+          {earlier > 0 && (
+            <Button size="md" variant="ghost" aria-expanded={allOrders} onClick={() => setAllOrders(!allOrders)}>
+              {allOrders ? PRACTICE_COPY.ordersFewer : practiceText("ordersEarlier", { count: earlier })}
+            </Button>
+          )}
         </section>
       )}
 
@@ -215,20 +264,20 @@ export function PracticeControls(props: PracticeControlsProps) {
         {swing ? <SwingOpenTradeCard trade={openTrade} tape={swing.tape} /> : <PositionCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />}
         {side !== "flat" && (
           <div className={styles.pair}>
-            <Button disabled={disabled} aria-keyshortcuts="X" onClick={props.onExit}>
+            <Button size="touch" disabled={disabled} aria-keyshortcuts="X" onClick={props.onExit}>
               Close position
               <Key>X</Key>
             </Button>
-            <Button disabled={disabled} aria-keyshortcuts="T" onClick={() => onComposer("stop")}>
+            <Button ref={stopOpener} size="touch" disabled={disabled} aria-keyshortcuts="T" onClick={() => onComposer("stop")}>
               Set stop
               <Key>T</Key>
             </Button>
           </div>
         )}
       </section>
-      {composer && <ComposerForm key={composer} composer={composer} lastPrice={lastPrice} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}
+      {composer && <ComposerForm key={composer} composer={composer} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}
       <div className={styles.footRow}>
-        <Button variant="ghost" size="md" disabled={disabled} aria-keyshortcuts="N" onClick={() => onComposer("note")}>
+        <Button ref={noteOpener} variant="ghost" size="lg" disabled={disabled} aria-keyshortcuts="N" onClick={() => onComposer("note")}>
           Add note
           <Key>N</Key>
         </Button>

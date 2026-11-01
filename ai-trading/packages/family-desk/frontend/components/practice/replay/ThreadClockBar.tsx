@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { formatEtClock } from "@/lib/desk/format";
+import { withoutRetryHint } from "@/lib/desk/freshness";
 import type { Speed } from "@/lib/replay/clock";
 import { playerPillText, statusLine, type PlayerStatus } from "@/lib/replay/player";
 import type { ReplayMark, ReplaySignal } from "@/lib/replay/schemas";
@@ -55,10 +56,10 @@ export function ThreadClockBar(props: ThreadClockBarProps) {
         <p className={styles.status} role="status" aria-live="polite">{statusLine(status, speed, clock, windowStart)}</p>
       </div>
       <div className={styles.toolbarRow}>
-        <Button size="md" variant="primary" disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} title="Space" onClick={props.onToggle}>
+        <Button size="touch" variant="primary" disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} title="Space" onClick={props.onToggle}>
           {status === "playing" ? "Pause" : "Play"}
         </Button>
-        <Button size="md" disabled={locked || props.busy} title="Step one bar (→)" onClick={props.onStep}>Step</Button>
+        <Button size="touch" disabled={locked || props.busy} title="Step one bar (→)" aria-keyshortcuts="ArrowRight" onClick={props.onStep}>Step</Button>
         <SpeedChips speed={speed} onSpeed={props.onSpeed} />
         <JumpMenu
           revealedThrough={clock}
@@ -73,7 +74,7 @@ export function ThreadClockBar(props: ThreadClockBarProps) {
       </div>
       {error && (
         <p className={styles.errorLine} role="alert">
-          {error.replace(/ · Try again$/, "")} ·{" "}
+          {withoutRetryHint(error)} ·{" "}
           <button type="button" className={styles.linkButton} onClick={props.onToggle}>Try again</button>
         </p>
       )}

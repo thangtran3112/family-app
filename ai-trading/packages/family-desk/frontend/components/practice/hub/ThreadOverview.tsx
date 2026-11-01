@@ -22,6 +22,8 @@ import o from "./overview.module.css";
 import { Skeleton } from "@/components/ui/StateBlocks";
 
 const POLL_MS = 4000;
+/** The Desk picks a stalled preparation up again on its next open once it has not moved for this long (backend `_prep_stale`); the page stops polling then and offers the retry (F-01). */
+export const PREP_STALL_MS = 5 * 60_000;
 
 /** `/practice/thread?id=`: the thread's overview, where she lands after a click on a row or New plan and where she returns to
  *  between days (02r2, 5R). A day thread and a swing thread each have their own dashboard (`DayOverview`, `SwingOverview`)
@@ -44,11 +46,29 @@ export function ThreadOverview() {
   const daily = useDeskQuery(`replay-daily:${id}`, (signal) => loadDaily({ threadId: id ?? 0, signal }), { enabled: id !== null, revision });
   const plan = daily.data?.plan ?? null;
   const preparing = plan?.prep.state === "running" && query.data !== null && planOpensIn(plan, query.data.thread);
+  // Preparing that has not moved for PREP_STALL_MS is stalled: `stalledAt` holds the count it stopped at, so any progress clears it.
+  const prepDone = plan?.prep.done ?? 0;
+  const [stalledAt, setStalledAt] = useState<number | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const stalled = preparing === true && stalledAt === prepDone;
   useEffect(() => {
     if (!preparing) return;
-    const timer = setInterval(changed, POLL_MS);
-    return () => clearInterval(timer);
-  }, [preparing, changed]);
+    const poll = setInterval(changed, POLL_MS);
+    const stall = setTimeout(() => {
+      clearInterval(poll);
+      setStalledAt(prepDone);
+    }, PREP_STALL_MS);
+    return () => {
+      clearInterval(poll);
+      clearTimeout(stall);
+    };
+  }, [preparing, prepDone, attempt, changed]);
+  // Anything that asks the Desk again (the retry, an open) starts the stall clock and the polling over.
+  const asked = useCallback(() => {
+    setStalledAt(null);
+    setAttempt((n) => n + 1);
+    changed();
+  }, [changed]);
 
   if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
     return (
@@ -79,9 +99,9 @@ export function ThreadOverview() {
         {tab === "portfolio" ? (
           <PortfolioTab summary={summary} />
         ) : thread.mode === "swing" && summary.swing ? (
-          <SwingOverview summary={summary} plan={plan} onChanged={changed} />
+          <SwingOverview summary={summary} plan={plan} onChanged={asked} />
         ) : (
-          <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setReplacing(true)} />
+          <DayOverview summary={summary} plan={plan} stalled={stalled} onChanged={asked} onNewPlan={() => setReplacing(true)} />
         )}
       </TabPanel>
       {replacing && (

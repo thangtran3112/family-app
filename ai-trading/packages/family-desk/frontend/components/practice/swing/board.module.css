@@ -2,7 +2,7 @@
 
 .strip { display: flex; min-width: 0; min-height: 28px; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); border-bottom: 1px solid var(--color-hairline); padding: 0 var(--space-4); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
 .stripMain { display: inline-flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.stripLink { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
+.stripLink { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-meta); font-weight: var(--weight-semibold); }
 .stripLink:hover { text-decoration: underline; }
 .stripLink:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
@@ -14,7 +14,7 @@
 .flat { color: var(--color-muted); }
 .amber { color: var(--color-amber); font-weight: var(--weight-semibold); }
 .tag { margin-left: 6px; }
-.note { display: inline-block; max-width: 40ch; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); white-space: normal; }
+.note { display: inline-block; max-width: 40ch; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); white-space: normal; }
 .holdsFoot { display: flex; align-items: center; gap: var(--space-2); }
 
 /* Ended day: one strip of tiles, then what comes next */
@@ -25,7 +25,7 @@
 /* One line: "Stop crossings" no longer wraps in its tile (D-126). */
 .tileLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tileValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.tileHint { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.tileHint { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .lines { display: flex; margin: 0; padding: 0; flex-direction: column; gap: 2px; list-style: none; color: var(--color-muted); font-size: var(--text-label); }
 .after { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .notice { margin: 0; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); }

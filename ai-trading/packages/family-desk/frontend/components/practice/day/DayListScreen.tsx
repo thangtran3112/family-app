@@ -9,10 +9,11 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
-import { formatClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
+import { formatClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
@@ -56,7 +57,7 @@ import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
-import { dayResultTone, formatBalance, formatDayResult, planRows } from "@/lib/replay/threadView";
+import { formatBalance, formatDayResult, planRows } from "@/lib/replay/threadView";
 import { DayLeftPanel } from "./DayLeftPanel";
 import { PeekPanel } from "./PeekPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -83,6 +84,14 @@ export function DayListScreen() {
   const notFound = problem === "missing" || (list.error instanceof DeskApiError && list.error.status === 404);
   if (id === null && problem === "missing") return <DayNotice title={PRACTICE_COPY.dayNotFound} />;
   if (id === null) {
+    // A failed read is not "no day selected": say it failed and offer the retry (F-10).
+    if (daily.data === null && daily.error !== null) {
+      return (
+        <div className={styles.body}>
+          <ErrorBlock message={PRACTICE_COPY.dayLoadError} onRetry={daily.refresh} />
+        </div>
+      );
+    }
     if (daily.loading || openDayId !== null) return <DaySkeleton />;
     return <DayNotice title={PRACTICE_COPY.dayNoPlan} />;
   }
@@ -148,10 +157,13 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const [opening, setOpening] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // The gateway cut a slow open or re-scan short and the screen is asking again; the server is still finishing (D-058, D-059).
-  const [still, setStill] = useState<"open" | "rescan" | null>(null);
+  const [still, setStill] = useState<"open" | "rescan" | "end" | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const [scanning, setScanning] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  // "Skip this day" (an empty list) ends the day like End day does, so it asks first too (F-11).
+  const [confirmSkip, setConfirmSkip] = useState(false);
+  const skipRef = useRef<HTMLButtonElement>(null);
   // The plan replaced from a day with no names (D-094).
   const [changing, setChanging] = useState(false);
   // Keyboard focus follows the flow (D-092, D-093): the page heading on arrival, then the confirm (InlineConfirm) when it opens and
@@ -192,7 +204,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
   // One read of the day list serves the rail's Portfolio and the End-day confirm, so both name the same open trades.
   const portfolio = useDayPortfolio(list.id, portfolioRevision);
-  const exits = endDayExitText(portfolioRows(portfolio.data ?? list));
+  const exits = endDayExitText(portfolioRows(portfolio.data ?? list), list.clock);
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -223,13 +235,19 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
   };
 
-  const finish = () =>
-    run(async () => {
-      await endDay(list.id);
-      endedHere.current = true;
-      setConfirmEnd(false);
-      onChanged();
-    }, PRACTICE_COPY.dayLoadError);
+  // Ending is safe to ask twice (the server answers an ended day the same), so a gateway cut waits and asks again, as the replay does (F-08).
+  const finish = (): Promise<void> =>
+    run(
+      async () => {
+        await whenReady(() => endDay(list.id), { onWaiting: () => setStill("end") });
+        endedHere.current = true;
+        setConfirmEnd(false);
+        setConfirmSkip(false);
+        onChanged();
+      },
+      PRACTICE_COPY.dayEndError,
+      () => void finish(),
+    );
 
   const relist = (listAt: string) =>
     run(async () => {
@@ -261,7 +279,15 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     setRetry(null);
     try {
       const result = await whenReady(() => openNextDay(undefined, threadId === null ? {} : { threadId }), { onWaiting: () => setStill("open") });
-      router.push(result.day_list_id === null ? "/practice" : `/practice/day?id=${result.day_list_id}`);
+      if (result.day_list_id === null) {
+        // The next day's data is still being prepared: stay here with a retry (the hub row does the same), not on a page that says nothing of it (F-09).
+        setMessage(PRACTICE_COPY.dayNextPreparing);
+        setRetry(() => () => void next());
+        setStill(null);
+        setBusy(false);
+        return;
+      }
+      router.push(`/practice/day?id=${result.day_list_id}`);
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.planStartError));
       setRetry(() => () => void next());
@@ -351,6 +377,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           </div>
         )}
         {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
+        {still === "end" && <p className={styles.banner} role="status">{PRACTICE_COPY.dayEndStillWorking}</p>}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
 
         {!ended && (
@@ -373,8 +400,22 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                 <EmptyBlock title={PRACTICE_COPY.dayNoMatchTitle}>
                   <p className={styles.muted}>{PRACTICE_COPY.dayNoMatchHint}</p>
                   <div className={styles.actions}>
-                    {list.sessions.length === 0 && (
-                      <Button variant="primary" disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.daySkip}</Button>
+                    {list.sessions.length === 0 && !confirmSkip && (
+                      <Button ref={skipRef} variant="primary" disabled={busy} onClick={() => setConfirmSkip(true)}>{PRACTICE_COPY.daySkip}</Button>
+                    )}
+                    {list.sessions.length === 0 && confirmSkip && (
+                      <InlineConfirm
+                        label="Confirm skipping the day"
+                        layout="block"
+                        size="md"
+                        prompt={<span>{PRACTICE_COPY.daySkipWarning}</span>}
+                        confirmLabel={PRACTICE_COPY.daySkipYes}
+                        cancelLabel={PRACTICE_COPY.dayKeepPracticing}
+                        busy={busy}
+                        returnFocus={skipRef}
+                        onConfirm={() => void finish()}
+                        onCancel={() => setConfirmSkip(false)}
+                      />
                     )}
                     {thread.data !== null && <Button onClick={() => setChanging(true)}>{PRACTICE_COPY.dayChangePlan}</Button>}
                   </div>
@@ -474,21 +515,25 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
             node: (
-              <dl className={styles.facts}>
-                {list.thread && (
-                  <>
-                    <div><dt>{PRACTICE_COPY.threadBalance}</dt><dd>{formatBalance(list.thread.balance)} <SimulatedBadge /></dd></div>
-                    {list.thread.today_pnl_usd !== null && (
-                      <div><dt>{PRACTICE_COPY.threadToday}</dt><dd className={styles[dayResultTone(list.thread.today_pnl_usd)]}>{formatDayResult(list.thread.today_pnl_usd)}</dd></div>
-                    )}
-                  </>
-                )}
-                <div><dt>Practice window</dt><dd>{practiceTime.from}–{practiceTime.to} ET</dd></div>
-                <div><dt>Chart</dt><dd>{setup.interval}</dd></div>
-                {thread.data?.thread.plan && planRows(thread.data.thread.plan).map((row) => <div key={row.id}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}
-                {ended && <div><dt>Day</dt><dd>{formatEtDay(list.day)}</dd></div>}
-                {list.thread && <p className={`${styles.muted} ${styles.factsNote}`}>{PRACTICE_COPY.threadPlanFrom}</p>}
-              </dl>
+              <>
+                <FactList
+                  facts={[
+                    ...(list.thread
+                      ? [
+                          { id: "balance", label: PRACTICE_COPY.threadBalance, value: <>{formatBalance(list.thread.balance)} <SimulatedBadge /></> },
+                          ...(list.thread.today_pnl_usd !== null
+                            ? [{ id: "today", label: PRACTICE_COPY.threadToday, value: formatDayResult(list.thread.today_pnl_usd), tone: signTone(list.thread.today_pnl_usd) }]
+                            : []),
+                        ]
+                      : []),
+                    { id: "window", label: "Practice window", value: `${practiceTime.from}–${practiceTime.to} ET` },
+                    { id: "chart", label: "Chart", value: setup.interval },
+                    ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
+                    ...(ended ? [{ id: "day", label: "Day", value: formatEtDay(list.day) }] : []),
+                  ]}
+                />
+                {list.thread && <p className={styles.muted}>{PRACTICE_COPY.threadPlanFrom}</p>}
+              </>
             ),
           },
         ]}

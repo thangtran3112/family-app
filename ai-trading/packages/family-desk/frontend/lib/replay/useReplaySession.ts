@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { DeskApiError } from "../api/client.ts";
 import { advanceReplay, cancelOrder, endReplay, loadReplayFeed, loadReplaySession, placeMark, placeOrder, undoMark, type AdvanceTarget, type OrderBody, type TapeParams } from "../desk/replay.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import { delayUntilNextTick, isSpeed, jumpMinutes, nextTo, threadClock, type Speed } from "./clock.ts";
+import { DEFAULT_SPEED, delayUntilNextTick, isSpeed, jumpMinutes, nextTo, threadClock, type Speed } from "./clock.ts";
 import { applyAdvance, applyFeedSwing, dismissPause as withoutPause, viewFromFeed, withHoldMarker, type ReplayView } from "./feedState.ts";
 import { markForAction, noteMark, stopMark, type MarkBuild, type MarkDraft } from "./markInput.ts";
 import type { EntryOrExit } from "./keys.ts";
@@ -35,6 +35,9 @@ export type ReplaySessionApi = {
   /** The live open trade, fresher than `session.open_trade`. */
   reload: () => void;
   dismissToast: () => void;
+  /** Pause a plain note's countdown while the pointer or focus is on it; `releaseToast` starts it again. An error never counts down. */
+  holdToast: () => void;
+  releaseToast: () => void;
   /** Swing only: the stop that paused the last advance (null otherwise). It stays until dismissed or the next advance. */
   paused: Paused | null;
   dismissPause: () => void;
@@ -51,25 +54,37 @@ export type ReplaySessionApi = {
   catchUp: () => void;
   /** Resolves true when the server accepted the mark. */
   mark: (kind: EntryOrExit, draft: MarkDraft) => Promise<boolean>;
-  /** Sends what the order ticket built: a market entry mark, or a limit, stop or stop-limit order. Resolves true when accepted. */
-  ticket: (action: TicketAction) => Promise<boolean>;
+  /** Sends what the order ticket built: a market entry mark, or a limit, stop or stop-limit order. Resolves true when accepted. `refused` hears the field the server named, so the message sits at that field. */
+  ticket: (action: TicketAction, refused?: Refusal) => Promise<boolean>;
   /** Cancels a working order. */
   cancelOrder: (id: number) => void;
-  stopNote: (price: string) => void;
-  note: (text: string) => void;
+  /** Resolve true when the server took the stop or the note; the form stays open on a refusal. */
+  stopNote: (price: string) => Promise<boolean>;
+  note: (text: string) => Promise<boolean>;
   undo: () => void;
   end: () => Promise<ReplaySession | null>;
   setFilter: (id: SizeFilterId) => void;
   setInterval: (interval: ReplayInterval) => void;
 };
 
+/** A plain note clears itself after this long; an error stays until it is dismissed (WCAG 2.2.1: nothing she must read disappears on a timer). */
 const DISMISS_MS = 4500;
+
+/** Told which ticket field the server refused: its `path` (shares, limitPrice, stopPrice) and its sentence. */
+export type Refusal = (path: string, message: string) => void;
+const refusedAt = (error: unknown, refused: Refusal | undefined) => {
+  const problem = error instanceof DeskApiError ? error.problems[0] : undefined;
+  if (problem && refused) refused(problem.path, problem.message);
+};
+
+/** The speed is the shared clock's, so a switch to another name (a new session, a new hook) keeps the one she chose. */
+let rememberedSpeed: Speed = DEFAULT_SPEED;
 
 export function useReplaySession(id: number | null): ReplaySessionApi {
   const [session, setSession] = useState<ReplaySession | null>(null);
   const [view, setView] = useState<ReplayView | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [player, dispatch] = useReducer(playerReducer, undefined, () => initialPlayer());
+  const [player, dispatch] = useReducer(playerReducer, undefined, () => initialPlayer(rememberedSpeed));
   const [toast, setToast] = useState<Toast | null>(null);
   const [filterId, setFilterId] = useState<SizeFilterId>("all");
   const [interval, setIntervalState] = useState<ReplayInterval>("5m");
@@ -87,6 +102,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   const lastStart = useRef(0);
   const toastId = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const toastTone = useRef<Toast["tone"]>("info");
   useEffect(() => {
     playerRef.current = player;
     viewRef.current = view;
@@ -97,11 +113,20 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
 
   const say = useCallback((tone: Toast["tone"], text: string) => {
     toastId.current += 1;
+    toastTone.current = tone;
     setToast({ id: toastId.current, tone, text });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), DISMISS_MS);
+    toastTimer.current = tone === "error" ? undefined : setTimeout(() => setToast(null), DISMISS_MS);
   }, []);
-  const dismissToast = useCallback(() => setToast(null), []);
+  const dismissToast = useCallback(() => {
+    clearTimeout(toastTimer.current);
+    setToast(null);
+  }, []);
+  const holdToast = useCallback(() => clearTimeout(toastTimer.current), []);
+  const releaseToast = useCallback(() => {
+    clearTimeout(toastTimer.current);
+    if (toastTone.current === "info") toastTimer.current = setTimeout(() => setToast(null), DISMISS_MS);
+  }, []);
   const dismissPause = useCallback(() => setView((current) => (current ? withoutPause(current) : current)), []);
 
   const tape = useCallback((): TapeParams => {
@@ -245,35 +270,43 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
 
   const togglePlay = useCallback(() => dispatch({ type: "toggle" }), []);
   const setSpeed = useCallback((next: Speed) => {
-    if (isSpeed(next)) dispatch({ type: "speed", speed: next });
+    if (!isSpeed(next)) return;
+    rememberedSpeed = next;
+    dispatch({ type: "speed", speed: next });
   }, []);
+  /** `guard`, and at the window end a press says why nothing moved instead of doing nothing. */
+  const allowed = useCallback(() => {
+    if (guard()) return true;
+    if (playerRef.current.status === "at_end") say("info", PRACTICE_COPY.stepAtEnd);
+    return false;
+  }, [say]);
   const step = useCallback(() => {
-    if (guard()) void exec(() => advance({ step: "bar" }), true);
-  }, [exec, advance]);
+    if (allowed()) void exec(() => advance({ step: "bar" }), true);
+  }, [allowed, exec, advance]);
   const nextSignal = useCallback(() => {
-    if (guard()) void exec(() => advance({ step: "next_signal" }), true);
-  }, [exec, advance]);
+    if (allowed()) void exec(() => advance({ step: "next_signal" }), true);
+  }, [allowed, exec, advance]);
   const jumpBy = useCallback(
     (minutes: number) => {
       const current = viewRef.current;
       const target = sessionRef.current;
-      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(threadClock(current.revealedThrough, current.dayClock), minutes, target.window_end) }), true);
+      if (current && target && allowed()) void exec(() => advance({ to: jumpMinutes(threadClock(current.revealedThrough, current.dayClock), minutes, target.window_end) }), true);
     },
-    [exec, advance],
+    [allowed, exec, advance],
   );
   const jumpToTime = useCallback(
     (hhmm: string) => {
       const target = sessionRef.current;
       const to = target ? etWallToUtcIso(target.spec.day, hhmm) : null;
-      if (!target || to === null || !guard()) return;
+      if (!target || to === null || !allowed()) return;
       void exec(() => advance({ to }), true);
     },
-    [exec, advance],
+    [allowed, exec, advance],
   );
   const jumpToEnd = useCallback(() => {
     const target = sessionRef.current;
-    if (target && guard()) void exec(() => advance({ to: target.window_end }), true);
-  }, [exec, advance]);
+    if (target && allowed()) void exec(() => advance({ to: target.window_end }), true);
+  }, [allowed, exec, advance]);
 
   /** Swing only: a mark moves a hold, so the day strip and the Daily chart's hold marker are read again (runs inside the one request in flight). */
   const refreshSwing = useCallback(async () => {
@@ -293,7 +326,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
 
   /** Sends a built mark; the server stamps it at the playhead and answers the new book. */
   const send = useCallback(
-    async (built: MarkBuild): Promise<boolean> => {
+    async (built: MarkBuild, refused?: Refusal): Promise<boolean> => {
       if (id === null) return false;
       if (!built.ok) {
         say("error", built.message);
@@ -319,6 +352,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
           if (!alive.current) return false;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
           say("error", problemMessage(error, PRACTICE_COPY.markError));
+          refusedAt(error, refused);
           return false;
         }
       });
@@ -330,7 +364,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
 
   /** Places a limit, stop or stop-limit order; the server answers the order, the list, and the entry mark when it filled at once. */
   const submitOrder = useCallback(
-    async (body: OrderBody): Promise<boolean> => {
+    async (body: OrderBody, refused?: Refusal): Promise<boolean> => {
       if (id === null) return false;
       if (sessionRef.current?.thread?.mode === "swing" && viewRef.current?.last === null) {
         say("error", PRACTICE_COPY.swingMarketNotOpen);
@@ -354,6 +388,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
           if (!alive.current) return false;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
           say("error", problemMessage(error, PRACTICE_COPY.markError));
+          refusedAt(error, refused);
           return false;
         }
       });
@@ -361,7 +396,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     },
     [id, exec, say, refreshSwing],
   );
-  const ticket = useCallback((action: TicketAction) => (action.kind === "mark" ? send({ ok: true, mark: action.mark }) : submitOrder(action.order)), [send, submitOrder]);
+  const ticket = useCallback((action: TicketAction, refused?: Refusal) => (action.kind === "mark" ? send({ ok: true, mark: action.mark }, refused) : submitOrder(action.order, refused)), [send, submitOrder]);
 
   const cancel = useCallback(
     (orderId: number) => {
@@ -381,8 +416,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     },
     [id, exec, say],
   );
-  const stopNote = useCallback((price: string) => void send(stopMark(price)), [send]);
-  const note = useCallback((text: string) => void send(noteMark(text)), [send]);
+  const stopNote = useCallback((price: string) => send(stopMark(price)), [send]);
+  const note = useCallback((text: string) => send(noteMark(text)), [send]);
 
   const undo = useCallback(() => {
     if (id === null) return;
@@ -475,8 +510,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     () => ({
       session, view, loading: id !== null && !loadError && (session === null || view === null), loadError, player, toast, filterId, interval,
       paused: view?.paused ?? null, dismissPause,
-      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancelOrder: cancel, stopNote, note, undo, end, setFilter, setInterval,
+      reload, dismissToast, holdToast, releaseToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancelOrder: cancel, stopNote, note, undo, end, setFilter, setInterval,
     }),
-    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
+    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, holdToast, releaseToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
   );
 }

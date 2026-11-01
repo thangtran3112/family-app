@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useId } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -22,13 +23,15 @@ import styles from "./landing.module.css";
  * Replace plan beside it. A swing thread: Continue or Start Day n, or while its week review is owed (the gate) the review first
  * and, beneath it, what unlocks after it. A closed thread has none. The last day's result sits under the button.
  */
-export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void }) {
+export function NextStep({ summary, plan, stalled = false, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; stalled?: boolean; onChanged: () => void; onNewPlan: () => void }) {
   const { thread, today, last_day: lastDay } = summary;
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
   const gate = swingGate(summary);
   const view = todayView(today, lastDay);
   const canReplace = !closed && thread.mode === "day" && planOpensIn(plan, thread);
+  const dayOpen = today !== null && today.status === "practicing";
+  const replaceNoteId = useId();
   // The plan's data is still being prepared (D-084): the action slot says so, and the card says nothing else about Day 1.
   const preparing = canReplace && planCard(plan).action === "none";
   const preparingHint = preparing ? planCard(plan).detail : null;
@@ -78,12 +81,14 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
             ) : (
               !finished && (
                 <div className={styles.resumeAction}>
-                  <ThreadAction summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
+                  <ThreadAction summary={summary} plan={plan} stalled={stalled} onChanged={onChanged} onNewPlan={onNewPlan} />
                 </div>
               )
             )}
-            {canReplace && <Button disabled={preparing} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</Button>}
+            {canReplace && <Button disabled={preparing} aria-describedby={dayOpen ? replaceNoteId : undefined} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</Button>}
           </div>
+          {/* Replacing ends the day in progress and exits what is open at the day clock (F-05): said before the click, not after. */}
+          {canReplace && dayOpen && <p id={replaceNoteId} className={hub.muted}>{PRACTICE_COPY.threadReplaceOpenDay}</p>}
           {gate && <p className={hub.muted}>{gate.locked}</p>}
           {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}
           {planDone && <p className={styles.dayLine}>{planFinishedLine(thread)}</p>}

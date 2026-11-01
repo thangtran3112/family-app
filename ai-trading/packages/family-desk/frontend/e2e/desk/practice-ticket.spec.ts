@@ -35,13 +35,13 @@ test.describe("Practice order ticket", () => {
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
     await expect(page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) })).toHaveCount(0); // no stop, no refusal (the route announcer is an alert too, so only the message toast counts)
     await expect(practice.getByText(/^Long · 5 shares/)).toBeVisible();
-    await expect(practice.getByRole("definition").filter({ hasText: "none" })).toBeVisible(); // the position's stop reads "none"
+    await expect(practice.getByRole("definition").filter({ hasText: "None" })).toBeVisible(); // the position's stop reads "None"
     await expectCleanScreen(page);
 
     // The stop is added afterwards, to the position, and stays optional.
     await practice.getByRole("button", { name: "Set stop" }).click();
     const form = practice.getByRole("form", { name: "Stop" });
-    await form.getByRole("textbox", { name: "Stop price" }).fill("1");
+    await form.getByRole("textbox", { name: "Stop loss" }).fill("1");
     await form.getByRole("button", { name: "Save" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "1.00" }).first()).toBeVisible();
 

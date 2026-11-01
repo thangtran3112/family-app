@@ -249,7 +249,7 @@ test.describe("Practice", () => {
   test("jump to the window end shows the end prompt, and the journal of an unfinished session stays open", async ({ page, context }) => {
     await startStubSession(page, context);
     await page.getByRole("button", { name: /^Jump/ }).click();
-    await page.getByRole("menuitem", { name: /^To the window end/ }).click();
+    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the window end/ }).click();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.endAndScore })).toBeVisible();
     await expect(page.getByText(/^Session over/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Play" })).toBeDisabled();

@@ -7,7 +7,7 @@ import type { PracticeStatusLine } from "@/lib/replay/statusLine";
 import styles from "./practiceChrome.module.css";
 
 // What a Practice screen tells the shell (02o §a1): which day it replays and where the playhead is, so the 28 px
-// amber band, the top-bar "Replay · …" badge and the status bar can say so. Kept in its own small context, apart
+// amber band, the top-bar "Practice · …" badge and the status bar can say so. Kept in its own small context, apart
 // from DeskUi, because the playhead moves every second and only these three readers should re-render for it.
 
 export type PracticeChromeState = {
