@@ -310,7 +310,7 @@ test("when the focused control leaves the page, focus goes to the page heading, 
   await expect(main.getByRole("heading", { level: 1 })).toBeFocused();
 });
 
-test("a removed control never pulls focus off the search box (D-093)", async ({ page }) => {
+test("a removed control never pulls focus off the top bar (D-093)", async ({ page }) => {
   await openDesk(page, "/screener");
   const main = page.locator("#main-content");
   await main.evaluate((node) => {
@@ -319,11 +319,12 @@ test("a removed control never pulls focus off the search box (D-093)", async ({ 
     node.append(gone);
     gone.focus();
   });
-  const search = page.locator(".dk-top").getByRole("combobox", { name: "Search symbols" });
-  await search.focus();
+  // The mode button exists in both bands (the search collapses to an icon at 1180).
+  const modeButton = page.locator(".dk-top").getByRole("button", { name: /^Mode: / });
+  await modeButton.focus();
   await page.locator("#e2e-gone").evaluate((node) => node.remove());
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-  await expect(search).toBeFocused();
+  await expect(modeButton).toBeFocused();
 });
 
 test("the chart's right rail: open at 1440, a collapsed strip with a drawer at 1180, and orders stay off", async ({ page }) => {
