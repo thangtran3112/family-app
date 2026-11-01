@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FIXTURE="$SCRIPT_DIR/desk-target-state/docker-compose.yml"
+FIXTURE="$SCRIPT_DIR/../../../infrastructure/apps/ai-trading/tests/desk-target-state/docker-compose.yml"
 PROJECT="desk-target-${GITHUB_RUN_ID:-local}-$$-$RANDOM"
 AI_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 

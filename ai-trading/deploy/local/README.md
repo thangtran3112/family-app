@@ -2,7 +2,7 @@
 
 Runs the release 1 stack on a laptop, with Caddy standing in for the Cloudflare Tunnel. Run every command from the repository root. Every value comes from Firestore `family-config` through `common/config/family_config.py` (`common/config/README.md`); never an old Secret Manager bundle, never a `.env` file inside `ai-trading/`.
 
-This stack's own `deploy/local/Caddyfile` (loaded by the `router` service in step 3's override) injects a **mock** identity header (`Cf-Access-Authenticated-User-Email: local-dev@example.test`) straight onto the terminal routes — it never calls the real `auth`/`gateway` services and never exercises Clerk. It is a UI smoke stack, not an auth test. The real production gate (Caddy `forward_auth` → `auth:8181` → Clerk token verification, `deploy/production/Caddyfile`) is tested separately, against a real Caddy container, by `ai-trading/deploy/ci/smoke-test.sh all` (see `ai-trading/AGENTS.md`'s Verification section).
+This stack's own `deploy/local/Caddyfile` (loaded by the `router` service in step 3's override) injects a **mock** identity header (`Cf-Access-Authenticated-User-Email: local-dev@example.test`) straight onto the terminal routes — it never calls the real `auth`/`gateway` services and never exercises Clerk. It is a UI smoke stack, not an auth test. The real production gate (Caddy `forward_auth` → `auth:8181` → Clerk token verification, `infrastructure/apps/ai-trading/Caddyfile`) is tested separately, against a real Caddy container, by `ai-trading/deploy/ci/smoke-test.sh all` (see `ai-trading/AGENTS.md`'s Verification section).
 
 1. Render the four Firestore profiles into a directory outside the repository (never commit or gitignore a secret file inside `ai-trading/`). `render` writes one file per profile named after the profile; `ai-trading/gateway` is renamed `auth.env` to match the compose service that reads it, the same rename `deploy.sh` does in production:
 
@@ -37,8 +37,8 @@ This stack's own `deploy/local/Caddyfile` (loaded by the `router` service in ste
 
    ```bash
    docker compose -p ai-trading-local --env-file ai-trading/deploy/local/local.env \
-     -f ai-trading/deploy/production/docker-compose.yml \
-     -f ai-trading/deploy/production/docker-compose.mirofish.yml \
+     -f infrastructure/apps/ai-trading/docker-compose.yml \
+     -f infrastructure/apps/ai-trading/docker-compose.mirofish.yml \
      -f ai-trading/deploy/local/docker-compose.override.yml up -d --wait
    ```
 
