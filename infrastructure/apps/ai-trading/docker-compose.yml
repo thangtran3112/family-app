@@ -1,0 +1,368 @@
+# ai-trading production stack (release 1: Trading Hub MVP).
+# Deployed by .github/workflows/ai-trading-deploy.yml through deploy.sh.
+name: ai-trading
+
+services:
+  web:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-web:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    networks: [hub]
+    mem_limit: 256m
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  ta-terminal:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-ta-terminal:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/tradingagents.env
+    volumes:
+      - ta-data:/home/appuser/.tradingagents
+    networks: [ta]
+    mem_limit: 1g
+    pids_limit: 512
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:7681/u/tradingagents/', headers={'Cf-Access-Authenticated-User-Email': 'healthcheck'}), timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  ta-research:
+    # Private research API + static shell (06): same tradingagents.env/appuser
+    # UID as ta-terminal, but its own data volume -- never mounts ta-data, and
+    # ta-data is never mounted here either (legacy terminal history stays
+    # terminal-only; see ta-research-data below). Deliberately NOT on `ta`
+    # (review round 1, Critical): ta-research trusts the gateway-verified
+    # Cf-Access-Authenticated-User-Email/X-Family-App-Prefix headers on any
+    # connection, and ta-terminal is not a trusted gateway -- an authenticated
+    # terminal user sharing a network with ta-research could otherwise send a
+    # direct request with a forged identity header and read another family
+    # member's private research. `research` is its own network, joined only
+    # by `gateway` and this service (same isolation shape as `vibe`).
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-ta-research:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/tradingagents.env
+    environment:
+      # Trust forwarded identity/scheme headers only from this dedicated
+      # network's own fixed subnet (its only other member is `gateway`) --
+      # never "*" (that would blindly trust any future peer added to this
+      # network, not just the gateway). The worker subprocess this service
+      # launches still reaches the open internet for its own provider calls;
+      # this only scopes which peer's *forwarded headers* are trusted, not
+      # egress.
+      FORWARDED_ALLOW_IPS: "172.30.90.0/29"
+    volumes:
+      - ta-research-data:/home/appuser/.tradingagents
+    networks: [research]
+    mem_limit: 1g
+    pids_limit: 512
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8182/__healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  ahf-terminal:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-ahf-terminal:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/ai-hedge-fund.env
+    environment:
+      FD_BASE_URL: http://market-data:8000
+    volumes:
+      - ahf-data:/home/app/.hedge-fund
+    networks: [ahf]
+    mem_limit: 1g
+    pids_limit: 512
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:7681/u/ai-hedge-fund/', headers={'Cf-Access-Authenticated-User-Email': 'healthcheck'}), timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  market-data:
+    # Financial Datasets-shaped API for ai-hedge-fund: Alpaca prices + SEC fundamentals (01m).
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-market-data:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data.env
+    networks: [ahf]
+    mem_limit: 256m
+    pids_limit: 128
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  market-data-bridge:
+    # 02t B0: the Go gRPC market-data bridge, deployed dark (no consumer yet). No host port
+    # and no Caddy route: reachable only on `marketdata` (joined by api and scheduler).
+    # Serves with auth required even when its Firestore profile is missing; see deploy.sh.
+    # `marketdata` is a plain internal bridge network, not `internal: true`, because the
+    # bridge itself must reach its providers (Alpaca today) outbound.
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-market-data-bridge:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data-bridge.env
+    networks: [marketdata]
+    mem_limit: 128m
+    pids_limit: 128
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # Process health only (`bridge healthcheck` asks /healthz): a provider outage never restarts it.
+      test: ["CMD", "/bridge", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  vibe-trading:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-vibe-trading:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-trading.env
+    environment:
+      # Trust X-Forwarded-Proto from the tunnel so the same-site check sees https.
+      FORWARDED_ALLOW_IPS: "*"
+      VIBE_CONSENSUS_URL: http://vibe-consensus:8000
+    volumes:
+      - vibe-runs:/app/agent/runs
+      - vibe-sessions:/app/agent/sessions
+      - vibe-uploads:/app/agent/uploads
+      - vibe-swarm-runs:/app/agent/.swarm/runs
+      - vibe-home:/home/vibe/.vibe-trading
+    networks: [vibe]
+    # Upstream hardening (Vibe-Trading docker-compose.yml, VT-007), memory lowered for the shared VPS.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/vibe/.cache
+      - /home/vibe/.config
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8899/live', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+  vibe-consensus:
+    # No host port/Caddy route. Only the Vibe app group starts this service.
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-vibe-consensus:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-gateway.env
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-consensus.env
+    networks: [vibe]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
+    pids_limit: 128
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  gateway:
+    # Not digest-pinned yet, unlike this file's other images: `caddy:2-alpine`
+    # matches the tag already used unpinned in
+    # ai-trading/deploy/local/docker-compose.override.yml. Pin it before the
+    # real production deploy (Task 9) by running
+    # `docker pull caddy:2-alpine && docker inspect --format '{{index .RepoDigests 0}}' caddy:2-alpine`
+    # and using that exact value here.
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # Task 4 (01g): the dedicated Caddy identity the control helper's
+    # SO_PEERCRED check trusts (ai-trading/control/server.py gateway_uid).
+    # Runs as this fixed UID/GID so the socket's root:gateway 0660 ownership
+    # actually grants (and only grants) this container group access.
+    user: "22001:22001"
+    env_file:
+      # Only VIBE_API_AUTH_KEY (derived by deploy.sh), injected for Vibe after the Clerk check.
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/vibe-gateway.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Read-only: this container only ever connects to the already-bound
+      # control.sock the host helper owns; it never creates or writes here.
+      - /run/family-app/ai-trading-control:/run/family-app/ai-trading-control:ro
+    # Non-root Caddy has no write access to the image's default root-owned
+    # /config, /data (XDG_CONFIG_HOME/XDG_DATA_HOME); `admin off` means
+    # nothing here is actually persisted, so private, per-restart tmpfs is
+    # enough -- no named volume, no host state to clean up.
+    tmpfs:
+      - /config:uid=22001,gid=22001,mode=0700
+      - /data:uid=22001,gid=22001,mode=0700
+    labels:
+      # Set by deploy.sh: a changed Caddyfile recreates this container.
+      com.family-app.caddyfile-sha256: ${AI_TRADING_CADDYFILE_SHA256:-unset}
+    # No depends_on ta-research (review/01g): explicit enabled-service
+    # selection (deploy.sh) controls which app containers actually start,
+    # not an implicit lifecycle coupling from the gateway's own dependency
+    # graph -- an off TradingAgents group must never be implicitly revived
+    # just because gateway (always-on) starts.
+    networks: [gateway, ta, ahf, vibe, research, mirofish]
+    mem_limit: 64m
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/__healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  auth:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-auth:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/auth.env
+    networks: [gateway]
+    mem_limit: 128m
+    pids_limit: 128
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8181/__auth/check').then((r) => process.exit(r.status === 401 ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    restart: unless-stopped
+    command: ["tunnel", "--metrics", "0.0.0.0:2000", "run"]
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/cloudflared.env
+    # SSH ingress reaches the host from inside this container, so the origin
+    # must resolve from here: host-gateway maps host.docker.internal to the
+    # host. Required by the ssh:// origin in infrastructure/cloudflare/ai-trading
+    # (laptop-ssh.tf); without it the Access SSH endpoint cannot connect.
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [hub, gateway]
+    mem_limit: 128m
+    security_opt: ["no-new-privileges:true"]
+
+  # Family Desk Phase 3 (02c; owner decision 2026-10-12, D-e): the Desk joins
+  # the shared VPS Postgres cluster instead of a Desk-private "desk-postgres"
+  # container. `database` below is this repo's OWN top-level network name,
+  # pointed at the shared cluster's real external network (`postgres_default`,
+  # the project-default name 30-postgres.sh's own Compose project creates) --
+  # the exact shape infrastructure/apps/expense-tax/docker-compose.yml
+  # already uses for the same shared cluster. No desk-postgres service, no
+  # Desk-private network, and no Desk-private data volume: nothing here is
+  # Desk-private anymore. Neither service gets a `depends_on` on the cluster
+  # (D-e, Task 3.6): it lives in a different Compose project
+  # (family-app-postgres, ${SHARED_PG_DIR}), already running before Desk ever
+  # deploys -- Compose cannot condition on a container from another project,
+  # and no other app's compose file in this repo does either. Each service's
+  # own healthcheck/startup retry is the gate instead.
+  api:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-desk:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    command: python -m uvicorn ai_trading.api.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
+    # Caddy reaches the API only on gateway; database access stays on the
+    # shared Postgres network. No host port is published.
+    networks: [database, gateway, marketdata]
+    mem_limit: 512m
+    pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # Generous retries/start_period (not this file's usual 3/10s): `api`
+      # has no depends_on on the shared cluster above (D-e health-gating
+      # note, Task 3.6). `/healthz` is a real READINESS check (Decision 4):
+      # it runs `SELECT 1` against the Desk database with a 1-second connect
+      # timeout on every call, returning 503 when the database can't be
+      # reached -- it makes one bounded attempt per call, not its own retry
+      # loop, so it's THIS healthcheck's interval/retries/start_period that
+      # give a cold/slow shared cluster time to become reachable, by polling
+      # the probe repeatedly rather than the probe itself looping.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+
+  scheduler:
+    image: ${AI_TRADING_REGISTRY:-ghcr.io/thangtran3112/family-app}/ai-trading-desk:${AI_TRADING_IMAGE_TAG:?AI_TRADING_IMAGE_TAG is required}
+    restart: unless-stopped
+    command: python -m ai_trading.jobs.scheduler
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/desk.env
+    # Database and marketdata (the bridge) only -- never gateway (it's a
+    # background job loop, not an HTTP service Caddy ever reaches).
+    networks: [database, marketdata]
+    mem_limit: 512m
+    pids_limit: 256
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # F4: `scheduler` has no HTTP endpoint for Docker to poll (unlike
+      # `api`'s `/healthz`), so its own main loop touches a heartbeat file
+      # once per iteration (ai_trading.jobs.scheduler.main) and this
+      # healthcheck runs ai_trading.jobs.healthcheck in-process, which exits
+      # 0 only while that heartbeat is still fresh (< 180s old) -- a stuck or
+      # crashed loop stops touching it and this starts failing within one
+      # window.
+      test: ["CMD", "python", "-m", "ai_trading.jobs.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+networks:
+  hub: {}
+  ta: {}
+  ahf: {}
+  vibe: {}
+  gateway: {}
+  # The market-data bridge's private network (02t §7.1), shared with api and scheduler.
+  marketdata: {}
+  # Dedicated to gateway + ta-research only (review round 1, Critical): a
+  # fixed, small subnet so ta-research's own FORWARDED_ALLOW_IPS above can
+  # trust exactly this network's peers, not "*". /29 (6 usable addresses) is
+  # plenty for its two members.
+  research:
+    ipam:
+      config:
+        - subnet: 172.30.90.0/29
+  # The shared VPS Postgres cluster's own Compose project default network
+  # (infrastructure/host/steps/30-postgres.sh's project directory is
+  # ${SHARED_PG_DIR}, so Compose's default "<project>_default" naming makes
+  # it postgres_default) -- external because that cluster is a different
+  # Compose project with its own lifecycle, already running before this
+  # project ever deploys. "database" is purely this file's own local name
+  # for it (same alias expense-tax-management's docker-compose.yml uses).
+  database:
+    external: true
+    name: postgres_default
+
+volumes:
+  ta-data: {}
+  ta-research-data: {}
+  ahf-data: {}
+  vibe-runs: {}
+  vibe-sessions: {}
+  vibe-uploads: {}
+  vibe-swarm-runs: {}
+  vibe-home: {}

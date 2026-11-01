@@ -85,6 +85,20 @@ class StateTest(unittest.TestCase):
         self.assertNotIn("mirofish", selected_services(state, False))
         self.assertIn("mirofish", selected_services(state, True))
 
+    def test_dark_selection_drops_only_cloudflared_and_scheduler(self):
+        state = initial_state(None)
+        dark = selected_services(state, False, dark=True)
+        self.assertNotIn("cloudflared", dark)
+        self.assertNotIn("scheduler", dark)
+        self.assertEqual(
+            [s for s in selected_services(state, False) if s not in ("cloudflared", "scheduler")], list(dark)
+        )
+        # The default (a normal deploy) still requires both.
+        self.assertIn("cloudflared", selected_services(state, False))
+        self.assertIn("scheduler", selected_services(state, False))
+        with self.assertRaises(ValueError):
+            selected_services(state, False, dark="yes")
+
     def test_service_selection_omits_both_ta_members_when_off(self):
         # task-5-brief's own fixture: deploy.sh's explicit selected-service
         # Compose call must never include a disabled app's mapped services,
@@ -389,6 +403,23 @@ class StateTest(unittest.TestCase):
                 "web", "gateway", "auth", "cloudflared", "market-data", "api", "scheduler", "market-data-bridge",
                 "ta-terminal", "ta-research", "ahf-terminal", "vibe-consensus", "vibe-trading",
             ])
+
+    def test_cli_services_dark_omits_cloudflared_and_scheduler(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_path = root / "control.json"
+            args = [
+                "--state", str(state_path), "--lock", str(root / ".control.lock"),
+                "--owner-uid", str(os.getuid()),
+            ]
+            atomic_write(state_path, initial_state(None), owner_uid=os.getuid())
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["services", "--mirofish-ready", "false", "--dark", *args]), 0)
+            lines = output.getvalue().splitlines()
+            self.assertNotIn("cloudflared", lines)
+            self.assertNotIn("scheduler", lines)
+            self.assertIn("gateway", lines)
 
     def test_cli_inherited_lock_is_not_unlocked(self):
         with tempfile.TemporaryDirectory() as directory:
