@@ -68,8 +68,10 @@ on:
       upload_desk_static:
         description: >-
           Build the Family Desk release export and upload its public shell to
-          its dedicated bucket. No Clerk key, images, VPS deploy or hostname
-          cutover. Run from main after the owner-reviewed bucket/IAM apply.
+          its dedicated bucket. Runs automatically on every push to main; this
+          manual flag forces a static-only re-upload from the current main
+          (e.g. to republish without a code change). No Clerk key, images, VPS
+          deploy or hostname cutover.
         type: boolean
         default: false
       target:
@@ -519,11 +521,16 @@ jobs:
           fi
           ../deploy/ci/upload-hub-static.sh out "$bucket"
 
-  # Desk has no Clerk bundle/key. Like the hub, upload is an explicit
-  # main-only dispatch (also enforced by WIF) and never applies Terraform.
+  # Desk has no Clerk bundle/key. Uploads the shell automatically on every
+  # push to main so a frontend change reaches the bucket without a manual
+  # dispatch: entry objects are Cache-Control no-store and hashed _next/static
+  # assets are content-addressed + immutable, so the re-upload is visible at
+  # once (the Worker fetches GCS directly, no CDN tier to purge). A manual
+  # dispatch with upload_desk_static=true re-uploads from the current main
+  # (static-only). Never applies Terraform.
   desk-static-upload:
-    name: Upload Desk static release (operator-gated)
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.upload_desk_static == true
+    name: Upload Desk static release
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.upload_desk_static == true))
     environment: ai-trading-production
     runs-on: ubuntu-latest
     timeout-minutes: 30
