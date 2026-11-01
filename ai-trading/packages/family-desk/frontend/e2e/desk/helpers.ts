@@ -71,6 +71,20 @@ export function watchApi(page: Page): { paths: () => string[]; clear: () => void
 
 /** What the 02l §c3 list bans, found in the text a person sees (and reads aloud): visible text and labels.
  * Code and JSON blocks are engineering detail (a `Details` disclosure at most) and are left out. */
+/** The tile values on the page that wrap onto a second line or spill their tile (D-086): "$25,000." over "00". */
+export async function brokenTileValues(page: Page): Promise<string[]> {
+  return page.locator("#main-content [data-tone]").evaluateAll((nodes) =>
+    nodes.flatMap((node) => {
+      const box = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
+      const wraps = box.height > line * 1.5;
+      const spills = node.scrollWidth > node.clientWidth + 1;
+      return wraps || spills ? [`${node.textContent} (${Math.round(box.width)}x${Math.round(box.height)})`] : [];
+    }),
+  );
+}
+
 export async function bannedWordingOnScreen(page: Page): Promise<string[]> {
   const text = await page.evaluate(() => {
     const code = [...document.querySelectorAll<HTMLElement>("pre, code")].map((node) => node.innerText);

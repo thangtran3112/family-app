@@ -4,7 +4,7 @@ import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
-import { expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
+import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
 import { openNextDay, replayRail, send } from "./swing-helpers";
 
@@ -225,6 +225,7 @@ test.describe("Practice", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Practice journal");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("TSLA");
     await expect(page.getByRole("listitem").filter({ hasText: /^Trades/ })).toContainText("1");
+    expect(await brokenTileValues(page), "a journal tile value wraps or spills (D-086)").toEqual([]);
     await expect(page.getByRole("table", { name: "Practice trades" }).getByRole("row")).toHaveCount(2); // header + the trade
     await expectCleanScreen(page);
 

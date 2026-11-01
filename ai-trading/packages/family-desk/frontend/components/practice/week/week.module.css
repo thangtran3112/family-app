@@ -28,6 +28,8 @@
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .link:hover { text-decoration: underline; }
+/* A day's link inside a table row: the row is the 24 px target, so the link must not make it 25 (the Holds table beside it is 24, D-127). */
+.dayLink { min-height: 0; }
 .link:focus-visible, .summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 /* Signed money, R and points: the sign carries the meaning, the colour repeats it. Flat is muted. */

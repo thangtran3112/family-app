@@ -17,6 +17,7 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
 import { swingDatesHidden, swingCardView } from "@/lib/replay/swing";
+import { swingGate } from "@/lib/replay/overviewView";
 import { loadHolds, loadWeeks } from "@/lib/replay/swingApi";
 import { journalStatusLine } from "@/lib/replay/statusLine";
 import type { Thread } from "@/lib/replay/threads";
@@ -56,7 +57,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
   const nextText =
     view?.action.kind === "none"
       ? PRACTICE_COPY.swingThreadFinished
-      : (view?.notice ?? `${where} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`);
+      : (swingGate(thread)?.locked ?? view?.notice ?? `${where} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`);
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
