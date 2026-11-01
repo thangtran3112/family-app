@@ -20,8 +20,8 @@ export type InlineConfirmProps = {
   layout?: "inline" | "block" | "floating";
   /** Layout only: where a floating confirm sits (position, width). */
   className?: string;
-  /** The trigger. Escape and the cancel button hand focus back to it; it may be mounted only after `onCancel` (a trigger the confirm replaced). */
-  returnFocus: RefObject<HTMLElement | null>;
+  /** The trigger, as a ref or (one trigger per row) a function that finds it. Escape and the cancel button hand focus back to it after `onCancel`, so it may be a trigger the confirm replaced. */
+  returnFocus: RefObject<HTMLElement | null> | (() => HTMLElement | null);
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -42,7 +42,7 @@ export function InlineConfirm({ label, prompt, confirmLabel, cancelLabel, tone =
 
   const back = () => {
     onCancel();
-    requestAnimationFrame(() => returnFocus.current?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => (typeof returnFocus === "function" ? returnFocus() : returnFocus.current)?.focus({ preventScroll: true }));
   };
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {

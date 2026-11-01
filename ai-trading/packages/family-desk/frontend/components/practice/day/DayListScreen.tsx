@@ -7,6 +7,7 @@ import { DeskApiError } from "@/lib/api/client";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
 import { formatClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
@@ -140,11 +141,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const [confirmEnd, setConfirmEnd] = useState(false);
   // The plan replaced from a day with no names (D-094).
   const [changing, setChanging] = useState(false);
-  // Keyboard focus follows the flow (D-092, D-093): the page heading on arrival, the confirm when it opens, the trigger when it
-  // closes, and the control that replaces End day once the day has ended.
+  // Keyboard focus follows the flow (D-092, D-093): the page heading on arrival, then the confirm (InlineConfirm) when it opens and
+  // the trigger when it closes, and the control that replaces End day once the day has ended.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const endRef = useRef<HTMLButtonElement>(null);
-  const yesRef = useRef<HTMLButtonElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const endedHere = useRef(false);
   // At the 1180 band the right rail is a tab strip: a row click opens the Peek drawer and the others stay as they are (D-020).
@@ -162,18 +162,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     titleRef.current?.focus({ preventScroll: true });
   }, []);
   useEffect(() => {
-    if (confirmEnd) yesRef.current?.focus();
-  }, [confirmEnd]);
-  useEffect(() => {
     if (ended && endedHere.current) {
       endedHere.current = false;
       nextRef.current?.focus({ preventScroll: true });
     }
   }, [ended]);
-  const cancelEnd = () => {
-    setConfirmEnd(false);
-    endRef.current?.focus();
-  };
 
   // The badge reads the day clock once practice has started, else the time the list was built (D-014).
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
@@ -294,24 +287,26 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             )
           ) : (
             <>
-              <button ref={endRef} type="button" className={styles.button} disabled={busy} aria-expanded={confirmEnd} aria-controls="day-end-confirm" onClick={() => (confirmEnd ? cancelEnd() : setConfirmEnd(true))}>{PRACTICE_COPY.dayEnd}</button>
+              <button ref={endRef} type="button" className={styles.button} disabled={busy} aria-expanded={confirmEnd} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</button>
               {confirmEnd && (
-                <div
-                  id="day-end-confirm"
-                  role="group"
-                  aria-label="Confirm ending the day"
-                  className={styles.endConfirm}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") cancelEnd();
-                  }}
-                >
-                  <p className={styles.line}>{PRACTICE_COPY.dayEndWarning}</p>
-                  {exits && <p className={styles.line}>{exits}</p>}
-                  <div className={styles.actions}>
-                    <button ref={yesRef} type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.dayEndYes}</button>
-                    <button type="button" className={styles.button} onClick={cancelEnd}>{PRACTICE_COPY.dayKeepPracticing}</button>
-                  </div>
-                </div>
+                <InlineConfirm
+                  label="Confirm ending the day"
+                  layout="floating"
+                  size="md"
+                  className={styles.endAnchor}
+                  prompt={
+                    <>
+                      <span>{PRACTICE_COPY.dayEndWarning}</span>
+                      {exits && <span>{exits}</span>}
+                    </>
+                  }
+                  confirmLabel={PRACTICE_COPY.dayEndYes}
+                  cancelLabel={PRACTICE_COPY.dayKeepPracticing}
+                  busy={busy}
+                  returnFocus={endRef}
+                  onConfirm={() => void finish()}
+                  onCancel={() => setConfirmEnd(false)}
+                />
               )}
             </>
           )}
