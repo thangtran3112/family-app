@@ -25,7 +25,7 @@ func (a *Archive) Ensure(ctx context.Context, symbol string, timeframe pb.Timefr
 	if len(dates) == 0 {
 		return cov
 	}
-	covered, err := a.covered(ctx, symbol, tf, dates, now)
+	covered, err := a.covered(ctx, symbol, tf, dates)
 	if err != nil {
 		a.log.Warn("archive read failed during EnsureHistory", "symbol", symbol, "error", err.Error())
 		cov.Error = "archive unreachable"

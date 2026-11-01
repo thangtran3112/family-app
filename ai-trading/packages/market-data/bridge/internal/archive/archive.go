@@ -67,12 +67,20 @@ func (a *Archive) Bars(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch)
 		return a.passthrough(ctx, req, fetch)
 	}
 
-	covered, err := a.covered(ctx, req.Symbol, tf, dates, now)
+	// `finished` parses its date, so ask it once per date and reuse the answer below.
+	isFinished := make([]bool, len(dates))
+	var fin []string
+	for i, d := range dates {
+		if isFinished[i] = finished(d, now); isFinished[i] {
+			fin = append(fin, d)
+		}
+	}
+	covered, err := a.covered(ctx, req.Symbol, tf, fin)
 	if err != nil {
 		a.log.Warn("archive read failed; serving from the provider", "symbol", req.Symbol, "error", err.Error())
 		return a.passthrough(ctx, req, fetch)
 	}
-	have := map[string]bool{}
+	have := make(map[string]bool, len(covered))
 	for _, s := range covered {
 		have[s.Date] = true
 	}
@@ -80,11 +88,11 @@ func (a *Archive) Bars(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch)
 	// A date after today has no bars yet and is not asked for.
 	today := a.cal.SessionDate(now)
 	var need, toStore []string
-	for _, d := range dates {
+	for i, d := range dates {
 		switch {
-		case finished(d, now) && !have[d]:
+		case isFinished[i] && !have[d]:
 			need, toStore = append(need, d), append(toStore, d)
-		case !finished(d, now) && d <= today:
+		case !isFinished[i] && d <= today:
 			need = append(need, d)
 		}
 	}
@@ -120,9 +128,9 @@ func (a *Archive) Bars(ctx context.Context, req *pb.GetBarsRequest, fetch Fetch)
 	return &pb.GetBarsResponse{Symbol: req.Symbol, Bars: bars, Served: served}, nil
 }
 
-// covered reads the archived sessions among dates (only finished ones can be archived).
-func (a *Archive) covered(ctx context.Context, symbol, tf string, dates []string, now time.Time) ([]Session, error) {
-	fin := finishedOf(dates, now)
+// covered reads the archived sessions among fin, the finished session dates in order (only finished ones can be
+// archived).
+func (a *Archive) covered(ctx context.Context, symbol, tf string, fin []string) ([]Session, error) {
 	if len(fin) == 0 {
 		return nil, nil
 	}
@@ -148,9 +156,13 @@ func markSource(bars []*pb.Bar, s pb.BarSource) {
 func (a *Archive) sessionDates(first, last string) []string {
 	first, last = max(first, a.cal.First()), min(last, a.cal.Last())
 	var out []string
-	for d, _ := time.ParseInLocation(xnys.DateFormat, first, xnys.NewYork); d.Format(xnys.DateFormat) <= last; d = d.AddDate(0, 0, 1) {
-		if a.cal.IsSession(time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, xnys.NewYork)) {
-			out = append(out, d.Format(xnys.DateFormat))
+	for d, _ := time.ParseInLocation(xnys.DateFormat, first, xnys.NewYork); ; d = d.AddDate(0, 0, 1) {
+		day := d.Format(xnys.DateFormat) // once per calendar day; the lookup takes the string, not an instant
+		if day > last {
+			break
+		}
+		if a.cal.IsSessionDate(day) {
+			out = append(out, day)
 		}
 	}
 	return out
@@ -204,8 +216,12 @@ func (a *Archive) record(ctx context.Context, symbol, tf string, dates []string,
 // cut to the caller's window. The archive wins where both have a date (02u §5.2: a vendor
 // revision never shows).
 func (a *Archive) merge(covered []Session, fetched []*pb.Bar, req *pb.GetBarsRequest, tf, first, last string) []*pb.Bar {
-	var out []*pb.Bar
-	have := map[string]bool{}
+	n := len(fetched)
+	for _, s := range covered {
+		n += len(s.Bars)
+	}
+	out := make([]*pb.Bar, 0, n) // every bar of both sources can land here: size once, no append regrowth
+	have := make(map[string]bool, len(covered))
 	for _, s := range covered {
 		have[s.Date] = true
 		for _, b := range s.Bars {

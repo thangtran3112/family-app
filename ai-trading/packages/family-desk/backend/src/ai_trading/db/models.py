@@ -183,6 +183,10 @@ class Signal(Base):
         UniqueConstraint(
             "strategy_version_id", "symbol", "bar_time", name="uq_signals_strategy_version_id_symbol_bar_time"
         ),
+        # 0015: per-symbol bar-time ranges (chart markers, tags, runtime history) and the dashboard's "since" window;
+        # the unique key above leads with strategy_version_id, so neither could use it.
+        Index("ix_signals_symbol_bar_time", "symbol", "bar_time"),
+        Index("ix_signals_bar_time", "bar_time"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -199,6 +203,13 @@ class Signal(Base):
 
 class Alert(Base):
     __tablename__ = "alerts"
+    __table_args__ = (
+        # 0015: the inbox, the delivery log, read-all and the unread badge filter `user_id`; the first two page by
+        # `created_at DESC, id DESC`, which this index serves directly. `signal_id` is `fires`' delivery lookup.
+        Index("ix_alerts_user_id_created_at", "user_id", text("created_at DESC"), text("id DESC")),
+        Index("ix_alerts_signal_id", "signal_id"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     signal_id: Mapped[int | None] = mapped_column(ForeignKey("signals.id"))
@@ -220,6 +231,9 @@ class Alert(Base):
 
 class Delivery(Base):
     __tablename__ = "deliveries"
+    # 0015: every delivery read joins on `alert_id`, and an alert delete cascades through it.
+    __table_args__ = (Index("ix_deliveries_alert_id", "alert_id"),)
+
     id: Mapped[int] = mapped_column(primary_key=True)
     # CASCADE (integration fix): deleting an alert deletes its per-channel delivery rows.
     alert_id: Mapped[int] = mapped_column(ForeignKey("alerts.id", ondelete="CASCADE"), nullable=False)

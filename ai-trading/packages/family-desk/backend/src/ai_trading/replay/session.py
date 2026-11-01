@@ -342,10 +342,10 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
 def _is_swing(db: Session, row: ReplaySession) -> bool:
     if row.thread_id is None:
         return False
-    return (
-        db.execute(select(PracticeThread.mode).where(PracticeThread.id == row.thread_id)).scalar_one_or_none()
-        == "swing"
-    )
+    # `db.get` answers from the identity map once the thread is loaded (a thread's mode never changes), so a list of
+    # sessions that share a thread asks the database once.
+    thread = db.get(PracticeThread, row.thread_id)
+    return thread is not None and thread.mode == "swing"
 
 
 # -- views over the revealed history --------------------------------------------------------------------------
@@ -518,15 +518,16 @@ def session_out(ctx: Ctx) -> dict[str, Any]:
     }
 
 
-def summary_out(db: Session, row: ReplaySession) -> dict[str, Any]:
-    """A hub row: realized trades and P/L only (cheap; no bars needed for active sessions)."""
+def summary_out(db: Session, row: ReplaySession, marks: list[PracticeMark] | None = None) -> dict[str, Any]:
+    """A hub row: realized trades and P/L only (cheap; no bars needed for active sessions). `marks` is the session's
+    marks in `seq` order when the caller already has them (`list_sessions` loads a whole page at once)."""
     if row.status == "ended" and row.journal is not None:
         totals = row.journal["totals"]
         trades, pnl, adherence = totals["trades"], totals["pnl_usd"], row.journal["adherence"]["score_pct"]
     elif _is_swing(db, row):  # the holds that closed in it; its marks alone miss a carried hold's exit
         (trades, pnl), adherence = swing_play.summary_totals(db, row.id), None
     else:
-        closed, _ = journal_mod.assemble(_marks_of(_load_marks(db, row.id)))
+        closed, _ = journal_mod.assemble(_marks_of(_load_marks(db, row.id) if marks is None else marks))
         trades = len(closed)
         pnl = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed]) if closed else None
         adherence = None
@@ -552,8 +553,23 @@ def list_sessions(db: Session, user_id: int, *, status: str | None, limit: int) 
     query = select(ReplaySession).where(ReplaySession.owner_user_id == user_id)
     if status:
         query = query.where(ReplaySession.status == status)
-    rows = db.execute(query.order_by(ReplaySession.updated_at.desc(), ReplaySession.id.desc()).limit(limit)).scalars()
-    return [summary_out(db, row) for row in rows]
+    rows = list(
+        db.execute(query.order_by(ReplaySession.updated_at.desc(), ReplaySession.id.desc()).limit(limit)).scalars()
+    )
+    # One query each for the page's threads and marks instead of two per row (was an N+1 over up to 100 rows). The
+    # threads land in the identity map, where `summary_out`'s `_is_swing` finds them; a row whose journal is already
+    # written needs neither its marks nor, usually, its thread.
+    thread_ids = {row.thread_id for row in rows if row.thread_id is not None}
+    if thread_ids:
+        db.execute(select(PracticeThread).where(PracticeThread.id.in_(thread_ids))).scalars().all()
+    marks: dict[int, list[PracticeMark]] = {}
+    need_marks = [row.id for row in rows if not (row.status == "ended" and row.journal is not None)]
+    if need_marks:
+        for mark in db.execute(
+            select(PracticeMark).where(PracticeMark.session_id.in_(need_marks)).order_by(PracticeMark.seq)
+        ).scalars():
+            marks.setdefault(mark.session_id, []).append(mark)
+    return [summary_out(db, row, marks.get(row.id, [])) for row in rows]
 
 
 # -- create --------------------------------------------------------------------------------------------------

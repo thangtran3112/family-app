@@ -194,8 +194,17 @@ def refresh(db: Session, sources: DataSources, *, now: datetime, symbols: list[s
     provider cannot serve is logged and skipped, never fatal."""
     window = last_sessions(now, LOOKBACK_SESSIONS)
     added: dict[str, int] = {}
-    for symbol in symbols if symbols is not None else watchlist_symbols(db):
-        have = set(db.execute(select(ReplayNotableDay.day).where(ReplayNotableDay.symbol == symbol)).scalars())
+    targets = list(symbols if symbols is not None else watchlist_symbols(db))
+    # One query for every symbol's stored days, not one per symbol (was an N+1 over the whole watchlist). A symbol's
+    # `_store`/`rerank` below only touches that symbol's rows, so the snapshot stays right for the later symbols.
+    stored: dict[str, set[date]] = {}
+    if targets:
+        for sym, stored_day in db.execute(
+            select(ReplayNotableDay.symbol, ReplayNotableDay.day).where(ReplayNotableDay.symbol.in_(targets))
+        ):
+            stored.setdefault(sym, set()).add(stored_day)
+    for symbol in targets:
+        have = stored.get(symbol, set())
         missing = [d for d in window if d not in have]
         if not missing:
             added[symbol] = 0
