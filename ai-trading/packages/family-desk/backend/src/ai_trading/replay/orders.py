@@ -15,17 +15,20 @@ the order fills: the session nets it against the position, `session._place`):
   it), the order fills on that bar at the trigger price. Otherwise it becomes a plain limit that is read from the NEXT
   bar on, because one bar does not say whether the price came back before or after the trigger.
 
-A fill is stamped at the close of its bar and priced in whole cents. There is no spread, slippage or fees. Bracket (a
-stop and a target that cancel each other) is not simulated; the Desk offers no way to place one.
+A fill is stamped at the close of its bar and priced in whole cents. A limit or stop price is itself whole cents
+(`check_new` refuses a fraction of a cent), so rounding a print can never carry a limit fill past its limit. There is
+no spread, slippage or fees. Bracket (a stop and a target that cancel each other) is not simulated; the Desk offers no
+way to place one.
 """
 
 import math
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 
-from ai_trading.replay.journal import fill_price
+from ai_trading.replay.journal import CENT, fill_price
 
 MINUTE = pd.Timedelta(minutes=1)
 
@@ -49,6 +52,8 @@ class Fill:
 def _positive(value: Any, path: str, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float) or not (math.isfinite(value) and value > 0):
         raise OrderProblem(f"{label} must be a number above 0", path=path)
+    if Decimal(repr(float(value))) % CENT:  # a fill is whole cents (D-033): a sub-cent limit would round past itself
+        raise OrderProblem(f"{label} must be in whole cents", path=path)
     return float(value)
 
 

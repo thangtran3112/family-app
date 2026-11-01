@@ -181,7 +181,7 @@ def test_a_name_left_behind_catches_up_to_the_clock_and_cannot_be_marked_before(
     ]
     with pytest.raises(ReplayProblem) as caught:
         _mark(db_session, user_id, svc, gapper.id, "note")  # even a note: the mark would be stamped in the past
-    assert caught.value.message == "This name is behind the day clock · advance to catch up before you mark"
+    assert caught.value.message == "This name is behind the day clock · catch up before you mark"
     caught_up = _advance(db_session, user_id, svc, gapper.id, "10:05")  # asks for less than the clock: monotonic
     assert caught_up["revealed_through"] == et(DAYS[0], "10:30") and caught_up["behind_clock"] is False
     assert [(s["name"], s["seen"]) for s in caught_up["signals"]] == [("mid", False)]  # fired while she was away

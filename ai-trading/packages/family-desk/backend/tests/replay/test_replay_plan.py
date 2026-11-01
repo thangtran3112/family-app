@@ -84,6 +84,35 @@ def _ready(db_session, user_id, svc) -> PracticePlan:
     return plan
 
 
+# -- a prep that died is restarted by the overview's own poll ---------------------------------------------------------
+
+
+def test_a_prep_that_stopped_reporting_is_claimed_for_restart_by_exactly_one_poll(db_session, user_id, svc) -> None:
+    """The screen hides its Next button while prep says "running", so only the poll can bring a dead prep back."""
+    from datetime import timedelta
+
+    plan = _plan(db_session, user_id, svc)  # prep: running, last reported at NOW
+    assert plan_mod.restart_stale_prep(db_session, user_id, NOW + timedelta(minutes=4), plan.thread_id) is None
+    later = NOW + timedelta(minutes=10)
+    claimed = plan_mod.restart_stale_prep(db_session, user_id, later, plan.thread_id)
+    assert claimed is not None and claimed.id == plan.id and claimed.prep["updated_at"] == later.isoformat()
+    assert claimed.prep["state"] == "running" and claimed.prep["total"] == len(SYMBOLS)  # only the clock moved
+    assert plan_mod.restart_stale_prep(db_session, user_id, later + timedelta(minutes=1), plan.thread_id) is None
+    assert plan_mod.restart_stale_prep(db_session, user_id, later + timedelta(minutes=6), None).id == plan.id  # no id
+    plan_mod.run_prep(db_session, svc, plan.id)
+    assert plan_mod.restart_stale_prep(db_session, user_id, later + timedelta(days=1), plan.thread_id) is None  # done
+
+
+def test_a_poll_with_no_thread_or_a_foreign_one_restarts_nothing(db_session, user_id, svc) -> None:
+    from datetime import timedelta
+
+    later = NOW + timedelta(minutes=10)
+    assert plan_mod.restart_stale_prep(db_session, user_id, later) is None  # no thread yet
+    plan = _plan(db_session, user_id, svc)
+    with pytest.raises(threads_mod.ThreadNotFound):
+        plan_mod.restart_stale_prep(db_session, user_id + 999, later, plan.thread_id)
+
+
 # -- the plan ---------------------------------------------------------------------------------------
 
 
@@ -494,7 +523,7 @@ def test_a_name_behind_the_day_clock_cannot_be_marked_until_it_catches_up(db_ses
     mark = {"schemaVersion": 1, "kind": "long_entry"}
     with pytest.raises(ReplayProblem) as caught:
         session_mod.place_mark(db_session, user_id, started.id, svc, mark)
-    assert caught.value.message == "This name is behind the day clock · advance to catch up before you mark"
+    assert caught.value.message == "This name is behind the day clock · catch up before you mark"
     caught_up = _advance(db_session, user_id, svc, started.id, "10:05")  # a nudge catches the name up to the clock
     assert caught_up["revealed_through"] == et(DAYS[0], "10:30")
     placed = session_mod.place_mark(db_session, user_id, started.id, svc, mark)

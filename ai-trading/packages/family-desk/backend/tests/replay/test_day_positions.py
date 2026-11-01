@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from daily_world import DAYS, make_thread
 from test_replay_plan import _advance
-from test_replay_switch import _mark, _names, _row
+from test_replay_switch import _feed, _mark, _names, _row
 
 from ai_trading.core.calendar import et
 from ai_trading.db.models import PracticeLedger, PracticeMark
@@ -337,6 +337,46 @@ def test_the_day_list_prices_every_position_at_the_clock_and_totals_the_day(db_s
     _mark(db_session, user_id, svc, flat.id, "long_exit")  # FLAT books +$20 at 52
     after = plan_mod.day_list_out(db_session, user_id, row.id, svc)["day_pnl"]
     assert (after["realized_usd"], after["open_usd"], after["total_usd"], after["open_count"]) == (20.0, 50.0, 70.0, 1)
+
+
+def test_a_name_behind_the_clock_shows_the_price_end_day_books_for_it(db_session, user_id, svc, world) -> None:
+    """The card of a name left behind the clock carried the price at its own playhead (110) while End day booked the
+    price at the clock (120): the number on the screen was not the number the trade exited at."""
+    _bend(world, "GAPPER", "10:00", None, open=120.0, high=120.0, low=120.0, close=120.0)
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc, "FLAT")
+    _advance(db_session, user_id, svc, gapper.id, "09:35")
+    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)
+    flat, _ = _enter(db_session, user_id, svc, row, "FLAT", shares=1)
+    _advance(db_session, user_id, svc, flat.id, "10:10")  # the clock: GAPPER's playhead is still 09:35
+
+    shown = session_mod.session_out(session_mod.context(db_session, svc, _row(db_session, gapper.id)))
+    assert shown["behind_clock"] and shown["revealed_through"] == _at("09:35")
+    assert (shown["open_trade"]["last_price"], shown["open_trade"]["unrealized_usd"]) == (120.0, 50.0)
+    feed = _feed(db_session, user_id, svc, gapper.id)
+    assert feed["open_trade"]["last_price"] == 120.0
+    assert feed["last"]["price"] == 110.0  # the chart's own last price stays at its playhead: nothing is drawn past it
+
+    plan_mod.end_day(db_session, user_id, row.id, svc)
+    booked = max(session_mod._marks_of(session_mod._load_marks(db_session, gapper.id)), key=lambda m: m.seq)
+    assert (booked.source, booked.at, booked.price) == ("auto", _at("10:10"), shown["open_trade"]["last_price"])
+
+
+def test_end_day_books_an_open_trade_flat_when_no_price_is_found(db_session, user_id, svc, monkeypatch) -> None:
+    """A trade with no price at the clock used to stay open on an ended session: its P/L vanished from the day."""
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc)
+    _advance(db_session, user_id, svc, gapper.id, "09:35")
+    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)
+    monkeypatch.setattr(session_mod, "last_price", lambda ctx, through: None)
+
+    plan_mod.end_day(db_session, user_id, row.id, svc)
+
+    booked = max(session_mod._marks_of(session_mod._load_marks(db_session, gapper.id)), key=lambda m: m.seq)
+    assert (booked.kind, booked.source, booked.price) == ("long_exit", "auto", 110.0)  # flat, at its entry
+    assert _row(db_session, gapper.id).journal["totals"]["trades"] == 1
+    ledger = db_session.query(PracticeLedger).filter_by(thread_id=gapper.thread_id).all()
+    assert [(r.symbol, float(r.pnl_usd)) for r in ledger] == [("GAPPER", 0.0)]
 
 
 def test_resuming_a_name_behind_the_clock_lifts_it_to_the_clock_and_adds_the_away_span(

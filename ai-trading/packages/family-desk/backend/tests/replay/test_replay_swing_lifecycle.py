@@ -313,6 +313,19 @@ def test_data_that_is_not_ready_yet_opens_no_list_and_a_dead_prep_says_to_restar
     assert swing.open_next(db_session, owner, svc, thread.id).day_list is not None
 
 
+def test_a_dead_swing_prep_is_claimed_by_the_poll_and_open_next_then_finds_it_alive(db_session, owner, svc) -> None:
+    from datetime import timedelta
+
+    thread, plan = create_swing_thread(db_session, owner, svc)
+    assert plan_mod.restart_stale_prep(db_session, owner, NOW, thread.id) is None  # reported just now
+    plan.prep = {**plan.prep, "updated_at": (NOW - timedelta(minutes=10)).isoformat()}
+    db_session.commit()
+    claimed = plan_mod.restart_stale_prep(db_session, owner, NOW, thread.id)
+    assert claimed is not None and claimed.id == plan.id and claimed.prep["updated_at"] == NOW.isoformat()
+    assert plan_mod.restart_stale_prep(db_session, owner, NOW, thread.id) is None  # one poll wins
+    assert swing.open_next(db_session, owner, svc, thread.id).restart_prep is False  # and Next does not start a second
+
+
 def test_a_closed_or_foreign_or_day_thread_cannot_open_a_day(db_session, owner, svc) -> None:
     from daily_world import make_thread
 
