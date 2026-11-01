@@ -747,7 +747,7 @@
           "type": "integer"
         },
         "shares": {
-          "maximum": 10000,
+          "maximum": 2147483647,
           "minimum": 1,
           "type": "integer"
         },
@@ -806,7 +806,7 @@
               "type": "number"
             },
             "shares": {
-              "maximum": 10000,
+              "maximum": 2147483647,
               "minimum": 1,
               "type": "integer"
             },
@@ -1407,7 +1407,7 @@
           "type": "string"
         },
         "shares": {
-          "maximum": 10000,
+          "maximum": 2147483647,
           "minimum": 1,
           "type": "integer"
         },

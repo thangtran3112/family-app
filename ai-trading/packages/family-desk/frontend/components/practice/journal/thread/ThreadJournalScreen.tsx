@@ -6,6 +6,7 @@ import { useState } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Badge } from "@/components/ui/Badge";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
@@ -61,7 +62,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{`Thread · ${name} · ${weeksInText(weeks.length)}`}</h1>
-            <span className={styles.chip}>{threadModeLabel(mode)}</span>
+            <Badge tone="neutral">{threadModeLabel(mode)}</Badge>
           </div>
           <p className={styles.sub}>
             {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} passed `}

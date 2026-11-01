@@ -377,6 +377,11 @@ def strip(ctx: "Ctx", clock: pd.Timestamp) -> list[dict[str, Any]]:
 # -- the hold as the screens read it -------------------------------------------------------------------------------
 
 
+def balance(db: Any, thread: PracticeThread) -> float:
+    """The thread's balance: the starting balance plus its ledger (never unrealized P/L)."""
+    return _swing().balance(db, thread)
+
+
 def free_cash(db: Any, thread: PracticeThread, rows: list[PracticeHold], day: date | None) -> float:
     """Free cash on `day` (b2): the ledger balance, plus today's realized P/L of the holds that exited today (credited
     to the ledger only when the day ends), minus the entry notional of every open hold. `day` None: between days,
@@ -385,7 +390,7 @@ def free_cash(db: Any, thread: PracticeThread, rows: list[PracticeHold], day: da
         holds_mod.closed_pnl(hold_rows.to_hold(r)) for r in rows if r.status == "closed" and r.exit_day == day
     )
     held = [hold_rows.to_hold(r) for r in rows if r.status == "open"]
-    return holds_mod.free_cash(_swing().balance(db, thread), realized, held)
+    return holds_mod.free_cash(balance(db, thread), realized, held)
 
 
 def _gap(ctx: "Ctx", row: PracticeHold) -> float | None:

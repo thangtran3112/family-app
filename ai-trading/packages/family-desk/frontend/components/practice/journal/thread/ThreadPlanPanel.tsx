@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadPlanFields } from "@/components/practice/thread/ThreadPlanFields";
@@ -66,7 +67,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
       {!closed && draft === null && (
         <div className={styles.headRow}>
           <p className={styles.planNote}>{PRACTICE_COPY.threadPlanCaption}</p>
-          <button type="button" className={styles.button} onClick={edit} disabled={busy}>{PRACTICE_COPY.threadEditPlan}</button>
+          <Button onClick={edit} disabled={busy}>{PRACTICE_COPY.threadEditPlan}</Button>
         </div>
       )}
 
@@ -83,8 +84,8 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
           <p className={styles.muted}>{PRACTICE_COPY.threadPlanApplies}</p>
           {saveError && <p role="alert" className={styles.alert}>{saveError}</p>}
           <div className={styles.actions}>
-            <button type="submit" className={`${styles.button} ${styles.primary}`} disabled={busy}>{PRACTICE_COPY.threadSavePlan}</button>
-            <button type="button" className={styles.button} onClick={cancel} disabled={busy}>Cancel</button>
+            <Button type="submit" variant="primary" disabled={busy}>{PRACTICE_COPY.threadSavePlan}</Button>
+            <Button onClick={cancel} disabled={busy}>Cancel</Button>
           </div>
         </form>
       ) : (
@@ -136,7 +137,7 @@ export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChan
 
   return (
     <div className={styles.stack}>
-      <button ref={closeRef} type="button" className={`${styles.button} ${styles.danger}`} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
+      <Button ref={closeRef} variant="danger" onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</Button>
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
       {mode === "swing" && <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p>}
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>

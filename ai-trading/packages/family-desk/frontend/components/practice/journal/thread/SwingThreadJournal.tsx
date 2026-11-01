@@ -7,6 +7,8 @@ import { HoldsTable } from "@/components/practice/swing/HoldsTable";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -61,7 +63,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{`Thread · ${name} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`}</h1>
-            <span className={styles.chip}>{threadModeLabel(thread.thread.mode)}</span>
+            <Badge tone="neutral">{threadModeLabel(thread.thread.mode)}</Badge>
           </div>
           <p className={styles.sub}>{`${startedWithText(thread.thread, state)} · ${where}${hidden ? ` · ${HUB_SWING_COPY.dateHidden}` : ""}`}</p>
         </div>
@@ -90,7 +92,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
             <div className={styles.nextRow}>
               <p className={`${styles.muted} ${styles.nextText}`}>{nextText}</p>
               {view.action.kind === "review" && view.action.weekNo !== null && view.action.label !== null && (
-                <Link href={`/practice/week?thread=${id}&week=${view.action.weekNo}`} className={styles.primaryLink}>{view.action.label}</Link>
+                <Button client href={`/practice/week?thread=${id}&week=${view.action.weekNo}`} variant="primary">{view.action.label}</Button>
               )}
               {(view.action.kind === "start" || view.action.kind === "continue") && view.action.label !== null && (
                 <SwingContinue threadId={id} label={view.action.label} onChanged={onChanged} />

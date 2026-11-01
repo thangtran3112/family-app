@@ -28,7 +28,8 @@ export type ThreadDraft = {
 export const defaultThreadDraft = (): ThreadDraft => ({
   startingBalance: String(DEFAULT_STARTING_BALANCE),
   mode: "day",
-  stopNoteOnEntry: true,
+  // A stop is advisable and never required: a new thread does not score, let alone ask for, one unless she turns it on.
+  stopNoteOnEntry: false,
   tradeOnlyOnSignal: false,
   maxLossUsd: "",
   maxTrades: "",

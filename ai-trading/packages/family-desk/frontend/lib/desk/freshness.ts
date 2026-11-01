@@ -319,7 +319,7 @@ export const PRACTICE_COPY = {
   bandHub: "Practice · replay of past days · nothing here reaches IBKR",
   bandHidden: "Practice · replay of a hidden day · nothing here reaches IBKR",
   bandHiddenWhy: "Day hidden so it cannot spoil the session",
-  bandMarks: "Practice marks are journal notes on a finished day, never trades",
+  bandMarks: "Practice trades are simulated on a finished day · nothing is sent to a broker",
   showDate: "Show date",
   statusPricesPast: "Prices: Alpaca SIP · past days",
   statusPricesReplay: "Prices: Alpaca SIP · replay",
@@ -355,9 +355,8 @@ export const PRACTICE_COPY = {
   markError: "Couldn't place that mark · Try again",
   markRejected: "That mark wasn't accepted",
   noOpenTrade: "No open practice trade to exit",
-  tradeAlreadyOpen: "A practice trade is already open · exit it first",
-  maxLoss: "Max loss reached · your plan says stop for the day",
   undone: "Practice mark removed",
+  orderFilled: "Working order filled at {price}",
   undoTooLate: "Can't undo · the playhead has moved",
   nothingToUndo: "No practice mark to undo",
   stopNeedsTrade: "Open a practice trade before setting a stop",
@@ -405,7 +404,6 @@ export const PRACTICE_COPY = {
   planSubmit: "Start day",
   planSubmitting: "Starting…",
   planOpening: "Opening the day…",
-  stopFirst: "Your plan asks for a stop on every entry · type a stop price first",
   // D-058, D-059: the day or the scan outlasted the gateway's wait; the Desk is still finishing it and the screen asks again.
   planStillWorking: "Still preparing your day · this can take a minute or two",
   planSaveFilterFirst: "Pick at least one filter to start a day",
@@ -458,7 +456,7 @@ export const PRACTICE_COPY = {
   dayOpen: "Open {symbol}",
   dayOpening: "Opening {symbol}…",
   dayPeekAt: "Peek at {symbol}",
-  dayPortfolioOpenOf: "{open} open of {cap}",
+  dayPortfolioOpenOf: "{open} open",
   dayPortfolioAsOf: "as of {time}",
   dayPortfolioExit: "Exit {symbol}",
   dayPortfolioLast: "last {price}",
@@ -667,10 +665,6 @@ export const PRACTICE_COPY = {
   swingEarnings: "Earnings {when} · {timing}",
   swingExitHer: "Exit Day {day} · {price}",
   swingExitAuto: "Closed at the close of Day {day} · {price}",
-  swingSizingRisk: "Sizing hint · risking {risk} to your stop means {shares} {noun}",
-  swingSizingCash: "Sizing hint · your free cash buys {shares} {noun}",
-  swingSizingNoCash: "Sizing hint · your free cash does not cover one share",
-  swingSizingTooBig: "Sizing hint · one share already risks more than {risk}",
   swingBoardHolds: "Practice holds",
   swingBoardNoHolds: "No practice holds open",
   swingBoardUniverse: "Universe",
@@ -873,8 +867,6 @@ export const PRACTICE_COPY = {
   overviewPlanTitle: "Plan and universe",
   overviewPlanCaption: "Thread plan",
   // Fix wave 5S, stream 3 (the replay chart and its controls).
-  entryResets: "After an entry the stop price clears and Shares stay as typed",
-  entryResetsSwing: "After an entry the stop price clears and Shares go back to the suggested size",
   // Fix wave 5S, stream 1 (practice UX): the hub, the day list and the week review.
   threadStartedSwing: "Started with {start} · realized {realized} · open holds {open}",
   planResumeDay: "Resume Day {n}",
@@ -901,17 +893,13 @@ export const PRACTICE_COPY = {
   overviewDayPassedHolds: "Passed · holds rode, equity {change}",
 } as const;
 
-/** Words that must not appear in Practice copy: there is no order, position, fill or broker in this lane (02o §a5). */
-export const PRACTICE_BANNED_TERMS: readonly RegExp[] = [
-  /\border(?:s|ed|ing)?\b/i,
-  /\bpositions?\b/i,
-  /\bfill(?:s|ed)?\b/i,
-  /\bbrokers?\b|\bbrokerage\b/i,
-  /\bexecut(?:e|es|ed|ing|ion)\b/i,
-];
-
+/**
+ * The Practice lane speaks broker words now (order, position, fill): its ticket is a broker ticket and its orders are
+ * simulated against a replayed day. What stays banned is the desk-wide list of technical words that must never reach
+ * the screen (`BANNED_TERMS`). The name is kept for the many copy tests that call it.
+ */
 export function containsPracticeBannedTerm(text: string): boolean {
-  return containsBannedTerm(text) || PRACTICE_BANNED_TERMS.some((pattern) => pattern.test(text));
+  return containsBannedTerm(text);
 }
 
 type PracticeKey = keyof typeof PRACTICE_COPY;

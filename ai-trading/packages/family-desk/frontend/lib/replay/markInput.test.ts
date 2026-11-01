@@ -12,8 +12,8 @@ test("entries carry shares and a stop only when typed", () => {
 });
 
 test("bad fields give plain sentences", () => {
-  assert.deepEqual(entryMark("long_entry", { shares: "0" }), { ok: false, message: "Shares: a whole number from 1 to 10,000" });
-  assert.deepEqual(entryMark("long_entry", { shares: "2.5" }), { ok: false, message: "Shares: a whole number from 1 to 10,000" });
+  assert.deepEqual(entryMark("long_entry", { shares: "0" }), { ok: false, message: "Quantity: a whole number of 1 or more" });
+  assert.deepEqual(entryMark("long_entry", { shares: "2.5" }), { ok: false, message: "Quantity: a whole number of 1 or more" });
   assert.deepEqual(entryMark("long_entry", { stopPrice: "-1" }), { ok: false, message: "Stop price: a number above 0" });
   assert.deepEqual(entryMark("long_entry", { stopPrice: "abc" }), { ok: false, message: "Stop price: a number above 0" });
   assert.deepEqual(stopMark(""), { ok: false, message: "Stop price: a number above 0" });

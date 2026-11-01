@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { PauseExit } from "@/lib/replay/playView";
 import type { Paused } from "@/lib/replay/schemas";
@@ -38,11 +39,11 @@ export function StopPausedToast({ paused, exit, busy, onExit, onKeep }: StopPaus
       <span>{view.text}</span>
       <span className={styles.pauseActions}>
         {exit && (
-          <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={answer(onExit)}>
+          <Button size="md" variant="primary" disabled={busy} onClick={answer(onExit)}>
             {practiceText("swingPauseExit", { symbol: exit.symbol })}
-          </button>
+          </Button>
         )}
-        <button type="button" className={styles.button} onClick={answer(onKeep)}>{PRACTICE_COPY.swingPauseKeep}</button>
+        <Button size="md" onClick={answer(onKeep)}>{PRACTICE_COPY.swingPauseKeep}</Button>
       </span>
     </div>
   );

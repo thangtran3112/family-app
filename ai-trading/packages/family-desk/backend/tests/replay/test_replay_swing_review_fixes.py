@@ -26,7 +26,6 @@ from ai_trading.replay import threads as threads_mod
 
 D1, D2, D3 = DAYS[:3]
 UNDO_CASH = "Can't undo that exit · it would leave you without enough practice cash"
-UNDO_CAP = "Can't undo that exit · it would take you past five practice holds"
 
 
 @pytest.fixture
@@ -44,7 +43,7 @@ def owner(db_session) -> int:
     return make_owner(db_session)
 
 
-# -- I1: undoing an exit re-checks the cap and the cash rule ---
+# -- I1: undoing an exit re-checks the cash rule ---
 
 
 def test_undoing_an_exit_that_would_leave_her_without_practice_cash_is_a_409_and_changes_nothing(
@@ -65,25 +64,23 @@ def test_undoing_an_exit_that_would_leave_her_without_practice_cash_is_a_409_and
     assert db_session.get(PracticeMark, exit_id) is not None
 
 
-def test_undoing_an_exit_that_would_make_a_sixth_open_hold_is_a_409_and_changes_nothing(db_session, owner, svc) -> None:
+def test_undoing_an_exit_with_other_holds_open_is_accepted_when_the_cash_is_there(db_session, owner, svc) -> None:
     thread, _ = ready_thread(db_session, owner, svc, balance=50_000)
     row, sessions = _day(db_session, owner, svc, thread, "S01", "S02", "S04", "S05", "S06")
     for s in sessions:
         _advance(db_session, owner, svc, s, "10:00")
         _mark(db_session, owner, svc, s, "long_entry", shares=10)
-    exit_ = _mark(db_session, owner, svc, sessions[0], "long_exit")  # four open
-    plan_mod.patch_day_list(  # swap a star: S07 takes S01's place on the focus list
+    exit_ = _mark(db_session, owner, svc, sessions[0], "long_exit")
+    plan_mod.patch_day_list(
         db_session, owner, row.id, svc, watch=["S02", "S04", "S05", "S06", "S07"], notes=None, rating=None,
         fields={"watch"},
     )  # fmt: skip
     seventh = swing.start_session(db_session, owner, row.id, "S07", svc)
     db_session.commit()
-    _mark(db_session, owner, svc, seventh, "long_entry", shares=10)  # five open
-    exit_id = exit_["mark"]["id"]
-    problem = _rejected(session_mod.undo_mark, db_session, owner, sessions[0].id, exit_id, svc)
-    assert (problem.message, problem.path, problem.status) == (UNDO_CAP, "kind", 409)
-    assert len(hold_rows.open_holds(db_session, thread.id)) == 5
-    assert _hold(db_session, thread, "S01").status == "closed" and db_session.get(PracticeMark, exit_id) is not None
+    _mark(db_session, owner, svc, seventh, "long_entry", shares=10)  # five open again, a sixth with the undo
+    out = session_mod.undo_mark(db_session, owner, sessions[0].id, exit_["mark"]["id"], svc)
+    assert out["removed_mark_id"] == exit_["mark"]["id"]
+    assert len(hold_rows.open_holds(db_session, thread.id)) == 6
 
 
 # -- I2: a swing session ends at the day's real regular close ---

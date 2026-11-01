@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { journal, openTrade } from "./fixtures.ts";
 import { formatClock } from "../desk/format.ts";
-import { maxLossReached, planChecklist, planNote, practicePnl, sessionFacts, stopMissing, tradeCount } from "./planView.ts";
+import { maxLossReached, planChecklist, planNote, practicePnl, sessionFacts, tradeCount } from "./planView.ts";
 import { JournalSchema, OpenTradeSchema } from "./schemas.ts";
 
 const parsedJournal = JournalSchema.parse(journal);
@@ -54,21 +54,18 @@ test("D-021: a plan with no rules still lists all four, reading Off and None", (
   assert.equal(planNote({}), null);
 });
 
-test("D-022: a missing stop on the open trade offers the one-click fix; a closed trade without one does not", () => {
+test("a missing stop is a tick on the checklist and nothing else: no action, no refusal", () => {
   const plan = { stopRequired: "yes", signalOnly: "no" } as const;
   const bare = { ...open, stop_price: null };
-  assert.equal(stopMissing(plan, bare), true);
-  assert.equal(stopMissing(plan, { ...open, stop_price: 9.5 }), false);
-  assert.equal(stopMissing(plan, null), false);
-  assert.equal(stopMissing({ stopRequired: "no" }, bare), false);
   const item = planChecklist(plan, { trades: [] }, bare)[0]!;
-  assert.deepEqual([item.state, item.detail, item.action], ["warn", "0 of 1", "add_stop"]);
+  assert.deepEqual([item.state, item.detail], ["warn", "0 of 1"]);
+  assert.equal("action" in item, false);
   const done = planChecklist(plan, { trades: [] }, { ...open, stop_price: 9.5 })[0]!;
-  assert.deepEqual([done.state, done.detail, done.action], ["ok", "1 of 1", undefined]);
+  assert.deepEqual([done.state, done.detail], ["ok", "1 of 1"]);
   const closedOnly = planChecklist(plan, { trades: [{ ...parsedJournal.trades[0]!, stop_price: null }] }, null)[0]!;
   assert.equal(closedOnly.state, "warn");
-  assert.equal(closedOnly.action, undefined);
 });
+
 
 test("the session block names the symbol, the window and the candle interval with the tape's feed", () => {
   assert.equal(formatClock("09:30"), "9:30 AM");

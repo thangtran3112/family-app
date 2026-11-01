@@ -11,7 +11,7 @@ armed strategy). A tape row is `[time, price, size, tick]`, oldest first.
 from datetime import date, datetime
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, Field, FiniteFloat, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer
 
 from ai_trading.api.schemas.common import Stamp, SwingOptional
 from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
@@ -27,6 +27,9 @@ NotableTag = Literal["gap_up", "gap_down", "heavy_volume", "earnings"]
 Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri"]
 MarkKind = Literal["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note"]
 Side = Literal["long", "short"]
+OrderSide = Literal["buy", "sell"]  # a buy is a long entry, a sell is a short entry
+WorkingOrderType = Literal["limit", "stop", "stop_limit"]  # a market entry is a mark (`POST .../marks`)
+OrderStatus = Literal["working", "filled", "cancelled"]
 PaceBand = Literal["quiet", "steady", "busy", "frantic"]
 
 
@@ -70,9 +73,29 @@ class MarkOut(BaseModel):
     source: Literal["her", "auto"]
 
 
+class OrderOut(BaseModel):
+    """A practice order that was not filled at once, and what became of it (the fill rules are in the orders module).
+    A fill is also an entry mark (`mark_id`)."""
+
+    id: int
+    side: OrderSide
+    type: WorkingOrderType
+    shares: int
+    limit_price: FiniteFloat | None
+    stop_price: FiniteFloat | None  # the stop leg's trigger
+    status: OrderStatus
+    placed_at: datetime  # the playhead when it was placed
+    triggered_at: datetime | None  # stop-limit: when the stop leg triggered
+    closed_at: datetime | None  # when it filled or was cancelled, on the tape's clock
+    fill_price: FiniteFloat | None
+    mark_id: int | None
+    reason: str | None  # why it was cancelled, when the server did it
+
+
 class OpenTradeOut(SwingOptional):
-    """The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
-    four last fields say how long it has been held and which price it is valued at; a day session leaves them out."""
+    """The name's open position: shares and `entry_price`, their average cost, however many fills built it. For a swing
+    session it is the name's practice hold (`trade_no` is the hold id) and the four last fields say how long it has been
+    held and which price it is valued at; a day session leaves them out."""
 
     swing_only: ClassVar[tuple[str, ...]] = (
         "opened_day_no",
@@ -296,6 +319,7 @@ class ReplaySessionOut(BaseModel):
     armed: list[ArmedOut]
     marks: list[MarkOut]
     open_trade: OpenTradeOut | None
+    orders: list[OrderOut] = []  # the session's orders that were not filled at once, newest last
     journal: JournalOut
     notes: str | None
     rating: int | None
@@ -427,7 +451,7 @@ class AdvanceOut(SwingOptional):
     it, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,
     and the levels, last print and open trade at the new playhead."""
 
-    swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming")
+    swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming", "fills")
 
     revealed_through: datetime
     day_clock: datetime | None  # the day list's shared clock; null for a standalone session
@@ -441,7 +465,10 @@ class AdvanceOut(SwingOptional):
     last: LastPrintOut | None
     quiet_s: int | None  # seconds with no eligible print, once that passes a minute: a halt looks like this
     open_trade: OpenTradeOut | None
+    orders: list[OrderOut] = []
     stamp: Stamp
+    # working orders the tape filled inside this advance, as the entry marks they became. Left out while there are none.
+    fills: list[MarkOut] | None = None
     # a stop was crossed on any open name of the day: play stopped at the close of its bar (a swing or a day session).
     # Left out of the JSON while there is no pause.
     paused: PausedOut | None = None
@@ -484,6 +511,37 @@ class MarkUndoOut(SwingOptional):
     journal: JournalOut
     thread: ThreadBriefOut | None = None  # undoing an exit takes its P/L back out of the balance
     hold: HoldOut | None = None  # a swing session: the hold after the undo (null when an entry was undone)
+
+
+class OrderIn(BaseModel):
+    """A limit, stop or stop-limit entry. Prices are in dollars; `shares` defaults to the session's. A limit order takes
+    `limitPrice` only, a stop order `stopPrice` only, a stop-limit both; anything else is a 422 that names the field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    side: OrderSide
+    orderType: WorkingOrderType
+    shares: int | None = Field(default=None, ge=1)
+    limitPrice: float | None = None
+    stopPrice: float | None = None
+
+
+class OrderResultOut(SwingOptional):
+    swing_only: ClassVar[tuple[str, ...]] = ("hold",)
+
+    order: OrderOut
+    orders: list[OrderOut]
+    mark: MarkOut | None  # set when the order filled at once (a limit through the market)
+    open_trade: OpenTradeOut | None
+    journal: JournalOut
+    warning: str | None
+    thread: ThreadBriefOut | None = None
+    hold: HoldOut | None = None
+
+
+class OrderCancelOut(BaseModel):
+    order: OrderOut
+    orders: list[OrderOut]
 
 
 # -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
@@ -652,7 +710,7 @@ class DaySessionOut(BaseModel):
     status: SessionStatus
     revealed_through: datetime
     behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
-    has_open_trade: bool  # the name holds an open trade (one per name, at most five across the day)
+    has_open_trade: bool  # the name holds an open position (one average-cost position per name, however many fills)
     trades: int  # closed trades on this name today
     realized_usd: FiniteFloat  # the closed trades' P/L (swing sessions report none here: their holds are scored weekly)
     position: OpenTradeOut | None  # the open trade marked at the DAY CLOCK, not the name's playhead; null when flat

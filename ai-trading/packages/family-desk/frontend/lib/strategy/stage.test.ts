@@ -37,8 +37,11 @@ test("Desk API and app source contain no order endpoint or client", async () => 
     ...await sourceFiles(join(frontend, "lib/api")),
     ...await sourceFiles(join(frontend, "app")),
   ];
+  // The one allowance (owner decision, 2026-11-01): the Practice lane's simulated limit, stop and stop-limit entries, which wait on a
+  // replayed past day and touch no broker or account. The generated OpenAPI files name exactly these two paths; any other "/orders" fails.
+  const practiceOrderRoutes = /\/replay\/sessions\/\{session_id\}\/orders(?:\/\{order_id\})?/g;
   for (const file of files) {
-    assert.equal((await readFile(file, "utf8")).includes("/orders"), false, file);
+    assert.equal((await readFile(file, "utf8")).replace(practiceOrderRoutes, "").includes("/orders"), false, file);
   }
 });
 

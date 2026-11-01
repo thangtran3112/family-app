@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { deleteThread } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
 import type { PracticeThread } from "@/lib/replay/threads";
 import { threadName } from "@/lib/replay/threadView";
-import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 
 /**
@@ -54,15 +54,14 @@ export function DeleteThread({
 
   return (
     <>
-      <button
-        type="button"
-        className={`${hub.button} ${styles.deleteButton}`}
+      <Button
+        className={styles.deleteButton}
         disabled={busy}
         aria-label={`${PRACTICE_COPY.threadDelete} ${threadName(thread)}`}
         onClick={() => setAsking(true)}
       >
         {PRACTICE_COPY.threadDelete}
-      </button>
+      </Button>
       {asking && (
         <ConfirmDialog
           title={practiceText("threadDeleteTitleNamed", { name: threadName(thread) })}

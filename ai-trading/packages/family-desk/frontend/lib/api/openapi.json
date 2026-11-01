@@ -257,6 +257,20 @@
             ],
             "title": "Day Clock"
           },
+          "fills": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MarkOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fills"
+          },
           "forming": {
             "anyOf": [
               {
@@ -289,6 +303,14 @@
                 "type": "null"
               }
             ]
+          },
+          "orders": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
           },
           "paused": {
             "anyOf": [
@@ -4168,6 +4190,20 @@
             ],
             "title": "Day Clock"
           },
+          "fills": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MarkOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fills"
+          },
           "forming": {
             "anyOf": [
               {
@@ -4209,6 +4245,14 @@
                 "type": "null"
               }
             ]
+          },
+          "orders": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
           },
           "paused": {
             "anyOf": [
@@ -8176,7 +8220,7 @@
         "type": "object"
       },
       "OpenTradeOut": {
-        "description": "The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the\nfour last fields say how long it has been held and which price it is valued at; a day session leaves them out.",
+        "description": "The name's open position: shares and `entry_price`, their average cost, however many fills built it. For a swing\nsession it is the name's practice hold (`trade_no` is the hold id) and the four last fields say how long it has been\nheld and which price it is valued at; a day session leaves them out.",
         "properties": {
           "days_held": {
             "anyOf": [
@@ -8360,6 +8404,244 @@
           "contracts"
         ],
         "title": "OptionLotOut",
+        "type": "object"
+      },
+      "OrderCancelOut": {
+        "properties": {
+          "order": {
+            "$ref": "#/components/schemas/OrderOut"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
+          }
+        },
+        "required": [
+          "order",
+          "orders"
+        ],
+        "title": "OrderCancelOut",
+        "type": "object"
+      },
+      "OrderOut": {
+        "description": "A practice order that was not filled at once, and what became of it (the fill rules are in the orders module).\nA fill is also an entry mark (`mark_id`).",
+        "properties": {
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "fill_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Price"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "mark_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark Id"
+          },
+          "placed_at": {
+            "format": "date-time",
+            "title": "Placed At",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "working",
+              "filled",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "triggered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Triggered At"
+          },
+          "type": {
+            "enum": [
+              "limit",
+              "stop",
+              "stop_limit"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "side",
+          "type",
+          "shares",
+          "limit_price",
+          "stop_price",
+          "status",
+          "placed_at",
+          "triggered_at",
+          "closed_at",
+          "fill_price",
+          "mark_id",
+          "reason"
+        ],
+        "title": "OrderOut",
+        "type": "object"
+      },
+      "OrderResultOut": {
+        "properties": {
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "journal": {
+            "$ref": "#/components/schemas/JournalOut"
+          },
+          "mark": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarkOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_trade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenTradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "order": {
+            "$ref": "#/components/schemas/OrderOut"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "order",
+          "orders",
+          "mark",
+          "open_trade",
+          "journal",
+          "warning"
+        ],
+        "title": "OrderResultOut",
         "type": "object"
       },
       "PaceOut": {
@@ -9088,7 +9370,7 @@
             "title": "Sessionid"
           },
           "shares": {
-            "maximum": 10000.0,
+            "maximum": 2147483647.0,
             "minimum": 1.0,
             "title": "Shares",
             "type": "integer"
@@ -10188,6 +10470,14 @@
               }
             ]
           },
+          "orders": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
           "rating": {
             "anyOf": [
               {
@@ -10486,7 +10776,7 @@
             "type": "string"
           },
           "shares": {
-            "maximum": 10000.0,
+            "maximum": 2147483647.0,
             "minimum": 1.0,
             "title": "Shares",
             "type": "integer"
@@ -19301,7 +19591,7 @@
     },
     "/api/desk/replay/day-lists/{day_list_id}/sessions": {
       "post": {
-        "description": "Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list\nname opens, one open trade at a time: a switch with a trade open is a 409 until it is closed.",
+        "description": "Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list\nname opens, and a position open on another name never blocks the switch.",
         "operationId": "start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post",
         "parameters": [
           {
@@ -19890,6 +20180,101 @@
           }
         },
         "summary": "Undo Mark",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/orders": {
+      "post": {
+        "description": "Place a limit, stop or stop-limit practice entry. It fills only on a later one-minute bar of the replayed tape\n(or at once at the last print when a limit already accepts it); a market entry is a mark.",
+        "operationId": "place_order_api_desk_replay_sessions__session_id__orders_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Order",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/sessions/{session_id}/orders/{order_id}": {
+      "delete": {
+        "description": "Cancel a working practice order (409 once it has filled or been cancelled).",
+        "operationId": "cancel_order_api_desk_replay_sessions__session_id__orders__order_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCancelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Order",
         "tags": [
           "replay"
         ]

@@ -22,8 +22,8 @@ export function SwingOpenTradeCard({ trade, tape }: { trade: OpenTrade | null; t
         <dt>Entry</dt>
         <dd>{trade.opened_day_no == null ? formatPrice(trade.entry_price) : holdEntryLabel({ entry_day_no: trade.opened_day_no, entry_price: trade.entry_price })}</dd>
       </div>
-      {trade.days_held != null && <div><dt className={styles.srOnly}>Held</dt><dd>{daysHeldText(trade.days_held)}</dd></div>}
-      {gap !== null && <div><dt className={styles.srOnly}>Overnight move</dt><dd data-tone={dayResultTone(trade.gap_usd)}>{gap}</dd></div>}
+      {trade.days_held != null && <div><dt className="sr-only">Held</dt><dd>{daysHeldText(trade.days_held)}</dd></div>}
+      {gap !== null && <div><dt className="sr-only">Overnight move</dt><dd data-tone={dayResultTone(trade.gap_usd)}>{gap}</dd></div>}
       <div><dt>Stop</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
       <div><dt>Price</dt><dd>{priceBasisLabel(trade.price_basis, trade.last_price, tape)}</dd></div>
       <div><dt>Unrealized</dt><dd data-tone={changeTone(trade.unrealized_usd)}>{formatSignedUsd(trade.unrealized_usd, { cents: true })}</dd></div>

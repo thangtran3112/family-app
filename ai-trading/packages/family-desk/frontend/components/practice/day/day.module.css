@@ -19,25 +19,13 @@
 .filterLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .filterNote { color: var(--color-muted); font-size: var(--text-micro); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.chip { display: inline-flex; min-height: 20px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
-.chipAmber { border-color: var(--color-amber); color: var(--color-amber); }
-/* A filter chosen at setup reads as on: filled amber (P7). Every chip on this screen is one. */
-.chipOn { min-height: 24px; border-color: var(--color-amber); background: var(--color-amber); padding: 0 var(--space-3); color: var(--color-on-pill); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); color: var(--color-amber); font-size: var(--text-label); }
 .footnote { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
-
-.button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; text-decoration: none; }
-.button:hover:not(:disabled) { background: var(--color-raised); }
-.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
-.primary { border-color: var(--color-amber); color: var(--color-amber); }
-.small { min-height: 24px; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-amber); font: inherit; font-size: var(--text-micro); font-weight: var(--weight-semibold); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
-.small:hover:not(:disabled) { background: var(--color-raised); }
-.small:disabled { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .link:hover { text-decoration: underline; }
-.button:focus-visible, .small:focus-visible, .link:focus-visible, .star:focus-visible, .tab:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.link:focus-visible, .star:focus-visible, .tab:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
-.star { width: 24px; height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.star { width: 24px; height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: var(--text-body); line-height: 1; cursor: pointer; }
 .star:hover:not(:disabled) { background: var(--color-raised); color: var(--color-text); }
 .star[aria-pressed="true"] { color: var(--color-amber); }
 .star:disabled { cursor: default; opacity: 0.5; }
@@ -59,7 +47,7 @@
 .tab[aria-selected="true"] { background: var(--color-raised); box-shadow: inset 0 -2px 0 var(--color-amber); color: var(--color-text); }
 
 /* Left rail: the block's days, the thread box, the starred names (P7) */
-.side:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.side:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .side { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
 .sideSection { display: flex; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3); }
 .sideHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
@@ -81,7 +69,7 @@
 .watchRow[data-selected="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
 .watchName { display: inline-flex; min-height: 24px; align-items: center; gap: var(--space-2); border: 0; background: transparent; padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-label); cursor: pointer; }
 .watchName:hover .symbol { text-decoration: underline; }
-.watchName:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.watchName:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .watchStar { color: var(--color-amber); }
 .facts { display: grid; margin: 0; grid-template-columns: 1fr 1fr; gap: var(--space-2); font-size: var(--text-label); }
 .facts dt { color: var(--color-muted); font-size: var(--text-micro); }

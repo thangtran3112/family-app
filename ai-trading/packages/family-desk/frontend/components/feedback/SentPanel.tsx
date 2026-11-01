@@ -24,8 +24,8 @@ export function SentPanel({ report }: { report: FeedbackDetail }) {
         <p className={styles.sentLine} role="status">Sent · thanks, it&apos;s on the Desk&apos;s list</p>
       </div>
       <div className={styles.sentActions}>
-        <Button href={`/feedback?id=${report.id}`}>View it</Button>
-        <Button href="/feedback" variant="secondary">All reports</Button>
+        <Button client href={`/feedback?id=${report.id}`}>View it</Button>
+        <Button client href="/feedback" variant="secondary">All reports</Button>
       </div>
       <div className={styles.attached}>
         <h3 className={styles.subhead}>What was attached</h3>

@@ -175,7 +175,7 @@ export const PracticeLedgerEntryV1Schema = z
     symbol: StockTickerSchema,
     day: IsoDaySchema,
     side: z.enum(["long", "short"]),
-    shares: z.int().min(1).max(10_000),
+    shares: z.int().min(1).max(2_147_483_647), // the column's width, not a cap (see replay-session-v1.ts)
     entryPrice: PriceSchema,
     exitPrice: PriceSchema,
     pnlUsd: UsdSchema,

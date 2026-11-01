@@ -197,3 +197,80 @@ export function paneHeights(total: number, wanted: readonly number[]): number[] 
   const room = total - price;
   return [price, ...wanted.map((height) => (asked > 0 ? (height * room) / asked : 0))];
 }
+
+// -- trackpad pinch ---------------------------------------------------------------------------------------------------
+
+/**
+ * Chrome and Edge send a trackpad pinch as `wheel` events with `ctrlKey` set and a `deltaY` of a few px. lightweight-charts
+ * treats them like a mouse wheel (a tenth of the bar spacing per 100 px), so a pinch zoomed about a tenth as far as the
+ * fingers moved (30 events of 2 px: 1.06x, measured in Chromium). The chart handles `ctrl+wheel` itself with this gain.
+ * Calibration knob: log-zoom per px of `deltaY`; raise it if a pinch still feels slow, lower it if it overshoots.
+ */
+export const PINCH_GAIN = 0.01;
+/** One event's px are capped: a ctrl+mouse-wheel notch reports 100 px and must not be a 2.7x jump. */
+const PINCH_MAX_PX = 30;
+/** Firefox reports wheel deltas in lines. */
+const PX_PER_LINE = 16;
+
+/** The zoom for one pinch event: above 1 zooms in (fingers apart, negative `deltaY`), below 1 zooms out. */
+export function pinchFactor(deltaY: number, deltaMode = 0): number {
+  const px = deltaMode === 0 ? deltaY : deltaY * PX_PER_LINE;
+  return Math.exp(-Math.max(-PINCH_MAX_PX, Math.min(PINCH_MAX_PX, px)) * PINCH_GAIN);
+}
+
+export type LogicalRange = { from: number; to: number };
+
+/**
+ * The visible range after zooming by `factor` with the point `x` px from the left edge of a `width` px chart staying on the
+ * same bar. Mirrors the library's own geometry (`count = to - from + 1 = width / barSpacing`, the right edge at `to`) and
+ * uses the bar's float index, because `coordinateToLogical` rounds up to a whole bar and would make the anchor jump.
+ */
+export function zoomedRange(range: LogicalRange, x: number, width: number, factor: number): LogicalRange {
+  const spacing = width / (range.to - range.from + 1);
+  const anchor = range.to - (width - 1 - x) / spacing;
+  const zoomed = spacing * factor;
+  const to = anchor + (width - 1 - x) / zoomed;
+  return { from: to - width / zoomed + 1, to };
+}
+
+type PinchChart = {
+  timeScale(): {
+    width(): number;
+    getVisibleLogicalRange(): LogicalRange | null;
+    setVisibleLogicalRange(range: LogicalRange): void;
+  };
+};
+
+/**
+ * Zoom the chart on a trackpad pinch (`ctrl+wheel`), anchored under the cursor, and keep the library's slower wheel handler
+ * from also seeing it. A plain wheel (mouse wheel, two-finger scroll) is left to the library. The listener is on `target`
+ * (the chart's container) in the capture phase, so it runs before the library's own listener on the element inside it.
+ * Returns the function that removes it.
+ *
+ * `setVisibleLogicalRange` only queues the range: the library applies it when it draws, on the next frame, and
+ * `getVisibleLogicalRange` keeps answering with the old one until then. A second event in the same frame would start from
+ * the old range and lose the first, so the range asked for is kept until `nextFrame` fires (after the library's own draw,
+ * which was queued first).
+ */
+export function attachPinchZoom(
+  target: HTMLElement,
+  chart: PinchChart,
+  nextFrame: (callback: () => void) => unknown = (callback) => requestAnimationFrame(callback),
+): () => void {
+  let queued: LogicalRange | null = null;
+  const onWheel = (event: WheelEvent) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const scale = chart.timeScale();
+    const range = queued ?? scale.getVisibleLogicalRange();
+    const width = scale.width();
+    if (range === null || width <= 1 || range.to < range.from) return;
+    const x = Math.max(0, Math.min(width - 1, event.clientX - target.getBoundingClientRect().left));
+    queued = zoomedRange(range, x, width, pinchFactor(event.deltaY, event.deltaMode));
+    scale.setVisibleLogicalRange(queued);
+    nextFrame(() => { queued = null; });
+  };
+  target.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  return () => target.removeEventListener("wheel", onWheel, { capture: true });
+}
