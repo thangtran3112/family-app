@@ -122,7 +122,7 @@ export function DayPlanFields({
           <Field id="plan-list-at" label={PRACTICE_COPY.planListAt} group className={modal.span} note={anyHeld ? needText : PRACTICE_COPY.planListAtHint} error={problems.listAt} reserve>
             <Segmented
               value={draft.listAt}
-              options={LIST_TIMES.map((item) => ({ value: item.value, label: item.label, disabledReason: listTimeHeld(item.value, need) ? needText : undefined }))}
+              options={LIST_TIMES.map((item) => ({ value: item.value, label: item.label, ...(listTimeHeld(item.value, need) ? { disabledReason: needText, reasonId: "plan-list-at-note" } : {}) }))}
               onChange={(listAt) => onDraft(withListTime(draft, listAt))}
             />
           </Field>

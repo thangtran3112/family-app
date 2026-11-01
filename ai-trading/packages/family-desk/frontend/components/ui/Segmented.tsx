@@ -10,6 +10,8 @@ export type SegmentedOption<T extends string> = {
   label: ReactNode;
   /** Why the option cannot be chosen. Setting it disables the option and shows the reason as its `title` and its description. */
   disabledReason?: string;
+  /** The id of an element on screen that already says the reason (a field's note): the option is described by it, and no hidden copy of the text is rendered. */
+  reasonId?: string;
 };
 
 /**
@@ -62,7 +64,7 @@ export function Segmented<T extends string>({
       data-size={size}
     >
       {options.map((option, index) => {
-        const reasonId = `${base}-${index}-reason`;
+        const reasonId = option.reasonId ?? `${base}-${index}-reason`;
         return (
           <Fragment key={option.value}>
           <button
@@ -81,7 +83,7 @@ export function Segmented<T extends string>({
             {option.label}
           </button>
           {/* Beside the button, not inside it: a description inside would become part of the button's name. */}
-          {option.disabledReason !== undefined && <span id={reasonId} className="sr-only">{option.disabledReason}</span>}
+          {option.disabledReason !== undefined && option.reasonId === undefined && <span id={reasonId} className="sr-only">{option.disabledReason}</span>}
           </Fragment>
         );
       })}
