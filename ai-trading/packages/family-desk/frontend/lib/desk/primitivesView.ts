@@ -89,7 +89,7 @@ export function rovingTarget(key: string, index: number, count: number, options:
 
 /** The index that takes Tab focus in a roving group: the selected one, else the first that is not disabled (so the group is never skipped). */
 export function rovingStop(selected: number, enabled: ReadonlyArray<boolean>): number {
-  if (selected >= 0 && enabled[selected] !== false) return selected;
+  if (selected >= 0 && selected < enabled.length && enabled[selected]) return selected;
   return Math.max(0, enabled.findIndex((on) => on));
 }
 
