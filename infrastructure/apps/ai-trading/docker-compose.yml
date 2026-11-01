@@ -254,6 +254,7 @@ services:
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/cloudflared.env
     networks: [hub, gateway]
+    extra_hosts: ["host.docker.internal:host-gateway"]
     mem_limit: 128m
     security_opt: ["no-new-privileges:true"]
 

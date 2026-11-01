@@ -38,6 +38,18 @@ resource "cloudflare_zero_trust_access_policy" "laptop_ssh" {
   }
 }
 
+resource "cloudflare_zero_trust_access_policy" "laptop_ssh_ci" {
+  count = var.laptop_ssh_enabled && var.laptop_ssh_ci_service_token_id != "" ? 1 : 0
+
+  account_id = var.cloudflare_account_id
+  name       = "laptop-ssh: CI service token"
+  decision   = "allow"
+
+  # The CI service token authenticates headlessly (no browser/PIN), so the
+  # GitHub deploy runner can ssh to the host through Cloudflare Access.
+  include = [{ service_token = { token_id = var.laptop_ssh_ci_service_token_id } }]
+}
+
 resource "cloudflare_zero_trust_access_application" "laptop_ssh" {
   count = var.laptop_ssh_enabled ? 1 : 0
 
@@ -51,8 +63,18 @@ resource "cloudflare_zero_trust_access_application" "laptop_ssh" {
   session_duration     = "24h"
   app_launcher_visible = false
 
-  policies = [{
-    id         = cloudflare_zero_trust_access_policy.laptop_ssh[0].id
-    precedence = 1
-  }]
+  policies = concat(
+    [
+      {
+        id         = cloudflare_zero_trust_access_policy.laptop_ssh[0].id
+        precedence = 1
+      },
+    ],
+    var.laptop_ssh_ci_service_token_id != "" ? [
+      {
+        id         = cloudflare_zero_trust_access_policy.laptop_ssh_ci[0].id
+        precedence = 2
+      },
+    ] : [],
+  )
 }

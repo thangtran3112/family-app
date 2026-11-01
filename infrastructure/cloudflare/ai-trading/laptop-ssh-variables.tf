@@ -33,6 +33,12 @@ variable "laptop_ssh_owner_email" {
   sensitive   = true
 }
 
+variable "laptop_ssh_ci_service_token_id" {
+  type        = string
+  description = "CI Access service token client id. When non-empty (and laptop_ssh_enabled), adds a second allow policy for this service token so GitHub deploys reach the host's sshd headlessly alongside the owner email. Empty = owner-email only. The value lives in Firestore ai-trading/cloudflare as TF_VAR_laptop_ssh_ci_service_token_id, never in this repository."
+  default     = ""
+}
+
 variable "laptop_ssh_origin" {
   type        = string
   description = "host:port the connector dials for the ssh:// ingress, as seen from inside the cloudflared container. The container is on bridge networks, so `localhost` is the container itself, not the host. The default needs `extra_hosts: [\"host.docker.internal:host-gateway\"]` on the cloudflared service in infrastructure/apps/ai-trading/docker-compose.yml, which that file does not have yet."
