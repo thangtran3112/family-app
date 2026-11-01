@@ -47,6 +47,15 @@ parse_args() {
   }
 }
 
+# ensure_trailing_newline FILE: appends one newline when FILE lacks a trailing
+# one. A PEM stored via `family_config.py set` loses its trailing newline (set
+# strips one); OpenSSH rejects the unterminated key file as "invalid format".
+ensure_trailing_newline() {
+  if [ -n "$(tail -c 1 "$1")" ]; then
+    printf '\n' >>"$1"
+  fi
+}
+
 main() {
   local ROOT CLI PROJECT CONFIGURATION READER_EMAIL REMOTE_KEY
   ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -73,6 +82,8 @@ main() {
   port="$("$CLI" get "$PROFILE" VPS_PORT)"
   user="$("$CLI" get "$PROFILE" VPS_USER)"
   "$CLI" get "$PROFILE" VPS_SSH_KNOWN_HOSTS >"$work/known_hosts"
+  ensure_trailing_newline "$work/known_hosts"
+  ensure_trailing_newline "$SSH_KEY"
   common_opts=(-i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="$work/known_hosts" -o StrictHostKeyChecking=yes)
   ssh_opts=("${common_opts[@]}" -p "$port")
   scp_opts=("${common_opts[@]}" -P "$port")
