@@ -8,6 +8,7 @@ import { nodePath } from "@/lib/desk/conditionTree";
 import { addRow, removeRow, updateRow, type FilterForm } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG } from "@/lib/desk/operands";
 import { fieldError } from "@/lib/desk/problems";
+import { optionLabel } from "@/lib/spec/labels";
 import { ConditionLeaf } from "./ConditionLeaf";
 import styles from "./conditions.module.css";
 
@@ -47,8 +48,8 @@ export function ConditionRows({ form, onChange, problems }: { form: FilterForm; 
     <FieldGroup legend="Conditions" error={groupError}>
       {form.rows.length > 1 && (
         <ChoiceGroup label="Match">
-          <Radio name="condition-mode" label="All of these" checked={form.mode === "all"} onChange={() => onChange({ ...form, mode: "all" })} />
-          <Radio name="condition-mode" label="Any of these" checked={form.mode === "any"} onChange={() => onChange({ ...form, mode: "any" })} />
+          <Radio name="condition-mode" label={optionLabel("all")} checked={form.mode === "all"} onChange={() => onChange({ ...form, mode: "all" })} />
+          <Radio name="condition-mode" label={optionLabel("any")} checked={form.mode === "any"} onChange={() => onChange({ ...form, mode: "any" })} />
         </ChoiceGroup>
       )}
       {form.rows.map((condition, index) => (

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 import { formatEtDayTime } from "@/lib/desk/feedbackView";
 import { EMPTY_VALUE } from "@/lib/desk/format";
 import type { FeedbackDetail } from "@/lib/feedback/schemas";
@@ -24,8 +24,8 @@ export function SentPanel({ report }: { report: FeedbackDetail }) {
         <p className={styles.sentLine} role="status">Sent · thanks, it&apos;s on the Desk&apos;s list</p>
       </div>
       <div className={styles.sentActions}>
-        <Link className={styles.view} href={`/feedback?id=${report.id}`}>View it</Link>
-        <Link className={styles.view} href="/feedback">All reports</Link>
+        <Button href={`/feedback?id=${report.id}`}>View it</Button>
+        <Button href="/feedback" variant="secondary">All reports</Button>
       </div>
       <div className={styles.attached}>
         <h3 className={styles.subhead}>What was attached</h3>

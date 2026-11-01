@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { FormActionBar } from "@/components/ui/FormActionBar";
+import { Segmented } from "@/components/ui/Segmented";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { createFeedbackReport } from "@/lib/desk/feedback";
 import { capture, captureRoute, contextOf } from "@/lib/desk/feedbackContext";
@@ -130,13 +131,12 @@ export function FeedbackForm() {
       }}
     >
       <div className={styles.scroll}>
-        <div role="radiogroup" aria-label="Type" className={styles.segmented}>
-          {KINDS.map((kind) => (
-            <button key={kind} type="button" role="radio" aria-checked={fields.kind === kind} className={styles.seg} onClick={() => set({ kind })}>
-              {KIND_FILTER_LABEL[kind]}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Type"
+          value={fields.kind}
+          options={KINDS.map((kind) => ({ value: kind, label: KIND_FILTER_LABEL[kind] }))}
+          onChange={(kind) => set({ kind })}
+        />
 
         <Field id="feedback-title" label="Title" required aside={<span className={styles.counter}>{fields.title.length} / {TITLE_LIMIT}</span>}>
           <Input maxLength={TITLE_LIMIT} autoComplete="off" autoFocus value={fields.title} onChange={(event) => set({ title: event.target.value })} />

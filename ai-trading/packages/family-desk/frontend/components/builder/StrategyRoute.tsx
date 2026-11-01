@@ -21,7 +21,7 @@ import { nextStage, type StrategyStage } from "@/lib/strategy/stage";
 import { positiveStrategyId } from "@/lib/strategy/id";
 import { STRATEGY_TEMPLATES } from "@/lib/templates";
 import type { StrategyVersion } from "./types";
-import { JsonView } from "./JsonView";
+import { JsonPanel } from "@/components/conditions/JsonPanel";
 import { saveBarCopy } from "@/lib/strategy/saveBar";
 import { SpecForm, validateSpecForm } from "./SpecForm";
 import { StageControl } from "./StageControl";
@@ -244,7 +244,6 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
           selectedVersionId={selectedVersionId}
           versions={loaded.versions}
         />
-        {selectedVersion && <JsonView spec={storedSpec} />}
       </div>
 
       <StageControl
@@ -274,6 +273,7 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
           readOnly={readOnly || saving}
         />
       )}
+      {selectedVersion && <JsonPanel spec={storedSpec} />}
       {saveError && <p className={styles.error} role="alert">{saveError}</p>}
       {form && (
         <FormActionBar
