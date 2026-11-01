@@ -167,3 +167,7 @@
 .bare .dataTable thead th { position: sticky; top: 0; background: var(--color-ground); }
 /* One legend per indicator pane, at the top of its pane (MarketChart places it from the pane layout). */
 .paneLegend { position: absolute; left: 12px; z-index: 3; }
+
+/* Replay level tooltip (the name of the level under the cursor) and the click-to-order popover; both float over the plot. */
+.levelTip { position: absolute; z-index: 4; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-1) var(--space-2); color: var(--color-text); font-size: var(--text-meta); line-height: var(--line-meta); white-space: nowrap; pointer-events: none; }
+.pick { position: absolute; z-index: 5; width: 232px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2); box-shadow: var(--shadow-pop); }
