@@ -13,7 +13,8 @@
 .root[data-variant="ghost"][data-icon="true"] { color: var(--color-muted); }
 .root:hover:not(:disabled, [aria-disabled="true"]) { background: var(--color-raised); }
 .root[data-variant="ghost"][data-icon="true"]:hover:not(:disabled) { color: var(--color-text); }
-.root[aria-pressed="true"] { border-color: var(--color-amber); }
+/* A pressed toggle, or the link to the page you are on (a filter chip row): the amber outline. */
+.root[aria-pressed="true"], .root[aria-current="page"] { border-color: var(--color-amber); }
 .root:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .root:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
 .root[aria-busy="true"] { cursor: progress; }
