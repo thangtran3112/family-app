@@ -259,7 +259,6 @@ services:
     # (laptop-ssh.tf); without it the Access SSH endpoint cannot connect.
     extra_hosts: ["host.docker.internal:host-gateway"]
     networks: [hub, gateway]
-    extra_hosts: ["host.docker.internal:host-gateway"]
     mem_limit: 128m
     security_opt: ["no-new-privileges:true"]
 
