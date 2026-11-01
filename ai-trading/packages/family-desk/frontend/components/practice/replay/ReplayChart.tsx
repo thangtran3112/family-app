@@ -11,6 +11,7 @@ import { chartLevels, declutterMarkers, firstDrawBars, practiceMarkers, signalMa
 import { visibleOverlays, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import { dailyChartModel, dailyLegend, type ChartMode } from "@/lib/replay/playView";
 import type { ReplayBar, ReplayMark } from "@/lib/replay/schemas";
+import { ms } from "@/lib/replay/time";
 import styles from "./replay.module.css";
 
 // Practice charts show a day's price, VWAP and the two EMAs with volume. RSI and MACD stay on the live workspace.
@@ -95,6 +96,13 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
   const untagged = useMemo(() => visibleOverlays(series.overlays, prefs).map((overlay) => ({ ...overlay, label: "" })), [series.overlays, prefs]);
   const hidden = new Set(series.overlays.filter((overlay) => prefs.on[overlay.id as PrefId] === false).map((overlay) => overlay.id));
   const legend = legendModel(symbol, view.interval, bars, series.overlays, crosshair, hidden);
+  // The bars before the replay window are lookback for the lines. The first view opens on the window's first bar, so a 15m axis reads 9:30 to 4:00, not 5:00 AM (D-099).
+  const sessionStart = useMemo(() => {
+    if (view.windowStart === null) return undefined;
+    const open = ms(view.windowStart);
+    const first = bars.findIndex((bar) => ms(bar.t) >= open);
+    return first < 0 ? bars.length : first;
+  }, [bars, view.windowStart]);
 
   return (
     <div className={styles.chartArea}>
@@ -117,6 +125,7 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
         height="fill"
         follow
         firstDraw={firstDrawBars(view.interval)}
+        sessionStart={sessionStart}
         hideDates={hideDates}
         focus={focus}
         dimmed={dimmed}

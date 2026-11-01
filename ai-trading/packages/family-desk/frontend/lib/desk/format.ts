@@ -144,9 +144,20 @@ export function signTone(value: number | null | undefined): SignTone {
   return value > 0 ? "up" : "down";
 }
 
+/** The sign of a change as the number reads once it is printed to `digits` decimals: -0.01% prints "0.0%" and is neutral, not red (D-148). */
+export function signToneAt(value: number | null | undefined, digits: number): SignTone {
+  return signTone(isFiniteNumber(value) ? Number(value.toFixed(digits)) : value);
+}
+
 /** The legacy spelling ("flat" for neutral) for modules not yet moved onto components/ui/tone; each migration wave retires its callers. */
 export function changeTone(value: number | null | undefined): Tone {
   const tone = signTone(value);
+  return tone === "neutral" ? "flat" : tone;
+}
+
+/** `changeTone` of the number as printed to `digits` decimals (see `signToneAt`). */
+export function changeToneAt(value: number | null | undefined, digits: number): Tone {
+  const tone = signToneAt(value, digits);
   return tone === "neutral" ? "flat" : tone;
 }
 

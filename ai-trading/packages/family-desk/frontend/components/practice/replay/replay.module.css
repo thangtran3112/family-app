@@ -84,7 +84,11 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .bottom { flex: 0 0 auto; border-top: 1px solid var(--color-hairline); }
 .bottomTabs { display: flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-4); }
 .bottomToggle { margin-left: auto; }
-.bottomBody { max-height: 160px; overflow-y: auto; padding: var(--space-2) var(--space-4); }
+/* The newest mark, named in the tab row while the panel is closed. */
+.newestMark { margin-left: auto; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.newestMark + .bottomToggle { margin-left: var(--space-2); }
+/* One fixed height, empty or full: a new mark scrolls inside it and never moves the chart (D-146). Newest first, so the top rows show. */
+.bottomBody { height: 72px; overflow-y: auto; padding: var(--space-2) var(--space-4); }
 
 /* Left rail: Session panel */
 .session { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
