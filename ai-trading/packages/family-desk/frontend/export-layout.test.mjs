@@ -27,6 +27,7 @@ const routes = [
   "practice",
   "practice/replay",
   "practice/journal",
+  "practice/order",
   "practice/day",
   "practice/week",
   "practice/thread",

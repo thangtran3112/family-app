@@ -20,7 +20,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
 import { threadClock } from "@/lib/replay/clock";
-import { formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
+import { formatEtClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { openRailTab } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
@@ -51,6 +51,7 @@ import type { Paused, ReplaySession } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
 import { replayStatusLine } from "@/lib/replay/statusLine";
 import { freeCashText } from "@/lib/replay/swing";
+import { chartOrderDraft } from "@/lib/replay/chartOrder";
 import { buildTicket, initialTicket, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
 import { whenReady } from "@/lib/desk/patience";
 import { endAnyDay } from "@/lib/replay/swingApi";
@@ -116,9 +117,16 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // The stop pause belongs to the playhead it stopped at: it shows until she answers or the playhead moves, so a chart
   // toggle (which re-reads the feed and drops `api.paused`) does not take the question away.
   const [pause, setPause] = useState<{ paused: Paused; at: string } | null>(null);
-  if (api.paused !== null && pause?.paused !== api.paused) setPause({ paused: api.paused, at: view.revealedThrough });
+  // A day thread's clock stays stopped at a crossed stop until she resumes it, so every follow answer repeats the same pause: it is one
+  // pause (the same name, stop and minute), and once answered it does not come back until the clock stops somewhere else.
+  const [answered, setAnswered] = useState<string | null>(null);
+  const pauseKey = (paused: Paused) => `${paused.symbol}|${paused.at}`;
+  if (api.paused !== null && pause?.paused !== api.paused && answered !== pauseKey(api.paused) && (pause === null || pauseKey(pause.paused) !== pauseKey(api.paused))) {
+    setPause({ paused: api.paused, at: view.revealedThrough });
+  }
   const shownPause = pause !== null && pause.at === view.revealedThrough && session.status !== "ended" ? pause.paused : null;
   const answerPause = () => {
+    if (pause !== null) setAnswered(pauseKey(pause.paused));
     setPause(null);
     api.dismissPause();
   };
@@ -161,6 +169,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const pnl = practicePnl(session.journal, view.openTrade);
   const trades = tradeCount(session.journal, view.openTrade);
   const atEnd = api.player.status === "at_end" || ended;
+  // A day thread's clock runs on the server and is controlled from the Summary: this screen has no transport at all (ADR-0018).
+  const followed = api.follows;
   const behind = view.behindClock && !ended;
   // The thread's one time: the day clock for a name on a day list (a name left behind it shows the thread's time, not its own old playhead).
   const clock = threadClock(view.revealedThrough, view.dayClock);
@@ -194,30 +204,37 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     if (next && band === "1180") setRailOpen((open) => openRailTab(open, "practice"));
   };
 
-  /** Buy or Sell as the ticket stands: a market entry, or a limit, stop or stop-limit order that waits on the tape. */
-  const submitTicket = (chosen: "buy" | "sell") => {
-    const built = buildTicket({ ...ticket, side: chosen });
+  /**
+   * Buy or Sell as the ticket stands: a market entry, or a limit, stop or stop-limit order that waits on the tape. A click on the
+   * chart's price (`chartDraft`) sends the ticket's quantity with the type and price that click means, through this same path, and
+   * leaves the ticket's own draft as she had it. Resolves true when the server took it.
+   */
+  const submitTicket = (chosen: "buy" | "sell", chartDraft?: TicketDraft): Promise<boolean> => {
+    const built = buildTicket(chartDraft ?? { ...ticket, side: chosen });
     if (!built.ok) {
-      setTicket((current) => ({ ...current, side: chosen }));
+      if (!chartDraft) setTicket((current) => ({ ...current, side: chosen }));
       setTicketError({ field: built.field, message: built.message });
       if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the message sits at the field
-      return;
+      return Promise.resolve(false);
     }
     setTicketError(null);
     // The server names the field it refused (not enough cash is the Quantity's): the message then sits at that field, as a typed one does.
+    // A chart order's price is not a ticket field the ticket shows (its type is market), so a refused price is the message line's.
     const refused = (path: string, message: string) => {
-      if (path !== "shares" && path !== "limitPrice" && path !== "stopPrice") return false;
-      setTicketError({ field: path, message });
+      const shown = chartDraft ? path === "shares" : path === "shares" || path === "limitPrice" || path === "stopPrice";
+      if (!shown) return false;
+      setTicketError({ field: path as TicketField, message });
       if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the field is in the drawer
       return true;
     };
-    void api.ticket(built.action, refused).then((accepted) => {
-      if (accepted) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
+    return api.ticket(built.action, refused).then((accepted) => {
+      if (accepted && !chartDraft) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
+      return accepted;
     });
   };
   const placeMark = (kind: Parameters<ReplaySessionApi["mark"]>[0]) => {
     if (kind === "long_entry" || kind === "short_entry") {
-      submitTicket(kind === "long_entry" ? "buy" : "sell");
+      void submitTicket(kind === "long_entry" ? "buy" : "sell");
       return;
     }
     void api.mark(kind, {}).then((accepted) => {
@@ -234,10 +251,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       return;
     }
     switch (action.type) {
-      case "toggle_play": toggle(); break;
-      case "step": api.step(); break;
-      case "next_signal": api.nextSignal(); break;
-      case "speed": api.setSpeed(action.speed); break;
+      // A day thread's clock is the Summary's: its keys say so instead of moving anything (ADR-0018).
+      case "toggle_play": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else toggle(); break;
+      case "step": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.step(); break;
+      case "next_signal": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.nextSignal(); break;
+      case "speed": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.setSpeed(action.speed); break;
       case "mark": placeMark(action.kind); break;
       case "stop_note": openComposer("stop"); break;
       case "note": openComposer("note"); break;
@@ -345,6 +363,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // newest mark in its tab row, so a mark she just placed is visible without Expand (D-028).
   const newestMark = markRows(session.marks)[0] ?? null;
 
+  // Click-to-order on the chart: only while she could use the ticket's buttons, and once there is a print to price against.
+  const lastPrice = view.last?.price ?? null;
+  const chartOrder = ended || behind || lastPrice === null
+    ? undefined
+    : { shares: ticket.shares, place: (chosen: "buy" | "sell", price: number) => submitTicket(chosen, chartOrderDraft(ticket, chosen, price, lastPrice)) };
+
   const controls = (
     <PracticeControls
       symbol={spec.symbol}
@@ -435,29 +459,41 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   return (
     <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined} data-full={full ? "true" : undefined}>
-      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active="trade" mode={swing ? "swing" : "day"} back={dayListId === null} />}
-      {/* The thread's clock sits above every name's header and chart: one time for all the tickers of the day, never under one chart. */}
-      <ThreadClockBar
-        label={dayListId !== null ? PRACTICE_COPY.threadTime : PRACTICE_COPY.replayTime}
-        hint={dayListId !== null ? PRACTICE_COPY.threadTimeHint : PRACTICE_COPY.replayTimeHint}
-        status={api.player.status}
-        busy={api.player.busy}
-        speed={api.player.speed}
-        error={api.player.error}
-        windowStart={session.window_start}
-        windowEnd={session.window_end}
-        clock={clock}
-        marks={session.marks}
-        signals={view.signals}
-        onToggle={toggle}
-        onStep={api.step}
-        onSpeed={api.setSpeed}
-        onJumpBy={api.jumpBy}
-        onJumpToTime={api.jumpToTime}
-        onNextSignal={api.nextSignal}
-        onJumpEnd={api.jumpToEnd}
-        swing={swing}
-      />
+      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active="order" mode={swing ? "swing" : "day"} back={dayListId === null} />}
+      {/* A day thread's clock is the thread's, on the server, and its controls are on the Summary: none of that is on a chart (ADR-0018).
+          A swing session and a standalone replay still carry their own clock bar. */}
+      {!followed && (
+        <ThreadClockBar
+          label={dayListId !== null ? PRACTICE_COPY.threadTime : PRACTICE_COPY.replayTime}
+          hint={dayListId !== null ? PRACTICE_COPY.threadTimeHint : PRACTICE_COPY.replayTimeHint}
+          status={api.player.status}
+          busy={api.player.busy}
+          speed={api.player.speed}
+          error={api.player.error}
+          windowStart={session.window_start}
+          windowEnd={session.window_end}
+          clock={clock}
+          marks={session.marks}
+          signals={view.signals}
+          onToggle={toggle}
+          onStep={api.step}
+          onSpeed={api.setSpeed}
+          onJumpBy={api.jumpBy}
+          onJumpToTime={api.jumpToTime}
+          onNextSignal={api.nextSignal}
+          onJumpEnd={api.jumpToEnd}
+          swing={swing}
+        />
+      )}
+      {followed && (
+        // Read-only: the thread's time and whether it is running. Pause, speed, Step, Jump and Skip day are on the Summary.
+        <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
+          <span>{PRACTICE_COPY.threadTime}</span>
+          <span data-testid="thread-clock-time">{formatEtClock(clock)}</span>
+          <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClose : PRACTICE_COPY.clockStatePaused}</span>
+          {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
+        </p>
+      )}
       <ReplayHeader
         symbol={spec.symbol}
         dayLabel={swingDay ?? dayLabel}
@@ -480,7 +516,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         </p>
       )}
       <div className={styles.chartSlot} data-testid="chart-slot">
-        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
       <ChartToolbar
         symbol={spec.symbol}
@@ -551,7 +587,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           </TabPanel>
         )}
       </section>
-      {helpOpen && <ShortcutsOverlay onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <ShortcutsOverlay onClose={() => setHelpOpen(false)} followed={followed} />}
       <LeftRailPortal>
         <div className={styles.session}>
           {swing ? (

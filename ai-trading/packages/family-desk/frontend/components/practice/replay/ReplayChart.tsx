@@ -7,11 +7,13 @@ import { ChartLegend } from "@/components/workspace/ChartLegend";
 import type { CrosshairPoint } from "@/lib/chart-data";
 import { legendModel, type ChartSeries, type IndicatorId } from "@/lib/desk/workspace";
 import { dailyBlock, type ReplayView } from "@/lib/replay/feedState";
-import { chartLevels, declutterMarkers, firstDrawBars, practiceMarkers, signalMarkers, stopLevel } from "@/lib/replay/marks";
+import { chartLevels, declutterMarkers, firstDrawBars, positionLevel, signalMarkers, stopLevel } from "@/lib/replay/marks";
 import { visibleOverlays, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import { dailyChartModel, dailyLegend, type ChartMode } from "@/lib/replay/playView";
-import type { ReplayBar, ReplayMark } from "@/lib/replay/schemas";
+import type { ReplayBar } from "@/lib/replay/schemas";
+import type { TicketSide } from "@/lib/replay/ticket";
 import { ms } from "@/lib/replay/time";
+import { ChartOrder } from "./ChartOrder";
 import styles from "./replay.module.css";
 
 // Practice charts show a day's price, VWAP and the two EMAs with volume. RSI and MACD stay on the live workspace.
@@ -23,7 +25,6 @@ export type ReplayChartProps = {
   /** The displayed bars and the series computed from them (the header reads VWAP from the same series). */
   bars: ReplayBar[];
   series: ChartSeries;
-  marks: readonly ReplayMark[];
   hideDates: boolean;
   focus: { time: string; at: number } | null;
   dimmed?: boolean;
@@ -33,11 +34,15 @@ export type ReplayChartProps = {
   onTogglePref: (id: PrefId) => void;
   /** Swing session only (02p d2): `daily` plots the rebased daily bars and today's forming candle in place of the intraday bars. */
   swing?: { mode: ChartMode };
+  /** Click-to-order on the intraday chart: the ticket's quantity and the way an order goes in. Absent while she cannot order (the session ended, or the name is behind the day clock). */
+  order?: { shares: string; place: (side: TicketSide, price: number) => Promise<boolean> };
 };
 
 /**
- * The replay chart: `MarketChart` fed only with what the server revealed (closed bars plus the forming one), her Practice
- * marks, the would-fire bells of released signals, key levels and the practice stop. No bar is ever sliced here.
+ * The replay chart: `MarketChart` fed only with what the server revealed (closed bars plus the forming one), the would-fire
+ * bells of released signals, key levels, and her position and stop as price lines. It draws no entry or exit arrows and no
+ * "Practice" wording: it reads as a broker's chart (the Marks list and the journal keep the labelled marks). A level is only its
+ * number on the axis, with its name on hover. A click on a price offers Buy and Sell there. No bar is ever sliced here.
  */
 export function ReplayChart(props: ReplayChartProps) {
   return props.swing?.mode === "daily" && props.view.daily !== null ? <DailyChart {...props} /> : <IntradayChart {...props} />;
@@ -68,8 +73,8 @@ function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps
           quality="eod"
           asOf={null}
           levels={model.levels}
+          levelTips
           chartType={prefs.type}
-          markers={model.markers}
           volume
           onCrosshair={setCrosshair}
           chrome="bare"
@@ -84,12 +89,13 @@ function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps
   );
 }
 
-function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, dimmed, prefs, onTogglePref }: ReplayChartProps) {
+function IntradayChart({ symbol, view, bars, series, hideDates, focus, dimmed, prefs, onTogglePref, order }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
-  // Marker labels that would print over each other lose their text; the shapes stay (D-099).
-  const markers = useMemo(() => declutterMarkers([...practiceMarkers(marks, bars), ...signalMarkers(view.signals, bars)], bars), [marks, bars, view.signals]);
-  // Her toggles filter what is drawn; the practice stop is her risk line, not a preference, so it always shows.
-  const levels = useMemo(() => [...chartLevels(view.levels, prefs), ...stopLevel(view.openTrade)], [view.levels, view.openTrade, prefs]);
+  // Only the replayed signals are marked: her entries and exits are not drawn on the chart. Their labels that would print over each other lose their text; the shapes stay (D-099).
+  const markers = useMemo(() => declutterMarkers(signalMarkers(view.signals, bars), bars), [bars, view.signals]);
+  // Her toggles filter the key levels; her position and stop are her own lines, not a preference, so they always show.
+  const levels = useMemo(() => [...chartLevels(view.levels, prefs), ...positionLevel(view.openTrade), ...stopLevel(view.openTrade)], [view.levels, view.openTrade, prefs]);
+  const last = view.last?.price ?? null;
   // The legend names VWAP and the EMAs. The chart's own series tags ("EMA 9") would sit over the newest bars, where a practice
   // marker lands, so they are left off the chart (D-028). Every overlay is still computed (the header reads VWAP from `series`);
   // only the visible ones go to the chart, and the legend keeps the hidden ones listed so a click turns them back on.
@@ -116,6 +122,8 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
         overlays={untagged}
         panes={series.panes}
         levels={levels}
+        levelTips
+        renderPick={order && last !== null ? (price, close) => <ChartOrder symbol={symbol} price={price} last={last} shares={order.shares} onPlace={order.place} onClose={close} /> : undefined}
         chartType={prefs.type}
         markers={markers}
         volume={series.volume && prefs.on.volume}

@@ -8,22 +8,18 @@ import { Tabs } from "@/components/ui/Tabs";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { PRACTICE_TABS, practiceTabLabel, resolveTabHref, threadPageHref, type PracticeTab, type TabLoaders } from "@/lib/replay/practiceTabs";
-import { loadAnyDayList } from "@/lib/replay/swingApi";
 import landing from "./landing.module.css";
 import styles from "./PracticeTabs.module.css";
 
 /** `idBase` of the strip: the thread page's `TabPanel` uses the same one. */
 export const PRACTICE_TABS_ID = "practice-tabs";
 
-const LOADERS: TabLoaders = {
-  today: async (id) => (await loadThread(id)).today,
-  sessions: async (dayListId) => (await loadAnyDayList(dayListId)).sessions.map((session) => session.id),
-};
+const LOADERS: TabLoaders = { today: async (id) => (await loadThread(id)).today };
 
 /**
- * The strip of one practice thread: Summary, Portfolio, Day list (Board for a swing thread), Trade, Journal. It stands in the
- * row the "Back to practice" link used to take, on the thread page, the day list, the replay workspace and the journal. A click
- * asks the server where the thread's open day and session are now (`resolveTabHref`), so a tab never sends her to a stale id.
+ * The strip of one practice thread: Summary, Portfolio, Day list (Board for a swing thread), Order, Trades. It stands in the
+ * row the "Back to practice" link used to take, on the thread page, the day list, the replay workspace, the Order page and the
+ * Trades screen. A click asks the server where the thread's open day is now (`resolveTabHref`), so a tab never sends her to a stale id.
  * A session with no thread has no strip and keeps the plain back link. Summary and Portfolio share the thread page, which wraps
  * its content in a `TabPanel` and passes `panelMounted`; on the other screens the tabs are navigation and name no panel.
  */
@@ -56,7 +52,7 @@ export function PracticeTabs({
       .then((href) => {
         if (click !== latest.current) return;
         setBusy(false);
-        // Summary with no open day for Day list or Trade is the page she is on: no second history entry.
+        // Summary with no open day for Day list is the page she is on: no second history entry.
         if (href !== `${window.location.pathname}${window.location.search}`) router.push(href, { scroll: false });
       });
   }

@@ -22,6 +22,7 @@ import { ImprovementPanel } from "./ImprovementPanel";
 import { SwingThreadJournal } from "./SwingThreadJournal";
 import { CloseThreadPanel, ThreadPlanPanel } from "./ThreadPlanPanel";
 import { ThreadPicker } from "./ThreadPicker";
+import { ThreadFills } from "./ThreadFills";
 import { ThreadSidePanel } from "./ThreadSidePanel";
 import { ThreadTiles } from "./ThreadTiles";
 import styles from "./threadJournal.module.css";
@@ -122,6 +123,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
               </section>
             </>
           )}
+          {mode === "day" && <ThreadFills thread={thread} />}
         </div>
       </div>
       <RightRail

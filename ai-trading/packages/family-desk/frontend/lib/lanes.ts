@@ -103,7 +103,7 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
   // Backtests joins when "Run backtest" stops being a fixture.
   backtest: [
     { label: "Practice", href: "/practice" },
-    { label: "Journal", href: "/practice/journal" },
+    { label: "Trades", href: "/practice/journal" },
   ],
 };
 
@@ -148,7 +148,7 @@ export function isNavActive(href: string, pathname: string, match: string = href
   return path === match || path.startsWith(`${match}/`);
 }
 
-/** The one tab to mark current: the longest matching one, so /practice/journal lights Journal and not Practice too. */
+/** The one tab to mark current: the longest matching one, so /practice/journal lights Trades and not Practice too. */
 export function activeNavItem(items: readonly NavItem[], pathname: string): NavItem | undefined {
   let best: NavItem | undefined;
   for (const item of items) {

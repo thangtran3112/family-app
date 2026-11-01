@@ -147,7 +147,7 @@
         "type": "object"
       },
       "AdvanceIn": {
-        "description": "Exactly one of `to` and `step`. `to` at or before `revealed_through` answers an empty delta; `to` past\nthe window end is clamped and `at_end` is true. `step: \"next_signal\"` reveals through the next would-fire bar\nclose (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422.",
+        "description": "Exactly one of `to`, `step` and `sync`. `to` at or before `revealed_through` answers an empty delta; `to` past\nthe window end is clamped and `at_end` is true. `step: \"next_signal\"` reveals through the next would-fire bar\nclose (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422. `sync: true` is\nthe day-trade screen following the thread's server-side clock (ADR-0018): it brings a running clock to now, then\nreveals this name through that clock, wherever it is; it moves nothing itself.",
         "properties": {
           "interval": {
             "anyOf": [
@@ -200,6 +200,11 @@
               }
             ],
             "title": "Step"
+          },
+          "sync": {
+            "default": false,
+            "title": "Sync",
+            "type": "boolean"
           },
           "to": {
             "anyOf": [
@@ -364,6 +369,16 @@
               }
             ],
             "title": "Strip"
+          },
+          "thread_clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadClockStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2375,6 +2390,189 @@
         "title": "CardBackOut",
         "type": "object"
       },
+      "ClockAccountOut": {
+        "description": "The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its\ncost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. Computed on the server, never past the\nclock.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "balance": {
+            "title": "Balance",
+            "type": "number"
+          },
+          "day_pnl_usd": {
+            "title": "Day Pnl Usd",
+            "type": "number"
+          },
+          "equity_usd": {
+            "title": "Equity Usd",
+            "type": "number"
+          },
+          "open_pnl_usd": {
+            "title": "Open Pnl Usd",
+            "type": "number"
+          },
+          "positions": {
+            "title": "Positions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "balance",
+          "open_pnl_usd",
+          "equity_usd",
+          "day_pnl_usd",
+          "positions",
+          "as_of"
+        ],
+        "title": "ClockAccountOut",
+        "type": "object"
+      },
+      "ClockIn": {
+        "additionalProperties": false,
+        "description": "Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with\nits UTC offset). Any mix, at least one; a step or jump is forward only and stops at a crossed stop or the close.",
+        "properties": {
+          "running": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Running"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "enum": [
+                  1,
+                  2,
+                  5,
+                  10
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bar",
+                  "next_signal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "title": "ClockIn",
+        "type": "object"
+      },
+      "ClockPauseOut": {
+        "description": "Why a running clock stopped: a stop crossed on an open name (`kind: \"stop\"`, with the name, the stop, the price\nan Exit would book and `crossing` \"cross\" or \"gap\") or the window end (`kind: \"close\"`).",
+        "properties": {
+          "also": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Also",
+            "type": "array"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "crossing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cross",
+                  "gap"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crossing"
+          },
+          "kind": {
+            "enum": [
+              "stop",
+              "close"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "kind",
+          "at"
+        ],
+        "title": "ClockPauseOut",
+        "type": "object"
+      },
       "ConsensusOut": {
         "properties": {
           "fiscal_years": {
@@ -4328,6 +4526,16 @@
             ],
             "title": "Strip"
           },
+          "thread_clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadClockStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "window_start": {
             "format": "date-time",
             "title": "Window Start",
@@ -5103,6 +5311,92 @@
           "report_id"
         ],
         "title": "FeedbackUploadOut",
+        "type": "object"
+      },
+      "FillOut": {
+        "description": "One execution of a day thread: a Buy or a Sell with its shares, price and time. `closes` of the shares closed the\nname's position and `opens` opened or added to one (a flip has both).",
+        "properties": {
+          "action": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "closes": {
+            "title": "Closes",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "opens": {
+            "title": "Opens",
+            "type": "integer"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "integer"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "her",
+              "auto"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "trade_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade No"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "symbol",
+          "day",
+          "action",
+          "shares",
+          "price",
+          "at",
+          "closes",
+          "opens",
+          "trade_no",
+          "source"
+        ],
+        "title": "FillOut",
         "type": "object"
       },
       "Filter": {
@@ -12338,6 +12632,36 @@
         "title": "SignalVsTradeOut",
         "type": "object"
       },
+      "SkipDayOut": {
+        "description": "Skip day: the day that ended and the next one (null while its data is still being prepared, or when the plan is\ndone: poll the hub), with the clock as it stands.",
+        "properties": {
+          "clock": {
+            "$ref": "#/components/schemas/ThreadClockOut"
+          },
+          "ended_day_list_id": {
+            "title": "Ended Day List Id",
+            "type": "integer"
+          },
+          "next_day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Day List Id"
+          }
+        },
+        "required": [
+          "ended_day_list_id",
+          "next_day_list_id",
+          "clock"
+        ],
+        "title": "SkipDayOut",
+        "type": "object"
+      },
       "SourceQualityOut": {
         "properties": {
           "median_return_pct": {
@@ -14395,6 +14719,168 @@
         "title": "ThreadBriefOut",
         "type": "object"
       },
+      "ThreadClockOut": {
+        "description": "The day-trade thread's clock (ADR-0018). `clock` is the simulated time at `server_now` (a running clock was\nsettled before this was built); a client may extrapolate it with `speed` between polls but never owns it.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClockAccountOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clock": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock"
+          },
+          "day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day List Id"
+          },
+          "day_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day No"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClockPauseOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "server_now": {
+            "format": "date-time",
+            "title": "Server Now",
+            "type": "string"
+          },
+          "speed": {
+            "enum": [
+              1,
+              2,
+              5,
+              10
+            ],
+            "title": "Speed",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "no_day",
+              "listed",
+              "paused",
+              "running",
+              "at_close"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "integer"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          }
+        },
+        "required": [
+          "thread_id",
+          "state",
+          "day_list_id",
+          "day_no",
+          "running",
+          "speed",
+          "clock",
+          "window_start",
+          "window_end",
+          "server_now",
+          "pause",
+          "account",
+          "label"
+        ],
+        "title": "ThreadClockOut",
+        "type": "object"
+      },
+      "ThreadClockStateOut": {
+        "properties": {
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "speed": {
+            "enum": [
+              1,
+              2,
+              5,
+              10
+            ],
+            "title": "Speed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "running",
+          "speed"
+        ],
+        "title": "ThreadClockStateOut",
+        "type": "object"
+      },
       "ThreadDayOut": {
         "description": "One ended practice day, in the order she practised. `balance` is the SIMULATED balance at the day's end.",
         "properties": {
@@ -14466,6 +14952,33 @@
           "balance"
         ],
         "title": "ThreadDayOut",
+        "type": "object"
+      },
+      "ThreadFillsOut": {
+        "description": "The newest executions of a day thread, newest booking first. `total` counts every one.",
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillOut"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id",
+          "total",
+          "fills"
+        ],
+        "title": "ThreadFillsOut",
         "type": "object"
       },
       "ThreadLedgerOut": {
@@ -20440,6 +20953,100 @@
         ]
       }
     },
+    "/api/desk/replay/threads/{thread_id}/clock": {
+      "get": {
+        "description": "The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the\nsimulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the\nanswer whether or not anyone was looking in between. Poll it; it is idempotent.",
+        "operationId": "get_thread_clock_api_desk_replay_threads__thread_id__clock_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadClockOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Clock",
+        "tags": [
+          "replay"
+        ]
+      },
+      "post": {
+        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump\nit to a time. Forward only; a step or jump stops at a crossed stop or the close like Play does. 409 before the day\nhas started or when Play is asked at the close. Time then runs on the server until she pauses it.",
+        "operationId": "control_thread_clock_api_desk_replay_threads__thread_id__clock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadClockOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Control Thread Clock",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
     "/api/desk/replay/threads/{thread_id}/close": {
       "post": {
         "description": "Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end\nit first). A swing thread's open holds exit at the last ended close and its open week is frozen with its review.\nIdempotent.",
@@ -20478,6 +21085,61 @@
           }
         },
         "summary": "Close Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/fills": {
+      "get": {
+        "description": "The day thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how\nmany of the shares closed the name's position. The server keeps the book; the screen never rebuilds a trade from\nmemory. A swing thread keeps its positions as holds (`/holds`): 404 here.",
+        "operationId": "get_thread_fills_api_desk_replay_threads__thread_id__fills_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadFillsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Fills",
         "tags": [
           "replay"
         ]
@@ -20591,6 +21253,49 @@
           }
         },
         "summary": "Get Thread Ledger",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/skip-day": {
+      "post": {
+        "description": "Skip to the next day: the clock runs to the window end, the day ends (every open position flattens at that close)\nand the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.",
+        "operationId": "skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkipDayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Skip Thread Day",
         "tags": [
           "replay"
         ]

@@ -9,10 +9,11 @@ import styles from "./panels.module.css";
 // on the dimmed page close it, and focus goes back to where it was. The workspace's own key map also sends Escape and `?`;
 // calling onClose twice is harmless (the parent only sets state).
 
-export function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+/** `followed`: the chart of a day thread, whose clock runs on the server and is controlled from the Summary (ADR-0018): no Playback keys. */
+export function ShortcutsOverlay({ onClose, followed = false }: { onClose: () => void; followed?: boolean }) {
   return (
     <Dialog title="Keyboard shortcuts" onClose={onClose} footer={<Button size="md" onClick={onClose}>Close</Button>}>
-      {SHORTCUT_GROUPS.map((group) => (
+      {SHORTCUT_GROUPS.filter((group) => !(followed && group.title === "Playback")).map((group) => (
         <section key={group.title} className={styles.group}>
           <h3 className={styles.heading}>{group.title}</h3>
           {group.rows.map((row) => (

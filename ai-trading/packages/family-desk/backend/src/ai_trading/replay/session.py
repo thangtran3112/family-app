@@ -3,8 +3,11 @@
 **The no-lookahead guarantee lives here.** A session row carries `revealed_through`, a timestamp that only moves
 forward; every read below is cut at it: bars whose period has closed, prints with `time <= revealed_through`,
 signals whose bar close is at or before it. The would-fire list is stored on the row and never serialized while
-the session is active (only `fires_so_far`). `advance` is the only writer of `revealed_through`, under a row lock,
-so two requests cannot reveal out of order. The playhead never moves backward: "Replay again" is a new attempt.
+the session is active (only `fires_so_far`). `advance` is the only writer of a session's `revealed_through`, under a
+row lock, so two requests cannot reveal out of order. The day clock (`replay_day_lists.revealed_through`) is written by
+`advance` and by `move_clock`, which a running thread clock settles lazily (`settle_locked`, ADR-0018): wall time moves
+the clock, never a session's playhead, and a name is lifted to the clock only when she is on it. The playhead never
+moves backward: "Replay again" is a new attempt.
 
 **Marks are practice records on a finished past day**: the server stamps each at the playhead and prices it at the
 last print at or before it, a stop note never exits, and nothing here touches a broker, an account or a live data path.
@@ -19,11 +22,12 @@ paths are unchanged.
 **A day holds several open positions** (N names, one average-cost position each, no cap on how many names or fills).
 A Buy or Sell mark is a fill against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the
 walk is `journal.assemble`). The one size rule is the cash check (`holds.check_buying_power`), applied to the shares a
-fill OPENS against the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). A name that
-catches up to the day clock does not fill, or score, an order the tape reached while she was elsewhere
-(`settle_away_orders`). The positions share the day clock: `positions` prices each at the clock, never at its own
-name's stale playhead (the name's own card is marked there too, `_marked`), `advance` pauses at the first stop crossed
-on ANY open name, and ending the day flattens every one of them at the clock.
+fill OPENS against the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). A resting
+order the tape reached while she was on another name fills like any other: at the bar that proved it, never past the
+day clock, booked when the name is next lifted to the clock (`advance`, `fill_away_orders`) or when the day ends
+(`end`), never cancelled for having been out of sight. The positions share the day clock: `positions` prices each at
+the clock, never at its own name's stale playhead (the name's own card is marked there too, `_marked`), `advance`
+pauses at the first stop crossed on ANY open name, and ending the day flattens every one of them at the clock.
 """
 
 import json
@@ -86,6 +90,7 @@ STAMP_SOURCE = "alpaca"
 BEHIND_CLOCK = "This name is behind the day clock · catch up before you {verb}"  # "Catch up" is the button's word
 STALE_PRINT_S = 30  # a mark priced off a print older than this carries a warning
 QUIET_PRINT_S = 60  # no eligible print for this long marks the tape quiet (a halt looks the same from here)
+ATTENTION_S = 20  # a name left this many seconds of thread time (x speed) behind a running clock is still being watched
 
 
 class ReplayProblem(Exception):
@@ -107,6 +112,9 @@ class Services:
     history: History
     tape: Tape
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
+    # The wall clock the thread clock runs on (ADR-0018). In production it is `now`; a test or the E2E rig that pins
+    # `now` (so a past day stays "finished") leaves this one real, or moves it by hand, so time can pass.
+    wall: Callable[[], datetime] = lambda: datetime.now(UTC)
     store_factory: Callable[[Session], BlobStore] = DbBlobStore
     sources: Any = None  # the `DataSources` behind `history` (the day list's earnings flag reads `earnings` from it)
 
@@ -736,7 +744,17 @@ def _lock_day_list(db: Session, session_id: int) -> ReplayDayList | None:
     return db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
 
 
-def _next_bar_boundary(ctx: Ctx, after: pd.Timestamp, minutes: int) -> pd.Timestamp:
+def _lock_and_settle(db: Session, svc: Services, user_id: int, session_id: int) -> ReplayDayList | None:
+    """`_lock_day_list`, then bring a running thread clock to now (ADR-0018). None for a standalone session. A stranger
+    gets the 404 before any lock or write, so it cannot move another user's clock."""
+    get_row(db, user_id, session_id)
+    day_list = _lock_day_list(db, session_id)
+    if day_list is not None:
+        settle_locked(db, svc, day_list)
+    return day_list
+
+
+def next_bar_boundary(after: pd.Timestamp, minutes: int) -> pd.Timestamp:
     """The next display-bar close strictly after `after`: wall-clock multiples of the interval (04:00 and 09:30
     are multiples of 15 minutes, so every phase bin lines up with them)."""
     local = after.tz_convert(ET)
@@ -793,6 +811,15 @@ def _prints_block(
     }
 
 
+def _clock_state(ctx: Ctx) -> dict[str, Any] | None:
+    """The thread clock as a day session's frame reports it: `{running, speed}` while it runs, else None (and left out
+    of the JSON). A chart that follows the clock shows a hint when it is not running; it has no controls (ADR-0018)."""
+    if ctx.db is None or ctx.row.day_list_id is None or ctx.swing:
+        return None
+    day_list = ctx.db.get(ReplayDayList, ctx.row.day_list_id)
+    return {"running": True, "speed": day_list.clock_speed} if day_list is not None and day_list.clock_running else None
+
+
 def _frame(
     ctx: Ctx,
     *,
@@ -833,6 +860,7 @@ def _frame(
         ),
         "open_trade": _open_trade(ctx, _marked(ctx, price)),
         "orders": list(ctx.row.orders or []),
+        "thread_clock": _clock_state(ctx),
         "stamp": stamp(through),
     }
 
@@ -895,6 +923,68 @@ def _stop_pause(
     return paused, crossing.at
 
 
+def move_clock(
+    db: Session, svc: Services, day_list: ReplayDayList, target: pd.Timestamp, *, stop_pause: bool = True
+) -> tuple[pd.Timestamp, dict[str, Any] | None]:
+    """Move the thread's day clock forward to `target`, clamped to the window end (the caller holds the day-list lock).
+    The same cut as `advance` makes for a day: with `stop_pause` the move ends at the first stop crossed on ANY open
+    name (a stop never exits), and a move that reaches the window end stops there. Either one stops a running clock and
+    is kept on the row (`clock_pause`) for her to read. Returns the new clock and the pause, if any. No session's
+    playhead moves here: a name is lifted to the clock when she is on it (`advance`), never written while she is not."""
+    sessions = _sessions_of_day(db, day_list.id)
+    if not sessions or day_list.revealed_through is None or day_list.status == "ended":
+        return (_ts(day_list.revealed_through) if day_list.revealed_through is not None else _ts(svc.now())), None
+    window_end = _ts(sessions[0].window_end)
+    previous = _ts(day_list.revealed_through)
+    target = min(max(_ts(target), previous), window_end)
+    pause: dict[str, Any] | None = None
+    if stop_pause and target > previous:
+        paused, target = _stop_pause(db, context(db, svc, sessions[0]), previous, target)
+        if paused is not None:
+            pause = {**paused, "crossing": paused["kind"], "kind": "stop"}
+    if pause is None and target >= window_end:
+        pause = {"kind": "close", "at": window_end}
+    day_list.revealed_through, day_list.updated_at = target.to_pydatetime(), svc.now()
+    if pause is not None:
+        day_list.clock_running, day_list.clock_anchor_at = False, None
+        day_list.clock_pause = jsonable(pause)
+    db.flush()
+    return target, pause
+
+
+def settle_locked(db: Session, svc: Services, day_list: ReplayDayList) -> None:
+    """Bring a running thread clock to now (ADR-0018): `clock + speed x (now - anchor)`, through `move_clock`, then a
+    fresh anchor. Called with the day-list lock held, by every request that reads or acts on the clock, so the clock is
+    a function of wall time and survives a closed screen, a logout and a restart. A paused clock, a day not under way,
+    or a request that arrives with the anchor in the future (clock skew) changes nothing."""
+    if (
+        not day_list.clock_running
+        or day_list.status != "practicing"
+        or day_list.revealed_through is None
+        or day_list.clock_anchor_at is None
+    ):
+        return
+    now = svc.wall()
+    elapsed = (_ts(now) - _ts(day_list.clock_anchor_at)).total_seconds()
+    if elapsed <= 0:
+        return
+    day_list.clock_anchor_at = now
+    move_clock(db, svc, day_list, _ts(day_list.revealed_through) + pd.Timedelta(seconds=elapsed * day_list.clock_speed))
+
+
+def settle_day(db: Session, svc: Services, day_list_id: int | None) -> None:
+    """`settle_locked` for a read: a cheap look first, so a paused clock (the usual case) takes no lock and writes
+    nothing; a running one is locked, brought to now and committed with the request."""
+    if day_list_id is None:
+        return
+    running = db.execute(
+        select(ReplayDayList.clock_running).where(ReplayDayList.id == day_list_id)
+    ).scalar_one_or_none()
+    if running:
+        row = db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
+        settle_locked(db, svc, row)
+
+
 def advance(
     db: Session,
     user_id: int,
@@ -907,10 +997,13 @@ def advance(
     min_size: int,
     min_notional: int,
     max_prints: int,
+    sync: bool = False,
 ) -> dict[str, Any]:
-    if (to is None) == (step is None):
-        raise ReplayProblem("Send exactly one of to and step", path="to")
-    day_list = _lock_day_list(db, session_id)  # the day list row first, then the session row: one lock order
+    if [to is not None, step is not None, sync].count(True) != 1:
+        raise ReplayProblem("Send exactly one of to, step and sync", path="to")
+    day_list = _lock_and_settle(db, svc, user_id, session_id)  # the day list row first, then the session row
+    if day_list is None and sync:
+        raise ReplayProblem("Only a session of a practice day follows the thread clock", path="sync")
     row = get_row(db, user_id, session_id, lock=True)
     ctx = context(db, svc, row)
     width = INTERVAL_MINUTES[interval or ctx.interval]
@@ -920,12 +1013,14 @@ def advance(
     base = previous if ctx.day_clock is None or row.status == "ended" else max(previous, ctx.day_clock)
     if row.status == "ended":
         target = ctx.window_end
+    elif sync:  # the screen follows the thread's clock: wherever it is now, never past it
+        target = base
     elif to is not None:
         if pd.Timestamp(to).tzinfo is None:
             raise ReplayProblem("Send the time with its UTC offset", path="to")
         target = _ts(to)
     elif step == "bar":
-        target = _next_bar_boundary(ctx, base, width)
+        target = next_bar_boundary(base, width)
     else:
         upcoming = signals_mod.next_after(ctx.fires, base)
         if upcoming is None:
@@ -937,11 +1032,11 @@ def advance(
         clock = ctx.day_clock
         if clock is not None:
             # A name behind the shared day clock catches up to it: what lies between is revealed on the chart but was
-            # never in front of her, and the journal does not score a signal that fired inside it (02o-b2).
-            if previous < clock:
+            # never in front of her, and the journal does not score a signal that fired inside it (02o-b2). A resting
+            # order the tape reached inside it still fills: the fill pass below reads `(previous, target]`.
+            if previous < clock and not (sync and _watching(ctx, day_list, previous, clock)):
                 row.away = add_span(list(row.away or []), previous, clock)
                 ctx.away = spans_of(row.away)
-                settle_away_orders(db, svc, row, previous, clock, ctx)
             target = min(max(target, clock), ctx.window_end)
             scan_from = max(previous, clock)
         if ctx.swing:  # play stops at the first crossed stop (02p b5): never earlier, never later
@@ -974,11 +1069,64 @@ def advance(
     )
     fresh = [f for f in ctx.fires if previous < f.bar_close <= target]
     frame = _frame(ctx, bars=_bar_rows(new_bars), through=target, width=width, prints=prints, signals=fresh)
+    stop = (day_list.clock_pause or {}) if day_list is not None else {}
+    if (
+        sync
+        and paused is None
+        and stop.get("kind") == "stop"
+        and any(s.symbol == stop["symbol"] and s.stop_hit_at is not None for s in _sessions_of_day(db, day_list.id))
+    ):
+        # The thread clock stopped at a crossed stop and the position is still open and flagged (she has not exited it):
+        # say so on the chart she follows the clock to, until she resumes the clock or closes the position.
+        paused = {
+            "symbol": stop["symbol"],
+            "stop_price": stop["stop_price"],
+            "at": _ts(stop["at"]),
+            "price": stop["price"],
+            "kind": stop["crossing"],
+            "also": stop.get("also", []),
+        }
     frame["paused"] = paused  # None unless a stop was crossed: the response leaves it out then
     frame["fills"] = [mark_out(m) for m in fills] or None  # working orders the tape filled inside this advance
     if ctx.swing:
         frame |= {"strip": swing_play.strip(ctx, target), "daily_forming": swing_play.forming_daily(ctx, target)}
     return frame
+
+
+def _watching(
+    ctx: Ctx, day_list: ReplayDayList, previous: pd.Timestamp, clock: pd.Timestamp, *, needs_running: bool = False
+) -> bool:
+    """She is on this name, not returning to it: its playhead trails the day clock by no more than `ATTENTION_S` of
+    thread time (the screen syncs every couple of seconds, so a name on screen is never further behind than that; one
+    she left falls further behind with every second the clock runs). Such a lift is the same minutes she was already
+    watching, so it adds no away span (the fill pass over `(previous, clock]` runs either way).
+    `needs_running`: the lift is not a screen's own `sync` but a mark or order on a name behind the clock, an old path
+    whose catch-up rules stay as they were unless the clock is running."""
+    return (
+        not ctx.swing
+        and (day_list.clock_running or not needs_running)
+        and (clock - previous).total_seconds() <= ATTENTION_S * day_list.clock_speed
+    )
+
+
+def _follow_clock(db: Session, ctx: Ctx) -> bool:
+    """A name she is on that a running clock left a few seconds behind is lifted quietly before she marks or orders on
+    it, so a click never fails with "behind the day clock" because the clock ran between two syncs. True when lifted."""
+    day_list = db.get(ReplayDayList, ctx.row.day_list_id) if ctx.row.day_list_id is not None else None
+    if (
+        day_list is None
+        or ctx.day_clock is None
+        or not ctx.behind_clock
+        or not _watching(ctx, day_list, ctx.through, ctx.day_clock, needs_running=True)
+    ):
+        return False
+    previous = ctx.through
+    ctx.row.revealed_through = ctx.day_clock.to_pydatetime()
+    ctx.through = ctx.day_clock
+    ctx.row.updated_at = ctx.svc.now()
+    db.flush()
+    _fill_working_orders(db, ctx, previous, ctx.through)
+    return True
 
 
 def feed(
@@ -994,6 +1142,7 @@ def feed(
     """Everything revealed so far at `interval`: the lookback for warm-up, the revealed window, the last minute of
     prints, the released signals (all of them once the session has ended). Never past `revealed_through`."""
     row = get_row(db, user_id, session_id)
+    settle_day(db, svc, row.day_list_id)
     ctx = context(db, svc, row)
     name = interval or ctx.interval
     width = INTERVAL_MINUTES[name]
@@ -1028,12 +1177,12 @@ def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: 
     """Stamp a practice mark at the playhead. State rules answer 422 with `path: "kind"` or `"stopPrice"`. An entry
     needs no stop: the thread's "stop on every entry" plan is scored, never a reason to refuse. A Buy or Sell is a fill
     against the name's position (adds, sells part, or flips); only the shares it opens must fit the cash."""
-    _lock_day_list(db, session_id)  # the day list row first, then the session row: one lock order
+    _lock_and_settle(db, svc, user_id, session_id)  # the day list row first, then the session row: one lock order
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
         raise ReplayProblem("This session is over · start a new attempt", path="kind")
     ctx = context(db, svc, row)
-    if ctx.behind_clock:
+    if ctx.behind_clock and not _follow_clock(db, ctx):
         # Revealed but not markable: the shared day clock is ahead of this name's playhead, so a mark here would be
         # stamped at a time the day has already passed. A catch-up (the screen's "Catch up") moves the name to the
         # clock first. A note is refused too: it would be stamped before the clock the day is already past.
@@ -1160,9 +1309,6 @@ def _close_order(
     order.update(status=status, closed_at=at.isoformat(), reason=reason, fill_price=price, mark_id=mark_id)
 
 
-AWAY_FILL = "The price reached it while you were on another name · it did not fill"
-
-
 def _tape_fill(
     ctx: Ctx, order: dict[str, Any], since: pd.Timestamp, target: pd.Timestamp
 ) -> tuple[orders_mod.Fill | None, pd.Timestamp | None]:
@@ -1179,34 +1325,20 @@ def _tape_fill(
     )
 
 
-def settle_away_orders(
-    db: Session,
-    svc: Services,
-    row: ReplaySession,
-    previous: pd.Timestamp,
-    clock: pd.Timestamp,
-    ctx: Ctx | None = None,
-) -> None:
-    """A name catching up to the day clock (an `advance`, or the lift of a resumed name) skips `(previous, clock]`: that
-    span was revealed while she was on another name and is history to her (`row.away`; the journal scores no signal
-    in it). A working order that the tape would have filled inside it is therefore not filled and not scored: it is
-    cancelled with that reason, so the order list agrees with the chart she lands on and no later touch fills it as a
-    different trade. A stop-limit whose stop leg triggered there keeps working, its trigger recorded. Everything after
-    `clock` is read normally by the fill pass, so no fill is ever stamped before the clock."""
+def fill_away_orders(
+    db: Session, svc: Services, row: ReplaySession, previous: pd.Timestamp, clock: pd.Timestamp
+) -> list[Mark]:
+    """Lift a resumed name's playhead from `previous` to the day clock and fill its working orders over `(previous,
+    clock]`. The thread's clock runs with nobody on this name, so a limit or stop the tape reached there fills like a
+    watched one (ADR-0019): stamped at the bar that proved it, in time order, against the cash the account has now.
+    Nothing past `clock` is read. (An `advance` needs no call here: its own fill pass reads the same span.)"""
     if not any(o["status"] == "working" for o in row.orders or []):
-        return
-    ctx = ctx if ctx is not None else context(db, svc, row)
-    orders = [dict(o) for o in row.orders]
-    for order in orders:
-        if order["status"] != "working":
-            continue
-        fill, fired = _tape_fill(ctx, order, max(previous, _ts(order["placed_at"])), clock)
-        if fill is not None:
-            _close_order(order, "cancelled", clock, reason=AWAY_FILL)
-        elif fired is not None:
-            order["triggered_at"] = fired.isoformat()
-    row.orders, row.updated_at = orders, svc.now()
+        return []
+    ctx = context(db, svc, row)
+    row.revealed_through, row.updated_at = clock.to_pydatetime(), svc.now()
+    ctx.through = clock
     db.flush()
+    return _fill_working_orders(db, ctx, previous, clock)
 
 
 def _fill_working_orders(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp) -> list[Mark]:
@@ -1253,12 +1385,12 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
     """Place a limit, stop or stop-limit entry at the playhead. A limit that already accepts the last price is
     marketable and fills at once at that price; anything else waits for the tape. State rules answer 422 with a path
     (`limitPrice`, `stopPrice`, `shares`, `kind`). Affordability is checked now and again at the fill."""
-    _lock_day_list(db, session_id)
+    _lock_and_settle(db, svc, user_id, session_id)
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
         raise ReplayProblem("This session is over · start a new attempt", path="kind")
     ctx = context(db, svc, row)
-    if ctx.behind_clock:
+    if ctx.behind_clock and not _follow_clock(db, ctx):
         raise ReplayProblem(BEHIND_CLOCK.format(verb="order"), path="kind")
     side = "long" if body["side"] == "buy" else "short"
     shares = body.get("shares") or row.spec["shares"]
@@ -1743,6 +1875,14 @@ def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: b
         return session_out(ctx)
     if row.day_list_id is not None and not via_day:
         raise ReplayProblem("End the day to score this session", path="kind", status=409)
+    if row.day_list_id is not None and not ctx.swing and ctx.day_clock is not None:
+        # A resting order the tape reached while she was on another name (the thread's clock runs without her) fills at
+        # its bar before the day ends, never past the day clock; only what the clock never reached is cancelled below.
+        clock = min(ctx.day_clock, ctx.window_end)
+        if ctx.through < clock:
+            previous, ctx.through = ctx.through, clock
+            row.revealed_through = clock.to_pydatetime()
+            _fill_working_orders(db, ctx, previous, clock)
     ctx.through = ctx.window_end
     row.revealed_through = ctx.window_end.to_pydatetime()
     _expire_orders(row, ctx.window_end)
