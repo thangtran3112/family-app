@@ -118,6 +118,8 @@ function ComposerForm({ composer, onStop, onNote, onClose }: { composer: Exclude
   const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
     if (event.key !== "Escape") return;
     event.preventDefault();
+    // Only the form closes: the drawer it sits in (1180) and the workspace key map are on the document and must not also act on this Escape.
+    event.nativeEvent.stopImmediatePropagation();
     onClose();
   };
   return (
