@@ -336,6 +336,7 @@ export type DayListStatus = z.infer<typeof DayListStatusSchema>;
 export type PracticePlan = z.infer<typeof PracticePlanSchema>;
 export type OpenNext = z.infer<typeof OpenNextSchema>;
 export type DayList = z.infer<typeof DayListSchema>;
+export type DayPnl = z.infer<typeof DayPnlSchema>;
 export type ListColumn = z.infer<typeof ListColumnSchema>;
 export type Candidate = z.infer<typeof CandidateSchema>;
 export type Rescan = NonNullable<DayList["rescan"]>;

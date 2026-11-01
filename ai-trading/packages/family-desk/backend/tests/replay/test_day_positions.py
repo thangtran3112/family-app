@@ -260,6 +260,10 @@ def test_the_day_list_prices_every_position_at_the_clock_and_totals_the_day(db_s
     behind = next(s for s in out["sessions"] if s["symbol"] == "GAPPER")
     assert behind["behind_clock"] is True and behind["revealed_through"] == _at("09:35")
     assert (behind["position"]["last_price"], behind["position"]["unrealized_usd"]) == (120.0, 50.0)  # at the clock
+    # The Portfolio shows when each trade was entered and orders the open trades by it.
+    assert behind["position"]["entry_at"] == _at("09:35")
+    entered = next(s for s in out["sessions"] if s["symbol"] == "FLAT")["position"]["entry_at"]
+    assert entered == _at("09:35")  # FLAT was entered at the clock GAPPER had reached
     assert out["day_pnl"] == {
         "realized_usd": 0.0,
         "open_usd": 70.0,

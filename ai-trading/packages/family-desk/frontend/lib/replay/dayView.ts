@@ -11,10 +11,11 @@ import {
   type Tone,
 } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayJournal, DayList, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
+import type { Candidate, DayJournal, DayList, DayPnl, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade } from "./schemas.ts";
 import { etHhMm } from "./time.ts";
+import { formatDayResult } from "./threadView.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
@@ -274,40 +275,59 @@ export function toggledStars(watch: readonly { symbol: string }[], symbol: strin
   return symbols.includes(symbol) ? symbols.filter((item) => item !== symbol) : [...symbols, symbol];
 }
 
+/** Open practice trades at once: the server's cap (`holds.HARD_CAP`). A sixth name opens but cannot be entered. */
+export const MAX_OPEN_PRACTICE_TRADES = 5;
+
 export type PortfolioRow = {
   symbol: string;
   sessionId: number;
-  /** The open trade, or null when flat. */
+  /** The open trade priced at the day clock (the live one on the name she is on), or null when flat. */
   position: OpenTrade | null;
   holding: boolean;
+  /** The open trade's side; null when flat. */
+  side: "long" | "short" | null;
+  /** When the open trade was entered; null when flat. */
+  entryAt: string | null;
+  /** When play paused because this trade's stop was crossed; null while it has not been. */
+  stopHitAt: string | null;
   trades: number;
   realized: number;
-  /** The open trade's P/L at its playhead; null when flat. */
+  /** The open trade's P/L at the day clock; null when flat. */
   unrealized: number | null;
   /** Realized plus unrealized: the name's P/L for the day. */
   dayPnl: number;
   behind: boolean;
   /** The name she is on in the replay. */
   current: boolean;
-  /** The held name that blocks switching to this one (one open trade a day), or null. */
-  blockedBy: string | null;
 };
 
-/** The day's portfolio: a row for every name she opened, the held one first, then in the order she opened them. `from` is
- *  the name she is on in the replay with its playhead and live open trade (null when she just exited, undefined on the day
- *  page): another name whose playhead is earlier is behind the day clock, which the list read may not know yet. */
+const at = (iso: string | null): number => (iso === null ? Number.POSITIVE_INFINITY : Date.parse(iso));
+
+/** The day's portfolio: a row for every name she opened. A crossed stop comes first (the earlier crossing first), then the
+ *  other open trades, oldest entry first, then the flat names in the order she opened them. `from` is the name she is on in
+ *  the replay with its playhead and live open trade (null when she just exited, undefined on the day page): another name
+ *  whose playhead is earlier is behind the day clock, which the list read may not know yet. */
 export function portfolioRows(
   list: Pick<DayList, "sessions">,
   from?: { symbol: string; playhead: string; openTrade?: OpenTrade | null },
 ): PortfolioRow[] {
   const rows = list.sessions.map((session): PortfolioRow => {
     const current = from !== undefined && session.symbol === from.symbol;
-    const position = current && from.openTrade !== undefined ? from.openTrade : session.position;
+    // The live view knows the price; the list read knows when the stop was crossed (and when older payloads lack the entry time).
+    const position =
+      current && from.openTrade !== undefined && from.openTrade !== null
+        ? { ...from.openTrade, entry_at: from.openTrade.entry_at ?? session.position?.entry_at, stop_hit_at: from.openTrade.stop_hit_at ?? session.position?.stop_hit_at }
+        : current && from.openTrade === null
+          ? null
+          : session.position;
     return {
       symbol: session.symbol,
       sessionId: session.id,
       position,
       holding: position !== null,
+      side: position?.side ?? null,
+      entryAt: position?.entry_at ?? null,
+      stopHitAt: position?.stop_hit_at ?? null,
       trades: session.trades,
       realized: session.realized_usd,
       unrealized: position?.unrealized_usd ?? null,
@@ -316,23 +336,51 @@ export function portfolioRows(
         session.behind_clock ||
         (from !== undefined && !current && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
       current,
-      blockedBy: null,
     };
   });
-  const held = rows.find((row) => row.holding)?.symbol ?? null;
-  return [...rows.filter((row) => row.holding), ...rows.filter((row) => !row.holding)].map((row) => ({ ...row, blockedBy: row.holding ? null : held }));
+  const crossed = rows.filter((row) => row.stopHitAt !== null).sort((a, b) => at(a.stopHitAt) - at(b.stopHitAt));
+  const held = rows.filter((row) => row.holding && row.stopHitAt === null).sort((a, b) => at(a.entryAt) - at(b.entryAt));
+  return [...crossed, ...held, ...rows.filter((row) => !row.holding)];
 }
 
-/** The footer: the day's P/L, split into what is booked and what is still open. */
+/** The open trades' sum, from the rows. The footer itself reads the server's `day_pnl`; this is for a screen without one. */
 export function portfolioTotal(rows: readonly PortfolioRow[]): { realized: number; open: number; total: number } {
   const realized = rows.reduce((sum, row) => sum + row.realized, 0);
   const open = rows.reduce((sum, row) => sum + (row.unrealized ?? 0), 0);
   return { realized, open, total: realized + open };
 }
 
-/** "Long 100 @ $812.40" for a held name, "Flat" for one with no open trade. */
-export const positionText = (row: Pick<PortfolioRow, "position">): string =>
-  row.position === null ? "Flat" : `${row.position.side === "long" ? "Long" : "Short"} ${row.position.shares} @ $${formatPrice(row.position.entry_price)}`;
+/** The footer, driven by `DayListOut.day_pnl`: "Day P/L +$154.00" with "realized −$46.00 · open +$200.00", "2 open of 5", "as of 10:30 AM ET". */
+export function portfolioFooter(pnl: DayPnl): { total: number; split: string; openOf: string; asOf: string } {
+  return {
+    total: pnl.total_usd,
+    split: practiceText("dayPortfolioSplit", { realized: formatSignedUsd(pnl.realized_usd, { cents: true }), open: formatSignedUsd(pnl.open_usd, { cents: true }) }),
+    openOf: practiceText("dayPortfolioOpenOf", { open: pnl.open_count, cap: MAX_OPEN_PRACTICE_TRADES }),
+    asOf: practiceText("dayPortfolioAsOf", { time: formatEtTimeZone(pnl.as_of) }),
+  };
+}
+
+/** "Stop crossed 10:21": the row of a trade whose stop paused play. */
+export const stopCrossedText = (iso: string): string => practiceText("dayStopCrossed", { time: etHhMm(iso) });
+
+/** "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", or null with none open. */
+export function endDayExitText(rows: readonly Pick<PortfolioRow, "symbol" | "holding">[]): string | null {
+  const held = rows.filter((row) => row.holding);
+  if (held.length === 0) return null;
+  return practiceText("dayEndExits", { count: held.length, trades: held.length === 1 ? "trade" : "trades", names: held.map((row) => row.symbol).join(", ") });
+}
+
+/** "2 open +$200.00": the hub's Today line, after the realized result; null with no open trade. */
+export const openTodayText = (pnl: Pick<DayPnl, "open_count" | "open_usd">): string | null =>
+  pnl.open_count === 0 ? null : practiceText("threadTodayOpen", { count: pnl.open_count, pnl: formatDayResult(pnl.open_usd) });
+
+/** "Long 100 @ $812.40 · 9:40 AM" for a held name (the entry time when the payload has it), "Flat" for one with no open trade. */
+export const positionText = (row: Pick<PortfolioRow, "position">): string => {
+  const trade = row.position;
+  if (trade === null) return "Flat";
+  const entered = trade.entry_at ? ` · ${formatEtTime(trade.entry_at)}` : "";
+  return `${trade.side === "long" ? "Long" : "Short"} ${trade.shares} @ $${formatPrice(trade.entry_price)}${entered}`;
+};
 
 /** A name's button on the day list: "Open" opens a name at the day clock, "Switch" goes back to one she opened. Resume
  *  belongs to the thread's day (one shared clock for every name), never to a single name. */

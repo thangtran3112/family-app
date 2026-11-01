@@ -29,9 +29,14 @@ import {
   peekDailyBars,
   peekOffsets,
   planArmedText,
+  endDayExitText,
+  MAX_OPEN_PRACTICE_TRADES,
+  openTodayText,
+  portfolioFooter,
   portfolioRows,
   portfolioTotal,
   positionText,
+  stopCrossedText,
   dayActionLabel,
   blockOpenByDefault,
   dayRouteProblem,
@@ -351,7 +356,7 @@ const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["s
   ...changes,
 });
 
-const smciLong = { trade_no: 1, side: "long" as const, shares: 100, entry_price: 812.4, stop_price: null, last_price: 814.54, unrealized_usd: 214, r: null };
+const smciLong = { trade_no: 1, side: "long" as const, shares: 100, entry_price: 812.4, entry_at: "2026-03-10T13:40:00Z", stop_price: null, last_price: 814.54, unrealized_usd: 214, r: null };
 
 test("no copy says a day is limited to N names or asks her to unstar one first", () => {
   for (const [key, text] of Object.entries(PRACTICE_COPY)) {
@@ -374,10 +379,59 @@ test("the portfolio puts the held name first and adds up each name's day P/L", (
   assert.deepEqual(portfolioRows({ sessions: [] }), []);
 });
 
-test("another name cannot be switched to while one holds the open trade, and the row says which", () => {
-  const rows = portfolioRows({ sessions: [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13)] });
-  assert.deepEqual(rows.map((row) => [row.symbol, row.blockedBy]), [["SMCI", null], ["ANET", "SMCI"]]);
-  assert.deepEqual(portfolioRows({ sessions: [opened("ANET", 13)] }).map((row) => row.blockedBy), [null]);
+test("open trades come in order: a crossed stop first, then the oldest entry, then flat names in the order opened", () => {
+  const long = (entry: string, changes = {}) => ({ ...smciLong, entry_at: entry, ...changes });
+  const list = {
+    sessions: [
+      opened("FLAT1", 11),
+      opened("SMCI", 12, { has_open_trade: true, position: long("2026-03-10T13:52:00Z") }),
+      opened("ANET", 13, { has_open_trade: true, position: long("2026-03-10T13:40:00Z") }),
+      opened("NVDA", 14, { has_open_trade: true, position: long("2026-03-10T14:05:00Z", { stop_hit_at: "2026-03-10T14:21:00Z" }) }),
+      opened("FLAT2", 15, { trades: 1, realized_usd: 12 }),
+      opened("SMCX", 16, { has_open_trade: true, position: long("2026-03-10T14:10:00Z", { stop_hit_at: "2026-03-10T14:15:00Z" }) }),
+    ],
+  };
+  const rows = portfolioRows(list);
+  // Crossed stops first (the earlier crossing first), then ANET (13:40) before SMCI (13:52), then the flat names as opened.
+  assert.deepEqual(rows.map((row) => row.symbol), ["SMCX", "NVDA", "ANET", "SMCI", "FLAT1", "FLAT2"]);
+  assert.deepEqual(rows.map((row) => row.stopHitAt !== null), [true, true, false, false, false, false]);
+  assert.deepEqual(rows.map((row) => row.side), ["long", "long", "long", "long", null, null]);
+  assert.equal(rows[2]!.entryAt, "2026-03-10T13:40:00Z");
+  // No row is blocked by another: holding several names at once is the rule, so a flat or held name always switches.
+  assert.equal(rows.some((row) => "blockedBy" in row), false);
+});
+
+test("a crossed stop reads 'Stop crossed 10:21' in ET", () => {
+  assert.equal(stopCrossedText("2026-03-10T14:21:00Z"), "Stop crossed 10:21");
+});
+
+test("the footer is the server's day P/L: realized, open, how many are open of five, and the clock it is marked at", () => {
+  const footer = portfolioFooter({ realized_usd: -46, open_usd: 200, total_usd: 154, open_count: 2, as_of: "2026-03-10T14:30:00Z" });
+  assert.deepEqual(footer, { total: 154, split: "realized −$46.00 · open +$200.00", openOf: "2 open of 5", asOf: "as of 10:30 AM ET" });
+  assert.equal(MAX_OPEN_PRACTICE_TRADES, 5);
+});
+
+test("End day names the open trades it exits and the price she sees now", () => {
+  const rows = portfolioRows({
+    sessions: [
+      opened("SMCI", 12, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:52:00Z" } }),
+      opened("ANET", 13),
+      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:45:00Z" } }),
+    ],
+  });
+  assert.equal(endDayExitText(rows), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI");
+  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "SMCI")), "Ending the day exits 1 open practice trade at the price you see now: SMCI");
+  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "ANET")), null);
+});
+
+test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with none open", () => {
+  assert.equal(openTodayText({ open_count: 2, open_usd: 200 }), "2 open +$200.00");
+  assert.equal(openTodayText({ open_count: 1, open_usd: -31.5 }), "1 open −$31.50");
+  assert.equal(openTodayText({ open_count: 0, open_usd: 0 }), null);
+});
+
+test("no copy asks her to close one trade before another", () => {
+  for (const [key, text] of Object.entries(PRACTICE_COPY)) assert.doesNotMatch(String(text), /close .* first|close an open trade/i, key);
 });
 
 test("the name she is on reads its live open trade, and a name earlier than her playhead is behind the clock", () => {
@@ -394,10 +448,11 @@ test("the name she is on reads its live open trade, and a name earlier than her 
 
 test("a position reads Long or Short with its shares and entry price, a flat name reads Flat", () => {
   const [held, flat] = portfolioRows({ sessions: [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13)] });
-  assert.equal(positionText(held!), "Long 100 @ $812.40");
+  assert.equal(positionText(held!), "Long 100 @ $812.40 · 9:40 AM"); // the entry time rides after the price
   assert.equal(positionText(flat!), "Flat");
   const [short] = portfolioRows({ sessions: [opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 25, entry_price: 0.5 } })] });
-  assert.equal(positionText(short!), "Short 25 @ $0.50");
+  assert.equal(positionText(short!), "Short 25 @ $0.50 · 9:40 AM");
+  assert.equal(positionText({ position: { ...smciLong, entry_at: null } }), "Long 100 @ $812.40"); // an older payload has no entry time
 });
 
 test("the portfolio counts every name opened, with no cap to count against", () => {
