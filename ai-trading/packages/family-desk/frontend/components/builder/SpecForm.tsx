@@ -16,7 +16,7 @@ import {
 } from "@/lib/spec/form";
 import { plainProblem } from "@/lib/desk/problems";
 import { describeSpec } from "@/lib/spec/describe";
-import { optionLabel, paramLabel, subLabel } from "@/lib/spec/labels";
+import { COMPARE_OPERATORS, RUN_ONS, optionLabel, paramLabel, subLabel } from "@/lib/spec/labels";
 import { symbolsFromDraft, symbolsToDraft } from "@/lib/spec/symbols";
 import type { WatchlistsResponseSchema } from "@/lib/api/schemas";
 import styles from "./builder.module.css";
@@ -373,7 +373,7 @@ function ConditionEditor({
       {kind !== "compare" && kind !== "within_pct" ? null : (
         <>
           <OperandEditor label="Left side" operand={comparison.left} onChange={(left) => onChange({ ...comparison, left } as Condition)} disabled={disabled} />
-          <SelectField label="Operator" value={operator} options={["gt", "gte", "lt", "lte", "crosses_above", "crosses_below", "within_pct"]} onChange={changeOperator} disabled={disabled} />
+          <SelectField label="Operator" value={operator} options={COMPARE_OPERATORS.map(({ op }) => op)} onChange={changeOperator} disabled={disabled} />
           <OperandEditor label="Right side" operand={comparison.right} onChange={(right) => onChange({ ...comparison, right } as Condition)} disabled={disabled} />
           {comparison.op === "within_pct" && (
             <NumberField label="Within percent" value={(comparison as typeof comparison & { pct: number }).pct} onChange={(pct) => onChange({ ...comparison, pct } as Condition)} disabled={disabled} step="any" min={0} max={100} />
@@ -479,7 +479,7 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
               />
             : <label className={styles.field}><span>Symbols (comma-separated)</span><input disabled={readOnly} onChange={(event) => updateWatch({ universe: { symbols: symbolsFromDraft(event.currentTarget.value) } })} value={Array.isArray(universe.symbols) ? symbolsToDraft(universe.symbols) : ""} /></label>}
           <SelectField label="Session" value={form.watch.session} options={["regular", "extended"]} disabled={readOnly} onChange={(session) => updateWatch({ session: session as StrategySpecForm["watch"]["session"] })} />
-          <SelectField label="Check on" value={form.watch.runOn} options={["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"]} disabled={readOnly} onChange={(runOn) => updateWatch({ runOn: runOn as StrategySpecForm["watch"]["runOn"] })} />
+          <SelectField label="Check on" value={form.watch.runOn} options={RUN_ONS} disabled={readOnly} onChange={(runOn) => updateWatch({ runOn: runOn as StrategySpecForm["watch"]["runOn"] })} />
         </div>
         <BlockErrors block="Watch" errors={errors} />
       </section>

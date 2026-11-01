@@ -1,22 +1,13 @@
 "use client";
 
-import type { AlertStrategySpecV1 } from "@ai-trading/contracts/alert-strategy";
 import type { Problem } from "@/lib/api/schemas";
 import { type AlertForm } from "@/lib/desk/alertForm";
-import { FREQUENCY_LABEL, runOnLabel } from "@/lib/desk/labels";
+import { FREQUENCY_LABEL } from "@/lib/desk/labels";
+import { RUN_ONS, runOnLabel } from "@/lib/spec/labels";
 import { Field, FieldError, FieldGroup, FieldRow, Input, NumberInput, Radio, Select } from "@/components/ui/Field";
 import styles from "./setup.module.css";
 import { problemLine } from "@/lib/desk/problems";
 
-const RUN_ON: readonly AlertStrategySpecV1["watch"]["runOn"][] = [
-  "bar_close_1m",
-  "bar_close_5m",
-  "bar_close_15m",
-  "bar_close_1h",
-  "premarket_0830",
-  "daily_close",
-  "weekly",
-];
 const FREQUENCIES = Object.keys(FREQUENCY_LABEL) as AlertForm["frequency"][];
 
 export function TriggerStep({ form, onChange, problems }: {
@@ -29,7 +20,7 @@ export function TriggerStep({ form, onChange, problems }: {
       <h2 id="alert-step-trigger" className={styles.stepTitle}>Trigger</h2>
       <Field id="alert-run-on" label="Check on">
         <Select value={form.runOn} onChange={(event) => onChange({ ...form, runOn: event.target.value as AlertForm["runOn"] })}>
-          {RUN_ON.map((runOn) => <option key={runOn} value={runOn}>{runOnLabel(runOn)}</option>)}
+          {RUN_ONS.map((runOn) => <option key={runOn} value={runOn}>{runOnLabel(runOn)}</option>)}
         </Select>
       </Field>
       <FieldGroup legend="Session">

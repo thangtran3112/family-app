@@ -41,7 +41,7 @@ async function closeSummary(page: Page) {
 /** The alert the spec builds: NVDA greater than 215 on each 15m close, fired once. */
 async function buildNvdaAbove215(page: Page) {
   await page.getByRole("textbox", { name: "Name" }).fill("NVDA above 215");
-  await page.getByRole("combobox", { name: "Operator" }).selectOption({ label: "Greater than" });
+  await page.getByRole("combobox", { name: "Operator" }).selectOption({ label: "is greater than" });
   await page.getByRole("combobox", { name: "Compared with" }).selectOption("value");
   await page.getByRole("spinbutton", { name: "Value" }).fill("215");
   await page.getByRole("combobox", { name: "Check on" }).selectOption("bar_close_15m");

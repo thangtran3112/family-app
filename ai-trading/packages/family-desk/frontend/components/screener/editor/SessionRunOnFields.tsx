@@ -3,10 +3,8 @@
 import { ChoiceGroup, Field, FieldGroup, Radio, Select } from "@/components/ui/Field";
 import type { Problem } from "@/lib/api/schemas";
 import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
-import { runOnLabel } from "@/lib/desk/labels";
+import { RUN_ONS, runOnLabel } from "@/lib/spec/labels";
 import { fieldError } from "@/lib/desk/problems";
-
-const RUN_ONS: FilterForm["runOn"][] = ["bar_close_1m", "bar_close_5m", "bar_close_15m", "bar_close_1h", "premarket_0830", "daily_close", "weekly"];
 
 export function SessionRunOnFields({ form, onChange, problems }: { form: FilterForm; onChange: (next: FilterForm) => void; problems: readonly Problem[] }) {
   // Everything under `watch` except the universe (its own field above), so a bare `watch` problem is still shown.

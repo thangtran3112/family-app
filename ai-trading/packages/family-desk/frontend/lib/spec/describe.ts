@@ -1,5 +1,6 @@
 import type { Condition, Operand, StrategySpecV1 } from "@ai-trading/contracts";
 import type { FilterStrategySpecV1 } from "@ai-trading/contracts/filter-strategy-spec-v1";
+import { operatorLabel } from "./labels.ts";
 
 export const runLabels: Record<StrategySpecV1["watch"]["runOn"], string> = {
   bar_close_1m: "each 1-minute close",
@@ -58,15 +59,7 @@ export function describeCondition(condition: Condition): string {
   const left = describeOperand(condition.left);
   const right = describeOperand(condition.right);
   if (condition.op === "within_pct") return `${left} is within ${condition.pct}% of ${right}`;
-  const operator = {
-    gt: "is greater than",
-    gte: "is at least",
-    lt: "is less than",
-    lte: "is at most",
-    crosses_above: "crosses above",
-    crosses_below: "crosses below",
-  }[condition.op];
-  return `${left} ${operator} ${right}`;
+  return `${left} ${operatorLabel(condition.op)} ${right}`;
 }
 
 type Universe = StrategySpecV1["watch"]["universe"] | FilterStrategySpecV1["watch"]["universe"];

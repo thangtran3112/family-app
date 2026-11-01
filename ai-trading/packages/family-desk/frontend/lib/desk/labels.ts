@@ -1,14 +1,5 @@
 // Short plain labels shared by several screens.
-const RUN_ON: Record<string, string> = {
-  bar_close_1m: "Each 1m close",
-  bar_close_5m: "Each 5m close",
-  bar_close_15m: "Each 15m close",
-  bar_close_1h: "Each 1h close",
-  premarket_0830: "Premarket 8:30",
-  daily_close: "Each daily close",
-  weekly: "Each weekly close",
-};
-export const runOnLabel = (runOn: string): string => RUN_ON[runOn] ?? runOn;
+export { runOnLabel } from "../spec/labels.ts";
 
 const TIMING: Record<string, string> = { after_close: "After close", before_open: "Before open", during: "During the day" };
 export const timingLabel = (timing: string): string => TIMING[timing] ?? timing.replaceAll("_", " ");

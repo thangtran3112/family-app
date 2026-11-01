@@ -84,7 +84,7 @@ test("prefill: symbol, watchlist id and filter id resolve; junk is ignored", () 
 });
 
 test("operators: the TradingView set plus pattern, switching keeps operands", () => {
-  assert.deepEqual(ALERT_OPERATORS.map((o) => o.label), ["Crossing up", "Crossing down", "Greater than", "At least", "Less than", "At most", "Within % of", "Pattern detected"]);
+  assert.deepEqual(ALERT_OPERATORS.map((o) => o.label), ["crosses above", "crosses below", "is greater than", "is at least", "is less than", "is at most", "is within % of", "a pattern appears"]);
   const row = form().rows[0]!;
   assert.equal(operatorOf(row), "crosses_above");
   const less = withOperator(row, "lt");
