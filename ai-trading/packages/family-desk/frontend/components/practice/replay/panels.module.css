@@ -3,7 +3,7 @@
 
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
 .heading { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.legend { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.legend { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .up { color: var(--color-up); }
 .down { color: var(--color-down); }
 .same { color: var(--color-muted); }
@@ -23,7 +23,7 @@
 .tapeTable[aria-busy="true"] { opacity: 0.6; }
 .bigTime { display: block; margin-inline: -6px; padding-inline: 6px; box-shadow: inset 2px 0 0 var(--color-amber); }
 .bigPrice { color: var(--color-amber); font-weight: var(--weight-semibold); }
-.feed { display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; color: var(--color-muted); font-size: var(--text-micro); line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.feed { display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; color: var(--color-muted); font-size: var(--text-meta); line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
 .feedIex { box-sizing: border-box; min-height: 20px; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: 2px var(--space-2); color: var(--color-amber); line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 .pace { display: flex; flex-direction: column; gap: 4px; }
 .meter { height: 4px; overflow: hidden; border-radius: 2px; background: var(--color-hairline); }
@@ -31,7 +31,7 @@
 .paceHead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .paceVerdict { color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .bigNotional { color: var(--color-amber); font-weight: var(--weight-semibold); }
-.paceText { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+.paceText { margin: 0; color: var(--color-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
 
 /* Session rail: plan checklist */
 .mark { display: inline-flex; width: 14px; flex: 0 0 14px; justify-content: center; font-weight: var(--weight-bold); }
@@ -61,7 +61,7 @@
 /* Shortcuts overlay (a ui/Dialog) */
 .group { display: flex; flex-direction: column; gap: 2px; }
 .keys { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.kbd { display: inline-flex; min-width: 24px; min-height: 22px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--color-raised); padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
+.kbd { display: inline-flex; min-width: 24px; min-height: 22px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--color-raised); padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
   .meterFill,
@@ -69,7 +69,7 @@
 }
 
 /* The tape has been silent for over a minute: a halt looks exactly like this from here. */
-.warn { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--color-amber); font-size: var(--text-micro); line-height: var(--line-micro); }
+.warn { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--color-amber); font-size: var(--text-meta); line-height: var(--line-meta); }
 
 /* Day names (02o-b2): switch between the names of the day */
 .portfolio { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
@@ -85,7 +85,7 @@
 .portfolioLine { display: flex; min-width: 0; align-items: baseline; gap: var(--space-2); }
 .portfolioPosition { min-width: 0; flex: 1 1 auto; color: var(--color-muted); }
 .portfolioPnl { flex: 0 0 auto; min-width: 9ch; text-align: right; font-weight: var(--weight-semibold); }
-.portfolioMeta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--color-muted); font-size: var(--text-micro); }
+.portfolioMeta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--color-muted); font-size: var(--text-meta); }
 .portfolioStop { color: var(--color-amber); font-weight: var(--weight-semibold); }
 /* A held row's Exit: a text button beside the row, not a bordered control (the row itself is the switch). */
 .portfolioExit { min-height: 28px; border: 0; background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; }
@@ -96,4 +96,7 @@
 .portfolioTotal { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-2); margin: 0; border-top: 1px solid var(--color-hairline); padding-top: var(--space-2); font-size: var(--text-label); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); }
 .problem { margin: 0; color: var(--color-amber); font-size: var(--text-label); }
 .unseen { opacity: 0.6; }
-.unseenNote { color: var(--color-muted); font-size: var(--text-micro); }
+.unseenNote { color: var(--color-muted); font-size: var(--text-meta); }
+
+/* The row text is the button's description (its name stays "Switch to X"); the wrapper adds no box of its own. */
+.portfolioBody { display: contents; }

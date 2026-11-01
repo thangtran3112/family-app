@@ -420,6 +420,10 @@ test("End day names the open trades it exits and the price she sees now", () => 
   assert.equal(endDayExitText(rows), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI");
   assert.equal(endDayExitText(rows.filter((row) => row.symbol === "SMCI")), "Ending the day exits 1 open practice trade at the price you see now: SMCI");
   assert.equal(endDayExitText(rows.filter((row) => row.symbol === "ANET")), null);
+  // F-06: a held name behind the day clock exits at the clock, so the line no longer promises the price on its chart.
+  const behind = rows.map((row) => (row.symbol === "NVDA" ? { ...row, behind: true } : row));
+  assert.equal(endDayExitText(behind, "2026-09-28T15:00:00Z"), "Ending the day exits 2 open practice trades at the day clock, 11:00 AM ET. A name behind the clock books its exit at the clock price, not the price on its chart: NVDA, SMCI");
+  assert.equal(endDayExitText(behind), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", "without a clock the plain line stands");
 });
 
 test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with none open", () => {

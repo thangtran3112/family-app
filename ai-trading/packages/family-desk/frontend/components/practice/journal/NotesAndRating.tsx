@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Segmented";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import styles from "./journal.module.css";
 
@@ -24,7 +25,7 @@ const normalise = (text: string): string | null => {
   return trimmed === "" ? null : trimmed;
 };
 
-/** Self-rating (1 to 5, click the selected one to clear) and the session notes. */
+/** Self-rating (1 to 5, a radio group; "Clear rating" takes it back) and the session notes. */
 export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabel = "Session notes" }: NotesAndRatingProps) {
   const id = useId();
   const [draft, setDraft] = useState(notes ?? "");
@@ -45,22 +46,16 @@ export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabe
   return (
     <div className={styles.notes}>
       <span className={styles.fieldLabel} id={`${id}-rating`}>Self-rating</span>
-      <div role="radiogroup" aria-labelledby={`${id}-rating`} className={styles.ratings}>
-        {RATINGS.map((value) => {
-          const checked = rating === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={checked}
-              className={styles.rating}
-              onClick={() => onSave({ rating: checked ? null : value })}
-            >
-              {value}
-            </button>
-          );
-        })}
+      <div className={styles.ratings}>
+        <Segmented
+          size="md"
+          labelledBy={`${id}-rating`}
+          value={rating === null ? "" : String(rating)}
+          options={RATINGS.map((value) => ({ value: String(value), label: String(value) }))}
+          onChange={(next) => onSave({ rating: Number(next) })}
+        />
+        {/* A radio group cannot un-pick its choice, so clearing is a button of its own. */}
+        {rating !== null && <Button variant="ghost" size="md" onClick={() => onSave({ rating: null })}>Clear rating</Button>}
       </div>
 
       <label htmlFor={`${id}-notes`} className={styles.fieldLabel}>{notesLabel}</label>

@@ -17,6 +17,7 @@ import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChro
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
 import { threadClock } from "@/lib/replay/clock";
 import { formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
@@ -66,12 +67,15 @@ import { PlanChecklist } from "./PlanChecklist";
 import { PracticeControls, type Composer } from "./PracticeControls";
 import { REPLAY_INDICATORS, ReplayChart } from "./ReplayChart";
 import { ReplayHeader } from "./ReplayHeader";
+import { ReplayToast } from "./ReplayToast";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { SignalsRail, signalKey } from "./SignalsRail";
 import { TapePanel } from "./TapePanel";
 import { ThreadClockBar } from "./ThreadClockBar";
 import styles from "./replay.module.css";
 import { FactList } from "@/components/ui/FactList";
+
+const BOTTOM_TABS_ID = "replay-bottom";
 
 /** `/practice/replay?id=`: the chart, the tape, the controls and the keyboard map (02o §a3). Reads the URL, so the page wraps it in Suspense. */
 export function ReplayWorkspace() {
@@ -169,7 +173,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [clockSeen, setClockSeen] = useState(view.revealedThrough);
   if (!playing && clockSeen !== view.revealedThrough) setClockSeen(view.revealedThrough);
   const dayList = useDayPortfolio(swing ? null : dayListId, session.marks.length * 2 + (behind ? 1 : 0) + Math.floor(Date.parse(clockSeen) / 1000));
-  const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade });
+  const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: clock, openTrade: view.openTrade });
 
   // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
   const masked = hidden && !dateShown && !(ended && !swing);
@@ -200,7 +204,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       return;
     }
     setTicketError(null);
-    void api.ticket(built.action).then((accepted) => {
+    // The server names the field it refused (not enough cash is the Quantity's): the message then sits at that field, as a typed one does.
+    const refused = (path: string, message: string) => {
+      if (path !== "shares" && path !== "limitPrice" && path !== "stopPrice") return false;
+      setTicketError({ field: path, message });
+      if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the field is in the drawer
+      return true;
+    };
+    void api.ticket(built.action, refused).then((accepted) => {
       if (accepted) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
     });
   };
@@ -217,6 +228,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const byLetter = (letter: "b" | "s" | "x") => perform(markActionFor(letter, side));
 
   const perform = (action: ReplayAction) => {
+    // The buttons are off while the name is behind the day clock or the session has ended; the keys say so instead of marking anyway.
+    if ((action.type === "mark" || action.type === "stop_note" || action.type === "note") && (ended || behind)) {
+      api.notify("info", ended ? PRACTICE_COPY.markEnded : practiceText("markBehind", { symbol: spec.symbol }));
+      return;
+    }
     switch (action.type) {
       case "toggle_play": toggle(); break;
       case "step": api.step(); break;
@@ -341,7 +357,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       symbol={spec.symbol}
       side={side}
       openTrade={view.openTrade}
-      lastPrice={view.last?.price ?? null}
       ticket={ticket}
       onTicket={editTicket}
       ticketError={ticketError}
@@ -384,7 +399,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       <PortfolioPanel
         dayListId={dayListId}
         query={dayList}
-        from={{ symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade }}
+        from={{ symbol: spec.symbol, playhead: clock, openTrade: view.openTrade }}
+        onLeave={() => {
+          if (api.player.status === "playing") api.togglePlay();
+        }}
         onExitHere={() => byLetter("x")}
         onExited={(symbol) => {
           if (shownPause?.symbol === symbol) answerPause();
@@ -458,12 +476,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         swing={swing && session.thread ? { money: swingMoneyLine(session.thread), tapeNote: tapeNote(session.tape_feed) } : undefined}
       />
       {session.thread && !swing && !full && <ThreadStrip thread={session.thread} />}
-      {api.toast && (
-        <p className={styles.toast} data-tone={api.toast.tone} role={api.toast.tone === "error" ? "alert" : "status"}>
-          <span>{api.toast.text}</span>
-          <button type="button" className={styles.linkButton} onClick={api.dismissToast} aria-label="Dismiss message">×</button>
-        </p>
-      )}
+      <ReplayToast toast={api.toast} onDismiss={api.dismissToast} onHold={api.holdToast} onRelease={api.releaseToast} />
       {shownPause && (
         <StopPausedToast paused={shownPause} exit={exitTarget} busy={api.player.busy || opening !== null} onExit={() => exitTarget && exitPaused(exitTarget)} onKeep={answerPause} />
       )}
@@ -494,7 +507,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         atEnd={atEnd}
         busy={api.player.busy || dayBusy}
         day={dayListId !== null}
-        exits={dayListId !== null && !swing ? endDayExitText(dayRows) : null}
+        exits={dayListId !== null && !swing ? endDayExitText(dayRows, view.dayClock) : null}
         swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock, holdsOpen } : undefined}
         backHref={dayListId !== null && !full ? `/practice/day?id=${dayListId}` : null}
         ended={ended ? { swing, journalHref: `/practice/journal?id=${session.id}` } : null}
@@ -505,40 +518,41 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           }
           // A daily-list session ends with its day, which also unseals the list review. A swing day leaves its holds open
           // overnight and goes back to its board, ended.
-          if (swing && api.player.status === "playing") api.togglePlay();
+          if (api.player.status === "playing") api.togglePlay();
           setDayBusy(true);
           const ending: Promise<unknown> = whenReady(() => (swing ? endAnyDay(dayListId) : endDay(dayListId)));
           ending
             .then(() => router.push(`/practice/day?id=${dayListId}`))
             .catch(() => {
-              api.notify("error", swing ? PRACTICE_COPY.swingEndError : PRACTICE_COPY.markError);
+              api.notify("error", swing ? PRACTICE_COPY.swingEndError : PRACTICE_COPY.dayEndError);
               setDayBusy(false);
             });
         }}
       />
       <section className={styles.bottom} aria-label="Marks and levels" data-open={bottomShown ? "true" : "false"}>
-        <div className={styles.bottomTabs} role="tablist" aria-label="Bottom panel">
-          {(["marks", "levels"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              className={styles.tab}
-              aria-selected={bottomTab === tab}
-              onClick={() => {
-                setBottomTab(tab);
-                setBottomOpen(true);
-              }}
-            >
-              {tab === "marks" ? "Marks" : "Levels"}
-            </button>
-          ))}
-          <button type="button" className={styles.linkButton} aria-expanded={bottomShown} onClick={() => setBottomOpen(!bottomShown)}>{bottomShown ? "Collapse" : "Expand"}</button>
+        <div className={styles.bottomTabs}>
+          <Tabs
+            idBase={BOTTOM_TABS_ID}
+            label="Bottom panel"
+            size="md"
+            track={false}
+            panelMounted={bottomShown}
+            value={bottomTab}
+            tabs={[{ id: "marks", label: "Marks" }, { id: "levels", label: "Levels" }]}
+            onChange={(tab) => {
+              setBottomTab(tab);
+              setBottomOpen(true);
+            }}
+          />
+          {/* One name, one state: the button is "Marks and levels panel" and `aria-expanded` says open or closed (the text no longer flips too). */}
+          <Button className={styles.bottomToggle} variant="ghost" size="md" iconOnly aria-label="Marks and levels panel" aria-expanded={bottomShown} onClick={() => setBottomOpen(!bottomShown)}>
+            <span aria-hidden="true">{bottomShown ? "▾" : "▴"}</span>
+          </Button>
         </div>
         {bottomShown && (
-          <div className={styles.bottomBody} role="tabpanel">
+          <TabPanel idBase={BOTTOM_TABS_ID} id={bottomTab} className={styles.bottomBody}>
             {bottomTab === "marks" ? <MarksList rows={markRows(session.marks)} /> : <LevelsList rows={levelRows(view.levels)} />}
-          </div>
+          </TabPanel>
         )}
       </section>
       {helpOpen && <ShortcutsOverlay onClose={() => setHelpOpen(false)} />}

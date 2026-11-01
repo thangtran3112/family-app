@@ -69,7 +69,7 @@ test("with the shortcuts overlay open only ? and Escape count", () => {
 
 test("every single-letter key in the legend under the timeline drives an action (D-026)", () => {
   const letters = KEY_LEGEND.filter((item) => /^[A-Z]$/.test(item.keys));
-  assert.deepEqual(letters.map((item) => item.keys), ["B", "S", "X", "T", "N"]);
+  assert.deepEqual(letters.map((item) => item.keys), ["B", "S", "X", "T", "N", "F", "C"]);
   for (const item of letters) assert.notEqual(press(item.keys.toLowerCase(), "long"), null, item.keys);
 });
 
@@ -105,10 +105,10 @@ test("Escape closes the innermost layer first: settings, then the shortcuts, the
   assert.equal(layerToClose({ settings: false, help: false, composer: false, full: false }), null);
 });
 
-test("the ? overlay lists the View keys, and the one-line legend under the timeline is unchanged", () => {
+test("the ? overlay lists the View keys, and the one-line legend under the timeline names the same keys (Ctrl works as well as ⌘)", () => {
   const view = SHORTCUT_GROUPS.find((group) => group.title === "View");
   assert.deepEqual(view?.rows.map((row) => row.keys), [["F"], ["C"], ["Esc"]]);
-  assert.deepEqual(KEY_LEGEND.map((item) => item.keys), ["Space", "B", "S", "X", "T", "N", "⌘Z", "?"]);
+  assert.deepEqual(KEY_LEGEND.map((item) => item.keys), ["Space", "→", "B", "S", "X", "T", "N", "F", "C", "Ctrl/⌘ Z", "?"]);
 });
 
 test("a checkbox or radio inside the settings popover is neither a text field nor activatable (why the popover keeps its keys)", () => {

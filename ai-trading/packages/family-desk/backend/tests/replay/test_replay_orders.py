@@ -126,6 +126,10 @@ def test_bars_that_closed_before_the_order_was_placed_are_never_read():
         ("long", "limit", None, None, "Enter a limit price"),
         ("long", "limit", 0, None, "Limit price must be a number above 0"),
         ("long", "limit", float("nan"), None, "Limit price must be a number above 0"),
+        ("long", "limit", 9.505, None, "Limit price must be in whole cents"),
+        ("short", "limit", 10.001, None, "Limit price must be in whole cents"),
+        ("long", "stop", None, 10.505, "Stop price must be in whole cents"),
+        ("long", "stop_limit", 10.5, 10.5001, "Stop price must be in whole cents"),
         ("long", "limit", 9.0, 9.5, "This order type takes no stop price"),
         ("long", "stop", None, None, "Enter a stop price"),
         ("long", "stop", 9.0, 9.5, "This order type takes no limit price"),
@@ -139,6 +143,16 @@ def test_check_new_names_what_is_wrong_in_a_plain_sentence(side, type_, limit, t
     with pytest.raises(OrderProblem) as err:
         check_new(side=side, type_=type_, limit=limit, trigger=trigger, last=10.0)
     assert err.value.message == message
+
+
+def test_a_whole_cent_limit_is_never_filled_past_itself_by_rounding():
+    """Why a fraction of a cent is refused: a 49.505 buy limit that fills at 49.505 prints as 49.51, worse than the
+    limit. On the cent grid, rounding the open of a bar that opened through the limit cannot cross it."""
+    assert check_new(side="long", type_="limit", limit=49.51, trigger=None, last=50.0) == (49.51, None)
+    got, _ = fill("long", "limit", limit=49.5, frame=bars((49.4951, 49.6, 49.4, 49.5)))
+    assert got is not None and got.price == 49.5  # 49.4951 rounds up to the limit, not past it
+    got, _ = fill("short", "limit", limit=49.5, frame=bars((49.5049, 49.6, 49.4, 49.5)))
+    assert got is not None and got.price == 49.5
 
 
 def test_check_new_returns_the_levels_and_marketable_limits_are_the_ones_through_the_market():

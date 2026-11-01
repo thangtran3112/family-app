@@ -13,15 +13,15 @@
 .sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-micro); }
 .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: 0; font-size: var(--text-label); }
-.built { color: var(--color-muted); font-size: var(--text-micro); }
+.built { color: var(--color-muted); font-size: var(--text-meta); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .filterRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
 .filterLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.filterNote { color: var(--color-muted); font-size: var(--text-micro); }
+.filterNote { color: var(--color-muted); font-size: var(--text-meta); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); color: var(--color-amber); font-size: var(--text-label); }
-.footnote { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
-.star:focus-visible, .tab:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.footnote { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
+.star:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 .star { width: 24px; height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: var(--text-body); line-height: 1; cursor: pointer; }
 .star:hover:not(:disabled) { background: var(--color-raised); color: var(--color-text); }
@@ -40,9 +40,6 @@
 .peek { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .peekHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .peekTitle { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); }
-.tabs { display: inline-flex; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: 2px; }
-.tab { border: 0; border-radius: 4px; background: transparent; padding: 0 var(--space-3); min-height: 24px; color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
-.tab[aria-selected="true"] { background: var(--color-raised); box-shadow: inset 0 -2px 0 var(--color-amber); color: var(--color-text); }
 
 /* Left rail: the block's days, the thread box, the starred names (P7) */
 .side:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
@@ -53,15 +50,15 @@
 .sideSummary .sideTitle { display: inline; }
 .watchName[data-inert="true"] { cursor: default; }
 .sideTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.sideHint { color: var(--color-muted); font-size: var(--text-micro); }
+.sideHint { color: var(--color-muted); font-size: var(--text-meta); }
 .ladder { display: flex; margin: 0; padding: 0; flex-direction: column; list-style: none; }
 .ladderRow { display: grid; min-height: 28px; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
-.ladderMark { color: var(--color-muted); font-size: var(--text-micro); text-align: center; }
+.ladderMark { color: var(--color-muted); font-size: var(--text-meta); text-align: center; }
 .ladderRow[data-state="ended"] .ladderMark { color: var(--color-up); }
 .ladderRow[data-state="open"] { box-shadow: inset 2px 0 0 var(--color-amber); background: var(--color-panel); }
 .ladderRow[data-state="open"] .ladderMark { color: var(--color-amber); }
 .ladderRow[data-state="locked"], .ladderRow[data-state="opens_after"] { color: var(--color-muted); }
-.ladderDetail { color: var(--color-muted); font-size: var(--text-micro); }
+.ladderDetail { color: var(--color-muted); font-size: var(--text-meta); }
 .watchList { display: flex; margin: 0; padding: 0; flex-direction: column; gap: var(--space-1); list-style: none; }
 .watchRow { display: flex; min-height: 32px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); }
 .watchRow[data-selected="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
@@ -69,14 +66,10 @@
 .watchName:hover .symbol { text-decoration: underline; }
 .watchName:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .watchStar { color: var(--color-amber); }
-.facts { display: grid; margin: 0; grid-template-columns: 1fr 1fr; gap: var(--space-2); font-size: var(--text-label); }
-.facts dt { color: var(--color-muted); font-size: var(--text-micro); }
-.facts dd { margin: 0; }
-.factsNote { grid-column: 1 / -1; }
 
 /* Review */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
 .tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tileValue { font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.tileHint { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.tileHint { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }

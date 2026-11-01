@@ -124,7 +124,7 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
       { keys: ["X"], label: "Close the open position" },
       { keys: ["T"], label: "Set a stop on the open position" },
       { keys: ["N"], label: "Add a note" },
-      { keys: ["⌘", "Z"], label: "Undo the last mark (before the playhead moves)" },
+      { keys: ["Ctrl / ⌘", "Z"], label: "Undo the last mark (before the playhead moves)" },
     ],
   },
   {
@@ -141,11 +141,14 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
 /** The one-line key legend under the timeline (D-026), a short form of the `?` overlay. */
 export const KEY_LEGEND: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: "Space", label: "Play / Pause" },
+  { keys: "→", label: "Step" },
   { keys: "B", label: "Buy" },
   { keys: "S", label: "Sell" },
   { keys: "X", label: "Close" },
   { keys: "T", label: "Stop" },
   { keys: "N", label: "Note" },
-  { keys: "⌘Z", label: "undo" },
-  { keys: "?", label: "all shortcuts" },
+  { keys: "F", label: "Full screen" },
+  { keys: "C", label: "Chart" },
+  { keys: "Ctrl/⌘ Z", label: "Undo" },
+  { keys: "?", label: "All shortcuts" },
 ];

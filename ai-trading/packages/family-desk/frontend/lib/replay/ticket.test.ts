@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SHARES_TOO_BIG } from "./markInput.ts";
 import { buildTicket, initialTicket, orderLine, orderStatusText, ticketSummary, TICKET_TYPES, typeOption, type TicketDraft } from "./ticket.ts";
 import type { PracticeOrder } from "./schemas.ts";
 
@@ -75,4 +76,14 @@ test("the summary and the order lines read like a broker's", () => {
   assert.equal(orderStatusText(order({ status: "filled", fill_price: 49.5 })), "Filled at 49.50");
   assert.equal(orderStatusText(order({ status: "cancelled", reason: "Not enough practice cash · $450 free" })), "Cancelled · Not enough practice cash · $450 free");
   assert.equal(orderStatusText(order({ status: "cancelled" })), "Cancelled");
+});
+
+test("limit and stop prices are plain decimals, and a quantity over the column names its top", () => {
+  for (const limitPrice of ["0x10", "1e2", "Infinity"]) {
+    const built = buildTicket({ ...base, type: "limit", limitPrice });
+    assert.ok(!built.ok && built.field === "limitPrice", limitPrice);
+  }
+  assert.ok(buildTicket({ ...base, type: "limit", limitPrice: "49.50" }).ok);
+  const big = buildTicket({ ...base, type: "limit", limitPrice: "49.5", shares: "2147483648" });
+  assert.ok(!big.ok && big.field === "shares" && big.message === SHARES_TOO_BIG);
 });

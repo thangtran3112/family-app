@@ -315,9 +315,9 @@ export function notEnoughHistoryText(timeframe: string): string {
 // ---- Practice (replay) lane copy (02o §a5). Same rules as COPY; the banned lists below cover it. ----
 
 export const PRACTICE_COPY = {
-  band: "Practice · replay of {day} · nothing here reaches IBKR",
-  bandHub: "Practice · replay of past days · nothing here reaches IBKR",
-  bandHidden: "Practice · replay of a hidden day · nothing here reaches IBKR",
+  band: "Practice · replay of {day} · nothing here reaches a broker",
+  bandHub: "Practice · replay of past days · nothing here reaches a broker",
+  bandHidden: "Practice · replay of a hidden day · nothing here reaches a broker",
   bandHiddenWhy: "Day hidden so it cannot spoil the session",
   bandMarks: "Practice trades are simulated on a finished day · nothing is sent to a broker",
   showDate: "Show date",
@@ -377,7 +377,7 @@ export const PRACTICE_COPY = {
   notesSaved: "Notes saved",
   // Daily-list practice (02o-b v1)
   planTitle: "Plan",
-  planIntro: "Each day your own filters build a list for the past day you are about to replay. Pick a few names, practice one, then see how every name moved.",
+  planIntro: "Each day your own filters build a list for the past day you are about to replay. You choose names from the list, practice one, and then see how every name moved.",
   planNone: "No daily plan yet · set one up to start Day 1",
   planDay: "Day {day} of {of}",
   // D-047: a plan that replaced another starts at its own Day 1, so the thread's day number is the one said: "Day 3" (D-118: one
@@ -403,6 +403,7 @@ export const PRACTICE_COPY = {
   planStartDay: "First day",
   planSubmit: "Start day",
   planSubmitting: "Starting…",
+  planSlowStart: "Still starting · loading the first days of bars can take a minute or two",
   planOpening: "Opening the day…",
   // D-058, D-059: the day or the scan outlasted the gateway's wait; the Desk is still finishing it and the screen asks again.
   planStillWorking: "Still preparing your day · this can take a minute or two",
@@ -445,7 +446,7 @@ export const PRACTICE_COPY = {
   dayPractice: "Practice {symbol}",
   daySwitch: "Switch to {symbol}",
   dayOnNow: "On now",
-  dayBehind: "Behind the clock",
+  dayBehind: "Behind the clock · no marks",
   daySwitchHint: "A name opens at the day clock, {time}. What it did earlier is on its chart and is not scored.",
   dayPortfolio: "Portfolio",
   dayPortfolioEmpty: "Click a name in Candidates to open its chart · it joins your portfolio",
@@ -461,11 +462,25 @@ export const PRACTICE_COPY = {
   dayPortfolioExit: "Exit {symbol}",
   dayPortfolioLast: "last {price}",
   dayPortfolioRealized: "realized {amount}",
+  dayPortfolioUnrealized: "unrealized {amount}",
+  dayPortfolioTradeOne: "1 trade",
+  dayPortfolioTrades: "{count} trades",
+  dayPortfolioExitButton: "Exit",
   dayStopCrossed: "Stop crossed {time}",
   dayStripNone: "Click a name in Candidates to open its chart",
   replayBehind: "{symbol} is behind the day clock, {clock} · catch up to practice it. What happened meanwhile is on the chart and is not scored.",
   replayCatchUp: "Catch up",
   replayCatchUpError: "Couldn't catch up · Try again",
+  markBehind: "{symbol} is behind the day clock · catch up before you mark it",
+  markEnded: "This session has ended · nothing more to mark",
+  stepAtEnd: "The replay is at the window end",
+  jumpSignalNote: "Reveals through the next time one of your armed strategies would fire. It tells you a signal is coming.",
+  dismissMessage: "Dismiss message",
+  stopLabel: "Stop loss",
+  stopNeeded: "Stop loss: a number above 0",
+  noteLabel: "Note",
+  ordersEarlier: "Show {count} earlier",
+  ordersFewer: "Show fewer",
   signalUnseen: "not scored · fired while you were on another name",
   dayRescan: "Re-scan now",
   dayRescanTitle: "Re-scan at the day clock",
@@ -480,8 +495,15 @@ export const PRACTICE_COPY = {
   dayRescanning: "Re-scanning…",
   dayRescanStillWorking: "Still scanning · this can take a minute or two",
   dayEnd: "End day",
+  dayEndError: "Couldn't end the day · Try again",
+  daySkipWarning: "Skipping ends this day with no practice trades. You cannot reopen it.",
+  daySkipYes: "Skip this day",
+  dayNextPreparing: "The next day's data is not ready yet · Try again",
+  dayEndStillWorking: "Still ending the day · this can take a minute or two",
   dayEndWarning: "Ending the day shows how every name moved after the list.",
   dayEndExits: "Ending the day exits {count} open practice {trades} at the price you see now: {names}",
+  // A held name that is behind the day clock shows its own older price; the exit books at the clock (F-06).
+  dayEndExitsClock: "Ending the day exits {count} open practice {trades} at the day clock, {clock}. A name behind the clock books its exit at the clock price, not the price on its chart: {names}",
   dayEnded: "Day over",
   dayPeek: "Peek",
   dayPeekNone: "Pick a row to peek at its chart before the open",
@@ -646,7 +668,7 @@ export const PRACTICE_COPY = {
   swingPassDay: "Pass this day",
   swingMarketNotOpen: "Market not open yet · step to the first bar",
   swingTapeOff: "Tape off · swing prices are one-minute closes",
-  swingTapeOffFootnote: "Swing prices are one-minute closes · turn the tape on for exact prints",
+  swingTapeOffFootnote: "Swing prices are one-minute closes · exact prints need the tape on",
   swingDividends: "Dividends are not credited in practice",
   swingScoredWeekly: "Scored weekly",
   // holds
@@ -824,7 +846,7 @@ export const PRACTICE_COPY = {
   newPlanDiscardTitle: "Discard your changes?",
   newPlanDiscardKeep: "Keep editing",
   newPlanDiscard: "Discard",
-  newPlanFooter: "Nothing reaches IBKR · All money is SIMULATED",
+  newPlanFooter: "Nothing reaches a broker · All money is simulated",
   newPlanError: "Couldn't set up the plan · Try again",
   newPlanThreadKept: "Your thread is started · the plan did not save, so try again",
   threadDelete: "Delete",
@@ -851,6 +873,7 @@ export const PRACTICE_COPY = {
   threadPageLastDay: "Last day",
   threadPageWeek: "Week {week} of {weeks}",
   threadPageReplace: "Replace plan",
+  threadReplaceOpenDay: "Replacing the plan ends the day in progress and exits its open trades at the day clock.",
   threadPageClosed: "This thread is closed. Its journal and final balance stay here.",
   threadPageFresh: "Your thread is ready · Day 1 is next",
   // The thread overview (5R): a dashboard of where the thread is and what comes next. Dates stay hidden: a day is "Day 3 · Wed".
@@ -919,7 +942,10 @@ export const prepPercent = (done: number, total: number): number => (total > 0 ?
 export const practiceText = (key: PracticeKey, values: Record<string, string | number> = {}): string =>
   fill(PRACTICE_COPY[key], Object.fromEntries(Object.entries(values).map(([name, value]) => [name, String(value)])));
 
-/** "Practice · replay of Fri 2026-10-23 · nothing here reaches IBKR"; `day` null on the hub, `hidden` while the date is masked. */
+/** A message line has no Try again button: the copy keeps its sentence and drops the " · Try again" tail that only an error block with a retry button can honour. */
+export const withoutRetryHint = (text: string): string => text.replace(/ · Try again$/, "");
+
+/** "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker"; `day` null on the hub, `hidden` while the date is masked. */
 export function practiceBandText(day: string | null, hidden = false, pastDays = false): string {
   if (pastDays && hidden) return PRACTICE_COPY.bandHub; // a list or journal of hidden days says "past days" (D-015)
   if (hidden) return PRACTICE_COPY.bandHidden;

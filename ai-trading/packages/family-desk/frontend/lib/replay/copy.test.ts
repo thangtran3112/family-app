@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containsPracticeBannedTerm, PRACTICE_COPY, practiceBandText, practiceText, replayBadgeText } from "../desk/freshness.ts";
+import { containsPracticeBannedTerm, PRACTICE_COPY, practiceBandText, practiceText, replayBadgeText, withoutRetryHint } from "../desk/freshness.ts";
 import { markLabel } from "./marks.ts";
 import { fastTapeText } from "./tape.ts";
 import { noTradesText, sessionOverText, tradesCountText } from "./journalView.ts";
@@ -22,9 +22,9 @@ test("the Practice lane may say order, position and fill; the desk-wide technica
 });
 
 test("the band and the replay badge name the day, the hidden state and the playhead time", () => {
-  assert.equal(practiceBandText(null), "Practice · replay of past days · nothing here reaches IBKR");
-  assert.equal(practiceBandText("2026-10-23"), "Practice · replay of Fri 2026-10-23 · nothing here reaches IBKR");
-  assert.equal(practiceBandText("2026-10-23", true), "Practice · replay of a hidden day · nothing here reaches IBKR");
+  assert.equal(practiceBandText(null), "Practice · replay of past days · nothing here reaches a broker");
+  assert.equal(practiceBandText("2026-10-23"), "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker");
+  assert.equal(practiceBandText("2026-10-23", true), "Practice · replay of a hidden day · nothing here reaches a broker");
   assert.equal(replayBadgeText("2026-10-23", "2026-10-23T14:07:00Z", false), "Replay · Fri 2026-10-23 · 10:07 AM ET");
   assert.equal(replayBadgeText("2026-10-23", "2026-10-23T14:07:00Z", true), "Replay · hidden day · 10:07 AM ET");
 });
@@ -68,7 +68,7 @@ test("a swing row with placeholders fills completely, and a row without any has 
 
 test("the swing strings the screens quote word for word", () => {
   assert.equal(PRACTICE_COPY.swingTapeOff, "Tape off · swing prices are one-minute closes");
-  assert.equal(PRACTICE_COPY.swingTapeOffFootnote, "Swing prices are one-minute closes · turn the tape on for exact prints");
+  assert.equal(PRACTICE_COPY.swingTapeOffFootnote, "Swing prices are one-minute closes · exact prints need the tape on");
   assert.equal(PRACTICE_COPY.swingDividends, "Dividends are not credited in practice");
   assert.equal(PRACTICE_COPY.swingScoredWeekly, "Scored weekly");
   assert.equal(PRACTICE_COPY.swingMarketNotOpen, "Market not open yet · step to the first bar");
@@ -93,4 +93,10 @@ test("the swing copy never says position, order, filled, broker or execute, in a
   ]) {
     assert.equal(containsPracticeBannedTerm(text), false, text);
   }
+});
+
+test("a message line keeps its sentence and drops the Try again tail it has no button for", () => {
+  assert.equal(withoutRetryHint(PRACTICE_COPY.markError), "Couldn't place that mark");
+  assert.equal(withoutRetryHint(PRACTICE_COPY.advanceError), "Couldn't load the next minute");
+  assert.equal(withoutRetryHint("Not enough practice cash · $450 free"), "Not enough practice cash · $450 free");
 });
