@@ -131,6 +131,27 @@ test.describe("Practice replay chart: full screen and settings", () => {
     expect(ratio.ratio, "the hidden entry's value against the bar").toBeGreaterThanOrEqual(4.5);
   });
 
+  // Owner directive 2026-11-01: the chart reads as a broker's. A level is only its number on the price axis (canvas text), and its name
+  // is a tooltip while the cursor is on the line; the Levels tab below the chart still names every level.
+  test("a level's name shows only on hover, not on the chart", async ({ page }) => {
+    await stepBars(page, 3);
+    const plot = (await page.locator("section[aria-label='TSLA 1m market chart'] canvas").first().boundingBox())!;
+    const tooltip = page.getByRole("tooltip");
+    await expect(page.getByText(/Session (high|low)/)).toHaveCount(0);
+    await page.mouse.move(plot.x + plot.width * 0.5, plot.y + 4);
+    await expect(tooltip).toHaveCount(0);
+    // A line is hit within 6 px, so a sweep in 8 px steps finds every line the plot draws.
+    const seen = new Set<string>();
+    for (let y = plot.y + 4; y < plot.y + plot.height - 4 && !/Session high[^]*Session low|Session low[^]*Session high/.test([...seen].join(" | ")); y += 8) {
+      await page.mouse.move(plot.x + plot.width * 0.5, y);
+      if ((await tooltip.count()) > 0) seen.add(await tooltip.innerText());
+    }
+    expect([...seen].join(" | ")).toMatch(/Session high/);
+    expect([...seen].join(" | ")).toMatch(/Session low/);
+    await page.mouse.move(plot.x + plot.width * 0.5, plot.y - 40); // off the chart: the tooltip goes
+    await expect(tooltip).toHaveCount(0);
+  });
+
   // A trackpad pinch reaches the page as ctrl+wheel events of a few px each. lightweight-charts' own handler turned 30 of them
   // (2 px) into a 1.06x zoom; the chart now takes them at the fingers' pace (about 1.8x), anchored under the cursor.
   test("a trackpad pinch (ctrl+wheel, 2 px an event) zooms the chart at the fingers' pace, not a tenth of it", async ({ page }) => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { delta, mark, openTrade } from "./fixtures.ts";
 import { defaultChartPrefs, togglePref } from "./chartPrefs.ts";
-import { barStartFor, canUndoLast, chartLevels, declutterMarkers, entrySince, firstDrawBars, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
+import { barStartFor, canUndoLast, chartLevels, declutterMarkers, entrySince, firstDrawBars, windowIndex, levelLines, levelRows, markLabel, markRows, openSide, positionLevel, practiceMarkers, pnlValues, signalMarkers, stopLevel } from "./marks.ts";
 import { ReplaySignalSchema, type ReplayBar, type ReplayMark } from "./schemas.ts";
 import { ms } from "./time.ts";
 
@@ -44,6 +44,12 @@ test("practice markers snap to the bar open at the mark time and skip stop, note
   ]);
 });
 
+test("the open position is a dashed line at its average price, green long and red short, none when flat", () => {
+  assert.deepEqual(positionLevel({ side: "long", shares: 100, entry_price: 184.2 }), [{ label: "Long 100 · avg 184.20", price: 184.2, color: "#30D158", style: "dashed" }]);
+  assert.deepEqual(positionLevel({ side: "short", shares: 25, entry_price: 190 }), [{ label: "Short 25 · avg 190.00", price: 190, color: "#FF453A", style: "dashed" }]);
+  assert.deepEqual(positionLevel(null), []);
+});
+
 test("a signal is placed on the bar open one second before its bar close", () => {
   const signal = ReplaySignalSchema.parse(delta.signals[0]); // bar_close 13:45:00 -> 13:44:59 -> the 13:40 bar
   const early = { ...signal, bar_close: "2026-04-07T13:36:00Z", name: "VWAP reclaim" }; // 13:35:59 -> the 13:35 bar
@@ -54,8 +60,8 @@ test("a signal is placed on the bar open one second before its bar close", () =>
   ]);
 });
 
-test("the stop level is an amber dashed line, present only with a stop", () => {
-  assert.deepEqual(stopLevel(openTrade), [{ label: "Practice stop", price: 186.9, color: "#FFB020", style: "dashed" }]);
+test("the stop level is an amber dashed line, present only with a stop, named Stop (no Practice wording on the chart)", () => {
+  assert.deepEqual(stopLevel(openTrade), [{ label: "Stop", price: 186.9, color: "#FFB020", style: "dashed" }]);
   assert.deepEqual(stopLevel({ stop_price: null }), []);
   assert.deepEqual(stopLevel(null), []);
   assert.equal(openSide(null), "flat");

@@ -146,3 +146,8 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 @media (max-width: 640px) {
   .endRow { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Click-to-order popover content (placed by the chart): the clicked price, a Buy and a Sell named for the order they place, the ticket's quantity. */
+.chartOrder { display: flex; flex-direction: column; gap: var(--space-2); }
+.chartOrderHead { display: flex; align-items: center; gap: var(--space-2); }
+.chartOrderPrice { flex: 1 1 auto; min-width: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
