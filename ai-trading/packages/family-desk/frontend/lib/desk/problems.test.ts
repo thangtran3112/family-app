@@ -45,9 +45,10 @@ test("field labels name the form control, never the schema path", () => {
     "then.paperOrder.size.riskUsd": "Paper order · Risk per trade ($)",
     "then.paperOrder.stop.atrMultiple": "Paper order · Stop ATR multiple",
     when: "Condition",
-    "when.all.1.right": "Condition 2 · right side",
-    "when.left.smoothK": "Condition · left side · %K smoothing",
-    "when.any.0.left.lookbackDays": "Condition 1 · left side · Lookback (days)",
+    "when.all.1.right": "Condition 2 · Compared with",
+    "when.left.smoothK": "Condition · Metric · %K smoothing",
+    "when.any.0.left.lookbackDays": "Condition 1 · Metric · Lookback (days)",
+    "when.all.1.any.0.left.length": "Condition 2.1 · Metric · Length",
     "limits.somethingNew": "Something new",
   };
   for (const [path, label] of Object.entries(cases)) assert.equal(fieldLabel(path), label, path);

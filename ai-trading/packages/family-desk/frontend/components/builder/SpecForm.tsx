@@ -2,7 +2,6 @@
 
 import {
   StrategySpecV1Schema,
-  type Condition,
   type Operand,
   type StrategySpecV1,
 } from "@ai-trading/contracts";
@@ -15,10 +14,12 @@ import {
   type StrategySpecForm,
 } from "@/lib/spec/form";
 import { plainProblem } from "@/lib/desk/problems";
+import { STRATEGY_OPERAND_CATALOG, choiceOf, operandDef, operandFor } from "@/lib/desk/operands";
 import { describeSpec } from "@/lib/spec/describe";
-import { COMPARE_OPERATORS, RUN_ONS, optionLabel, paramLabel, subLabel } from "@/lib/spec/labels";
+import { RUN_ONS, optionLabel, paramLabel, subLabel } from "@/lib/spec/labels";
 import { symbolsFromDraft, symbolsToDraft } from "@/lib/spec/symbols";
 import type { WatchlistsResponseSchema } from "@/lib/api/schemas";
+import { ConditionTree } from "@/components/conditions/ConditionTree";
 import styles from "./builder.module.css";
 
 type Props = {
@@ -29,51 +30,11 @@ type Props = {
   readOnly?: boolean;
 };
 type RecordValue = Record<string, unknown>;
-type SeriesOperand = Extract<Operand, { series: string }>;
 type LevelOperand = Extract<Operand, { level: string }>;
 type PaperOrder = NonNullable<StrategySpecV1["then"]["paperOrder"]>;
 
-const SERIES = [
-  "open", "high", "low", "close", "volume", "vwap", "gap_pct", "sma", "ema", "rsi", "atr",
-  "cci", "momentum", "williams_r", "vwma", "hull_ma", "rvol", "macd", "stochastic", "stoch_rsi",
-  "adx", "awesome_oscillator", "bull_bear_power", "ultimate_oscillator", "ichimoku", "atr_pct", "bias",
-] as const;
-const LEVELS = [
-  "prior_day_high", "prior_day_low", "prior_day_close", "premarket_high", "premarket_low",
-  "overnight_high", "overnight_low", "opening_range_high", "opening_range_low", "n_day_high",
-  "n_day_low", "support", "resistance", "pivot",
-] as const;
-const SERIES_NUMBERS: Record<string, string[]> = {
-  sma: ["length"], ema: ["length"], rsi: ["length"], atr: ["length"], cci: ["length"],
-  momentum: ["length"], williams_r: ["length"], vwma: ["length"], hull_ma: ["length"],
-  rvol: ["lookbackDays"], macd: ["fast", "slow", "signal"],
-  stochastic: ["length", "smoothK", "smoothD"],
-  stoch_rsi: ["smoothK", "smoothD", "rsiLength", "stochLength"], adx: ["length"],
-  awesome_oscillator: ["fast", "slow"], bull_bear_power: ["length"],
-  ultimate_oscillator: ["fast", "mid", "slow"],
-  ichimoku: ["conversionLength", "baseLength", "spanBLength"],
-  atr_pct: ["length", "medianLength"],
-};
-const SERIES_CHOICES: Record<string, Record<string, string[]>> = {
-  macd: { line: ["line", "signal", "histogram"] },
-  stochastic: { line: ["k", "d"] },
-  stoch_rsi: { line: ["k", "d"] },
-  adx: { line: ["adx", "plus_di", "minus_di"] },
-  bull_bear_power: { line: ["bull", "bear"] },
-  ichimoku: { line: ["conversion", "base", "span_a", "span_b"] },
-  bias: { part: ["oscillators", "moving_averages", "summary"] },
-};
-const LEVEL_NUMBERS: Record<string, string[]> = {
-  opening_range_high: ["minutes"], opening_range_low: ["minutes"],
-  n_day_high: ["days"], n_day_low: ["days"], support: ["days"], resistance: ["days"],
-};
-const LEVEL_CHOICES: Record<string, Record<string, string[]>> = {
-  pivot: {
-    method: ["classic", "fibonacci", "camarilla"],
-    period: ["session", "week", "month"],
-    point: ["P", "R1", "R2", "R3", "S1", "S2", "S3"],
-  },
-};
+/** The price levels a stop or target can rest on: the strategy catalog's level rows, bounded by the contract. */
+const LEVEL_IDS = STRATEGY_OPERAND_CATALOG.filter((def) => def.group === "Levels").map((def) => def.id);
 
 function object(value: unknown): RecordValue {
   return value as RecordValue;
@@ -85,74 +46,6 @@ function numberText(value: unknown): string {
 
 function numeric(value: string): number {
   return value === "" ? Number.NaN : Number(value);
-}
-
-function conditionKind(condition: Condition): string {
-  if ("all" in condition) return "all";
-  if ("any" in condition) return "any";
-  if ("not" in condition) return "not";
-  if (condition.op === "time_between") return "time_between";
-  return condition.op === "within_pct" ? "within_pct" : "compare";
-}
-
-function newCondition(kind: string): Condition {
-  const comparison = { left: { series: "close" }, right: { value: 0 } };
-  if (kind === "within_pct") return { ...comparison, op: "within_pct", pct: 1 } as Condition;
-  if (kind === "time_between") return { op: "time_between", start: "09:30", end: "16:00" };
-  if (kind === "all") return { all: [{ ...comparison, op: "gte" }] } as Condition;
-  if (kind === "any") return { any: [{ ...comparison, op: "gte" }] } as Condition;
-  if (kind === "not") return { not: { ...comparison, op: "gte" } } as Condition;
-  return { ...comparison, op: "gte" } as Condition;
-}
-
-function changeConditionKind(current: Condition, kind: string): Condition {
-  if (conditionKind(current) === kind) return current;
-  if (kind === "not") return { not: current };
-  if (kind === "all" || kind === "any") {
-    const children = "all" in current ? current.all : "any" in current ? current.any : [current];
-    return kind === "all" ? { all: children } : { any: children };
-  }
-  if ("not" in current) return changeConditionKind(current.not, kind);
-  if ((kind === "compare" || kind === "within_pct") && "left" in current) {
-    if (kind === "within_pct") {
-      return { ...current, op: "within_pct", pct: "pct" in current ? current.pct : 1 } as Condition;
-    }
-    const comparison = { ...current } as typeof current & { pct?: number };
-    delete comparison.pct;
-    return { ...comparison, op: "gte" } as Condition;
-  }
-  if ((kind === "compare" || kind === "within_pct") && ("all" in current || "any" in current)) {
-    const first = "all" in current ? current.all[0] : current.any[0];
-    if (first) return changeConditionKind(first, kind);
-  }
-  return newCondition(kind);
-}
-
-function seriesDefaults(series: string): SeriesOperand {
-  const fields: Record<string, RecordValue> = {
-    rvol: { lookbackDays: 10 },
-    macd: { line: "histogram", fast: 12, slow: 26, signal: 9 },
-    stochastic: { line: "k", length: 14, smoothK: 3, smoothD: 3 },
-    stoch_rsi: { line: "k", smoothK: 3, smoothD: 3, rsiLength: 14, stochLength: 14 },
-    adx: { line: "adx", length: 14 },
-    awesome_oscillator: { fast: 5, slow: 34 },
-    bull_bear_power: { line: "bull", length: 13 },
-    ultimate_oscillator: { fast: 7, mid: 14, slow: 28 },
-    ichimoku: { line: "conversion", conversionLength: 9, baseLength: 26, spanBLength: 52 },
-    atr_pct: { length: 14, medianLength: 50 },
-    bias: { part: "summary" },
-  };
-  const selected = fields[series] ?? (SERIES_NUMBERS[series] ? { length: 14 } : {});
-  return { series, ...selected } as SeriesOperand;
-}
-
-function levelDefaults(level: string): LevelOperand {
-  const parameters: Record<string, RecordValue> = {
-    opening_range_high: { minutes: 15 }, opening_range_low: { minutes: 15 },
-    n_day_high: { days: 20 }, n_day_low: { days: 20 }, support: { days: 50 }, resistance: { days: 50 },
-    pivot: { method: "classic", period: "session", point: "P" },
-  };
-  return { level, ...(parameters[level] ?? {}) } as LevelOperand;
 }
 
 function BlockErrors({ block, errors }: { block: SpecBlock; errors: SpecBlockErrors }) {
@@ -219,171 +112,7 @@ function SelectField({
   );
 }
 
-function OperandEditor({
-  label, operand, onChange, disabled,
-}: {
-  label: string;
-  operand: Operand;
-  onChange: (operand: Operand) => void;
-  disabled: boolean;
-}) {
-  const record = object(operand);
-  const kind = "series" in operand ? "series" : "level" in operand ? "level" : "value";
-  const update = (key: string, value: unknown) => onChange({ ...record, [key]: value } as unknown as Operand);
-  const switchKind = (next: string) => onChange(next === "series"
-    ? seriesDefaults("close")
-    : next === "level"
-      ? levelDefaults("prior_day_high")
-      : { value: 0 });
-
-  return (
-    <div className={styles.operand}>
-      <SelectField label={label} value={kind} options={["series", "level", "value"]} onChange={switchKind} disabled={disabled} />
-      {kind === "value" && (
-        <NumberField label={`${label} number`} value={record.value} onChange={(value) => update("value", value)} disabled={disabled} step="any" />
-      )}
-      {kind === "series" && (
-        <>
-          <SelectField
-            label={`${label} indicator`}
-            value={String(record.series)}
-            options={SERIES}
-            onChange={(series) => onChange(seriesDefaults(series))}
-            disabled={disabled}
-          />
-          {(SERIES_NUMBERS[String(record.series)] ?? []).map((field) => (
-            <NumberField
-              key={field}
-              label={subLabel(label, field)}
-              value={record[field]}
-              onChange={(value) => update(field, value)}
-              disabled={disabled}
-              min={field === "lookbackDays" ? 1 : 1}
-              max={field === "lookbackDays" ? 60 : 500}
-            />
-          ))}
-          {Object.entries(SERIES_CHOICES[String(record.series)] ?? {}).flatMap(([field, options]) => {
-            const current = String(record[field] ?? options[0]);
-            return [<SelectField key={field} label={subLabel(label, field)} value={current} options={options} onChange={(value) => update(field, value)} disabled={disabled} />];
-          })}
-        </>
-      )}
-      {kind === "level" && (
-        <>
-          <SelectField
-            label={`${label} price level`}
-            value={String(record.level)}
-            options={LEVELS}
-            onChange={(level) => onChange(levelDefaults(level))}
-            disabled={disabled}
-          />
-          {(LEVEL_NUMBERS[String(record.level)] ?? []).map((field) => (
-            <NumberField key={field} label={subLabel(label, field)} value={record[field]} onChange={(value) => update(field, value)} disabled={disabled} min={1} max={260} />
-          ))}
-          {Object.entries(LEVEL_CHOICES[String(record.level)] ?? {}).map(([field, options]) => (
-            <SelectField key={field} label={subLabel(label, field)} value={String(record[field])} options={options} onChange={(value) => update(field, value)} disabled={disabled} />
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-function ConditionEditor({
-  condition, onChange, disabled, depth = 0,
-}: {
-  condition: Condition;
-  onChange: (condition: Condition) => void;
-  disabled: boolean;
-  depth?: number;
-}) {
-  const kind = conditionKind(condition);
-  if ("all" in condition || "any" in condition) {
-    const key = "all" in condition ? "all" : "any";
-    const children: Condition[] = "all" in condition ? condition.all : condition.any;
-    const updateChildren = (next: Condition[]) => onChange(key === "all" ? { all: next } : { any: next });
-    return (
-      <div className={styles.condition}>
-        <SelectField label="Condition group" value={key} options={["all", "any", "compare", "within_pct", "time_between", "not"]} onChange={(value) => onChange(changeConditionKind(condition, value))} disabled={disabled} />
-        <p className={styles.help}>{key === "all" ? "All conditions must be true" : "Any condition may be true"}</p>
-        <div className={styles.nestedConditions}>
-          {children.map((child, index) => (
-            <div className={styles.nestedCondition} key={`${depth}-${index}`}>
-              <ConditionEditor
-                condition={child}
-                depth={depth + 1}
-                disabled={disabled}
-                onChange={(next) => updateChildren(children.map((item, itemIndex) => itemIndex === index ? next : item))}
-              />
-              <button
-                className={styles.removeButton}
-                disabled={disabled || children.length <= 1}
-                onClick={() => updateChildren(children.filter((_, itemIndex) => itemIndex !== index))}
-                type="button"
-              >Remove condition</button>
-            </div>
-          ))}
-        </div>
-        <button
-          className={styles.secondaryButton}
-          disabled={disabled || children.length >= 20}
-          onClick={() => updateChildren([...children, newCondition("compare")])}
-          type="button"
-        >Add condition</button>
-      </div>
-    );
-  }
-
-  if ("not" in condition) {
-    return (
-      <div className={styles.condition}>
-        <SelectField label="Condition" value="not" options={["compare", "within_pct", "time_between", "all", "any", "not"]} onChange={(value) => onChange(changeConditionKind(condition, value))} disabled={disabled} />
-        <p className={styles.help}>Not this condition</p>
-        <ConditionEditor condition={condition.not} depth={depth + 1} disabled={disabled} onChange={(next) => onChange({ not: next })} />
-      </div>
-    );
-  }
-
-  if (condition.op === "time_between") {
-    return (
-      <div className={styles.condition}>
-        <SelectField label="Condition" value="time_between" options={["compare", "within_pct", "time_between", "all", "any", "not"]} onChange={(value) => onChange(changeConditionKind(condition, value))} disabled={disabled} />
-        <div className={styles.inlineFields}>
-          <label className={styles.field}><span>Start (ET)</span><input disabled={disabled} inputMode="numeric" onChange={(event) => onChange({ ...condition, start: event.currentTarget.value })} placeholder="09:30" value={condition.start} /></label>
-          <label className={styles.field}><span>End (ET)</span><input disabled={disabled} inputMode="numeric" onChange={(event) => onChange({ ...condition, end: event.currentTarget.value })} placeholder="16:00" value={condition.end} /></label>
-        </div>
-      </div>
-    );
-  }
-
-  const comparison = condition as Extract<Condition, { left: Operand; right: Operand }>;
-  const operator = comparison.op === "within_pct" ? "within_pct" : comparison.op;
-  const changeOperator = (value: string) => {
-    if (value === "within_pct") {
-      onChange({ ...comparison, op: "within_pct", pct: 1 } as Condition);
-      return;
-    }
-    const withoutPct = { ...comparison } as typeof comparison & { pct?: number };
-    delete withoutPct.pct;
-    onChange({ ...withoutPct, op: value } as Condition);
-  };
-  return (
-    <div className={styles.condition}>
-      <SelectField label="Condition" value={kind} options={["compare", "within_pct", "time_between", "all", "any", "not"]} onChange={(value) => onChange(changeConditionKind(condition, value))} disabled={disabled} />
-      {kind !== "compare" && kind !== "within_pct" ? null : (
-        <>
-          <OperandEditor label="Left side" operand={comparison.left} onChange={(left) => onChange({ ...comparison, left } as Condition)} disabled={disabled} />
-          <SelectField label="Operator" value={operator} options={COMPARE_OPERATORS.map(({ op }) => op)} onChange={changeOperator} disabled={disabled} />
-          <OperandEditor label="Right side" operand={comparison.right} onChange={(right) => onChange({ ...comparison, right } as Condition)} disabled={disabled} />
-          {comparison.op === "within_pct" && (
-            <NumberField label="Within percent" value={(comparison as typeof comparison & { pct: number }).pct} onChange={(pct) => onChange({ ...comparison, pct } as Condition)} disabled={disabled} step="any" min={0} max={100} />
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
+/** A stop or target that rests on a price level: the level, then its choice and number parameters from the strategy catalog. */
 function LevelActionEditor({
   label, value, onChange, disabled,
 }: {
@@ -392,14 +121,44 @@ function LevelActionEditor({
   onChange: (value: LevelOperand) => void;
   disabled: boolean;
 }) {
-  const record = object(value);
-  const level = String(record.level);
-  const update = (key: string, next: unknown) => onChange({ ...record, [key]: next } as unknown as LevelOperand);
+  const level = String(object(value).level);
+  const def = operandDef(level, STRATEGY_OPERAND_CATALOG);
+  const choice = choiceOf(value, STRATEGY_OPERAND_CATALOG);
+  const params = choice !== null && !("value" in choice) ? choice.params : {};
+  const picks = choice !== null && !("value" in choice) ? choice.picks ?? {} : {};
+  const update = (patch: { params?: Record<string, number>; picks?: Record<string, string> }) =>
+    onChange(operandFor({ id: level, params: { ...params, ...patch.params }, picks: { ...picks, ...patch.picks } }, STRATEGY_OPERAND_CATALOG) as LevelOperand);
   return (
-    <div className={styles.operand}>
-      <SelectField label={`${label} price level`} value={level} options={LEVELS} onChange={(next) => onChange(levelDefaults(next))} disabled={disabled} />
-      {(LEVEL_NUMBERS[level] ?? []).map((field) => <NumberField key={field} label={subLabel(label, field)} value={record[field]} onChange={(next) => update(field, next)} disabled={disabled} min={1} max={260} />)}
-      {Object.entries(LEVEL_CHOICES[level] ?? {}).map(([field, options]) => <SelectField key={field} label={subLabel(label, field)} value={String(record[field])} options={options} onChange={(next) => update(field, next)} disabled={disabled} />)}
+    <div className={styles.actionFields}>
+      <SelectField
+        label={`${label} price level`}
+        value={level}
+        options={LEVEL_IDS}
+        onChange={(next) => onChange(operandFor({ id: next, params: {} }, STRATEGY_OPERAND_CATALOG) as LevelOperand)}
+        disabled={disabled}
+      />
+      {def?.picks?.map((item) => (
+        <SelectField
+          key={item.key}
+          label={subLabel(label, item.key)}
+          value={picks[item.key] ?? item.defaultValue}
+          // The picker offers the level's own words; a stored value outside them still shows as its id.
+          options={item.options.includes(picks[item.key] ?? item.defaultValue) ? item.options : [picks[item.key] ?? item.defaultValue, ...item.options]}
+          onChange={(picked) => update({ picks: { [item.key]: picked } })}
+          disabled={disabled}
+        />
+      ))}
+      {def?.params.map((param) => (
+        <NumberField
+          key={param.key}
+          label={subLabel(label, param.key)}
+          value={params[param.key] ?? param.defaultValue}
+          onChange={(amount) => update({ params: { [param.key]: amount } })}
+          disabled={disabled}
+          min={param.min}
+          max={param.max}
+        />
+      ))}
     </div>
   );
 }
@@ -426,11 +185,11 @@ function PaperOrderEditor({
       <SelectField label="Side" value={String(order.side)} options={["buy", "sell"]} onChange={(side) => update("side", side)} disabled={disabled} />
       <SelectField label="Size order by" value={sizeKind} options={["riskUsd", "shares", "pctOfBook", "contracts"]} onChange={(kind) => update("size", defaultSize(kind))} disabled={disabled} />
       <NumberField label={paramLabel(sizeKind)} value={size[sizeKind]} onChange={(amount) => update("size", { ...size, [sizeKind]: amount })} disabled={disabled} step={sizeKind === "shares" || sizeKind === "contracts" ? "1" : "any"} min={1} />
-      <SelectField label="Stop by" value={"atrMultiple" in stop ? "atrMultiple" : "level"} options={["atrMultiple", "level"]} onChange={(kind) => update("stop", kind === "atrMultiple" ? { atrMultiple: 2 } : levelDefaults("prior_day_low"))} disabled={disabled} />
+      <SelectField label="Stop by" value={"atrMultiple" in stop ? "atrMultiple" : "level"} options={["atrMultiple", "level"]} onChange={(kind) => update("stop", kind === "atrMultiple" ? { atrMultiple: 2 } : operandFor({ id: "prior_day_low", params: {} }, STRATEGY_OPERAND_CATALOG))} disabled={disabled} />
       {"atrMultiple" in stop
         ? <NumberField label="Stop ATR multiple" value={stop.atrMultiple} onChange={(amount) => update("stop", { atrMultiple: amount })} disabled={disabled} step="any" min={0} max={20} />
         : <LevelActionEditor label="Stop" value={order.stop as LevelOperand} onChange={(next) => update("stop", next)} disabled={disabled} />}
-      <SelectField label="Target by" value={"r" in target ? "r" : "level"} options={["r", "level"]} onChange={(kind) => update("target", kind === "r" ? { r: 2 } : levelDefaults("prior_day_high"))} disabled={disabled} />
+      <SelectField label="Target by" value={"r" in target ? "r" : "level"} options={["r", "level"]} onChange={(kind) => update("target", kind === "r" ? { r: 2 } : operandFor({ id: "prior_day_high", params: {} }, STRATEGY_OPERAND_CATALOG))} disabled={disabled} />
       {"r" in target
         ? <NumberField label="Target R multiple" value={target.r} onChange={(amount) => update("target", { r: amount })} disabled={disabled} step="any" min={0} max={20} />
         : <LevelActionEditor label="Target" value={order.target as LevelOperand} onChange={(next) => update("target", next)} disabled={disabled} />}
@@ -486,8 +245,13 @@ export function SpecForm({ form, watchlists, onChange, errors, readOnly = false 
 
       <section className={styles.block} aria-labelledby="when-heading">
         <div className={styles.blockHeading}><h3 id="when-heading">When</h3><span>Closed-bar conditions</span></div>
-        <ConditionEditor condition={form.when} onChange={(when) => onChange({ ...form, when })} disabled={readOnly} />
-        <BlockErrors block="When" errors={errors} />
+        <ConditionTree
+          value={form.when}
+          onChange={(when) => onChange({ ...form, when })}
+          problems={errors.When ?? []}
+          disabled={readOnly}
+          hideLegend
+        />
       </section>
 
       <section className={styles.block} aria-labelledby="then-heading">
