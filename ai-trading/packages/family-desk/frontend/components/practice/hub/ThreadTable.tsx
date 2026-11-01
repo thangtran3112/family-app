@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -148,9 +150,9 @@ function ThreadRow({
       <th scope="row" className={styles.threadCell}>
         <span className={styles.threadHead}>
           <Link href={href} className={styles.threadName} {...lockLink(busy)}>{threadName(thread)}</Link>
-          <span className={hub.chip}>{threadModeLabel(thread.mode)}</span>
+          <Badge tone="neutral">{threadModeLabel(thread.mode)}</Badge>
           {closed ? (
-            <span className={hub.chip}>{PRACTICE_COPY.threadClosedBadge}</span>
+            <Badge tone="neutral">{PRACTICE_COPY.threadClosedBadge}</Badge>
           ) : (
             <span className={styles.activeTag}>
               <span className={hub.openDot} aria-hidden="true" />
@@ -171,7 +173,7 @@ function ThreadRow({
       <td>
         <span className={styles.progress}>{progress.main}</span>
         <span className={styles.sub}>{progress.sub}</span>
-        {progress.gate && <span className={`${hub.chip} ${styles.gateChip}`}>{progress.gate}</span>}
+        {progress.gate && <Badge tone="warn" className={styles.gateChip}>{progress.gate}</Badge>}
       </td>
       <td className={styles.num}>{winRateText(stats.winRate)}</td>
       {wide && (
@@ -184,7 +186,7 @@ function ThreadRow({
       <td className={styles.actionCell}>
         <div className={styles.actions}>
           {closed ? (
-            <Link href={`/practice/journal?thread=${thread.id}`} className={hub.primaryLink} {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Link>
+            <Button href={`/practice/journal?thread=${thread.id}`} variant="primary" {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Button>
           ) : dayActive && daily.loading ? (
             <Skeleton width={84} height={32} className={styles.skelEnd} />
           ) : (

@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
@@ -273,22 +275,22 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       <header className={styles.header}>
         <div className={styles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={styles.title}>{title}</h1>
-          <span className={styles.chip}>Practice day list</span>
-          {hidden && <span className={styles.chip}>{PRACTICE_COPY.dayDateHidden}</span>}
+          <Badge tone="neutral">Practice day list</Badge>
+          {hidden && <Badge tone="neutral">{PRACTICE_COPY.dayDateHidden}</Badge>}
         </div>
         <div className={`${styles.actions} ${styles.endWrap}`}>
           {practicing && !ended && (
-            <Link href={`/practice/replay?id=${practicing.id}`} className={`${styles.button} ${styles.primary}`}>{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Link>
+            <Button href={`/practice/replay?id=${practicing.id}`} variant="primary">{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Button>
           )}
           {ended ? (
             finishHref !== null ? (
-              <Link href={finishHref} className={`${styles.button} ${styles.primary}`}>{PRACTICE_COPY.dayFinishPlan}</Link>
+              <Button href={finishHref} variant="primary">{PRACTICE_COPY.dayFinishPlan}</Button>
             ) : (
-              <button ref={nextRef} type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</button>
+              <Button ref={nextRef} variant="primary" disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</Button>
             )
           ) : (
             <>
-              <button ref={endRef} type="button" className={styles.button} disabled={busy} aria-expanded={confirmEnd} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</button>
+              <Button ref={endRef} disabled={busy} aria-expanded={confirmEnd} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</Button>
               {confirmEnd && (
                 <InlineConfirm
                   label="Confirm ending the day"
@@ -325,7 +327,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             {list.screen.filters.map((filter) => {
               const counts = list.universe.filters.find((item) => item.id === filter.id);
               return (
-                <li key={filter.id} className={`${styles.chip} ${styles.chipOn}`} data-active="true" title={counts ? `${counts.matches_total} matched` : undefined}>{filter.name}</li>
+                <li key={filter.id} data-active="true" title={counts ? `${counts.matches_total} matched` : undefined}><Badge tone="warn">{filter.name}</Badge></li>
               );
             })}
           </ul>
@@ -334,7 +336,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         {warning && <p className={styles.banner} role="status">{warning}</p>}
         {list.relist && (
           <div className={styles.actions}>
-            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void relist(list.relist!.list_at)}>{list.relist.label}</button>
+            <Button variant="primary" disabled={busy} onClick={() => void relist(list.relist!.list_at)}>{list.relist.label}</Button>
             {list.relist.window_from && <span className={styles.muted}>{practiceText("dayRelistWindow", { time: formatClock(list.relist.window_from) })}</span>}
           </div>
         )}
@@ -362,9 +364,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   <p className={styles.muted}>{PRACTICE_COPY.dayNoMatchHint}</p>
                   <div className={styles.actions}>
                     {list.sessions.length === 0 && (
-                      <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.daySkip}</button>
+                      <Button variant="primary" disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.daySkip}</Button>
                     )}
-                    {thread.data !== null && <button type="button" className={styles.button} onClick={() => setChanging(true)}>{PRACTICE_COPY.dayChangePlan}</button>}
+                    {thread.data !== null && <Button onClick={() => setChanging(true)}>{PRACTICE_COPY.dayChangePlan}</Button>}
                   </div>
                 </EmptyBlock>
               }
@@ -372,19 +374,19 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                 const here = opening === row.symbol;
                 return (
                   <span className={styles.actions}>
-                    <button
-                      type="button"
-                      className={styles.small}
+                    <Button
+                      size="sm"
+                      variant="primary"
                       disabled={busy}
-                      aria-busy={here ? "true" : undefined}
+                      loading={here}
                       aria-label={here ? undefined : practiceText(opened.has(row.symbol) ? "daySwitch" : "dayOpen", { symbol: row.symbol })}
                       onClick={() => void practice(row.symbol)}
                     >
                       {here ? practiceText("dayOpening", { symbol: row.symbol }) : nameActionLabel(opened.has(row.symbol))}
-                    </button>
-                    <button type="button" className={styles.small} disabled={busy} aria-label={practiceText("dayPeekAt", { symbol: row.symbol })} onClick={() => peekAt(row.symbol)}>
+                    </Button>
+                    <Button size="sm" variant="primary" disabled={busy} aria-label={practiceText("dayPeekAt", { symbol: row.symbol })} onClick={() => peekAt(row.symbol)}>
                       {PRACTICE_COPY.dayPeek}
-                    </button>
+                    </Button>
                   </span>
                 );
               }}
@@ -401,7 +403,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
             {!ended && (
               <div className={styles.actions}>
-                <button type="button" className={styles.button} disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{scanning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}</button>
+                <Button disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{scanning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}</Button>
                 <span className={styles.muted} role={still === "rescan" ? "status" : undefined}>{still === "rescan" ? PRACTICE_COPY.dayRescanStillWorking : canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
               </div>
             )}
@@ -494,8 +496,8 @@ function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]
       render: (row) => (
         <span>
           <span className={styles.symbol}>{row.symbol}</span>
-          {row.new_since_list && <span className={`${styles.chip} ${styles.chipAmber}`} style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanNew}</span>}
-          {row.reported_before_open && <span className={`${styles.chip} ${styles.chipAmber}`} style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayReported}</span>}
+          {row.new_since_list && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanNew}</Badge>}
+          {row.reported_before_open && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayReported}</Badge>}
         </span>
       ),
     },
@@ -522,7 +524,7 @@ function columnsOf(list: DayList): DenseColumn<Candidate>[] {
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",
       render: (row) => {
         const text = dayCellText(column, row);
-        if (column.format === "earnings") return text === "—" ? text : <span className={`${styles.chip} ${styles.chipAmber}`}>{text}</span>;
+        if (column.format === "earnings") return text === "—" ? text : <Badge tone="warn">{text}</Badge>;
         if (column.missing) return <span title={PRACTICE_COPY.dayNoValue}>{text}</span>;
         const tone = dayCellTone(column, row);
         return <span className={tone ? styles[tone] : undefined}>{text}</span>;

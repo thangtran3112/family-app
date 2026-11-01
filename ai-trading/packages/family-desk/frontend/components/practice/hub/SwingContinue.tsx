@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
@@ -65,7 +66,7 @@ export function SwingContinue({
   return (
     <>
       <div className={styles.inline}>
-        <button type="button" className={styles.primary} disabled={locked || own} aria-busy={locked || own || undefined} onClick={() => void open()}>{own ? PRACTICE_COPY.planOpening : label}</button>
+        <Button variant="primary" disabled={locked || own} loading={locked || own} onClick={() => void open()}>{own ? PRACTICE_COPY.planOpening : label}</Button>
         {own && still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
         {waiting && (
           <p role="status" className={styles.hint}>

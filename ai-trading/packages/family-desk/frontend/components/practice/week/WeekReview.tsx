@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { AdherenceChecklist } from "@/components/practice/journal/AdherenceChecklist";
 import { NotesAndRating } from "@/components/practice/journal/NotesAndRating";
 import { ThreadTiles } from "@/components/practice/journal/thread/ThreadTiles";
@@ -115,7 +117,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
           <Link href={threadOverviewHref(threadId)} className={styles.link}>{WEEK_TEXT.back}</Link>
           <div className={styles.titleRow}>
             <h1 className={styles.title}>{weekTitle(week)}</h1>
-            <span className={`${styles.chip} ${toDate ? styles.chipOpen : ""}`}>{heading.badge}</span>
+            <Badge tone={toDate ? "warn" : "neutral"}>{heading.badge}</Badge>
             <SimulatedBadge />
           </div>
           <p className={styles.sub}>{weekSubtitle(week)}</p>
@@ -126,9 +128,9 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
         <div className={styles.actions}>
           <Link href={threadHref(threadId)} className={styles.link}>{WEEK_TEXT.threadJournal}</Link>
           {action.kind === "start" ? (
-            <button type="button" className={`${styles.button} ${styles.primary}`} disabled={start.busy} onClick={startWeek}>{action.label}</button>
+            <Button variant="primary" disabled={start.busy} onClick={startWeek}>{action.label}</Button>
           ) : (
-            action.href !== null && <Link href={action.href} className={`${styles.button} ${styles.primary}`}>{action.label}</Link>
+            action.href !== null && <Button href={action.href} variant="primary">{action.label}</Button>
           )}
         </div>
       </header>

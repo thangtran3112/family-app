@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
 import { BackLink } from "@/components/practice/hub/BackLink";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -381,7 +382,7 @@ function boardColumnsOf(
       render: (row) => (
         <span>
           <span className={dayStyles.symbol}>{row.symbol}</span>
-          {options.held[row.symbol] && <span className={`${styles.chip} ${styles.tag}`}>{options.held[row.symbol]} hold</span>}
+          {options.held[row.symbol] && <Badge tone="neutral" className={styles.tag}>{options.held[row.symbol]} hold</Badge>}
         </span>
       ),
     },
@@ -395,7 +396,7 @@ function boardColumnsOf(
       render: (row) => {
         if (column.key === "earnings") {
           const chip = earningsText(row.earnings);
-          return chip ? <span className={`${styles.chip} ${styles.chipAmber}`}>{chip}</span> : "—";
+          return chip ? <Badge tone="warn">{chip}</Badge> : "—";
         }
         const tone = boardCellTone(column, row);
         return <span className={tone ? dayStyles[tone] : undefined}>{boardCellText(column, row)}</span>;
