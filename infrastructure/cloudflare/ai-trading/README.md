@@ -65,6 +65,8 @@ persisted boolean. No manual console changes or targeted applies are needed.
 
 Operator access to the host goes through this tunnel behind Cloudflare Access, not over the tailnet (which is CI deploys only; `.claude/rules/tailscale.md`). The client side, the status checks and the failure modes are in the skill `manage-cloudflare-tunnel` (`.claude/skills/`). With `laptop_ssh_enabled=false` (the default) nothing below exists.
 
+Login methods: the `laptop-ssh` Access app leaves `allowed_idps` empty, so its login page offers every configured identity provider: One-time PIN (Terraform, `infrastructure/cloudflare/zero-trust/`) and Passkeys (created through the API, not modelled by the pinned provider). Passkey enrollment is pending the owner's first gesture; do not record it as done before a passkey login succeeds. The Access `session_duration` stays 168h.
+
 | Variable | Default | Firestore key in `ai-trading/cloudflare` |
 |---|---|---|
 | `laptop_ssh_enabled` | `false` | `TF_VAR_laptop_ssh_enabled` |
