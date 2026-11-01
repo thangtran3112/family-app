@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
+import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
@@ -112,7 +113,7 @@ function DayNotice({ title }: { title: string }) {
   );
 }
 
-/** The day page while it loads: grey blocks where the header, the counts and the candidate rows will be (D-116). */
+/** The day page while it loads: grey blocks where the header, the counts, the candidate rows and the left rail will be (D-116). */
 function DaySkeleton() {
   return (
     <div className={styles.screen} role="status" aria-busy="true" aria-label={PRACTICE_COPY.dayLoading}>
@@ -124,6 +125,18 @@ function DaySkeleton() {
         <Skeleton width="60%" />
         <Skeleton height={240} />
       </div>
+      <LeftRailPortal>
+        <div className={styles.side} aria-hidden="true">
+          <section className={styles.sideSection}>
+            <Skeleton width={96} height={11} />
+            <Skeleton height={72} />
+          </section>
+          <section className={styles.sideSection}>
+            <Skeleton width={120} height={11} />
+            <Skeleton height={96} />
+          </section>
+        </div>
+      </LeftRailPortal>
     </div>
   );
 }
