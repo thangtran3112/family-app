@@ -428,14 +428,14 @@ def test_an_entry_creates_the_mark_and_the_hold_and_credits_nothing(db_session, 
     assert swing.day_list_out(db_session, owner, row.id, svc)["holds"][0]["id"] == hold.id
 
 
-def test_a_second_entry_on_a_held_symbol_is_a_422_and_a_sixth_hold_is_accepted(db_session, owner, svc) -> None:
+def test_a_second_entry_on_a_held_symbol_adds_to_it_and_a_sixth_hold_is_accepted(db_session, owner, svc) -> None:
     thread, _ = ready_thread(db_session, owner, svc)
     row, sessions = _day(db_session, owner, svc, thread, "S01", "S02", "S03", "S04", "S05")
     for session in sessions:
         _advance(db_session, owner, svc, session, "10:00")
         _mark(db_session, owner, svc, session, "long_entry", shares=10)
-    problem = _rejected(session_mod.place_mark, db_session, owner, sessions[0].id, svc, {"kind": "short_entry"})
-    assert (problem.message, problem.status) == ("Close your open S01 practice hold first", 422)
+    more = _mark(db_session, owner, svc, sessions[0], "long_entry", shares=5)  # the same name again: it adds
+    assert more["hold"]["shares"] == 15 and len(hold_rows.open_holds(db_session, thread.id)) == 5
     plan_mod.patch_day_list(db_session, owner, row.id, svc, watch=["S06"], notes=None, rating=None, fields={"watch"})
     sixth = swing.start_session(db_session, owner, row.id, "S06", svc)
     _advance(db_session, owner, svc, sixth, "10:00")
@@ -517,10 +517,15 @@ def test_an_exit_needs_an_open_hold_of_the_same_side_and_a_stop_needs_one_on_the
         session_mod.place_mark, db_session, owner, session.id, svc, {"kind": "stop", "stopPrice": off(price, 1)}
     )
     assert (problem.message, problem.path) == ("A long stop goes below the last price", "stopPrice")
-    short = _rejected(
-        session_mod.place_mark, db_session, owner, session.id, svc, {"kind": "short_entry", "stopPrice": off(price, -1)}
+    # A Sell that leaves the long open is judged against the long that remains: a stop above the price is refused ...
+    sell_body = {"kind": "short_entry", "shares": 1}
+    problem = _rejected(
+        session_mod.place_mark, db_session, owner, session.id, svc, {**sell_body, "stopPrice": off(price, 1)}
     )
-    assert short.message == "Close your open S01 practice hold first"
+    assert (problem.message, problem.path) == ("A long stop goes below the last price", "stopPrice")
+    # ... and one below it moves the line of the remaining position.
+    kept = _mark(db_session, owner, svc, session, **sell_body, stopPrice=off(price, -1))
+    assert kept["hold"]["status"] == "open" and kept["hold"]["stop_price"] == off(price, -1)
 
 
 def test_a_stop_mark_moves_the_line_keeps_the_r_basis_and_clears_the_pause_flag(db_session, owner, world, svc) -> None:

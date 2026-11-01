@@ -19,9 +19,9 @@ test("barStartFor is the last bar starting at or before the instant", () => {
 });
 
 test("markLabel reads every mark kind as Practice text", () => {
-  assert.equal(markLabel({ kind: "long_entry", shares: 100, stop_price: null }), "Practice long 100");
-  assert.equal(markLabel({ kind: "short_entry", shares: 50, stop_price: null }), "Practice short 50");
-  assert.equal(markLabel({ kind: "long_entry", shares: null, stop_price: null }), "Practice long", "no share count trims cleanly");
+  assert.equal(markLabel({ kind: "long_entry", shares: 100, stop_price: null }), "Practice buy 100");
+  assert.equal(markLabel({ kind: "short_entry", shares: 50, stop_price: null }), "Practice sell 50");
+  assert.equal(markLabel({ kind: "long_entry", shares: null, stop_price: null }), "Practice buy", "no share count trims cleanly");
   assert.equal(markLabel({ kind: "long_exit", shares: null, stop_price: null }), "Practice exit");
   assert.equal(markLabel({ kind: "short_exit", shares: null, stop_price: null }), "Practice exit");
   assert.equal(markLabel({ kind: "stop", shares: null, stop_price: 186.9 }), "Practice stop 186.90");
@@ -38,8 +38,8 @@ test("practice markers snap to the bar open at the mark time and skip stop, note
     withMark({ id: 8, seq: 6, kind: "long_entry", at: "2026-04-07T13:20:00Z" }), // before the first bar
   ];
   assert.deepEqual(practiceMarkers(marks, bars), [
-    { time: "2026-04-07T13:45:00Z", kind: "practice_long", label: "Practice long 100" },
-    { time: "2026-04-07T13:35:00Z", kind: "practice_short", label: "Practice short 50" },
+    { time: "2026-04-07T13:45:00Z", kind: "practice_long", label: "Practice buy 100" },
+    { time: "2026-04-07T13:35:00Z", kind: "practice_short", label: "Practice sell 50" },
     { time: "2026-04-07T13:50:00Z", kind: "practice_exit", label: "Practice exit" },
   ]);
 });
@@ -84,7 +84,7 @@ test("the Marks tab lists newest first; undo only reaches her last mark while th
     withMark({ id: 4, seq: 2, kind: "stop", at: "2026-04-07T13:48:00Z", price: null, stop_price: 186.9, note: null }),
   ];
   assert.deepEqual(markRows(marks).map((row) => row.id), [6, 5, 4, 3]);
-  assert.deepEqual(markRows(marks)[3], { id: 3, time: "9:47:00 AM ET", label: "Practice long 100", price: "187.42", note: "ORB hold", auto: false });
+  assert.deepEqual(markRows(marks)[3], { id: 3, time: "9:47:00 AM ET", label: "Practice buy 100", price: "187.42", note: "ORB hold", auto: false });
   assert.deepEqual(markRows(marks)[1], { id: 5, time: "9:50:00 AM ET", label: "Practice note", price: "", note: "watch the open", auto: false });
   assert.deepEqual(markRows(marks)[0], { id: 6, time: "4:00:00 PM ET", label: "Practice exit", price: "189.45", note: null, auto: true });
   assert.equal(canUndoLast(marks, "2026-04-07T20:00:00Z"), false, "the last mark is an auto exit");
@@ -105,6 +105,12 @@ test("the journal chart starts at the first bar of the window, after the lookbac
   assert.equal(windowIndex(bars, "2026-04-07T13:40:00Z"), 2);
   assert.equal(windowIndex(bars, "2026-04-07T13:41:00Z"), 3);
   assert.equal(windowIndex(bars, "2026-04-07T23:00:00Z"), 0, "a window after every bar falls back to the start");
+});
+
+test("the open position's 'since' is its first fill, however many fills added to it", () => {
+  const first = withMark({ id: 3, seq: 1, kind: "long_entry", at: "2026-04-07T13:35:00Z", trade_no: 1 });
+  const added = withMark({ id: 4, seq: 2, kind: "long_entry", at: "2026-04-07T13:41:00Z", trade_no: 1 });
+  assert.equal(entrySince([first, added], { trade_no: 1 }), "2026-04-07T13:35:00Z");
 });
 
 test("the open trade's 'since' is the time of its entry mark", () => {
@@ -169,29 +175,29 @@ const run = Array.from({ length: 60 }, (_, index) => bar(minute(index)));
 const at = (index: number, kind: "practice_long" | "practice_short" | "practice_exit" | "would_fire", label: string) => ({ time: run[index]!.t, kind, label });
 
 test("three trades inside a few bars keep one label each side: the newest wins, the shape still shows", () => {
-  const out = declutterMarkers([at(10, "practice_long", "Practice long 100"), at(14, "practice_long", "Practice long 50"), at(18, "practice_long", "Practice long 25")], run);
-  assert.deepEqual(out.map((marker) => marker.label), ["", "", "Practice long 25"]);
+  const out = declutterMarkers([at(10, "practice_long", "Practice buy 100"), at(14, "practice_long", "Practice buy 50"), at(18, "practice_long", "Practice buy 25")], run);
+  assert.deepEqual(out.map((marker) => marker.label), ["", "", "Practice buy 25"]);
   assert.deepEqual(out.map((marker) => marker.time), [run[10]!.t, run[14]!.t, run[18]!.t], "no marker is removed");
 });
 
 test("labels far enough apart all stay", () => {
-  const input = [at(5, "practice_long", "Practice long 100"), at(30, "practice_exit", "Practice exit"), at(55, "practice_short", "Practice short 100")];
+  const input = [at(5, "practice_long", "Practice buy 100"), at(30, "practice_exit", "Practice exit"), at(55, "practice_short", "Practice sell 100")];
   assert.deepEqual(declutterMarkers(input, run), input);
 });
 
 test("two labels on one side stay when they are a dozen bars apart", () => {
-  const input = [at(5, "practice_long", "Practice long 100"), at(30, "practice_long", "Practice long 50")];
+  const input = [at(5, "practice_long", "Practice buy 100"), at(30, "practice_long", "Practice buy 50")];
   assert.deepEqual(declutterMarkers(input, run), input);
 });
 
 test("markers on different sides of the bar do not hide each other", () => {
-  const input = [at(10, "practice_long", "Practice long 100"), at(12, "practice_short", "Practice short 100"), at(13, "practice_exit", "Practice exit")];
-  assert.deepEqual(declutterMarkers(input, run).map((marker) => marker.label), ["Practice long 100", "Practice short 100", "Practice exit"]);
+  const input = [at(10, "practice_long", "Practice buy 100"), at(12, "practice_short", "Practice sell 100"), at(13, "practice_exit", "Practice exit")];
+  assert.deepEqual(declutterMarkers(input, run).map((marker) => marker.label), ["Practice buy 100", "Practice sell 100", "Practice exit"]);
 });
 
 test("a bell near a practice short is on the same side, so only the newest label stays", () => {
-  const out = declutterMarkers([at(20, "would_fire", "ORB long"), at(22, "practice_short", "Practice short 100")], run);
-  assert.deepEqual(out.map((marker) => marker.label), ["", "Practice short 100"]);
+  const out = declutterMarkers([at(20, "would_fire", "ORB long"), at(22, "practice_short", "Practice sell 100")], run);
+  assert.deepEqual(out.map((marker) => marker.label), ["", "Practice sell 100"]);
 });
 
 test("declutter does not reorder markers or change the input", () => {
