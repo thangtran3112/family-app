@@ -425,7 +425,7 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
   });
 
-  test("a re-scan runs at the day clock, says when and on what data, and leaves the list as it was", async ({ page, context }) => {
+  test("a re-scan shows its progress, repopulates the list instead of adding a second one, and is labelled with its clock", async ({ page, context }) => {
     test.setTimeout(240_000);
     // The Desk recorded that morning with two of the stub's four names: the list scans those, and says so.
     await recordUniverse(context, [{ day: DAY, symbols: ["TSLA", "LRCX"] }]);
@@ -451,19 +451,49 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
     await expect(rescan).toBeEnabled();
+
+    // The stub scans in a blink, so hold the day list's job at what a slow scan looks like: the test moves it on by hand.
+    // Every other part of each answer (the list, the scan row, the counts) is the server's own.
+    let stage: "counting" | "reading" | "filtering" | "live" = "counting";
+    await page.route(/\/api\/desk\/replay\/day-lists\/\d+$/, async (route) => {
+      if (route.request().method() !== "GET" || stage === "live") return route.fallback();
+      const response = await route.fetch();
+      const body = await response.json();
+      if (body.rescan_job === null) return route.fulfill({ response, json: body });
+      const progress = { counting: { done: 0, total: 0 }, reading: { done: 40, total: 134 }, filtering: { done: 134, total: 134 } }[stage];
+      return route.fulfill({ response, json: { ...body, rescan_job: { ...body.rescan_job, state: "running", ...progress } } });
+    });
     await rescan.click();
+    const progress = page.getByTestId("rescan-progress-text");
+    const bar = page.getByRole("progressbar", { name: PRACTICE_COPY.dayRescanProgressLabel });
+    await expect(progress).toHaveText("Re-scanning at 9:35 AM ET · counting the names to read…");
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescanning })).toBeDisabled();
+    stage = "reading";
+    await expect(progress).toHaveText("Re-scanning at 9:35 AM ET · read 40 of 134 names (29%)");
+    await expect(bar).toHaveAttribute("value", "40");
+    await expect(bar).toHaveAttribute("max", "134");
+    stage = "filtering";
+    await expect(progress).toHaveText("Re-scanning at 9:35 AM ET · applying your filters to 134 names…");
+    await expect(page.getByTestId("rescan-done")).toHaveCount(0); // still running: no "finished" yet
+    stage = "live"; // the server's own answer: the scan is done
+    await expect(page.getByTestId("rescan-done")).toHaveText("Re-scan finished · the list above is scan 1");
+    await expect(progress).toHaveCount(0);
+    await expect(rescan).toBeDisabled(); // the list already shows a scan at this clock
+    await expect(page.getByTestId("rescan-hint")).toHaveText(PRACTICE_COPY.dayRescanCurrent);
+
+    // The scan IS the list: its label sits with the list's counts, and there is no second table beside it.
     const label = page.getByTestId("rescan-label");
     await expect(label).toHaveText("Scan 1 · run at 9:35 AM ET · data through 9:20 AM");
-    await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new since your list");
+    await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new in this scan");
     await expect(label).not.toContainText("2026"); // dates stay hidden
-    const scanned = page.getByRole("table", { name: "Re-scan" });
-    await expect(scanned.getByRole("row", { name: /TSLA/ })).toBeVisible();
-    await expect(scanned.getByRole("row", { name: /LRCX/ })).toBeVisible();
-    await expect(list.getByRole("row")).toHaveCount(3); // the frozen list is unchanged: header and its two names
+    await expect(page.getByRole("table", { name: "Re-scan" })).toHaveCount(0);
+    await expect(list.getByRole("row")).toHaveCount(3); // the header and its two names
+    await expect(list.getByRole("row", { name: /TSLA/ })).toHaveCount(1);
+    await expect(list.getByRole("row", { name: /LRCX/ })).toHaveCount(1);
     await expect(page.getByTestId("rescan-stale")).toHaveCount(0);
     await expectCleanScreen(page);
 
-    // The clock moves on: the old scan says it is older, and a new scan is its own.
+    // The clock moves on: the scan says it is older, and a new scan replaces the list, it does not add to it.
     await page.getByRole("button", { name: "Switch to TSLA" }).first().click(); // the name in hand: its button reads Switch
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
@@ -473,11 +503,17 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
     await expect(page.getByTestId("rescan-stale")).toContainText("The day clock is now 9:37 AM ET · this scan is older");
+    await expect(rescan).toBeEnabled();
     await rescan.click();
     await expect(label).toHaveText("Scan 2 · run at 9:37 AM ET · data through 9:22 AM");
     await expect(page.getByTestId("rescan-stale")).toHaveCount(0);
+    await expect(page.getByRole("table", { name: "Re-scan" })).toHaveCount(0);
+    await expect(list.getByRole("row")).toHaveCount(3); // still the header and its two names, not four
+    await expect(list.getByRole("row", { name: /TSLA/ })).toHaveCount(1);
+    await expect(list.getByRole("row", { name: /LRCX/ })).toHaveCount(1);
+    await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new in this scan");
 
-    // Ending the day closes scanning and keeps the last scan on screen.
+    // Ending the day closes scanning and keeps the last scan's label on screen.
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
