@@ -57,6 +57,13 @@ export type MarketChartPane = {
   references?: Array<{ value: number; label: string }>;
 };
 
+/** A chart of money over a stand-in timeline (the week review's balance and equity): what each bar's day is called on the time axis ("D1"), and how a dollar reads on the price axis and its pills. */
+export type MarketChartMoneyAxis = {
+  days: readonly string[];
+  label: (price: number) => string;
+  tick: (price: number) => string;
+};
+
 export type MarketChartLevel = {
   /** What a settings toggle filters by; the chart itself ignores it. */
   id?: string;
@@ -103,6 +110,8 @@ export type MarketChartProps = {
   clockTicks?: boolean;
   /** One label per bar for the data table while dates are hidden ("D-3", "Day 6"): a stand-in timeline's own times say nothing. */
   rowLabels?: readonly string[];
+  /** Money, not a price: day names on the time axis, dollars on the price axis, and room above and below the lines for the top label and the library's logo (D-087, D-128). */
+  moneyAxis?: MarketChartMoneyAxis;
   /** Start time of a bar to bring into view with the crosshair on it (a click in the signals rail). `at` changes on every click, so the same bar can be asked for twice. */
   focus?: { time: string; at: number } | null;
   /** One legend per indicator pane (same order as `panes`), drawn at the top of its pane wherever the layout puts it. */
@@ -217,6 +226,7 @@ export function MarketChart({
   hideDates = false,
   clockTicks = false,
   rowLabels,
+  moneyAxis,
   focus = null,
   paneLegends,
 }: MarketChartProps) {
@@ -363,15 +373,20 @@ export function MarketChart({
     const mainSeries = main.current;
     if (wantKind === "Candlestick") mainSeries.applyOptions(candleStyle(chartType));
 
-    const timeLabel = hideDates ? formatChartClock : formatChartTime;
+    const dayName = moneyAxis ? new Map(bars.map((bar, index) => [timeId(chartTime(bar.t)), moneyAxis.days[index] ?? ""])) : null;
+    const timeLabel = dayName ? (time: Time) => dayName.get(timeId(time)) ?? "" : hideDates ? formatChartClock : formatChartTime;
     currentChart.applyOptions({
       timeScale: {
         timeVisible: interval !== "1d" && interval !== "1w",
-        tickMarkFormatter: follow || hideDates || clockTicks ? (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates) : (time: Time) => timeLabel(time),
+        tickMarkFormatter: dayName || !(follow || hideDates || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates),
         rightOffset: follow ? FOLLOW_RIGHT_PAD : 0,
       },
-      localization: { timeFormatter: timeLabel },
+      localization: {
+        timeFormatter: timeLabel,
+        ...(moneyAxis ? { priceFormatter: moneyAxis.label, tickmarksPriceFormatter: (prices: readonly number[]) => prices.map(moneyAxis.tick) } : {}),
+      },
     });
+    if (moneyAxis) currentChart.priceScale("right").applyOptions({ scaleMargins: { top: 0.12, bottom: 0.14 } });
 
     const wantedOverlays = new Set(overlays.map(({ id }) => id));
     for (const [id, series] of overlaySeries.current) {
@@ -531,7 +546,7 @@ export function MarketChart({
       currentChart.timeScale().scrollToRealTime();
     }
     lastIndex.current = count - 1;
-  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, firstDraw, hideDates, clockTicks, chartType]);
+  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, firstDraw, hideDates, clockTicks, chartType, moneyAxis]);
 
   // Move the crosshair to the asked-for bar, scrolling it into view when it is off screen. Never touches the data.
   useEffect(() => {
