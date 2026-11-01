@@ -152,7 +152,7 @@ Host family-laptop
 
 `%h` expands to `HostName`, so the hostname appears once. (`cloudflared access ssh-config --hostname <ssh-hostname>` prints the same `ProxyCommand` line.)
 
-First use: `ssh family-laptop` opens a browser on the Cloudflare Access login for the hostname. Sign in as the owner identity; with no identity provider configured, the default is a one-time PIN sent to that email. On a machine with no browser, `cloudflared access login` prints a URL instead. `cloudflared` stores a token locally and reuses it until the Access `session_duration` (24h) runs out, then the browser step repeats. Host key: the first connection asks to trust the key under that hostname; compare it with the laptop's own before answering yes.
+First use: `ssh family-laptop` opens a browser on the Cloudflare Access login for the hostname. Sign in with a **passkey** (Touch ID): the login page offers only the Passkeys identity provider — the email one-time-PIN IdP is kept dormant, not deleted. On a machine with no browser, `cloudflared access login` prints a URL instead. `cloudflared` stores a token locally and reuses it until the Access `session_duration` (168h / 7 days) runs out, then the passkey gesture repeats. Host key: the first connection asks to trust the key under that hostname; compare it with the laptop's own before answering yes.
 
 ### CI deploys (headless)
 
