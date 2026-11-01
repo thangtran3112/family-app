@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { defaultAlertFilters, toQuery, type AlertFilterState, type AlertsTab } from "@/lib/desk/alertsView";
@@ -38,34 +38,37 @@ export function AlertsScreen() {
   const banner = status ? alertsBanner(status.alerts.state) : null;
   const filtersActive = Boolean(query.status || query.category || query.symbol);
 
-  let body: ReactNode;
-  if (list.data === null) {
-    body = list.error === null ? <LoadingBlock label="Loading alert strategies…" /> : <ErrorBlock subject="alert list" onRetry={list.refresh} />;
-  } else if (list.data.length === 0) {
-    body = filtersActive
-      ? (
-        <EmptyBlock title="No alert strategies match these filters">
-          <Button onClick={() => setFilters(defaultAlertFilters())}>Clear filters</Button>
-        </EmptyBlock>
-      )
-      : (
-        <EmptyBlock title={COPY.noAlertStrategies}>
-          <Link href="/alerts/new" className={styles.link}>New alert strategy</Link>
-        </EmptyBlock>
-      );
-  } else {
-    body = (
-      <AlertTable
-        rows={list.data}
-        selectedId={selectedId}
-        onSelect={(id) => {
-          setSelectedId(id);
-          setDrawerOpen(true);
-        }}
-        onChanged={list.refresh}
-      />
-    );
-  }
+  const body = (
+    <QueryBoundary
+      query={list}
+      loading="Loading alert strategies…"
+      subject="alert list"
+      isEmpty={(rows) => rows.length === 0}
+      empty={
+        filtersActive ? (
+          <EmptyBlock title="No alert strategies match these filters">
+            <Button onClick={() => setFilters(defaultAlertFilters())}>Clear filters</Button>
+          </EmptyBlock>
+        ) : (
+          <EmptyBlock title={COPY.noAlertStrategies}>
+            <Link href="/alerts/new" className={styles.link}>New alert strategy</Link>
+          </EmptyBlock>
+        )
+      }
+    >
+      {(rows) => (
+        <AlertTable
+          rows={rows}
+          selectedId={selectedId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setDrawerOpen(true);
+          }}
+          onChanged={list.refresh}
+        />
+      )}
+    </QueryBoundary>
+  );
 
   return (
     <div className={styles.root}>

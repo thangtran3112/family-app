@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useActiveLane } from "@/components/shell/desktop/DeskContext";
+import { QueryBoundary } from "@/components/ui/StateBlocks";
 import { FuturesSpecsSchema } from "@/lib/api/schemas";
 import { deskFetch } from "@/lib/api/client";
 import { FUTURES_HOME } from "@/lib/lanes";
 import { marginText, rollEvents } from "@/lib/futures/specs";
+import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "./futures.module.css";
 
 type FuturesSpec = ReturnType<typeof FuturesSpecsSchema.parse>[number];
@@ -33,44 +35,12 @@ function numeric(value: number): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
-export function FuturesSpecsScreen() {
-  const [specs, setSpecs] = useState<FuturesSpec[] | null>(null);
-  const [error, setError] = useState("");
-  const [reload, setReload] = useState(0);
-  // Shared route: "back" goes to the active lane's own futures screen, not the other lane's interstitial.
-  const back = FUTURES_HOME[useActiveLane()];
-
-  useEffect(() => {
-    let active = true;
-    void deskFetch("/api/desk/futures/specs", FuturesSpecsSchema).then((result) => {
-      if (active) setSpecs(result);
-    }).catch(() => {
-      if (active) setError("Futures reference specs are unavailable.");
-    });
-    return () => { active = false; };
-  }, [reload]);
-
-  function retry() {
-    setSpecs(null);
-    setError("");
-    setReload((value) => value + 1);
-  }
-  const pairs = useMemo(() => pairsFromSpecs(specs ?? []), [specs]);
-  const nextRolls = useMemo(() => rollEvents(specs ?? []), [specs]);
-  const sessions = useMemo(() => [...new Map((specs ?? []).map(({ session }) => [`${session.open_time}-${session.close_time}`, session])).values()], [specs]);
-
+function SpecSections({ specs }: { specs: FuturesSpec[] }) {
+  const pairs = useMemo(() => pairsFromSpecs(specs), [specs]);
+  const nextRolls = useMemo(() => rollEvents(specs), [specs]);
+  const sessions = useMemo(() => [...new Map(specs.map(({ session }) => [`${session.open_time}-${session.close_time}`, session])).values()], [specs]);
   return (
-    <div className={styles.page}>
-      <header className={styles.pageHeader}>
-        <div><p className={styles.eyebrow}>FUTURES · REFERENCE</p><h1>Futures specs &amp; roll calendar</h1><p className={styles.subtitle}>12 contracts · mini/micro pairs · roll dates included · margin is not available</p></div>
-        <Link className={styles.secondaryLink} href={back.href}>{back.label}</Link>
-      </header>
-      <p className={styles.sourceNote}>Contract multipliers, tick sizes, sessions, and roll dates are the Desk&apos;s own reference data. No broker is connected.</p>
-      {!specs && !error && <p role="status" className={styles.muted}>Loading contract reference…</p>}
-      {error && <div className={styles.error} role="alert">{error}<button type="button" onClick={retry}>Try again</button></div>}
-
-      {specs?.length === 0 && <p className={styles.muted}>No futures contract specs are available.</p>}
-      {specs && <>
+    <>
         <section className={styles.specSection}>
           <h2>12 contracts · mini and micro</h2>
           <div className={styles.tableScroll}>
@@ -120,7 +90,31 @@ export function FuturesSpecsScreen() {
             </div>)}
           </div>
         </section>
-      </>}
+    </>
+  );
+}
+
+export function FuturesSpecsScreen() {
+  const specs = useDeskQuery("futures-specs", (signal) => deskFetch("/api/desk/futures/specs", FuturesSpecsSchema, { signal }));
+  // Shared route: "back" goes to the active lane's own futures screen, not the other lane's interstitial.
+  const back = FUTURES_HOME[useActiveLane()];
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.pageHeader}>
+        <div><p className={styles.eyebrow}>FUTURES · REFERENCE</p><h1>Futures specs &amp; roll calendar</h1><p className={styles.subtitle}>12 contracts · mini/micro pairs · roll dates included · margin is not available</p></div>
+        <Link className={styles.secondaryLink} href={back.href}>{back.label}</Link>
+      </header>
+      <p className={styles.sourceNote}>Contract multipliers, tick sizes, sessions, and roll dates are the Desk&apos;s own reference data. No broker is connected.</p>
+      <QueryBoundary
+        query={specs}
+        loading="Loading contract reference…"
+        message="Futures reference specs are unavailable."
+        isEmpty={(rows) => rows.length === 0}
+        empty={<p className={styles.muted}>No futures contract specs are available.</p>}
+      >
+        {(rows) => <SpecSections specs={rows} />}
+      </QueryBoundary>
       <p className={styles.disclaimer}>Reference specifications only. Approximate broker margins remain unavailable; no margin or order value is inferred.</p>
     </div>
   );

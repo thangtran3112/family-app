@@ -24,6 +24,7 @@ import { DeleteThread } from "./DeleteThread";
 import { ThreadAction, lockLink } from "./ThreadAction";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
+import { Skeleton } from "@/components/ui/StateBlocks";
 
 const POLL_MS = 4000;
 
@@ -94,12 +95,12 @@ export function ThreadTable({
 function SkeletonRow({ wide }: { wide: boolean }) {
   return (
     <tr className={styles.skelRow} aria-hidden="true">
-      <td><span className={`${styles.skel} ${styles.skelName}`} /></td>
-      <td className={styles.num}><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
-      <td><span className={`${styles.skel} ${styles.skelMoney}`} /></td>
-      <td className={styles.num}><span className={`${styles.skel} ${styles.skelNum}`} /></td>
-      {wide && <td><span className={`${styles.skel} ${styles.skelName}`} /></td>}
-      <td className={styles.actionCell}><span className={`${styles.skel} ${styles.skelAction}`} /></td>
+      <td><Skeleton width={120} height={14} /></td>
+      <td className={styles.num}><Skeleton width={96} height={14} /></td>
+      <td><Skeleton width={96} height={14} /></td>
+      <td className={styles.num}><Skeleton width={32} className={styles.skelEnd} /></td>
+      {wide && <td><Skeleton width={120} height={14} /></td>}
+      <td className={styles.actionCell}><Skeleton width={84} height={32} className={styles.skelEnd} /></td>
     </tr>
   );
 }
@@ -185,7 +186,7 @@ function ThreadRow({
           {closed ? (
             <Link href={`/practice/journal?thread=${thread.id}`} className={hub.primaryLink} {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Link>
           ) : dayActive && daily.loading ? (
-            <span className={`${styles.skel} ${styles.skelAction}`} aria-hidden="true" />
+            <Skeleton width={84} height={32} className={styles.skelEnd} />
           ) : (
             <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={() => onNewPlan(thread)} />
           )}

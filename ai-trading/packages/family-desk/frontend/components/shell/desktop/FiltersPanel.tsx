@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { RailList, RailValue, type RailRow } from "@/components/ui/RailList";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { QueryBoundary } from "@/components/ui/StateBlocks";
 import type { ScreenerFilter } from "@/lib/api/schemas";
 import { EMPTY_VALUE } from "@/lib/desk/format";
 import { COPY } from "@/lib/desk/freshness";
@@ -38,13 +38,12 @@ export function FiltersPanel() {
   const filters = useDeskQuery("rail-filters", (signal) => loadFilters({ signal }), { revision: revisions.filters });
   const current = useSearchParams().get("filter");
 
-  if (filters.data === null) {
-    return filters.error === null ? <LoadingBlock label="Loading filters…" /> : <ErrorBlock subject="filter list" onRetry={filters.refresh} />;
-  }
-
-  const defaults = filters.data.filter((filter) => filter.read_only);
-  const mine = filters.data.filter((filter) => !filter.read_only);
   return (
+    <QueryBoundary query={filters} loading="Loading filters…" subject="filter list">
+      {(all) => {
+        const defaults = all.filter((filter) => filter.read_only);
+        const mine = all.filter((filter) => !filter.read_only);
+        return (
     <div className={styles.filters}>
       <section aria-labelledby="filters-defaults">
         <h2 id="filters-defaults" className={styles.groupTitle}>Defaults</h2>
@@ -60,5 +59,8 @@ export function FiltersPanel() {
         <RailList rows={[{ id: "new", label: COPY.newFilter, href: "/screener/filters" }]} size="md" />
       </section>
     </div>
+        );
+      }}
+    </QueryBoundary>
   );
 }

@@ -1,12 +1,6 @@
 /* Daily-list practice, day screen (02o-b v1): header, candidate table, Peek, watch rail, review. Tokens only. */
 
 /* The page while it loads, in the shape it will have (D-116). */
-.skel { display: block; height: 12px; border-radius: var(--radius-sm); background: var(--color-raised); animation: dayPulse 1.4s ease-in-out infinite; }
-.skelTitle { width: 280px; height: 18px; }
-.skelLine { width: 60%; }
-.skelTable { height: 240px; }
-@keyframes dayPulse { 50% { opacity: 0.45; } }
-@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 .screen { display: flex; min-width: 0; min-height: 0; flex-direction: column; font-variant-numeric: tabular-nums; }
 .header { display: flex; min-height: 44px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
 .title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }

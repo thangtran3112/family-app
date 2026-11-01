@@ -2,7 +2,7 @@
 
 import { PanelHeader } from "@/components/ui/Panel";
 import { RailList, RailValue } from "@/components/ui/RailList";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { QueryBoundary } from "@/components/ui/StateBlocks";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { formatEtStamp } from "@/lib/desk/format";
 import { strategyHref } from "@/lib/desk/hrefs";
@@ -15,19 +15,20 @@ import { alertNewHref } from "@/lib/desk/hrefs";
 export function StrategiesOnList({ listId, listName }: { listId: number; listName: string }) {
   const strategies = useDeskQuery(`list-strategies:${listId}`, (signal) => loadAlertStrategies({ watchlistId: listId }, { signal }));
 
-  let body;
-  if (strategies.data === null) {
-    body = strategies.error === null
-      ? <LoadingBlock label="Loading strategies…" height={60} />
-      : <ErrorBlock subject="strategy list" onRetry={strategies.refresh} />;
-  } else if (strategies.data.length === 0) {
-    body = <p className={styles.muted}>No strategies on this list yet</p>;
-  } else {
-    body = (
+  const body = (
+    <QueryBoundary
+      query={strategies}
+      loading="Loading strategies…"
+      height={60}
+      subject="strategy list"
+      isEmpty={(rows) => rows.length === 0}
+      empty={<p className={styles.muted}>No strategies on this list yet</p>}
+    >
+      {(rows) => (
       <RailList
         size="md"
         divided
-        rows={strategies.data.map((row) => ({
+        rows={rows.map((row) => ({
           id: String(row.id),
           href: strategyHref(row.id),
           label: row.name,
@@ -38,8 +39,9 @@ export function StrategiesOnList({ listId, listName }: { listId: number; listNam
           ),
         }))}
       />
-    );
-  }
+      )}
+    </QueryBoundary>
+  );
 
   return (
     <div className={styles.strategies}>

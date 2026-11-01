@@ -60,6 +60,7 @@ import { PeekPanel } from "./PeekPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { UniverseFootnote } from "./UniverseFootnote";
 import styles from "./day.module.css";
+import { Skeleton } from "@/components/ui/StateBlocks";
 
 /** `/practice/day?id=`: the day's candidate list before the open, then the review after it (02o-b v1). Reads the URL, so the page wraps it in Suspense. */
 export function DayListScreen() {
@@ -114,12 +115,12 @@ function DaySkeleton() {
   return (
     <div className={styles.screen} role="status" aria-busy="true" aria-label={PRACTICE_COPY.dayLoading}>
       <header className={styles.header}>
-        <span className={`${styles.skel} ${styles.skelTitle}`} />
+        <Skeleton width={280} height={18} />
       </header>
       <div className={styles.body}>
-        <span className={`${styles.skel} ${styles.skelLine}`} />
-        <span className={`${styles.skel} ${styles.skelLine}`} />
-        <span className={`${styles.skel} ${styles.skelTable}`} />
+        <Skeleton width="60%" />
+        <Skeleton width="60%" />
+        <Skeleton height={240} />
       </div>
     </div>
   );

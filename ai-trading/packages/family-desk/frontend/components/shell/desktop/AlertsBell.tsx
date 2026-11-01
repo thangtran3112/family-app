@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Popover } from "@/components/ui/Popover";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { formatEtTime } from "@/lib/desk/format";
 import { SYMBOL_HREF } from "@/lib/lanes";
 import { loadAlertInbox, markAlertRead, markAllAlertsRead } from "@/lib/desk/status";
@@ -45,13 +45,11 @@ export function AlertsBell() {
   }
 
   function body() {
-    if (alerts.data === null) {
-      return alerts.error ? <ErrorBlock subject="alert list" onRetry={alerts.refresh} /> : <LoadingBlock label="Loading alerts…" />;
-    }
-    if (alerts.data.length === 0) return <EmptyBlock title="No alerts yet" />;
     return (
+      <QueryBoundary query={alerts} loading="Loading alerts…" subject="alert list" isEmpty={(rows) => rows.length === 0} empty={<EmptyBlock title="No alerts yet" />}>
+        {(rows) => (
       <ul className={styles.alertList}>
-        {alerts.data.map((alert) => (
+        {rows.map((alert) => (
           <li key={alert.id}>
             <button type="button" className={styles.alertRow} onClick={() => openAlert(alert)}>
               <span className={styles.dot} data-unread={alert.read_at === null ? "true" : undefined} aria-hidden="true" />
@@ -67,6 +65,8 @@ export function AlertsBell() {
           </li>
         ))}
       </ul>
+        )}
+      </QueryBoundary>
     );
   }
 

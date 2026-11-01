@@ -447,21 +447,6 @@
   color: var(--color-muted);
 }
 
-.routeError {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  border: 1px solid color-mix(in srgb, var(--color-down) 55%, transparent);
-  border-radius: var(--radius-md);
-  padding: 14px;
-}
-
-.routeError p {
-  margin: 0;
-}
-
 @media (max-width: 820px) {
   .workspace {
     padding: 16px 14px 30px;

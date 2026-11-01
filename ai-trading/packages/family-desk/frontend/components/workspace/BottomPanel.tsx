@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, LoadingBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import type { Signal, Technicals } from "@/lib/api/schemas";
 import { loadSignals } from "@/lib/desk/charts";
@@ -89,12 +89,11 @@ function TechnicalsBody({ technicals, timeframeLabel }: { technicals: Technicals
 // Its own component so the signal query only runs while the Signals tab is selected.
 function SignalsBody({ symbol }: { symbol: string }) {
   const signals = useDeskQuery(`signals-${symbol}`, (signal) => loadSignals({ symbol, limit: 50 }, { signal }), { intervalMs: 60_000 });
-  const rows = signals.data;
-  if (rows === null) {
-    return signals.error === null ? <LoadingBlock label="Loading signals…" /> : <ErrorBlock subject="signal list" onRetry={signals.refresh} />;
-  }
-  if (rows.length === 0) return <EmptyBlock title={COPY.noSignalsToday} />;
-  return <DenseTable caption="Signals" columns={SIGNAL_COLUMNS} rows={rows} rowKey={(row) => String(row.id)} density="compact" />;
+  return (
+    <QueryBoundary query={signals} loading="Loading signals…" subject="signal list" isEmpty={(rows) => rows.length === 0} empty={<EmptyBlock title={COPY.noSignalsToday} />}>
+      {(rows) => <DenseTable caption="Signals" columns={SIGNAL_COLUMNS} rows={rows} rowKey={(row) => String(row.id)} density="compact" />}
+    </QueryBoundary>
+  );
 }
 
 function LevelsBody({ technicals }: { technicals: Technicals | null }) {
