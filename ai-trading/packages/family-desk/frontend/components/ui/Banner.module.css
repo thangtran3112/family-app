@@ -1,0 +1,2 @@
+.root { display: flex; align-items: center; gap: var(--space-3); border: 1px solid var(--tone); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-label); }
+.text { min-width: 0; flex: 1 1 auto; margin: 0; }

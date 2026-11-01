@@ -10,22 +10,13 @@
 }
 
 .bar :is(a, button, input):focus-visible {
-  outline: 2px solid var(--color-amber);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
 /* The nav links are as tall as the bar, so the default outline (offset 2 px) is cut at the viewport's top edge: draw it inside (D-108). */
 .bar .navLink:focus-visible {
   outline-offset: -2px;
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 
 .spacer {
@@ -39,7 +30,7 @@
   align-items: center;
   gap: 10px;
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-body);
   font-weight: var(--weight-bold);
   line-height: 20px;
   white-space: nowrap;
@@ -75,7 +66,7 @@
   padding: 0 var(--space-2) 0 var(--space-3);
   color: var(--color-text);
   font: inherit;
-  font-size: 15px;
+  font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   line-height: 20px;
   white-space: nowrap;
@@ -87,11 +78,8 @@
 }
 
 .chevron {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: var(--color-muted);
-  stroke-width: 1.6;
+  display: inline-flex;
+  color: var(--color-muted);
 }
 
 .nav {
@@ -112,7 +100,7 @@
   align-items: center;
   border-bottom: 2px solid transparent;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
 }
@@ -131,25 +119,6 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-}
-
-.iconButton {
-  position: relative;
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-muted);
-  cursor: pointer;
-}
-
-.iconButton:hover {
-  background: var(--color-raised);
-  color: var(--color-text);
 }
 
 /* The search box gives way first (a shrink weight far above the badge's): the market pill and the quote badge keep
@@ -174,7 +143,7 @@
   padding: 0 56px 0 10px;
   color: var(--color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-label);
 }
 
 .searchInput::placeholder {
@@ -192,7 +161,7 @@
   border-radius: 4px;
   padding: 0 4px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro);
   line-height: 16px;
   pointer-events: none;
 }
@@ -219,7 +188,7 @@
 .note {
   padding: 8px 12px;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-label);
 }
 
 .option {
@@ -243,7 +212,7 @@
 
 .optionSymbol {
   min-width: 56px;
-  font-size: 13px;
+  font-size: var(--text-label);
   font-weight: var(--weight-bold);
 }
 
@@ -252,7 +221,7 @@
   flex: 1;
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -263,7 +232,7 @@
   border-radius: 4px;
   padding: 0 4px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro);
   line-height: 16px;
 }
 
@@ -272,7 +241,7 @@
   flex-shrink: 0;
   align-items: center;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro);
   white-space: nowrap;
 }
 
@@ -285,63 +254,17 @@
   background: var(--color-amber);
 }
 
-.pill {
-  display: inline-flex;
-  flex-shrink: 0;
-  min-height: 24px;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-full);
-  padding: 0 10px;
-  color: var(--color-muted);
-  font-size: 12px;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
-.pill[data-open="true"] {
-  color: var(--color-text);
-}
-
-.pillDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-muted);
-}
-
-.pill[data-open="true"] .pillDot {
-  background: var(--color-up);
-}
-
-/* The market is open but the quotes are not current: an amber dot, not the green that reads as live. */
-.pill[data-stale="true"] .pillDot {
-  background: var(--color-amber);
-}
-
-.badge {
+.bellCount {
   position: absolute;
   top: -4px;
   right: -6px;
-  display: grid;
-  min-width: 16px;
-  height: 16px;
-  place-items: center;
-  border-radius: var(--radius-full);
-  background: var(--color-amber);
-  color: var(--color-on-pill);
-  padding: 0 4px;
-  font-size: 11px;
-  font-weight: var(--weight-bold);
-  line-height: 16px;
 }
 
 .panelHead {
   border-bottom: 1px solid var(--color-hairline);
   padding: 10px 12px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
@@ -394,7 +317,7 @@
 
 .alertTitle {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--text-label);
   font-weight: var(--weight-medium);
   line-height: 18px;
   text-overflow: ellipsis;
@@ -403,13 +326,13 @@
 
 .alertMeta {
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-meta);
   line-height: 16px;
 }
 
 .alertTime {
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-meta);
   line-height: 18px;
   white-space: nowrap;
 }
@@ -420,25 +343,6 @@
   justify-content: space-between;
   border-top: 1px solid var(--color-hairline);
   padding: 8px 12px;
-}
-
-.textButton {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  padding: 0 var(--space-2);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-}
-
-.textButton:hover {
-  background: var(--color-raised);
 }
 
 .avatar {
@@ -452,7 +356,7 @@
   background: var(--color-raised);
   color: var(--color-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-meta);
   font-weight: var(--weight-semibold);
   cursor: pointer;
 }
@@ -461,13 +365,11 @@
   border-color: var(--color-muted);
 }
 
-.pillText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pill { max-width: none; flex-shrink: 0; }
 .topBadge { min-width: 0; max-width: 260px; flex-shrink: 1; }
 .bar[data-band="1180"] .topBadge { max-width: 260px; }
 
-/* The top-bar badge during a replay (02o §a1): amber, never Live or Delayed. */
-.replayBadge { display: inline-flex; flex-shrink: 0; align-items: center; max-width: none; overflow: hidden; border-color: var(--color-amber); color: var(--color-amber); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The replay note keeps its whole text (layout only; ui/Freshness owns the look): never Live or Delayed, never shrunk (02o §a1). */
+.replayBadge { flex-shrink: 0; max-width: none; }
 .bar[data-band] .replayBadge { max-width: none; }
 
 /* Fundamental mode: the masking switch (02n §b1). */
@@ -483,7 +385,7 @@
   padding: 0 var(--space-3);
   color: var(--color-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
   cursor: pointer;

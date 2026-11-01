@@ -15,7 +15,6 @@ import {
   nameFor,
   operatorOf,
   parsePrefill,
-  problemsBanner,
   stepOf,
   turnOnState,
   withOperator,
@@ -85,7 +84,7 @@ test("prefill: symbol, watchlist id and filter id resolve; junk is ignored", () 
 });
 
 test("operators: the TradingView set plus pattern, switching keeps operands", () => {
-  assert.deepEqual(ALERT_OPERATORS.map((o) => o.label), ["Crossing up", "Crossing down", "Greater than", "At least", "Less than", "At most", "Within % of", "Pattern detected"]);
+  assert.deepEqual(ALERT_OPERATORS.map((o) => o.label), ["crosses above", "crosses below", "is greater than", "is at least", "is less than", "is at most", "is within % of", "a pattern appears"]);
   const row = form().rows[0]!;
   assert.equal(operatorOf(row), "crosses_above");
   const less = withOperator(row, "lt");
@@ -111,12 +110,9 @@ test("Turn on is disabled until the alert runtime starts", () => {
   assert.deepEqual(turnOnState("paused_no_quotes"), { enabled: true, reason: null });
 });
 
-test("server problems sort into steps and the banner counts them", () => {
+test("server problems sort into steps", () => {
   assert.deepEqual(["name", "watch.universe.symbols", "when.all.1.right", "watch.runOn", "limits.cooldownMinutes", "then.alert.channels", "mystery"].map(stepOf), ["source", "source", "condition", "trigger", "trigger", "deliver", "other"]);
   const groups = groupProblems([{ path: "then.alert.channels", message: "the first alert channel must be inbox" }, { path: "when", message: "x" }]);
   assert.equal(groups.deliver.length, 1);
   assert.equal(groups.condition.length, 1);
-  assert.equal(problemsBanner(0), null);
-  assert.equal(problemsBanner(1), "1 problem to fix");
-  assert.equal(problemsBanner(3), "3 problems to fix");
 });

@@ -25,6 +25,7 @@ import { buildChartSeries } from "@/lib/desk/workspace";
 import { endDay, placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
 import { sessionOverText } from "@/lib/replay/journalView";
 import { briefLine } from "@/lib/replay/threadView";
+import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
 import { readChartPrefs, togglePref, writeChartPrefs, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import { actionForKey, layerToClose, markActionFor, type ReplayAction } from "@/lib/replay/keys";
 import { exitMark, type MarkDraft } from "@/lib/replay/markInput";
@@ -56,7 +57,7 @@ import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplayS
 import { chartBars, type ReplayView } from "@/lib/replay/feedState";
 import { ArmedStrategiesList } from "./ArmedStrategiesList";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
-import { DayNames } from "./DayNames";
+import { PortfolioPanel, useDayPortfolio } from "./Portfolio";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
@@ -110,7 +111,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // toggle (which re-reads the feed and drops `api.paused`) does not take the question away.
   const [pause, setPause] = useState<{ paused: Paused; at: string } | null>(null);
   if (api.paused !== null && pause?.paused !== api.paused) setPause({ paused: api.paused, at: view.revealedThrough });
-  const shownPause = swing && pause !== null && pause.at === view.revealedThrough && session.status !== "ended" ? pause.paused : null;
+  const shownPause = pause !== null && pause.at === view.revealedThrough && session.status !== "ended" ? pause.paused : null;
   const answerPause = () => {
     setPause(null);
     api.dismissPause();
@@ -150,6 +151,16 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const trades = tradeCount(session.journal, view.openTrade);
   const atEnd = api.player.status === "at_end" || ended;
   const behind = view.behindClock && !ended;
+  // A day's portfolio: every name she holds, read once here so the rail, the stop-pause toast and End day agree on it.
+  // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
+  // jump, a stop pause), not on every bar of a running replay: each read prices up to five names.
+  // While paused the clock follows the playhead; while playing it stays at the playhead it had when the replay last paused. It is
+  // adjusted during render (as `pause` above is), so a paused reveal re-renders once before commit, not again after an effect.
+  const playing = api.player.status === "playing";
+  const [clockSeen, setClockSeen] = useState(view.revealedThrough);
+  if (!playing && clockSeen !== view.revealedThrough) setClockSeen(view.revealedThrough);
+  const dayList = useDayPortfolio(swing ? null : dayListId, session.marks.length * 2 + (behind ? 1 : 0) + Math.floor(Date.parse(clockSeen) / 1000));
+  const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade });
 
   // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
   const masked = hidden && !dateShown && !(ended && !swing);
@@ -255,7 +266,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         setOpening(null);
       });
   };
-  const exitTarget = shownPause ? pauseExit(shownPause, { sessionSymbol: spec.symbol, openSide: side, strip: view.strip }) : null;
+  const exitTarget = shownPause
+    ? pauseExit(shownPause, { sessionSymbol: spec.symbol, openSide: side, strip: view.strip, held: dayRows.map((row) => ({ symbol: row.symbol, side: row.side })) })
+    : null;
   /** Exit on the toast: an exit mark at the revealed price, on this chart's name or (through its session) on another's. */
   const exitPaused = (target: PauseExit) => {
     if (target.here) {
@@ -349,7 +362,18 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       }}
     />;
 
-  const dayNames = dayListId !== null && !swing ? <DayNames dayListId={dayListId} current={spec.symbol} playhead={view.revealedThrough} revision={session.marks.length * 2 + (behind ? 1 : 0)} /> : null;
+  const portfolio =
+    dayListId !== null && !swing ? (
+      <PortfolioPanel
+        dayListId={dayListId}
+        query={dayList}
+        from={{ symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade }}
+        onExitHere={() => byLetter("x")}
+        onExited={(symbol) => {
+          if (shownPause?.symbol === symbol) answerPause();
+        }}
+      />
+    ) : null;
 
   const sections: RailSection[] = [
     {
@@ -368,8 +392,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     },
     { id: "practice", label: "Practice", node: controls },
     ...(band === "1180" ? [{ id: "signals", label: "Signals", node: signalsRail }] : []),
-    // At 1440 the day's names sit in the left rail; at 1180 that rail is a strip, so they open from the right drawer.
-    ...(band === "1180" && dayNames !== null ? [{ id: "names", label: "Names", node: dayNames }] : []),
+    // At 1440 the day's portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from the right drawer.
+    ...(band === "1180" && portfolio !== null ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: portfolio }] : []),
   ];
   const fires = armed.reduce((sum, item) => sum + item.fires, 0);
 
@@ -463,6 +487,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           atEnd={atEnd}
           busy={api.player.busy || dayBusy}
           day={dayListId !== null}
+          exits={dayListId !== null && !swing ? endDayExitText(dayRows) : null}
           swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock: view.revealedThrough, holdsOpen } : undefined}
           onEnd={() => {
             if (dayListId === null) {
@@ -555,10 +580,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
                   onAddStop={() => openComposer("stop")}
                 />
               </section>
-              {band === "1440" && dayNames && (
-                <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayNamesTitle}>
-                  <h2 className={styles.railTitle}>{PRACTICE_COPY.dayNamesTitle}</h2>
-                  {dayNames}
+              {band === "1440" && portfolio && (
+                <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayPortfolio}>
+                  <h2 className={styles.railTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
+                  {portfolio}
                 </section>
               )}
             </>

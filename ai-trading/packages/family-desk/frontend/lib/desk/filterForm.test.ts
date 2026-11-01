@@ -13,7 +13,6 @@ import {
   rowKind,
   specToForm,
   symbolsFromText,
-  unplacedProblems,
   updateRow,
 } from "./filterForm.ts";
 import { choiceOf, OPERAND_CATALOG, operandFor } from "./operands.ts";
@@ -87,7 +86,6 @@ test("server problems land on the right field and row", () => {
   assert.deepEqual(problemsForRow(problems, form, 1), [problems[1]]);
   assert.deepEqual(problemsForRow(problems, form, 0), []);
   assert.deepEqual(problemsForRow([{ path: "when.right.value", message: "x" }], { mode: "all", rows: [newRow()] }, 0).length, 1);
-  assert.deepEqual(unplacedProblems(problems, form), [problems[3]]);
 });
 
 test("operand picker: every catalog entry round-trips and numbers are values", () => {

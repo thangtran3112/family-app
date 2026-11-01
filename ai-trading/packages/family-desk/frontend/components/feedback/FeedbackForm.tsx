@@ -3,6 +3,9 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { Button } from "@/components/ui/Button";
+import { Field, Input, Textarea } from "@/components/ui/Field";
+import { FormActionBar } from "@/components/ui/FormActionBar";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { createFeedbackReport } from "@/lib/desk/feedback";
 import { capture, captureRoute, contextOf } from "@/lib/desk/feedbackContext";
@@ -133,54 +136,18 @@ export function FeedbackForm() {
           ))}
         </div>
 
-        <div className={styles.field}>
-          <div className={styles.labelRow}>
-            <div className={styles.labelGroup}>
-              <label htmlFor="feedback-title" className={styles.label}>Title</label>
-              <span className={styles.hint}>Required</span>
-            </div>
-            <span className={styles.counter}>{fields.title.length} / {TITLE_LIMIT}</span>
-          </div>
-          <input
-            id="feedback-title"
-            type="text"
-            className={styles.input}
-            maxLength={TITLE_LIMIT}
-            autoComplete="off"
-            autoFocus
-            value={fields.title}
-            onChange={(event) => set({ title: event.target.value })}
-          />
-        </div>
+        <Field id="feedback-title" label="Title" required aside={<span className={styles.counter}>{fields.title.length} / {TITLE_LIMIT}</span>}>
+          <Input maxLength={TITLE_LIMIT} autoComplete="off" autoFocus value={fields.title} onChange={(event) => set({ title: event.target.value })} />
+        </Field>
 
-        <div className={styles.field}>
-          <div className={styles.labelGroup}>
-            <label htmlFor="feedback-body" className={styles.label}>{bodyLabel(fields.kind)}</label>
-            <span className={styles.hint}>{bug ? "Required · becomes \"What should it do?\" for a feature request" : "Required"}</span>
-          </div>
-          <textarea
-            id="feedback-body"
-            className={styles.textarea}
-            maxLength={BODY_LIMIT}
-            value={fields.body}
-            onChange={(event) => set({ body: event.target.value })}
-          />
-        </div>
+        <Field id="feedback-body" label={bodyLabel(fields.kind)} required hint={bug ? "becomes \"What should it do?\" for a feature request" : undefined}>
+          <Textarea rows={4} maxLength={BODY_LIMIT} value={fields.body} onChange={(event) => set({ body: event.target.value })} />
+        </Field>
 
         {bug && (
-          <div className={styles.field}>
-            <div className={styles.labelGroup}>
-              <label htmlFor="feedback-expected" className={styles.label}>What did you expect?</label>
-              <span className={styles.hint}>Optional · bugs only</span>
-            </div>
-            <textarea
-              id="feedback-expected"
-              className={`${styles.textarea} ${styles.textareaShort}`}
-              maxLength={BODY_LIMIT}
-              value={fields.expected}
-              onChange={(event) => set({ expected: event.target.value })}
-            />
-          </div>
+          <Field id="feedback-expected" label="What did you expect?" optional hint="bugs only">
+            <Textarea rows={2} maxLength={BODY_LIMIT} value={fields.expected} onChange={(event) => set({ expected: event.target.value })} />
+          </Field>
         )}
 
         {bug && <SeverityRadios value={fields.severity} onChange={(severity) => set({ severity })} />}
@@ -190,14 +157,18 @@ export function FeedbackForm() {
         <ScreenshotsField {...shots} />
       </div>
 
-      <div className={styles.footer}>
-        <button type="submit" className={styles.sendButton} disabled={reason !== null || sending}>{sending ? "Sending…" : "Send report"}</button>
-        <button type="button" className={styles.cancel} onClick={cancel}>Cancel</button>
-        <div className={styles.footNotes} aria-live="polite">
-          <span className={error ? styles.sendError : undefined} role={error ? "alert" : undefined}>{error ?? reason ?? READY_TEXT}</span>
-          <span className={styles.footMuted}>Nothing is sent anywhere else · the report stays on this Desk</span>
-        </div>
-      </div>
+      <FormActionBar
+        className={styles.bar}
+        label="Send report"
+        status={
+          <div className={styles.footNotes} aria-live="polite">
+            <span className={error ? styles.sendError : undefined} role={error ? "alert" : undefined}>{error ?? reason ?? READY_TEXT}</span>
+            <span className={styles.footMuted}>Nothing is sent anywhere else · the report stays on this Desk</span>
+          </div>
+        }
+        secondary={<Button onClick={cancel}>Cancel</Button>}
+        primary={<Button type="submit" variant="primary" disabled={reason !== null} loading={sending}>{sending ? "Sending…" : "Send report"}</Button>}
+      />
       {rail}
     </form>
   );

@@ -24,8 +24,8 @@ test("option labels: operators, series, levels, run-on and size types are plain 
   assert.equal(optionLabel("vwap"), "VWAP");
   assert.equal(optionLabel("rsi"), "RSI");
   assert.equal(optionLabel("opening_range_high"), "Opening range high");
-  assert.equal(optionLabel("bar_close_1m"), "Every 1-minute close");
-  assert.equal(optionLabel("premarket_0830"), "08:30 premarket scan");
+  assert.equal(optionLabel("bar_close_1m"), "Each 1m close");
+  assert.equal(optionLabel("premarket_0830"), "Premarket 8:30");
   assert.equal(optionLabel("riskUsd"), "Risk per trade ($)");
   assert.equal(optionLabel("atrMultiple"), "ATR multiple");
   assert.equal(optionLabel("watchlist"), "A watchlist");

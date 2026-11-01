@@ -1,9 +1,11 @@
 import { DeskApiError } from "../api/client.ts";
 import type { Brief, BriefRow, Rating, Research, TimelineItem, Valuation } from "../api/fundamentalSchemas.ts";
-import { changeTone, EMPTY_VALUE, formatEtDay, formatEtTimeZone, formatPct, formatSignedPct, type Tone } from "./format.ts";
+import type { Tone } from "../../components/ui/tone.ts";
+import { EMPTY_VALUE, formatEtDay, formatEtTimeZone, formatPct, formatSignedPct, signTone } from "./format.ts";
 import { COPY, deskAiStaleText } from "./freshness.ts";
 import { ratingText } from "./fundamentalView.ts";
 import { formatUsd, formatUsdPrice } from "./mask.ts";
+import { niceTicks } from "./ticks.ts";
 import type { TimelineKind } from "./research.ts";
 
 // View models for the Research screens (02n §b3 FD7 to FD10): the API rows turned into display text once, here, so the
@@ -92,12 +94,12 @@ export function briefRows(brief: Pick<Brief, "date" | "rows">): BriefRowView[] {
     target: formatUsdPrice(row.target.base),
     range: `${formatUsdPrice(row.target.low)}–${formatUsdPrice(row.target.high)}`,
     upside: formatSignedPct(row.upside_pct, 1),
-    upsideTone: changeTone(row.upside_pct),
+    upsideTone: signTone(row.upside_pct),
     upsideValue: row.upside_pct,
     confidence: formatPct(row.confidence, 0),
     confidenceValue: row.confidence,
     epsRev30d: formatSignedPct(row.eps_rev_30d_pct, 1),
-    epsRevTone: changeTone(row.eps_rev_30d_pct),
+    epsRevTone: signTone(row.eps_rev_30d_pct),
     epsRevValue: row.eps_rev_30d_pct,
     earnings: earningsInText(row.earnings_in_days),
     earningsDays: row.earnings_in_days,
@@ -142,13 +144,13 @@ export function surpriseRows(surprises: NonNullable<Research["consensus"]>["surp
     estimate: formatUsdPrice(estimate),
     surprise: formatSignedPct(surprise_pct, 1),
     word: surpriseWord(surprise_pct),
-    tone: changeTone(surprise_pct),
+    tone: signTone(surprise_pct),
   }));
 }
 
 /** 7, 30 and 90 days; a revision is null until the Desk's own snapshots reach back that far. */
 export function revisionCells(revisions: NonNullable<Research["consensus"]>["revisions"]): Array<{ label: string; text: string; tone: Tone }> {
-  const cell = (label: string, value: number | null) => ({ label, text: value === null ? EPS_NOT_ENOUGH_HISTORY : formatSignedPct(value, 1), tone: changeTone(value) });
+  const cell = (label: string, value: number | null) => ({ label, text: value === null ? EPS_NOT_ENOUGH_HISTORY : formatSignedPct(value, 1), tone: signTone(value) });
   return [cell("7 days", revisions.d7), cell("30 days", revisions.d30), cell("90 days", revisions.d90)];
 }
 
@@ -216,7 +218,7 @@ export const inputLabel = (key: string): string => INPUT_LABELS[key] ?? key.repl
 
 function inputText(key: string, value: number | null): string {
   const label = inputLabel(key);
-  if (value === null) return `${label}: not available`;
+  if (value === null) return `${label}: ${EMPTY_VALUE}`;
   return key.endsWith("_pct") ? `${label} ${formatPct(value, 1)}` : `${label} ${value}`;
 }
 
@@ -270,13 +272,8 @@ export function reactionSummary(reaction: NonNullable<Valuation["earnings_reacti
 /** Axis ticks at round steps that cover `maxAbs`, mirrored around zero: step 2 and top 8 give -8, -6 ... 8. */
 export function axisTicks(maxAbs: number): { step: number; top: number; ticks: number[] } {
   const safe = Number.isFinite(maxAbs) && maxAbs > 0 ? maxAbs : 1;
-  const raw = safe / 2;
-  const pow = 10 ** Math.floor(Math.log10(raw));
-  const step = ([1, 2, 5, 10].map((m) => m * pow).find((candidate) => candidate >= raw) ?? raw) as number;
-  const top = Math.ceil(safe / step) * step;
-  const count = Math.round(top / step);
-  const ticks = Array.from({ length: count * 2 + 1 }, (_, index) => Number(((index - count) * step).toFixed(6)));
-  return { step, top, ticks };
+  const ticks = niceTicks(-safe, safe);
+  return { step: ticks[1]! - ticks[0]!, top: ticks[ticks.length - 1]!, ticks };
 }
 
 export type ReactionBar = { date: string; label: string; value: number; text: string; tone: Tone; heightPct: number };
@@ -288,7 +285,7 @@ export function reactionBars(series: NonNullable<Valuation["earnings_reaction"]>
     label: point.date.slice(2, 7),
     value: point.move_pct,
     text: formatSignedPct(point.move_pct, 1),
-    tone: changeTone(point.move_pct),
+    tone: signTone(point.move_pct),
     heightPct: (Math.abs(point.move_pct) / axis.top) * 50,
   }));
   return { bars, axis };

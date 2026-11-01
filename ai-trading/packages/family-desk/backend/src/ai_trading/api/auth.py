@@ -1,7 +1,7 @@
 """Gateway-verified identity (PROTO-BRIEF.md §4 L4).
 
 `IDENTITY_HEADER` is the header Caddy's `forward_auth` sets from Clerk's verified email
-(`deploy/production/Caddyfile`: every protected route strips any caller-supplied
+(`infrastructure/apps/ai-trading/Caddyfile`: every protected route strips any caller-supplied
 `Cf-Access-Authenticated-User-Email` first, then `copy_headers X-Verified-Email>
 Cf-Access-Authenticated-User-Email` writes the gateway's own verified value). This module only
 ever trusts that one header name -- never a query param, a cookie, or any other header -- so a

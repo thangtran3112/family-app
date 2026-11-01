@@ -1,7 +1,8 @@
 import type {
   AccountType, Candidates, CoverageRow, HoldingAccount, HoldingRow, Holdings, Lots, Research, ShortCall,
 } from "../api/fundamentalSchemas.ts";
-import { changeTone, EMPTY_VALUE, formatEtDay, formatPct, formatSignedPct, type Tone } from "./format.ts";
+import type { Tone } from "../../components/ui/tone.ts";
+import { EMPTY_VALUE, formatEtDay, formatPct, formatSignedPct, signTone } from "./format.ts";
 import { COPY } from "./freshness.ts";
 import { hasHoldingsData, importLine } from "./fundamentalView.ts";
 import { formatUsdPrice, maskedQuantity, maskedSignedUsd, maskedUsd } from "./mask.ts";
@@ -28,22 +29,22 @@ export type Tile = { key: string; label: string; value: string; note: string | n
 /** Portfolio value, day change and unrealized: the dollar figures hide, the percentages stay. */
 export function totalsTiles(totals: Holdings["totals"], masked: boolean): Tile[] {
   return [
-    { key: "value", label: "Market value", value: maskedUsd(masked, totals.market_value), note: null, tone: "flat" },
+    { key: "value", label: "Market value", value: maskedUsd(masked, totals.market_value), note: null, tone: "neutral" },
     {
       key: "day",
       label: "Day change",
       value: maskedSignedUsd(masked, totals.day_change),
       note: totals.day_change_pct === null ? null : `${formatSignedPct(totals.day_change_pct)} today`,
-      tone: changeTone(totals.day_change_pct),
+      tone: signTone(totals.day_change_pct),
     },
     {
       key: "unrealized",
       label: "Unrealized",
       value: maskedSignedUsd(masked, totals.unrealized),
       note: totals.unrealized_pct === null ? null : formatSignedPct(totals.unrealized_pct, 1),
-      tone: changeTone(totals.unrealized_pct),
+      tone: signTone(totals.unrealized_pct),
     },
-    { key: "cost", label: "Cost", value: maskedUsd(masked, totals.cost), note: null, tone: "flat" },
+    { key: "cost", label: "Cost", value: maskedUsd(masked, totals.cost), note: null, tone: "neutral" },
   ];
 }
 
@@ -70,10 +71,10 @@ export function holdingViews(rows: readonly HoldingRow[], masked: boolean): Hold
     shares: maskedQuantity(masked, row.shares),
     avgCost: formatUsdPrice(row.avg_cost),
     last: formatUsdPrice(row.last),
-    change: { text: formatSignedPct(row.change_pct), tone: changeTone(row.change_pct) },
+    change: { text: formatSignedPct(row.change_pct), tone: signTone(row.change_pct) },
     value: maskedUsd(masked, row.market_value),
     weight: formatPct(row.weight_pct, 1),
-    unrealized: { text: formatSignedPct(row.unrealized_pct, 1), tone: changeTone(row.unrealized_pct) },
+    unrealized: { text: formatSignedPct(row.unrealized_pct, 1), tone: signTone(row.unrealized_pct) },
     coverable: maskedQuantity(masked, row.coverable_contracts),
     openCalls: maskedQuantity(masked, row.open_calls),
     nextEarnings: row.next_earnings ? formatEtDay(row.next_earnings) : EMPTY_VALUE,
@@ -93,7 +94,7 @@ export type RailRow = { symbol: string; weight: string; change: { text: string; 
 export function railRows(rows: readonly HoldingRow[]): RailRow[] {
   return [...rows]
     .sort((a, b) => (b.weight_pct ?? -1) - (a.weight_pct ?? -1) || a.symbol.localeCompare(b.symbol))
-    .map((row) => ({ symbol: row.symbol, weight: formatPct(row.weight_pct, 1), change: { text: formatSignedPct(row.change_pct), tone: changeTone(row.change_pct) }, rating: row.ai_rating }));
+    .map((row) => ({ symbol: row.symbol, weight: formatPct(row.weight_pct, 1), change: { text: formatSignedPct(row.change_pct), tone: signTone(row.change_pct) }, rating: row.ai_rating }));
 }
 
 export type LotView = { key: string; accountId: number; acquired: string; shares: string; cost: string; term: string; gain: { text: string; tone: Tone } };
@@ -106,7 +107,7 @@ export function lotViews(lots: Lots["lots"], masked: boolean): LotView[] {
     shares: maskedQuantity(masked, lot.shares),
     cost: formatUsdPrice(lot.cost_per_share),
     term: lot.term === "long" ? "Long term" : "Short term",
-    gain: { text: formatSignedPct(lot.gain_pct, 1), tone: changeTone(lot.gain_pct) },
+    gain: { text: formatSignedPct(lot.gain_pct, 1), tone: signTone(lot.gain_pct) },
   }));
 }
 

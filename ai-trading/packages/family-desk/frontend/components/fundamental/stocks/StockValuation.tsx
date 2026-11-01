@@ -1,3 +1,5 @@
+import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { StatTile } from "@/components/ui/StatTile";
 import type { Valuation } from "@/lib/api/fundamentalSchemas";
 import { blendView, filingText, impliedMoveText, methodRows, REACTION_NEEDS_REPORTS, reactionSummary } from "@/lib/desk/researchView";
 import styles from "../fundamental.module.css";
@@ -11,8 +13,8 @@ export function StockValuation({ valuation }: { valuation: Valuation }) {
   const reaction = valuation.earnings_reaction;
   return (
     <div className={local.stack} data-testid="fund-valuation">
-      <section className={styles.panel} aria-label="Valuation methods">
-        <h2 className={styles.panelTitle}>Fair value per share</h2>
+      <Panel aria-label="Valuation methods">
+        <PanelHeader title="Fair value per share" />
         <p className={styles.muted}>{filingText(valuation.filing_as_of)}</p>
         <div>
           {methods.map((method) => (
@@ -27,7 +29,7 @@ export function StockValuation({ valuation }: { valuation: Valuation }) {
           ))}
         </div>
         <div className={local.compare} aria-label="Blend against the price">
-          <h3 className={local.subTitle}>Blend (60/40) against the price</h3>
+          <PanelHeader variant="label" level={3} title="Blend (60/40) against the price" />
           {blend === null ? (
             <p className={styles.muted}>{valuation.blend === null ? "Not enough data to blend the methods yet" : "No price to compare with yet"}</p>
           ) : (
@@ -38,27 +40,28 @@ export function StockValuation({ valuation }: { valuation: Valuation }) {
             </>
           )}
         </div>
-      </section>
+      </Panel>
 
-      <section className={styles.panel} aria-label="Earnings reaction" data-testid="fund-reaction">
-        <h2 className={styles.panelTitle}>Earnings reaction</h2>
-        {reaction === null ? (
-          <p className={styles.muted}>{REACTION_NEEDS_REPORTS}</p>
-        ) : (
-          <>
-            <ul className={styles.tiles}>
-              {reactionSummary(reaction).map((tile) => (
-                <li key={tile.label} className={styles.tile}>
-                  <span className={styles.tileLabel}>{tile.label}</span>
-                  <span className={styles.tileValue}>{tile.value}</span>
-                </li>
-              ))}
-            </ul>
-            <ReactionChart series={reaction.series} />
-            <p className={styles.muted} data-testid="fund-implied-move">{impliedMoveText(reaction.implied_move_pct)}</p>
-          </>
-        )}
-      </section>
+      <div data-testid="fund-reaction">
+        <Panel aria-label="Earnings reaction">
+          <PanelHeader title="Earnings reaction" />
+          {reaction === null ? (
+            <p className={styles.muted}>{REACTION_NEEDS_REPORTS}</p>
+          ) : (
+            <>
+              <ul className={styles.tiles}>
+                {reactionSummary(reaction).map((tile) => (
+                  <li key={tile.label}>
+                    <StatTile label={tile.label} value={tile.value} />
+                  </li>
+                ))}
+              </ul>
+              <ReactionChart series={reaction.series} />
+              <p className={styles.muted} data-testid="fund-implied-move">{impliedMoveText(reaction.implied_move_pct)}</p>
+            </>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }

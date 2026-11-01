@@ -1,0 +1,5 @@
+/* The one save bar (design-component-system §4.3). Sticky at the bottom of its scroll container, in flow, so it never covers the last field. */
+.bar { position: sticky; bottom: 0; z-index: var(--z-sticky); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-raised); padding: var(--space-3) var(--space-4); }
+.status { display: flex; min-width: 0; flex: 1 1 12rem; flex-direction: column; gap: var(--space-0-5); color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); }
+.status > * { margin: 0; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }

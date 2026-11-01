@@ -1,6 +1,3 @@
-.band { display: flex; height: 28px; align-items: center; gap: var(--space-4); border-bottom: 1px solid var(--color-amber); background: color-mix(in srgb, var(--color-amber) 14%, var(--color-ground)); padding: 0 var(--space-4); color: var(--color-amber); font-size: 12px; font-weight: var(--weight-semibold); line-height: 16px; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; }
+.band { display: flex; height: 28px; align-items: center; gap: var(--space-4); border-bottom: 1px solid var(--color-amber); background: color-mix(in srgb, var(--color-amber) 14%, var(--color-ground)); padding: 0 var(--space-4); color: var(--color-amber); font-size: var(--text-meta); font-weight: var(--weight-semibold); line-height: 16px; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; }
 .band > [role="status"] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bandNote { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); margin-left: auto; color: var(--color-muted); font-weight: var(--weight-regular); }
-.bandButton { min-height: 24px; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-amber); font: inherit; font-weight: var(--weight-semibold); cursor: pointer; }
-.bandButton:hover { background: var(--color-raised); }
-.bandButton:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }

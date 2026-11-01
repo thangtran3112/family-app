@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Button } from "@/components/ui/Button";
+import { Delta } from "@/components/ui/Delta";
+import { Freshness } from "@/components/ui/Freshness";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { StatTile } from "@/components/ui/StatTile";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { AsOfLine } from "@/components/ui/AsOfLine";
 import type { ImportState } from "@/lib/api/fundamentalSchemas";
@@ -104,7 +108,7 @@ export function HoldingsScreen() {
     <div className={fund.screen} data-testid="fund-holdings">
       <header className={fund.head}>
         <h1 className={fund.pageTitle}>Holdings</h1>
-        {stamp && !emptyText && <FreshnessBadge stamp={stamp} />}
+        {stamp && !emptyText && <Freshness stamp={stamp} />}
         <select
           className={styles.select}
           aria-label="Account"
@@ -115,7 +119,7 @@ export function HoldingsScreen() {
             <option key={option.id ?? "all"} value={option.id ?? ""}>{option.label}</option>
           ))}
         </select>
-        <button type="button" className={fund.button} onClick={() => void importNow()} disabled={importing} data-testid="fund-import">Import now</button>
+        <Button size="md" onClick={() => void importNow()} loading={importing} data-testid="fund-import">Import now</Button>
       </header>
       <div className={styles.toolbar}>
         {importState && <ImportLine state={importState} />}
@@ -133,29 +137,35 @@ export function HoldingsScreen() {
           {maskValues && (
             <p className={styles.hidden} data-testid="values-hidden">
               <span>{hiddenLead} ·</span>
-              <button type="button" className={styles.textButton} onClick={() => setMaskValues(false)}>Show values</button>
+              <Button variant="ghost" size="sm" onClick={() => setMaskValues(false)}>Show values</Button>
             </p>
           )}
           <ul className={fund.tiles} aria-label="Portfolio totals">
             {totalsTiles(data.totals, maskValues).map((tile) => (
-              <li key={tile.key} className={fund.tile}>
-                <span className={fund.tileLabel}>{tile.label}</span>
-                <span className={fund.tileValue} data-testid={tile.key === "value" ? "fund-holdings-value" : undefined}>{tile.value}</span>
-                {tile.note && <span className={fund.tileNote} data-tone={tile.tone}>{tile.note}</span>}
+              <li key={tile.key}>
+                <StatTile
+                  label={tile.label}
+                  value={<span data-testid={tile.key === "value" ? "fund-holdings-value" : undefined}>{tile.value}</span>}
+                  delta={tile.note ? <Delta tone={tile.tone}>{tile.note}</Delta> : undefined}
+                />
               </li>
             ))}
           </ul>
           {stamp && <AsOfLine stamp={stamp} />}
-          <section className={`${fund.panel} ${styles.tableCard}`} aria-label="Positions">
-            <PositionsTable rows={data.rows} masked={maskValues} selected={selected} onSelect={setSelectedSymbol} />
-          </section>
-          <section className={`${fund.panel} ${styles.tableCard}`} aria-label="Fundamentals">
-            <div className={styles.tableHead}>
-              <h2 className={fund.panelTitle}>Fundamentals</h2>
-              <ColumnsMenu chosen={chosen} disabled={!record || saveStatus === "saving"} status={saveStatus} onChange={(next) => void saveColumns(next)} onRetry={() => wanted && void saveColumns(wanted)} />
+          <Panel aria-label="Positions">
+            <div className={styles.tableBleed}>
+              <PositionsTable rows={data.rows} masked={maskValues} selected={selected} onSelect={setSelectedSymbol} />
             </div>
-            <FundamentalsTable rows={data.rows} chosen={chosen} masked={maskValues} selected={selected} onSelect={setSelectedSymbol} />
-          </section>
+          </Panel>
+          <Panel aria-label="Fundamentals">
+            <PanelHeader
+              title="Fundamentals"
+              actions={<ColumnsMenu chosen={chosen} disabled={!record || saveStatus === "saving"} status={saveStatus} onChange={(next) => void saveColumns(next)} onRetry={() => wanted && void saveColumns(wanted)} />}
+            />
+            <div className={styles.tableBleed}>
+              <FundamentalsTable rows={data.rows} chosen={chosen} masked={maskValues} selected={selected} onSelect={setSelectedSymbol} />
+            </div>
+          </Panel>
           {selected && <LotsPane symbol={selected} masked={maskValues} accounts={accounts} />}
         </>
       )}

@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { isSearchShortcut, moveActive } from "@/lib/desk/listNav";
 import { SYMBOL_HREF } from "@/lib/lanes";
 import { searchSymbols } from "@/lib/desk/status";
@@ -99,18 +101,15 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
 
   if (compact && !expanded) {
     return (
-      <button
-        type="button"
-        className={styles.iconButton}
+      <Button
+        variant="ghost"
+        iconOnly
         aria-label="Search symbols, ⌘K"
         title="Search symbols (⌘K)"
         onClick={() => setExpanded(true)}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-          <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-          <path d="m16 16 4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-      </button>
+        <Icon name="search" />
+      </Button>
     );
   }
 
@@ -166,14 +165,14 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
           {failed ? (
             <>
               Search is unavailable right now ·{" "}
-              <button
-                type="button"
-                className={styles.textButton}
+              <Button
+                variant="ghost"
+                size="sm"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runSearch(text)}
               >
                 try again
-              </button>
+              </Button>
             </>
           ) : (
             <>No symbols match “{query}”</>

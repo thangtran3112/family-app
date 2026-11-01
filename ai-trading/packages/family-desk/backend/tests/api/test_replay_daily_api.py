@@ -203,7 +203,7 @@ def test_plan_rejections_are_plain_problems(daily, db_session) -> None:
     ]
     wrong = post({**good, "extra": 1})
     assert wrong.status_code == 422
-    missing = post({**good, "screen": {**good["screen"], "filters": [{"id": 999}]}})
+    missing = post({**good, "screen": {**good["screen"], "filters": [{"id": 999_999}]}})
     assert missing.json()["detail"]["problems"] == [{"path": "screen.filters.0.id", "message": "Filter not found"}]
     stray = client.post(f"{BASE}/daily/next", json={"plans": {}}, headers=auth_headers())
     assert stray.status_code == 422
@@ -269,9 +269,9 @@ def test_the_hub_session_rows_say_which_day_list_they_belong_to(daily, db_sessio
 def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) -> None:
     client, services, user_id = daily
     body = _plan_body(db_session, user_id)
-    started = client.post(f"{BASE}/daily/next", json={"plan": body}, headers=auth_headers())
+    started = client.post(f"{BASE}/daily/next", json={"plan": {**body, "maxSymbols": 2}}, headers=auth_headers())
     assert started.status_code == 200, started.text
-    assert "max_symbols" not in started.json()["plan"]
+    assert "max_symbols" not in started.json()["plan"] and started.json()["plan"]["spec"]["maxSymbols"] == 2  # ignored
     plan = db_session.execute(select(PracticePlan).where(PracticePlan.owner_user_id == user_id)).scalar_one()
     plan.universe = {**plan.universe, "symbols": SYMBOLS}
     db_session.commit()
@@ -297,6 +297,8 @@ def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) ->
     flat = start("FLAT")
     assert flat.status_code == 200, flat.text
     assert flat.json()["revealed_through"] == at("10:00") and flat.json()["day_clock"] == at("10:00")
+    third = start("SPLITTER")  # past the old plan cap of 2: every list name opens
+    assert third.status_code == 200, third.text
     assert start("GAPPER").json()["id"] == gapper["id"]  # a name in hand resumes
 
     client.post(f"{BASE}/sessions/{flat.json()['id']}/advance", json={"to": at("10:30")}, headers=auth_headers())
@@ -316,14 +318,20 @@ def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) ->
         f"{BASE}/sessions/{gapper['id']}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
     )
     assert entered.status_code == 200
-    blocked = start("FLAT")
-    assert blocked.status_code == 409
-    assert blocked.json()["detail"]["problems"][0]["message"].startswith("Close your open GAPPER practice trade")
-    strip = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["sessions"]
+    switched = start("FLAT")  # a trade open on GAPPER no longer blocks the switch (one open trade per name)
+    assert switched.status_code == 200, switched.text
+    detail = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
+    strip = detail["sessions"]
     assert [(s["symbol"], s["behind_clock"], s["has_open_trade"]) for s in strip] == [
         ("GAPPER", False, True),
         ("FLAT", False, False),
+        ("SPLITTER", True, False),  # opened at 10:00, behind the 10:30 clock
     ]
+    assert {k: detail["day_pnl"][k] for k in ("realized_usd", "open_count", "as_of")} == {
+        "realized_usd": 0.0,
+        "open_count": 1,
+        "as_of": at("10:30"),
+    }
     stars = client.patch(
         f"{BASE}/day-lists/{list_id}", json={"watch": ["GAPPER", "FLAT", "SPLITTER"]}, headers=auth_headers()
     )
@@ -392,3 +400,54 @@ def test_the_rescan_route_scans_at_the_day_clock_and_leaves_the_frozen_list_alon
     closed = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
     assert closed.status_code == 409
     assert closed.json()["detail"]["problems"][0]["message"] == "The day is over · scans are closed"
+
+
+def test_day_list_sessions_carry_position_and_realized(daily, db_session) -> None:
+    client, services, _ = daily
+    # GAPPER sits at 110 from the open: lift it to 112 from 10:00. Before the plan starts, so no prep sees the old bars.
+    minutes = services.sources.bars.minutes["GAPPER"]
+    after = (minutes.index >= et(DAYS[0], "10:00")) & (minutes.index < et(DAYS[0], "11:30"))
+    for column in ("open", "high", "low", "close"):
+        minutes.loc[after, column] = 112.0
+    plan_id = _start_plan(daily, db_session)["plan"]["id"]
+    plan_mod.run_prep(db_session, services, plan_id)
+    list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    sid = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()).json()[
+        "id"
+    ]
+
+    def at(hhmm):
+        return et(DAYS[0], hhmm).tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def row():
+        (brief,) = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["sessions"]
+        return brief
+
+    flat = row()
+    assert (flat["position"], flat["trades"], flat["realized_usd"]) == (None, 0, 0.0)
+    start = client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("09:35")}, headers=auth_headers())
+    assert start.status_code == 200, start.text
+    entered = client.post(
+        f"{BASE}/sessions/{sid}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
+    )
+    assert entered.status_code == 200, entered.text
+    moved = client.post(f"{BASE}/sessions/{sid}/advance", json={"to": at("10:30")}, headers=auth_headers())
+    assert moved.status_code == 200 and moved.json()["revealed_through"] == at("10:30"), moved.text
+    held = row()
+    assert (held["trades"], held["realized_usd"], held["has_open_trade"]) == (0, 0.0, True)
+    assert held["position"] is not None
+    assert {k: held["position"][k] for k in ("side", "shares", "entry_price", "last_price", "unrealized_usd")} == {
+        "side": "long",
+        "shares": 100,
+        "entry_price": 110.0,
+        "last_price": 112.0,
+        "unrealized_usd": 200.0,
+    }
+    exited = client.post(
+        f"{BASE}/sessions/{sid}/marks", json={"schemaVersion": 1, "kind": "long_exit"}, headers=auth_headers()
+    )
+    assert exited.status_code == 200, exited.text
+    done = row()
+    assert (done["position"], done["trades"], done["realized_usd"], done["has_open_trade"]) == (None, 1, 200.0, False)
+    ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    assert ended.json()["journal"]["pnl_usd"] == done["realized_usd"]  # the same figure the ledger books

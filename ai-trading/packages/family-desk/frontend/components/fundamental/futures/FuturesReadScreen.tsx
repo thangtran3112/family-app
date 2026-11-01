@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Panel } from "@/components/ui/Panel";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { deskFetch } from "@/lib/api/client";
 import { FuturesSpecsSchema } from "@/lib/api/schemas";
@@ -10,7 +13,6 @@ import { COPY } from "@/lib/desk/freshness";
 import { nextRoll, READ_ROOTS, ROOT_NAMES, todayEt, type ReadRoot } from "@/lib/desk/futuresRead";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "../fundamental.module.css";
-import local from "./futuresRead.module.css";
 
 type Row = { root: ReadRoot; name: string; next: string | null };
 
@@ -40,12 +42,11 @@ export function FuturesReadScreen() {
         <h1 className={styles.pageTitle}>Futures</h1>
         <Link className={styles.link} href="/futures/specs">Contract sizes and roll calendar</Link>
       </header>
-      <p className={`${styles.banner} ${local.reading}`} role="note" data-testid="futures-reading-only">
-        <span>{COPY.futuresReadingOnly}</span>
-        {/* A full navigation, like the rest of the shell: /futures opens in Technical mode, its only mode (ADR-0014). */}
-        <a className={styles.button} href="/futures">Switch to Technical</a>
-      </p>
-      <section className={styles.panel} aria-label="Futures reading">
+      {/* The action is a full navigation, like the rest of the shell: /futures opens in Technical mode, its only mode (ADR-0014). */}
+      <div data-testid="futures-reading-only">
+        <Banner action={<Button href="/futures" size="md">Switch to Technical</Button>}>{COPY.futuresReadingOnly}</Banner>
+      </div>
+      <Panel aria-label="Futures reading">
         {specs.error !== null && specs.data === null ? (
           <ErrorBlock subject="futures reference" onRetry={specs.refresh} />
         ) : specs.data === null ? (
@@ -54,7 +55,7 @@ export function FuturesReadScreen() {
           <DenseTable caption="Futures reading" columns={columns} rows={rows} rowKey={(row) => row.root} />
         )}
         <p className={styles.notice} role="status" data-testid="futures-deferred">{COPY.futuresDeferred}</p>
-      </section>
+      </Panel>
     </div>
   );
 }

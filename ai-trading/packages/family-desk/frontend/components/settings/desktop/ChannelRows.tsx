@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Checkbox, Field, FieldRow, Input } from "@/components/ui/Field";
 import { DeskApiError } from "@/lib/api/client";
 import type { SettingsChannel } from "@/lib/api/schemas";
-import { channelRows, testResultText, validateChatId, type ChannelRowState } from "@/lib/desk/channelView";
+import { channelRows, channelStatusTone, testResultText, validateChatId, type ChannelRowState } from "@/lib/desk/channelView";
 import { linkTelegram, testChannel } from "@/lib/desk/settings";
 import type { DeliveryPreferences } from "@/lib/settings/schema";
 import styles from "./settingsDesktop.module.css";
@@ -86,48 +89,35 @@ function ChannelRow({ row, preferences, disabled, onPreference, onChannelsChange
     <div className={styles.block}>
       <div className={styles.inline}>
         <h3 className={styles.rowTitle}>{row.title}</h3>
-        <span className={styles.chip} data-status={row.status}>{row.statusText}</span>
+        <Badge tone={channelStatusTone(row.status)}>{row.statusText}</Badge>
       </div>
       <p className={styles.note}>{row.note}</p>
 
       {channel !== "inbox" && (
-        <label className={styles.inline}>
-          <input
-            className={styles.check}
-            type="checkbox"
-            // A channel that is not connected cannot deliver, so its box reads unchecked whatever was saved before.
-            checked={row.status === "connected" && preferences[channel]}
-            disabled={disabled || row.status !== "connected"}
-            onChange={(event) => onPreference(channel, event.currentTarget.checked)}
-          />
-          <span>Send alerts to {row.title}</span>
-        </label>
+        <Checkbox
+          label={`Send alerts to ${row.title}`}
+          // A channel that is not connected cannot deliver, so its box reads unchecked whatever was saved before.
+          checked={row.status === "connected" && preferences[channel]}
+          disabled={disabled || row.status !== "connected"}
+          onChange={(event) => onPreference(channel, event.currentTarget.checked)}
+        />
       )}
 
       {row.canLink && (
-        <form className={styles.linkForm} noValidate onSubmit={(event) => void connect(event)}>
-          <label className={styles.fieldLabel} htmlFor="telegram-chat-id">Telegram chat ID</label>
-          <input
-            id="telegram-chat-id"
-            className={`${styles.input} ${styles.textInput}`}
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            value={chatId}
-            disabled={disabled || linking}
-            aria-invalid={linkError !== null}
-            aria-describedby={linkError ? "telegram-chat-id-error" : undefined}
-            onChange={(event) => setChatId(event.currentTarget.value)}
-          />
-          <button type="submit" className={`${styles.button} ${styles.primary}`} disabled={disabled || linking}>Connect</button>
-          {linking && <span role="status">Saving…</span>}
-          {linkError && <p className={styles.fieldError} id="telegram-chat-id-error" role="alert">{linkError}</p>}
+        <form noValidate onSubmit={(event) => void connect(event)}>
+          <FieldRow>
+            <Field id="telegram-chat-id" label="Telegram chat ID" error={linkError}>
+              <Input inputMode="numeric" autoComplete="off" value={chatId} disabled={disabled || linking} onChange={(event) => setChatId(event.currentTarget.value)} />
+            </Field>
+            <Button type="submit" variant="primary" disabled={disabled || linking}>Connect</Button>
+            {linking && <span role="status">Saving…</span>}
+          </FieldRow>
         </form>
       )}
 
       {row.canTest && (
         <div className={styles.inline}>
-          <button type="button" className={styles.button} disabled={disabled || testing} onClick={() => void runTest()}>Send test</button>
+          <Button disabled={disabled || testing} onClick={() => void runTest()}>Send test</Button>
           {(testing || testText) && <span role="status">{testing ? "Sending…" : testText}</span>}
         </div>
       )}

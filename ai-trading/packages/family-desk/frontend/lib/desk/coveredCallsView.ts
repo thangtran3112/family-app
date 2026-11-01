@@ -2,7 +2,7 @@ import type { Candidates, CoverageRow, HoldingAccount, Income, ShortCall } from 
 import { EMPTY_VALUE, formatPct } from "./format.ts";
 import { COPY } from "./freshness.ts";
 import { formatUsd, MASK } from "./mask.ts";
-import { niceTicks } from "./payoff.ts";
+import { niceTicks } from "./ticks.ts";
 
 // View models and wording for the covered-call screens (02n §b3 FD4, FD5). The engine's numbers arrive final; this file only
 // turns them into text. Yields, upside cap and return if called are fractions of the share price (0.1605 is 16.1%); spread,
@@ -113,7 +113,7 @@ export type IncomeChart = { bars: IncomeBar[]; ticks: IncomeTick[] };
 /** Bars scaled to the tallest month (`share` 0 to 1) and a numeric $ axis. While values are hidden the axis labels are `•••••`: the bars keep their shape and no amount shows. */
 export function incomeChart(byMonth: Income["by_month"], masked: boolean): IncomeChart {
   const max = Math.max(0, ...byMonth.map((month) => month.premium));
-  const ticks = niceTicks(0, max, 4);
+  const ticks = niceTicks(0, max, { inside: true });
   const top = ticks.length > 0 ? Math.max(ticks[ticks.length - 1]!, max) : max;
   return {
     bars: byMonth.map((month) => ({ month: month.month, label: monthLabel(month.month), premium: month.premium, contracts: month.contracts, share: top > 0 ? month.premium / top : 0 })),

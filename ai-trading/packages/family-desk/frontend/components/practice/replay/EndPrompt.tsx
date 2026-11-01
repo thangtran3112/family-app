@@ -18,9 +18,11 @@ export type EndPromptProps = {
   day?: boolean;
   /** A swing day (02p a2 step 4a): open holds stay open overnight, so the prompt says so, and there is no score to point at. */
   swing?: { dayNo: number; /** The day clock (ISO). */ clock: string | null; holdsOpen: number };
+  /** A day's open practice trades, named: ending the day exits them at the price on screen. Null with none open. */
+  exits?: string | null;
 };
 
-export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing }: EndPromptProps) {
+export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, exits = null }: EndPromptProps) {
   const asDay = day || swing !== undefined;
   const endLabel = asDay ? PRACTICE_COPY.dayEnd : PRACTICE_COPY.endAndScore;
   const warning = swing ? endDayPrompt({ dayNo: swing.dayNo, clock: swing.clock, holdsOpen: swing.holdsOpen }) : day ? PRACTICE_COPY.dayEndWarning : PRACTICE_COPY.endEarlyWarning;
@@ -73,6 +75,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing }
     <div className={styles.endSlot}>
       <div role="group" aria-label={asDay ? "Confirm ending the day" : "Confirm ending the session"} className={styles.confirm}>
         <p className={styles.endText}>{warning}</p>
+        {exits && <p className={styles.endText}>{exits}</p>}
         <div className={styles.confirmActions}>
           <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
             {endLabel}

@@ -1,5 +1,6 @@
 import type { Holdings, Income, ShortCall } from "../api/fundamentalSchemas.ts";
-import { changeTone, EMPTY_VALUE, formatEtDay, formatSignedPct, type Tone } from "./format.ts";
+import type { Tone } from "../../components/ui/tone.ts";
+import { EMPTY_VALUE, formatEtDay, formatSignedPct, signTone } from "./format.ts";
 import { COPY } from "./freshness.ts";
 import { hasHoldingsData, importLine } from "./fundamentalView.ts";
 import { formatUsdPrice, maskedSignedUsd, maskedUsd } from "./mask.ts";
@@ -10,6 +11,15 @@ import { formatUsdPrice, maskedSignedUsd, maskedUsd } from "./mask.ts";
 
 export type FeedKind = "short_call_risk" | "earnings_soon" | "ex_dividend" | "import";
 export type FeedItem = { kind: FeedKind; symbol: string | null; title: string; detail: string; at: string; href: string };
+
+const FEED_KIND: Record<FeedKind, { label: string; tone: Tone }> = {
+  short_call_risk: { label: "Call risk", tone: "warn" },
+  earnings_soon: { label: "Earnings", tone: "neutral" },
+  ex_dividend: { label: "Ex-dividend", tone: "neutral" },
+  import: { label: "Holdings", tone: "warn" },
+};
+/** The caps label of a feed row and its tone: a call at risk and a holdings problem are amber, the rest plain. */
+export const feedKindView = (kind: FeedKind): { label: string; tone: Tone } => FEED_KIND[kind];
 
 export const FEED_LIMIT = 20;
 export const EARNINGS_FEED_DAYS = 7;
@@ -54,7 +64,8 @@ export function needsYouFeed({ holdings, shortCalls, today }: { holdings: Holdin
   const items: FeedItem[] = [];
   if (holdings) {
     const line = importLine(holdings.import);
-    if (line.tone === "problem" || line.tone === "empty") {
+    // A good or running import needs nothing; a failed, not-connected or empty one does (the tone no longer tells these apart).
+    if (holdings.import.state === "failed" || holdings.import.state === "not_configured" || holdings.import.state === "none") {
       items.push({ kind: "import", symbol: null, title: line.text, detail: "Holdings import", at: holdings.import.imported_at ?? today, href: "/settings" });
     }
   }
@@ -109,7 +120,7 @@ export function needsYouFeed({ holdings, shortCalls, today }: { holdings: Holdin
 
 export type TodayTile = { id: string; label: string; value: string; note: string | null; tone: Tone };
 
-const tile = (id: string, label: string, value: string, note: string | null = null, tone: Tone = "flat"): TodayTile => ({ id, label, value, note, tone });
+const tile = (id: string, label: string, value: string, note: string | null = null, tone: Tone = "neutral"): TodayTile => ({ id, label, value, note, tone });
 
 /** Portfolio value, day change and unrealized gain. Dollars hide while `masked`; percentages stay. Without holdings every tile is a dash. */
 export function portfolioTiles(holdings: Holdings | null, masked: boolean): TodayTile[] {
@@ -118,8 +129,8 @@ export function portfolioTiles(holdings: Holdings | null, masked: boolean): Toda
   const unrealizedUsd = maskedSignedUsd(masked, totals?.unrealized);
   return [
     tile("value", "Portfolio value", maskedUsd(masked, totals?.market_value)),
-    tile("day", "Day change", day, null, changeTone(totals?.day_change_pct)),
-    tile("unrealized", "Unrealized", formatSignedPct(totals?.unrealized_pct), unrealizedUsd === EMPTY_VALUE ? null : unrealizedUsd, changeTone(totals?.unrealized_pct)),
+    tile("day", "Day change", day, null, signTone(totals?.day_change_pct)),
+    tile("unrealized", "Unrealized", formatSignedPct(totals?.unrealized_pct), unrealizedUsd === EMPTY_VALUE ? null : unrealizedUsd, signTone(totals?.unrealized_pct)),
   ];
 }
 

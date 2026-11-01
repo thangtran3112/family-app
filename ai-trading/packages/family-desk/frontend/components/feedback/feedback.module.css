@@ -38,10 +38,8 @@
 .sortLabel { color: var(--color-muted); font-size: var(--text-micro); letter-spacing: var(--tracking-caps); line-height: var(--line-micro); text-transform: uppercase; }
 .reason { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
 
-/* The table: DenseTable's 28 px rows, tightened so the board's eight columns fit the 840 px center column */
-.tableWrap table th, .tableWrap table td { padding-inline: 4px; }
-.tableWrap table th:first-child, .tableWrap table td:first-child { padding-left: var(--space-4); }
-.tableWrap table th:last-child, .tableWrap table td:last-child { padding-right: var(--space-4); }
+/* The table: DenseTable's 28 px rows, tight so the board's eight columns fit the 840 px center column (the edge cells keep a 16 px gutter). */
+.tableWrap { --dense-edge: var(--space-4); }
 .id { display: inline-block; width: 44px; font-variant-numeric: tabular-nums; }
 .kind { display: inline-flex; height: 20px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: 0 8px; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
 .kind[data-kind="bug"] { color: var(--color-text); }

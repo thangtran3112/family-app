@@ -1,5 +1,6 @@
 import type { Rating } from "@/lib/api/fundamentalSchemas";
 import { ratingText } from "@/lib/desk/fundamentalView";
+import { Badge } from "@/components/ui/Badge";
 import styles from "../fundamental.module.css";
 
 /** The violet Desk AI rating: a dot alone in dense rows (`compact`), dot and word elsewhere. No rating renders nothing, never a guess. */
@@ -9,9 +10,9 @@ export function AiRatingChip({ rating, compact = false }: { rating: Rating | nul
   return compact ? (
     <span className={styles.ratingDot} data-rating={rating} role="img" aria-label={`Desk AI: ${text}`} title={`Desk AI: ${text}`} />
   ) : (
-    <span className={styles.rating}>
+    <Badge tone="ai" className={styles.ratingBadge}>
       <span className={styles.ratingDot} data-rating={rating} aria-hidden="true" />
       {text}
-    </span>
+    </Badge>
   );
 }

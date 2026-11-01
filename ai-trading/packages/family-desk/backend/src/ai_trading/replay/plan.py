@@ -1,16 +1,18 @@
 """Daily-list practice (02o-b v1): the plan, the day lists, the stars, the day's session, and ending the day.
 
 Each practice day, her own filters build a candidate list for the past day she is about to replay
-(`screen.build_list`: the live screener fed from the blob cache and cut at the time she would have looked). She stars
-any names she likes, practises one of them, and ends the day to see how every candidate moved from its list price.
+(`screen.build_list`: the live screener fed from the blob cache and cut at the time she would have looked). She opens
+any names from it by clicking them, practises them one at a time, and ends the day to see how every candidate moved
+from its list price. The names she opened are her portfolio for the day: a row for each, flat or holding its one open
+trade, with the day's P/L.
 
 - **Walk forward.** `practice_plans` is the saved setup plus a cursor. Days open in order, one list at a time; the
   next day opens only after the current one has ended. Dates are returned and hidden by a render rule.
 - **Switching names on a shared day clock (02o-b2).** `replay_day_lists.revealed_through` is the day clock: `advance`
   moves it, a new session starts at it, and a name behind it is caught up by its next advance and cannot be marked
-  until then. A day has no cap on names (stars or practised), one open trade at a
-  time: she closes the trade on one name before she moves to another. What a name did while she was elsewhere is on
-  the chart as history and is not scored (`replay_sessions.away`).
+  until then. A day opens any number of list names (a saved plan's `maxSymbols` is accepted and ignored), with one open
+  trade at a time: she closes the trade on one name before she moves to another. What a name did while she was
+  elsewhere is on the chart as history and is not scored (`replay_sessions.away`).
 - **Re-scan at the playhead (02o-b2).** `rescan` runs the day's filters again at the day clock, with the filter versions
   the list used and every input cut 15 minutes before the clock. Each scan is its own row (`replay_day_scans`) labelled
   with the clock it ran at; the frozen list, its stars and its review are never touched, and a name the scan shows that
@@ -61,7 +63,7 @@ from ai_trading.replay import threads as threads_mod
 from ai_trading.replay import universe_days as universe_mod
 from ai_trading.replay.cache import BlobKey, BlobStore
 from ai_trading.replay.data import ReplayDayError, check_day
-from ai_trading.replay.model import ENTRY_KINDS
+from ai_trading.replay.model import ENTRY_KINDS, add_span
 from ai_trading.replay.screen import ASOF_PART, EARLIEST_LIST_DAY, FilterInput, build_list, cut_frames
 from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound, jsonable
 from ai_trading.screener.evaluator import SymbolBars, check_filter
@@ -682,10 +684,22 @@ def _sessions_of(db: Session, day_list_id: int) -> list[ReplaySession]:
     )
 
 
-def _session_brief(s: ReplaySession, row: ReplayDayList, holding: set[int]) -> dict[str, Any]:
-    """A name on the day strip: its status, how far it is revealed, whether it is behind the shared day clock (its next
-    advance catches it up), and whether it holds the day's one open trade."""
+def _session_brief(
+    s: ReplaySession,
+    row: ReplayDayList,
+    holding: set[int],
+    book: tuple[list[journal_mod.Trade], journal_mod.Trade | None] | None = None,
+    last: float | None = None,
+) -> dict[str, Any]:
+    """A name in the day's portfolio: its status, how far it is revealed, whether it is behind the shared day clock
+    (its next advance catches it up), whether it holds an open trade (a day holds one per name), and its P/L: the
+    closed trades booked so far and the open trade marked at `last` (the price at the day clock) with when play
+    paused on its stop. A swing session passes no `book` (its holds are read elsewhere)."""
     clock = None if row.revealed_through is None else _utc(row.revealed_through)
+    closed, open_ = book if book is not None else ([], None)
+    position = journal_mod.open_trade_out(open_, last)
+    if position is not None and s.stop_hit_at is not None:
+        position["stop_hit_at"] = s.stop_hit_at
     return {
         "id": s.id,
         "symbol": s.symbol,
@@ -693,6 +707,9 @@ def _session_brief(s: ReplaySession, row: ReplayDayList, holding: set[int]) -> d
         "revealed_through": s.revealed_through,
         "behind_clock": s.status == "active" and clock is not None and _utc(s.revealed_through) < clock,
         "has_open_trade": s.id in holding,
+        "trades": len(closed),
+        "realized_usd": journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed]),
+        "position": position,
     }
 
 
@@ -872,7 +889,11 @@ def day_list_out(
         return _swing().day_list_out(db, user_id, day_list_id, svc, peek=peek)
     ended = row.status == "ended"
     sessions = _sessions_of(db, row.id)
-    holding = {session_id for session_id, _ in session_mod.open_trades(db, row.id)}
+    books = session_mod.day_books(db, row.id)
+    holding = {session_id for session_id, (_, open_) in books.items() if open_ is not None}
+    clock = None if row.revealed_through is None else _utc(row.revealed_through)
+    # every open trade priced at the one day clock, a name behind it included (nothing here is later than the clock)
+    held = {} if clock is None else {p.row.id: p for p in session_mod.positions(db, svc, row.id, clock, books)}
     universe = row.universe
     warnings = [_few_names_reason(db, row)] if len(row.candidates) < FEW_NAMES else []
     scan = _latest_scan(db, row.id)
@@ -896,7 +917,14 @@ def day_list_out(
         "candidates": row.candidates,
         "watch": row.watch,
         "clock": row.revealed_through,
-        "sessions": [_session_brief(s, row, holding) for s in sessions],
+        # ponytail: `positions` loads one context per open position, at most `holds.HARD_CAP`; batch the bar loads if
+        # the cap is raised
+        "sessions": [
+            _session_brief(s, row, holding, books[s.id], held[s.id].price if s.id in held else None) for s in sessions
+        ],
+        "day_pnl": session_mod.day_pnl(
+            books, list(held.values()), row.revealed_through if clock is not None else row.data_through
+        ),
         "watch_check": watch_check(db, row, sessions),
         "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
@@ -1079,8 +1107,10 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
 
 def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc: Services) -> ReplaySession:
     """The day's practice session on a name from the list, built from the plan's setup: a new name opens at the shared
-    day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds one open
-    trade (any number of names), so a switch with a trade open is a 409 (close it first)."""
+    day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds any number of names
+    and one open trade per name (at most five at once, refused on the entry mark), so a switch never needs a trade
+    closed first. A name resumed behind the clock is lifted to it, the span she was away is recorded, and she can mark
+    at once."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
@@ -1092,13 +1122,6 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         raise ReplayProblem(f"{symbol} is not on today's list", path="symbol")
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
-    held = next((name for _, name in session_mod.open_trades(db, row.id) if name != symbol), None)
-    if held is not None:
-        raise ReplayProblem(
-            f"Close your open {held} practice trade before you switch to {symbol} · exit it at the price you see now",
-            path="symbol",
-            status=409,
-        )
     thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
     if thread is None:
         raise ReplayProblem(threads_mod.NO_THREAD, path="threadId", status=409)
@@ -1112,6 +1135,12 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     row.updated_at = svc.now()
     if row.revealed_through is None or _utc(created.revealed_through) > _utc(row.revealed_through):
         row.revealed_through = created.revealed_through
+    elif created.status == "active" and _utc(created.revealed_through) < _utc(row.revealed_through):
+        # A name opened earlier fell behind the shared day clock while she played another one. Returning to it lifts it
+        # to the clock, as an `advance` does: what lies between is revealed but was never in front of her (an away
+        # span), and every advance scanned all open trades' stops, so nothing is skipped by the lift.
+        created.away = add_span(list(created.away or []), _utc(created.revealed_through), _utc(row.revealed_through))
+        created.revealed_through, created.updated_at = row.revealed_through, svc.now()
     db.flush()
     return created
 
@@ -1156,8 +1185,8 @@ def _day_journal(sessions: list[ReplaySession]) -> dict[str, Any]:
 
 
 def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayList:
-    """Ends the day's session (an open practice trade exits at the last price), unseals the window, and stores the
-    list review. Idempotent."""
+    """Ends the day: every open practice trade exits at the price at the day clock (`source=auto`), then the window
+    unseals and the list review is stored. Idempotent."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
     if row.status == "ended":
         return row

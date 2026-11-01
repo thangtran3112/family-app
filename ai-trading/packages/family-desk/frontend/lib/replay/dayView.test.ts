@@ -25,11 +25,18 @@ import {
   listWarning,
   moveText,
   nameActionLabel,
-  namesTodayText,
   ordinal,
   peekDailyBars,
   peekOffsets,
   planArmedText,
+  endDayExitText,
+  MAX_OPEN_PRACTICE_TRADES,
+  openTodayText,
+  portfolioFooter,
+  portfolioRows,
+  portfolioTotal,
+  positionText,
+  stopCrossedText,
   dayActionLabel,
   blockOpenByDefault,
   dayRouteProblem,
@@ -43,7 +50,6 @@ import {
   selectionText,
   sessionResumeHref,
   sourceNote,
-  stripRows,
   syntheticDays,
   threadDayNo,
   toggledStars,
@@ -344,8 +350,13 @@ const opened = (symbol: string, id: number, changes: Partial<(typeof dayList)["s
   revealed_through: "2026-03-10T14:00:00Z",
   behind_clock: false,
   has_open_trade: false,
+  trades: 0,
+  realized_usd: 0,
+  position: null,
   ...changes,
 });
+
+const smciLong = { trade_no: 1, side: "long" as const, shares: 100, entry_price: 812.4, entry_at: "2026-03-10T13:40:00Z", stop_price: null, last_price: 814.54, unrealized_usd: 214, r: null };
 
 test("no copy says a day is limited to N names or asks her to unstar one first", () => {
   for (const [key, text] of Object.entries(PRACTICE_COPY)) {
@@ -353,29 +364,102 @@ test("no copy says a day is limited to N names or asks her to unstar one first",
   }
 });
 
-test("the day strip lists the names she opened, then the starred ones she has not", () => {
+test("the portfolio puts the held name first and adds up each name's day P/L", () => {
   const list = {
-    sessions: [opened("SMCI", 12, { has_open_trade: true }), opened("ANET", 13, { behind_clock: true })],
-    watch: [{ symbol: "NVDA", starred_clock: "2026-03-10T12:30:00Z" }, { symbol: "SMCI", starred_clock: "2026-03-10T12:30:00Z" }],
+    sessions: [opened("ANET", 13, { trades: 2, realized_usd: -38 }), opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("NVDA", 14, { behind_clock: true })],
   };
-  assert.deepEqual(stripRows(list), [
-    { symbol: "SMCI", sessionId: 12, starred: true, behind: false, holding: true },
-    { symbol: "ANET", sessionId: 13, starred: false, behind: true, holding: false },
-    { symbol: "NVDA", sessionId: null, starred: true, behind: false, holding: false },
+  const rows = portfolioRows(list);
+  assert.deepEqual(rows.map((row) => [row.symbol, row.sessionId, row.holding, row.trades, row.realized, row.unrealized, row.dayPnl, row.behind]), [
+    ["SMCI", 12, true, 0, 0, 214, 214, false],
+    ["ANET", 13, false, 2, -38, null, -38, false],
+    ["NVDA", 14, false, 0, 0, null, 0, true],
   ]);
-  assert.deepEqual(stripRows({ sessions: [], watch: [] }), []);
-  // A name whose playhead is earlier than the one she is on is behind the clock, though the list read says it was not.
-  const lagging = { sessions: [opened("SMCI", 12, { revealed_through: "2026-03-10T14:00:00Z" }), opened("ANET", 13)], watch: [] };
-  const behindOf = (rows: ReturnType<typeof stripRows>) => rows.map((row) => [row.symbol, row.behind]);
-  assert.deepEqual(behindOf(stripRows(lagging, { symbol: "ANET", playhead: "2026-03-10T14:05:00Z" })), [["SMCI", true], ["ANET", false]]);
-  assert.deepEqual(behindOf(stripRows(lagging, { symbol: "SMCI", playhead: "2026-03-10T14:00:00Z" })), [["SMCI", false], ["ANET", false]]);
+  assert.deepEqual(portfolioTotal(rows), { realized: -38, open: 214, total: 176 });
+  assert.deepEqual(portfolioTotal([]), { realized: 0, open: 0, total: 0 });
+  assert.deepEqual(portfolioRows({ sessions: [] }), []);
 });
 
-test("the names line counts the names opened, with no cap to count against", () => {
-  const two = { sessions: [opened("SMCI", 12), opened("ANET", 13)] };
-  assert.equal(namesTodayText(two), "2 names practiced today");
-  assert.equal(namesTodayText({ sessions: [opened("SMCI", 12)] }), "1 name practiced today");
-  for (const text of [namesTodayText(two), practiceText("replayBehind", { symbol: "ANET", clock: "10:30 AM ET" })]) {
+test("open trades come in order: a crossed stop first, then the oldest entry, then flat names in the order opened", () => {
+  const long = (entry: string, changes = {}) => ({ ...smciLong, entry_at: entry, ...changes });
+  const list = {
+    sessions: [
+      opened("FLAT1", 11),
+      opened("SMCI", 12, { has_open_trade: true, position: long("2026-03-10T13:52:00Z") }),
+      opened("ANET", 13, { has_open_trade: true, position: long("2026-03-10T13:40:00Z") }),
+      opened("NVDA", 14, { has_open_trade: true, position: long("2026-03-10T14:05:00Z", { stop_hit_at: "2026-03-10T14:21:00Z" }) }),
+      opened("FLAT2", 15, { trades: 1, realized_usd: 12 }),
+      opened("SMCX", 16, { has_open_trade: true, position: long("2026-03-10T14:10:00Z", { stop_hit_at: "2026-03-10T14:15:00Z" }) }),
+    ],
+  };
+  const rows = portfolioRows(list);
+  // Crossed stops first (the earlier crossing first), then ANET (13:40) before SMCI (13:52), then the flat names as opened.
+  assert.deepEqual(rows.map((row) => row.symbol), ["SMCX", "NVDA", "ANET", "SMCI", "FLAT1", "FLAT2"]);
+  assert.deepEqual(rows.map((row) => row.stopHitAt !== null), [true, true, false, false, false, false]);
+  assert.deepEqual(rows.map((row) => row.side), ["long", "long", "long", "long", null, null]);
+  assert.equal(rows[2]!.entryAt, "2026-03-10T13:40:00Z");
+  // No row is blocked by another: holding several names at once is the rule, so a flat or held name always switches.
+  assert.equal(rows.some((row) => "blockedBy" in row), false);
+});
+
+test("a crossed stop reads 'Stop crossed 10:21' in ET", () => {
+  assert.equal(stopCrossedText("2026-03-10T14:21:00Z"), "Stop crossed 10:21");
+});
+
+test("the footer is the server's day P/L: realized, open, how many are open of five, and the clock it is marked at", () => {
+  const footer = portfolioFooter({ realized_usd: -46, open_usd: 200, total_usd: 154, open_count: 2, as_of: "2026-03-10T14:30:00Z" });
+  assert.deepEqual(footer, { total: 154, split: "realized −$46.00 · open +$200.00", openOf: "2 open of 5", asOf: "as of 10:30 AM ET" });
+  assert.equal(MAX_OPEN_PRACTICE_TRADES, 5);
+});
+
+test("End day names the open trades it exits and the price she sees now", () => {
+  const rows = portfolioRows({
+    sessions: [
+      opened("SMCI", 12, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:52:00Z" } }),
+      opened("ANET", 13),
+      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:45:00Z" } }),
+    ],
+  });
+  assert.equal(endDayExitText(rows), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI");
+  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "SMCI")), "Ending the day exits 1 open practice trade at the price you see now: SMCI");
+  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "ANET")), null);
+});
+
+test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with none open", () => {
+  assert.equal(openTodayText({ open_count: 2, open_usd: 200 }), "2 open +$200.00");
+  assert.equal(openTodayText({ open_count: 1, open_usd: -31.5 }), "1 open −$31.50");
+  assert.equal(openTodayText({ open_count: 0, open_usd: 0 }), null);
+});
+
+test("no copy asks her to close one trade before another", () => {
+  for (const [key, text] of Object.entries(PRACTICE_COPY)) assert.doesNotMatch(String(text), /close .* first|close an open trade/i, key);
+});
+
+test("the name she is on reads its live open trade, and a name earlier than her playhead is behind the clock", () => {
+  const list = { sessions: [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13, { revealed_through: "2026-03-10T13:55:00Z" })] };
+  const live = { ...smciLong, last_price: 815, unrealized_usd: 260 };
+  const [smci, anet] = portfolioRows(list, { symbol: "SMCI", playhead: "2026-03-10T14:00:00Z", openTrade: live });
+  assert.deepEqual([smci!.current, smci!.unrealized, smci!.dayPnl, anet!.current, anet!.behind], [true, 260, 260, false, true]);
+  // She has just exited: the live view is flat before the list read catches up.
+  const [flat] = portfolioRows(list, { symbol: "SMCI", playhead: "2026-03-10T14:00:00Z", openTrade: null });
+  assert.deepEqual([flat!.holding, flat!.unrealized, flat!.dayPnl], [false, null, 0]);
+  // Without a live view (the day page) the list read stands.
+  assert.equal(portfolioRows(list)[0]!.unrealized, 214);
+});
+
+test("a position reads Long or Short with its shares and entry price, a flat name reads Flat", () => {
+  const [held, flat] = portfolioRows({ sessions: [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13)] });
+  assert.equal(positionText(held!), "Long 100 @ $812.40 · 9:40 AM"); // the entry time rides after the price
+  assert.equal(positionText(flat!), "Flat");
+  const [short] = portfolioRows({ sessions: [opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 25, entry_price: 0.5 } })] });
+  assert.equal(positionText(short!), "Short 25 @ $0.50 · 9:40 AM");
+  assert.equal(positionText({ position: { ...smciLong, entry_at: null } }), "Long 100 @ $812.40"); // an older payload has no entry time
+});
+
+test("the portfolio counts every name opened, with no cap to count against", () => {
+  const many = { sessions: Array.from({ length: 25 }, (_, i) => opened(`N${i}`, 100 + i)) };
+  assert.equal(portfolioRows(many).length, 25);
+  assert.equal("dayNamesToday" in PRACTICE_COPY, false, "the portfolio replaces the names-practiced line");
+  for (const text of [PRACTICE_COPY.dayPortfolioEmpty, PRACTICE_COPY.dayOpenHint, practiceText("replayBehind", { symbol: "ANET", clock: "10:30 AM ET" })]) {
     assert.equal(containsPracticeBannedTerm(text), false, text);
   }
 });
@@ -461,9 +545,10 @@ test("a day thread's one action says what it does (D-078)", () => {
   assert.equal(dayActionLabel(null, null), null);
 });
 
-// D-095 once said "Star up to N names" next to "Starred 0 of N". There is no N now: the header counts stars and the rail asks for none.
+// D-095 once said "Star up to N names" next to "Starred 0 of N". There is no N now: the day page has no starred header (the
+// portfolio replaced its stars) and the swing board's empty rail asks for none.
 test("the starred header and the empty rail name no cap", () => {
-  assert.equal(practiceText("dayStarred", { n: 4 }), "Starred 4");
+  assert.equal("dayStarred" in PRACTICE_COPY, false);
   assert.equal(PRACTICE_COPY.dayWatchEmpty, "Star names to keep them in view");
 });
 
@@ -498,7 +583,7 @@ test("the trade table ends on a total row, and the selection quotes the table's 
 });
 
 test("Resume belongs to the thread's day, never to one name: a name's button says Practice or Switch, and a day session resumes through its day", () => {
-  assert.deepEqual([nameActionLabel(false), nameActionLabel(true)], ["Practice", "Switch"]);
+  assert.deepEqual([nameActionLabel(false), nameActionLabel(true)], ["Open", "Switch"]);
   assert.equal(sessionResumeHref({ id: 9, day_list_id: 42 }), "/practice/day?id=42", "a day-list session resumes the whole day, on its shared clock");
   assert.equal(sessionResumeHref({ id: 9, day_list_id: null }), "/practice/replay?id=9", "a standalone session has no day to resume through");
 });

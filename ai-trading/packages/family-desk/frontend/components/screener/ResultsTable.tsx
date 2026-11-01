@@ -2,9 +2,10 @@
 
 import { useMemo } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Delta } from "@/components/ui/Delta";
 import type { ScreenerResults } from "@/lib/api/schemas";
-import { changeTone } from "@/lib/desk/format";
-import { cellText, cellValue, matchCaption, resultColumns } from "@/lib/desk/screenerView";
+import { columnFromSpec } from "@/lib/desk/columns";
+import { cellValue, matchCaption, resultColumns } from "@/lib/desk/screenerView";
 import styles from "./screener.module.css";
 
 type Match = ScreenerResults["matches"][number];
@@ -29,17 +30,9 @@ export function ResultsTable({
   const columns = useMemo<DenseColumn<Match>[]>(
     () => [
       { key: "symbol", label: "Symbol", align: "left", render: (match) => <strong>{match.symbol}</strong>, sortValue: (match) => match.symbol },
-      ...resultColumns(results.table_columns).map((column): DenseColumn<Match> => ({
-        key: column.key,
-        label: column.label,
-        align: column.align,
-        priority: column.priority,
-        render: (match) => {
-          const value = cellValue(match, column.key);
-          return <span className={column.format === "pct_signed" ? styles[changeTone(typeof value === "number" ? value : null)] : undefined}>{cellText(match, column)}</span>;
-        },
-        sortValue: (match) => cellValue(match, column.key),
-      })),
+      ...resultColumns(results.table_columns).map((column): DenseColumn<Match> =>
+        columnFromSpec(column, (match) => cellValue(match, column.key), (text, tone) => <Delta tone={tone}>{text}</Delta>),
+      ),
     ],
     [results.table_columns],
   );

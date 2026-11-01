@@ -1,3 +1,5 @@
+import { Delta } from "@/components/ui/Delta";
+import { StatTile } from "@/components/ui/StatTile";
 import type { TodayTile } from "@/lib/desk/fundamentalToday";
 import styles from "../fundamental.module.css";
 
@@ -6,10 +8,8 @@ export function TileList({ tiles, label, testIdPrefix, dim = false }: { tiles: r
   return (
     <ul className={`${styles.tiles} ${dim ? styles.dim : ""}`} aria-label={label}>
       {tiles.map((tile) => (
-        <li key={tile.id} className={styles.tile} data-testid={`${testIdPrefix}-${tile.id}`}>
-          <span className={styles.tileLabel}>{tile.label}</span>
-          <span className={`${styles.tileValue} ${styles.tone}`} data-tone={tile.tone}>{tile.value}</span>
-          {tile.note && <span className={styles.tileNote}>{tile.note}</span>}
+        <li key={tile.id} data-testid={`${testIdPrefix}-${tile.id}`}>
+          <StatTile label={tile.label} value={tile.tone === "neutral" ? tile.value : <Delta tone={tile.tone}>{tile.value}</Delta>} note={tile.note} />
         </li>
       ))}
     </ul>

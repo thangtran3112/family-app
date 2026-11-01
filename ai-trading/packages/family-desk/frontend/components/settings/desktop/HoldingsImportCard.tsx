@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useHoldings } from "@/components/shell/desktop/DeskContext";
+import { Button } from "@/components/ui/Button";
 import { ImportLine } from "@/components/fundamental/shared/ImportLine";
 import { COPY } from "@/lib/desk/freshness";
 import { runHoldingsImport } from "@/lib/desk/holdingsImport";
@@ -58,15 +59,13 @@ export function HoldingsImportCard({ disabled }: Readonly<{ disabled: boolean }>
         </>
       )}
       <div className={styles.inline}>
-        <button
-          type="button"
-          className={styles.button}
+        <Button
           data-testid="import-now"
           disabled={disabled || busy || holdings === null || importState === "not_configured"}
           onClick={() => void importNow()}
         >
           Import now
-        </button>
+        </Button>
         {message && <span className={message.tone === "error" ? styles.errorText : styles.helper} role="status" data-testid="import-message">{message.text}</span>}
       </div>
     </section>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { columnsForBand } from "@/lib/desk/columns";
+import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, type CellAlign, type ColumnKind } from "@/lib/desk/denseTable";
 import { ariaSort, nextSort, sortRows, type SortState, type SortValue } from "@/lib/desk/sort";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { ShellBand } from "@/lib/desk/viewport";
@@ -11,8 +12,10 @@ export type DenseColumn<R> = {
   key: string;
   label: string;
   render: (row: R) => ReactNode;
-  /** Numbers right-aligned with tabular figures; text left-aligned. */
-  align?: "left" | "right" | "center";
+  /** `num`: right-aligned, tabular, never clipped. `action`: right-aligned buttons. `text` (default): left-aligned. */
+  kind?: ColumnKind;
+  /** Overrides the alignment `kind` implies. */
+  align?: CellAlign;
   /** Present: sortable header. */
   sortValue?: (row: R) => SortValue;
   /** Present: dropped at the 1180 band (lowest first, see lib/desk/columns.ts). */
@@ -21,6 +24,12 @@ export type DenseColumn<R> = {
   firstSort?: "asc" | "desc";
   /** The one column that gives way (its text ellipsizes) so the others stay whole in a table narrower than its content. */
   fill?: boolean;
+  /** Clip the cell with an ellipsis and put the full text in its tooltip: pass a function for the tooltip text when `render` does not return a string or number. Needs `fill` or `minWidth` to bound it; ignored on `num`. */
+  truncate?: boolean | ((row: R) => string);
+  /** px. The column never gets narrower; on a `truncate` column that is not `fill` it is also the width. */
+  minWidth?: number;
+  /** Drop the column when its cell is empty (nothing, "" or the em dash) in every row. */
+  hideWhenEmpty?: boolean;
 };
 
 export type DenseTableProps<R> = {
@@ -32,19 +41,26 @@ export type DenseTableProps<R> = {
   band?: ShellBand;
   /** 28 px rows by default, 24 px for compact rails. */
   density?: "default" | "compact";
+  /** 4 px cell padding for a table that must fit its column without scrolling; the first and last cells keep the `--dense-edge` gutter (default `--space-3`; a wrapper may set it). */
+  tight?: boolean;
   selectedKey?: string | null;
   onSelect?: (row: R) => void;
-  /** Hover actions in a trailing cell; they are real buttons, so keyboard focus reveals them too. */
+  /** Actions in a trailing cell; they are real buttons. In a `scrollX` table the cell stays pinned to the scroller's right edge. */
   rowActions?: (row: R) => ReactNode;
-  /** Opt-in (the practice day list, D-090): the actions show without a hover and, in a `scrollX` table, stay pinned to the scroller's right edge. Off by default: the screener and watchlists keep their hover actions. */
-  alwaysShowActions?: boolean;
-  /** Screener only: horizontal scroll with the first column pinned. */
+  /** `always` (default): visible without a hover, so touch and sight can reach them. `hover`: shown on hover and keyboard focus, for the densest tables only. */
+  actions?: "always" | "hover";
+  /** Horizontal scroll with the first column pinned; a soft shadow marks each edge that has more to scroll to. */
   scrollX?: boolean;
   initialSort?: SortState | null;
   /** Dim every value (the quote connection dropped but last values stay visible). */
   dim?: boolean;
   /** Shown instead of the body when there are no rows. */
   empty?: ReactNode;
+};
+
+const alignClass = (column: { kind?: ColumnKind; align?: CellAlign }) => {
+  const align = cellAlign(column);
+  return align === "right" ? styles.right : align === "center" ? styles.center : "";
 };
 
 export function DenseTable<R>({
@@ -54,10 +70,11 @@ export function DenseTable<R>({
   rowKey,
   band,
   density = "default",
+  tight = false,
   selectedKey = null,
   onSelect,
   rowActions,
-  alwaysShowActions = false,
+  actions = "always",
   scrollX = false,
   initialSort = null,
   dim = false,
@@ -65,13 +82,33 @@ export function DenseTable<R>({
 }: DenseTableProps<R>) {
   const shellBand = useShellBand();
   const [sort, setSort] = useState<SortState | null>(initialSort);
-  const visible = useMemo(() => columnsForBand(columns, band ?? shellBand), [columns, band, shellBand]);
+  const visible = useMemo(() => dropEmptyColumns(columnsForBand(columns, band ?? shellBand), rows), [columns, rows, band, shellBand]);
+  const showEmpty = rows.length === 0 && Boolean(empty);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // The scroll edge shadow: the wrapper says which edges have more to scroll to; the CSS draws the shadow (no re-render on scroll).
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!scrollX || !wrap) return;
+    const update = () => {
+      wrap.dataset.scrolled = String(wrap.scrollLeft > 0);
+      wrap.dataset.more = String(wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
+    };
+    update();
+    wrap.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(wrap);
+    if (wrap.firstElementChild) observer.observe(wrap.firstElementChild);
+    return () => {
+      wrap.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [scrollX, showEmpty]);
   const sorted = useMemo(() => {
     const column = sort ? visible.find((item) => item.key === sort.key) : undefined;
     return column?.sortValue && sort ? sortRows(rows, column.sortValue, sort.direction) : rows;
   }, [rows, sort, visible]);
 
-  if (rows.length === 0 && empty) return <div className={styles.empty}>{empty}</div>;
+  if (showEmpty) return <div className={styles.empty}>{empty}</div>;
 
   function onKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: R) {
     if (event.target !== event.currentTarget) return;
@@ -86,26 +123,37 @@ export function DenseTable<R>({
   }
 
   return (
-    <div className={`${styles.wrap} ${scrollX ? styles.scrollX : ""} ${alwaysShowActions && rowActions ? styles.actionsPinned : ""}`} data-density={density} data-dim={dim ? "true" : undefined}>
+    <div
+      ref={wrapRef}
+      className={`${styles.wrap} ${scrollX ? styles.scrollX : ""} ${scrollX && rowActions ? styles.actionsPinned : ""}`}
+      data-density={density}
+      data-tight={tight ? "true" : undefined}
+      data-actions={rowActions ? actions : undefined}
+      data-dim={dim ? "true" : undefined}
+    >
       <table className={styles.table} aria-label={caption}>
         <thead>
           <tr>
-            {visible.map((column, index) => (
-              <th
-                key={column.key}
-                scope="col"
-                className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""} ${column.fill ? styles.fill : ""}`}
-                aria-sort={column.sortValue ? ariaSort(sort, column.key) : undefined}
-              >
-                {column.sortValue ? (
-                  <button type="button" className={styles.sortButton} onClick={() => setSort(nextSort(sort, column.key, column.firstSort ?? (column.align === "right" ? "desc" : "asc")))}>
-                    {column.label}
-                    <span aria-hidden="true" className={styles.caret}>{sort?.key === column.key ? (sort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                ) : column.label}
-              </th>
-            ))}
-            {rowActions && <th scope="col" className={styles.actionsHead}><span className={styles.srOnly}>Actions</span></th>}
+            {visible.map((column, index) => {
+              const { fill, style } = columnLayout(column);
+              return (
+                <th
+                  key={column.key}
+                  scope="col"
+                  className={`${alignClass(column)} ${scrollX && index === 0 ? styles.sticky : ""} ${fill ? styles.fill : ""}`}
+                  style={style}
+                  aria-sort={column.sortValue ? ariaSort(sort, column.key) : undefined}
+                >
+                  {column.sortValue ? (
+                    <button type="button" className={styles.sortButton} onClick={() => setSort(nextSort(sort, column.key, column.firstSort ?? (cellAlign(column) === "right" ? "desc" : "asc")))}>
+                      {column.label}
+                      <span aria-hidden="true" className={styles.caret}>{sort?.key === column.key ? (sort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  ) : column.label}
+                </th>
+              );
+            })}
+            {rowActions && <th scope="col" className={styles.actionsHead}><span className="sr-only">Actions</span></th>}
           </tr>
         </thead>
         <tbody>
@@ -121,11 +169,14 @@ export function DenseTable<R>({
                 onClick={onSelect ? () => onSelect(row) : undefined}
                 onKeyDown={onSelect ? (event) => onKeyDown(event, row) : undefined}
               >
-                {visible.map((column, index) => (
-                  <td key={column.key} className={`${column.align === "right" ? styles.right : column.align === "center" ? styles.center : ""} ${scrollX && index === 0 ? styles.sticky : ""} ${column.fill ? styles.fill : ""}`}>
-                    {column.render(row)}
-                  </td>
-                ))}
+                {visible.map((column, index) => {
+                  const { fill, truncate, style } = columnLayout(column);
+                  return (
+                    <td key={column.key} className={`${alignClass(column)} ${scrollX && index === 0 ? styles.sticky : ""} ${fill ? styles.fill : ""}`} style={style}>
+                      {truncate ? <span className={styles.clip} title={cellTitle(column, row)}>{column.render(row)}</span> : column.render(row)}
+                    </td>
+                  );
+                })}
                 {rowActions && <td className={styles.actions} onClick={(event) => event.stopPropagation()}>{rowActions(row)}</td>}
               </tr>
             );

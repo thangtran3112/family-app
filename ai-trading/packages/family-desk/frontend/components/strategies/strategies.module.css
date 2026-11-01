@@ -41,7 +41,6 @@
   line-height: 36px;
 }
 
-.primaryLink,
 .submitButton {
   display: inline-flex;
   min-height: 44px;
@@ -58,7 +57,6 @@
   transition: opacity 120ms ease;
 }
 
-.primaryLink:hover,
 .submitButton:not(:disabled):hover {
   opacity: 0.86;
 }
@@ -68,13 +66,12 @@
   opacity: 0.42;
 }
 
-.primaryLink:focus-visible,
 .submitButton:focus-visible,
 .secondaryButton:focus-visible,
 .templateCard:focus-visible,
 .field input:focus-visible,
 .field select:focus-visible {
-  outline: 2px solid var(--color-amber);
+  outline: var(--focus-ring);
   outline-offset: 3px;
 }
 
@@ -115,30 +112,6 @@
   align-items: center;
   font-size: var(--text-row);
   font-weight: var(--weight-semibold);
-}
-
-.stageBadge {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  border: 1px solid var(--color-hairline);
-  border-radius: 4px;
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  padding: 3px 8px;
-  text-transform: uppercase;
-}
-
-.stage_draft {
-  border-color: #55555b;
-}
-
-.stage_alert_only,
-.stage_paper {
-  border-color: var(--color-amber);
-  color: var(--color-amber);
 }
 
 .noVersion {
@@ -555,7 +528,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .primaryLink,
   .submitButton {
     transition: none;
   }

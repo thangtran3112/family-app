@@ -1,6 +1,7 @@
 import type { Condition, Operand } from "@ai-trading/contracts";
 import type { FilterStrategySpecV1 } from "@ai-trading/contracts/filter-strategy-spec-v1";
 import type { Problem } from "../api/schemas.ts";
+import { COMPARE_OPERATORS } from "../spec/labels.ts";
 import { operandFor } from "./operands.ts";
 
 // The filter editor's form model (D6, 02k §4). The form keeps typed-in text for numbers so a half-typed
@@ -108,15 +109,8 @@ export function rowKind(condition: Condition): RowKind {
   return "static";
 }
 
-export const OPERATORS = [
-  { op: "gt", label: "is greater than" },
-  { op: "gte", label: "is at least" },
-  { op: "lt", label: "is less than" },
-  { op: "lte", label: "is at most" },
-  { op: "crosses_above", label: "crosses above" },
-  { op: "crosses_below", label: "crosses below" },
-  { op: "within_pct", label: "is within % of" },
-] as const;
+/** The operators the editor lists: the one table in lib/spec/labels.ts. */
+export const OPERATORS = COMPARE_OPERATORS;
 
 /** Problems under a dotted path prefix (`watch.runOn`, `when.all.1`); a single-row `when` has no group index. */
 export function problemsFor(problems: readonly Problem[], prefix: string): Problem[] {
@@ -127,8 +121,3 @@ export function problemsForRow(problems: readonly Problem[], form: Pick<FilterFo
   return form.rows.length === 1 ? problemsFor(problems, "when") : problemsFor(problems, `when.${form.mode}.${index}`);
 }
 
-/** Problems that belong to no field the form shows (so they would otherwise be lost). */
-export function unplacedProblems(problems: readonly Problem[], form: Pick<FilterForm, "mode" | "rows">): Problem[] {
-  const prefixes = ["name", "watch", "assetTypes", "liquidity", "rank", "maxResults", "when"];
-  return problems.filter((problem) => !prefixes.some((prefix) => problem.path === prefix || problem.path.startsWith(`${prefix}.`)) || (form.rows.length === 0 && problem.path.startsWith("when")));
-}

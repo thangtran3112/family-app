@@ -138,16 +138,23 @@ export const exitKindFor = (side: "long" | "short"): "long_exit" | "short_exit" 
 export type PauseExit = { symbol: string; kind: "long_exit" | "short_exit"; /** The paused name is the one on the chart. */ here: boolean };
 
 /**
- * What the toast's Exit does: an exit mark on the paused name. On the chart's own name the side comes from the open hold;
- * for another name from its strip row. Null when the side is not known (the button is then left off).
+ * What the toast's Exit does: an exit mark on the paused name. On the chart's own name the side comes from the open trade;
+ * for another name from its swing strip row or, on a day, from the portfolio (`held`). Null when the side is not known (the
+ * button is then left off).
  */
 export function pauseExit(
   paused: Pick<Paused, "symbol">,
-  context: { sessionSymbol: string; openSide: "flat" | "long" | "short"; strip: readonly StripRow[] | null },
+  context: {
+    sessionSymbol: string;
+    openSide: "flat" | "long" | "short";
+    strip: readonly StripRow[] | null;
+    held?: readonly { symbol: string; side: "long" | "short" | null }[];
+  },
 ): PauseExit | null {
   const here = paused.symbol === context.sessionSymbol;
   const fromStrip = context.strip?.find((row) => row.symbol === paused.symbol)?.hold?.side ?? null;
-  const side = here && context.openSide !== "flat" ? context.openSide : fromStrip;
+  const fromHeld = context.held?.find((row) => row.symbol === paused.symbol)?.side ?? null;
+  const side = here && context.openSide !== "flat" ? context.openSide : (fromStrip ?? fromHeld);
   return side === null ? null : { symbol: paused.symbol, kind: exitKindFor(side), here };
 }
 

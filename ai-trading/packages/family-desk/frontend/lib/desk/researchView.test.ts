@@ -85,6 +85,7 @@ test("consensus periods, surprises, revisions and next earnings", () => {
   assert.deepEqual(revisionCells(consensus.revisions).map((cell) => cell.text), ["+0.4%", "+1.4%", "+2.9%"]);
   // JNJ has no snapshot history yet: every revision says so in words, never a zero.
   assert.deepEqual(revisionCells(jnj.consensus!.revisions).map((cell) => cell.text), ["Needs more history", "Needs more history", "Needs more history"]);
+  assert.deepEqual(revisionCells(jnj.consensus!.revisions).map((cell) => cell.tone), ["neutral", "neutral", "neutral"], "no history carries the shared neutral tone");
   assert.equal(nextEarningsText(consensus.next_earnings), "Thu 2027-01-28 · after close");
   assert.equal(nextEarningsText(null), "—");
   assert.deepEqual(targetsView(aapl.targets!), { low: "$189.75", mean: "$259.17", high: "$312.39", counts: "24 Buy · 9 Hold · 2 Sell" });
@@ -111,7 +112,7 @@ test("valuation methods, their inputs in words and the engine's fallback sentenc
   assert.ok(rows[2]!.inputs.includes("Forward P/E 28.4"));
   assert.deepEqual(rows[2]!.fallbacks, ["EBITDA multiple: the sector median, no five-year history"]);
   assert.equal(methodRows([{ id: "dcf", value: null, inputs: { growth_pct: null }, fallbacks: [] }])[0]!.value, "Not enough data");
-  assert.equal(methodRows([{ id: "dcf", value: null, inputs: { growth_pct: null }, fallbacks: [] }])[0]!.inputs[0], "Growth: not available");
+  assert.equal(methodRows([{ id: "dcf", value: null, inputs: { growth_pct: null }, fallbacks: [] }])[0]!.inputs[0], "Growth: —");
   assert.equal(inputLabel("something_new_pct"), "Something new");
   const blend = blendView(valuation.blend, valuation.price)!;
   assert.deepEqual([blend.blend, blend.price, blend.word, blend.blendPct], ["$253.92", "$231.40", "Blend is above the price", 100]);

@@ -100,6 +100,7 @@ export const dayList: DayList = {
   watch_check: { starred: ["SMCI"], traded: [], off_watch: [], verdict: "no_trades", label: "No practice trades yet" },
   clock: null,
   sessions: [],
+  day_pnl: { realized_usd: 0, open_usd: 0, total_usd: 0, open_count: 0, as_of: "2026-03-10T12:15:00Z" },
   thread: threadBrief,
   warnings: ["Only 2 of the 131 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the next days' lists"],
   relist: null,
@@ -118,7 +119,8 @@ export const endedDayList: DayList = {
   ...dayList,
   status: "ended",
   clock: "2026-03-10T15:30:00Z",
-  sessions: [{ id: 12, symbol: "SMCI", status: "ended", revealed_through: "2026-03-10T15:30:00Z", behind_clock: false, has_open_trade: false }],
+  sessions: [{ id: 12, symbol: "SMCI", status: "ended", revealed_through: "2026-03-10T15:30:00Z", behind_clock: false, has_open_trade: false, trades: 1, realized_usd: 63, position: null }],
+  day_pnl: { realized_usd: 63, open_usd: 0, total_usd: 63, open_count: 0, as_of: "2026-03-10T15:30:00Z" },
   journal: {
     sessions: [{ id: 12, symbol: "SMCI", trades: 1, pnl_usd: 63, adherence_pct: 100 }],
     trades: 1,

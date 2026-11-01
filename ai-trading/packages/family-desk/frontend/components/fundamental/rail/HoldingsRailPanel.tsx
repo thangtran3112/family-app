@@ -1,12 +1,12 @@
 "use client";
 
 import { useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
+import { Delta } from "@/components/ui/Delta";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { holdingsEmptyText, railRows } from "@/lib/desk/holdingsView";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { AiRatingChip } from "../shared/AiRatingChip";
 import { ImportText } from "../shared/ImportText";
-import fund from "../fundamental.module.css";
 import styles from "./rail.module.css";
 
 /** The Holdings tab of the Fundamental left rail (02n §b1): symbol, weight, change and the Desk AI dot; 1180 keeps symbol, weight and change. */
@@ -26,7 +26,7 @@ export function HoldingsRailPanel({ band }: { band: ShellBand }) {
           <button type="button" className={styles.row} data-band={band} aria-pressed={selectedSymbol === row.symbol} onClick={() => setSelectedSymbol(row.symbol)}>
             <span className={styles.symbol}>{row.symbol}</span>
             <span className={styles.weight}>{row.weight}</span>
-            <span className={`${styles.change} ${fund.tone}`} data-tone={row.change.tone}>{row.change.text}</span>
+            <Delta tone={row.change.tone} className={styles.change}>{row.change.text}</Delta>
             {band === "1440" && <span className={styles.dot}><AiRatingChip rating={row.rating} compact /></span>}
           </button>
         </li>

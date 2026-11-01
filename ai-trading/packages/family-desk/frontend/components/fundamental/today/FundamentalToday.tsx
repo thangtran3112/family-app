@@ -5,7 +5,9 @@ import Link from "next/link";
 import { MarketStrip } from "@/components/dashboard/MarketStrip";
 import { FundamentalRightRail } from "@/components/fundamental/rail/FundamentalRightRail";
 import { useDeskStatus, useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
-import { FreshnessBadge } from "@/components/ui/FreshnessBadge";
+import { Button } from "@/components/ui/Button";
+import { Freshness } from "@/components/ui/Freshness";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadShortCalls, loadIncome } from "@/lib/desk/coveredCalls";
 import { loadDashboard } from "@/lib/desk/dashboard";
@@ -53,16 +55,16 @@ export function FundamentalToday() {
     <div className={styles.screen} data-testid="fund-today">
       <header className={styles.head}>
         <h1 className={styles.pageTitle}>Today</h1>
-        {market.data && <FreshnessBadge stamp={market.data.stamp} session={market.data.market.session} connection={market.connection === "reconnecting" ? "reconnecting" : "ok"} feed />}
+        {market.data && <Freshness stamp={market.data.stamp} session={market.data.market.session} connection={market.connection === "reconnecting" ? "reconnecting" : "ok"} feed />}
         {updating && <span className={styles.caption}>{COPY.updating}</span>}
-        <button type="button" className={styles.button} onClick={refresh}>Refresh</button>
+        <Button size="md" onClick={refresh}>Refresh</Button>
       </header>
 
       {holdings && <ImportLine state={holdings.import} />}
       {maskValues && (
         <p className={`${styles.muted} ${local.hint}`} data-testid="fund-values-hidden">
           <span>{COPY.valuesHidden.replace(/ Show values$/, "")}</span>
-          <button type="button" className={styles.button} onClick={() => setMaskValues(false)}>{COPY.maskShow}</button>
+          <Button variant="ghost" size="sm" onClick={() => setMaskValues(false)}>{COPY.maskShow}</Button>
         </p>
       )}
 
@@ -92,8 +94,8 @@ export function FundamentalToday() {
             <TileList tiles={[incomeTile(income.data, today, maskValues), openCallsTile(calls.data)]} label="Covered calls" testIdPrefix="fund" dim={dim} />
             {calls.error !== null && calls.data === null && <ErrorBlock subject="open calls" onRetry={calls.refresh} />}
             {status?.options.state === "not_connected" && (calls.data?.length ?? 0) > 0 && <p className={styles.notice}>{COPY.optionQuotesNotConnected}</p>}
-            <section className={styles.panel} aria-labelledby="fund-events-title">
-              <h2 id="fund-events-title" className={styles.panelTitle}>Upcoming events</h2>
+            <Panel aria-labelledby="fund-events-title">
+              <PanelHeader id="fund-events-title" title="Upcoming events" />
               {events.length === 0 ? (
                 <p className={styles.muted}>No earnings dates for your holdings in the next two weeks</p>
               ) : (
@@ -107,7 +109,7 @@ export function FundamentalToday() {
                   ))}
                 </ul>
               )}
-            </section>
+            </Panel>
             <p className={styles.notice} data-testid="fund-futures-deferred">
               {COPY.futuresDeferred} · <Link className={styles.link} href="/futures/read">Futures</Link>
             </p>

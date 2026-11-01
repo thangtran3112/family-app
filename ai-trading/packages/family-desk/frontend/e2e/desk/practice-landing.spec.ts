@@ -118,10 +118,10 @@ test.describe("Practice landing", () => {
     // No "Preset" pills: a filter row is its checkbox, its name and its rule (D-076, M-06).
     await expect(filters).not.toContainText(/Preset|Yours/);
 
-    // The rest of the form is on screen: dates (with the recorded-day note), days, names, hide dates, list time and size, interval, window.
+    // The rest of the form is on screen: dates (with the recorded-day note), days, hide dates, list time and size, interval, window.
     await expect(dialog.getByTestId("first-day-note")).toBeVisible();
     await expect(dialog.getByRole("group", { name: "Days" }).getByRole("button")).toHaveText(["5", "10", "20", "30"]);
-    await expect(dialog.getByRole("group", { name: "Names a day" })).toHaveCount(0); // no limit on names
+    await expect(dialog.getByText("Names a day"), "a day opens any list name: no cap to pick").toHaveCount(0);
     await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planHideDates }).getByRole("button", { name: "Yes" })).toHaveAttribute("aria-pressed", "true");
     await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planListAt }).getByRole("button")).toHaveCount(3);
     await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");

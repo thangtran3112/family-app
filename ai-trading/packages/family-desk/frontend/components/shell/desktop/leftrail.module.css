@@ -4,11 +4,8 @@
 .tab { min-height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
 .tab:hover { background: var(--color-raised); color: var(--color-text); }
 .tab[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--color-amber); color: var(--color-text); }
-.iconButton { display: inline-flex; width: 28px; min-width: 24px; height: 28px; min-height: 24px; flex: 0 0 auto; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0; color: var(--color-muted); cursor: pointer; }
-.iconButton:hover { background: var(--color-raised); color: var(--color-text); }
-.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
-.lock { width: 12px; height: 12px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; color: var(--color-muted); }
-.tab:focus-visible, .iconButton:focus-visible, .select:focus-visible, .symbol:focus-visible, .link:focus-visible, .filterRow:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.lock { display: inline-flex; flex: 0 0 auto; color: var(--color-muted); }
+.tab:focus-visible, .select:focus-visible, .symbol:focus-visible, .link:focus-visible, .filterRow:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .strip { display: flex; width: 48px; height: 100%; flex-direction: column; align-items: center; gap: var(--space-2); padding-top: var(--space-2); }
 .panel { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; }
 /* 8 px at the sides: the 1180 rail has 215 px for Symbol, Last, Chg % and Tag (a 12 px gutter left the table 4 px short). */
@@ -19,11 +16,7 @@
 .symbol { display: block; width: fit-content; max-width: 100%; color: var(--color-text); font-weight: var(--weight-bold); text-decoration: none; }
 .symbol:hover { text-decoration: underline; }
 .name { display: block; max-width: 150px; overflow: hidden; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-regular); text-overflow: ellipsis; }
-.up { color: var(--color-up); }
-.down { color: var(--color-down); }
-.flat { color: var(--color-muted); }
 .tagDot { display: inline-block; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-amber); vertical-align: middle; }
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .filters { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-3); }
 .groupTitle { margin: 0 0 var(--space-1); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .list { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
@@ -42,4 +35,4 @@
 .moreLink { display: flex; min-height: 32px; align-items: center; padding: 0 var(--space-3); color: var(--color-muted); font-size: var(--text-label); }
 .moreLink:hover { background: var(--color-raised); color: var(--color-text); }
 .moreLink[aria-current="page"] { background: var(--color-raised); box-shadow: inset 2px 0 0 var(--color-amber); color: var(--color-text); font-weight: var(--weight-semibold); }
-.moreLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.moreLink:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }

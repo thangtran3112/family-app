@@ -2,6 +2,7 @@
 // Plain links: full document navigation lets the strategy builder's beforeunload guard run.
 
 import { useEffect } from "react";
+import { Icon } from "@/components/ui/Icon";
 import { Menu } from "@/components/ui/Menu";
 import { LANE_HOME, LANE_LABEL, LANE_SUMMARY, LANES, type Lane } from "@/lib/lanes";
 import { isTextField } from "@/lib/replay/keys";
@@ -46,9 +47,9 @@ export function ModeMenu() {
       trigger={(props) => (
         <button type="button" className={styles.modeButton} aria-label={`Mode: ${LANE_LABEL[lane]}`} {...props}>
           {LANE_LABEL[lane]}
-          <svg className={styles.chevron} viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-            <path d="m3 4.5 3 3 3-3" />
-          </svg>
+          <span className={styles.chevron}>
+            <Icon name="chevron-down" size={12} />
+          </span>
         </button>
       )}
     />

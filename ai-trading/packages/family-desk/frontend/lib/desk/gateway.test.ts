@@ -22,8 +22,8 @@ test("no gateway line contains a banned term", () => {
 
 test("BrokerRowsDisabled stays order-free: every input is disabled and no handlers or order calls", () => {
   const source = readFileSync(new URL("../../components/settings/desktop/BrokerRowsDisabled.tsx", import.meta.url), "utf8");
-  const inputs = source.match(/<input[\s\S]*?\/>/g) ?? [];
-  assert.ok(inputs.length > 0, "expected at least one <input");
+  const inputs = source.match(/<(?:input|Switch)[\s\S]*?\/>/g) ?? [];
+  assert.ok(inputs.length > 0, "expected at least one <input or <Switch");
   for (const input of inputs) assert.match(input, /\sdisabled\s/);
   for (const forbidden of ["onChange", "onClick", "onSubmit", "fetch(", "placeOrder"]) {
     assert.equal(source.includes(forbidden), false, forbidden);

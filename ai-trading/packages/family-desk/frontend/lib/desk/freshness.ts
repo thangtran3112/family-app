@@ -1,4 +1,6 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import type { Stamp } from "../api/schemas.ts";
+import type { ShellBand } from "./viewport.ts";
 import { formatAgo, formatAsOfText, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
 
 // The single copy table for freshness, session and empty/error wording (02l §c3, 02m §c3). Components
@@ -100,7 +102,6 @@ export function containsBannedTerm(text: string): boolean {
 export type FreshnessState =
   | "live" | "delayed" | "updating" | "reconnecting" | "paused" | "backup"
   | "closed" | "pre_market" | "after_hours" | "unavailable";
-export type FreshnessTone = "up" | "muted" | "amber" | "down";
 /** Client-side connection state: a request in flight, or the quote connection down (02m §a1). */
 export type Connection = "ok" | "updating" | "reconnecting";
 export type MarketSession = "pre" | "regular" | "after" | "closed";
@@ -119,7 +120,7 @@ export type FreshnessInput = {
 export type FreshnessView = {
   state: FreshnessState;
   label: string;
-  tone: FreshnessTone;
+  tone: Tone;
   /** A filled dot beside the label (only "Live"). */
   dot: boolean;
   /** The last price stays visible but dimmed. */
@@ -130,16 +131,16 @@ export type FreshnessView = {
   mark: string | null;
 };
 
-const TONE: Record<FreshnessState, FreshnessTone> = {
+const TONE: Record<FreshnessState, Tone> = {
   live: "up",
-  delayed: "muted",
-  updating: "muted",
-  reconnecting: "amber",
-  paused: "amber",
-  backup: "amber",
-  closed: "muted",
-  pre_market: "muted",
-  after_hours: "muted",
+  delayed: "neutral",
+  updating: "neutral",
+  reconnecting: "warn",
+  paused: "warn",
+  backup: "warn",
+  closed: "neutral",
+  pre_market: "neutral",
+  after_hours: "neutral",
   unavailable: "down",
 };
 
@@ -250,6 +251,27 @@ export function marketPillOpen(session: MarketSession, quotes: Pick<FreshnessVie
 /** The pill at the 1180 band: just the session word, the full text moves to a tooltip. */
 export function marketPillShort(session: MarketSession): string {
   return session === "regular" ? "Open" : session === "pre" ? COPY.marketPre : session === "after" ? COPY.marketAfter : "Closed";
+}
+
+export type MarketPillInput = {
+  /** Null until /status answers. */
+  market: { session: MarketSession; next_open: string | null } | null;
+  quotes: FreshnessInput["stamp"];
+  connection: Connection;
+  /** The first /status load failed and there is nothing to show. */
+  failed: boolean;
+  band: ShellBand;
+  now?: Date;
+};
+
+/** Everything the top-bar market pill shows, decided here: whole text (its title), the text on screen, the green dot and the stale mark. */
+export function marketPillView({ market, quotes, connection, failed, band, now }: MarketPillInput): { full: string; shown: string; open: boolean; stale: boolean } {
+  const full = failed ? "Market status unavailable" : market ? marketPillText(market.session, market.next_open) : "Checking the market…";
+  // The quote badge beside the pill already says "Market closed": the pill drops that prefix and keeps what is new, when it opens (D-107).
+  const shown = market && band === "1180" ? marketPillShort(market.session) : full.replace(/^Market closed · (.)/, (_, first: string) => first.toUpperCase());
+  // "Market open" is true of the market, not of the numbers: the dot goes green only while the quotes are current too (V-Today-01).
+  const feed = resolveFreshness({ stamp: quotes, session: market?.session, connection, feed: true, now });
+  return { full, shown, open: market !== null && marketPillOpen(market.session, feed), stale: market?.session === "regular" && feed.stale };
 }
 
 export type AlertsRuntimeState = "running" | "paused_no_quotes" | "paused_by_user" | "not_started";
@@ -406,7 +428,6 @@ export const PRACTICE_COPY = {
   dayDateHidden: "Date hidden",
   dayFiltersNote: "Chosen at setup · a name that passes either one is listed",
   dayFiltersNoteOne: "Chosen at setup",
-  dayStarred: "Starred {n}",
   dayUniverse: "Universe: today's Desk set, up to {max} names by today's dollar volume ({size} names here). It can differ from the names that traded on that day.",
   daySource: "Source: Alpaca SIP bars up to {through} · nothing after the list time is shown",
   dayNoNames: "No name passed your filters on this day · widen a filter, or end the day to open the next",
@@ -424,15 +445,26 @@ export const PRACTICE_COPY = {
   dayWatch: "Your names",
   dayWatchEmpty: "Star names to keep them in view",
   dayPractice: "Practice {symbol}",
-  dayPracticeHint: "Switch names any time · close an open trade first · End day scores the day",
-  dayNamesToday: "{used} {names} practiced today",
-  dayNamesTitle: "Day names",
   daySwitch: "Switch to {symbol}",
   dayOnNow: "On now",
   dayBehind: "Behind the clock",
-  dayHolding: "Open trade",
   daySwitchHint: "A name opens at the day clock, {time}. What it did earlier is on its chart and is not scored.",
-  dayStripNone: "Star a name on the list, or pick one from the table, to start practicing",
+  dayPortfolio: "Portfolio",
+  dayPortfolioEmpty: "Click a name in Candidates to open its chart · it joins your portfolio",
+  dayPortfolioTotal: "Day P/L",
+  dayPortfolioSplit: "realized {realized} · open {open}",
+  dayOpenHint: "Click a name to open its chart and practice it · your first name starts the day",
+  dayOpenRelistHint: "Click a name to open its chart and practice it · your first name starts the day · re-list first if you want a later list time",
+  dayOpen: "Open {symbol}",
+  dayOpening: "Opening {symbol}…",
+  dayPeekAt: "Peek at {symbol}",
+  dayPortfolioOpenOf: "{open} open of {cap}",
+  dayPortfolioAsOf: "as of {time}",
+  dayPortfolioExit: "Exit {symbol}",
+  dayPortfolioLast: "last {price}",
+  dayPortfolioRealized: "realized {amount}",
+  dayStopCrossed: "Stop crossed {time}",
+  dayStripNone: "Click a name in Candidates to open its chart",
   replayBehind: "{symbol} is behind the day clock, {clock} · catch up to practice it. What happened meanwhile is on the chart and is not scored.",
   replayCatchUp: "Catch up",
   replayCatchUpError: "Couldn't catch up · Try again",
@@ -445,12 +477,13 @@ export const PRACTICE_COPY = {
   dayRescanCounts: "{shown} of {matched} matched · {fresh} new since your list",
   dayRescanStale: "The day clock is now {clock} · this scan is older. Re-scan to update it.",
   dayRescanNew: "New since your list",
-  dayRescanReadOnly: "Names new since your list are for reading: you star and practice names from the list above.",
+  dayRescanReadOnly: "Names new since your list are for reading: you open names from the list above.",
   dayRescanError: "Couldn't re-scan · Try again",
   dayRescanning: "Re-scanning…",
   dayRescanStillWorking: "Still scanning · this can take a minute or two",
   dayEnd: "End day",
   dayEndWarning: "Ending the day shows how every name moved after the list.",
+  dayEndExits: "Ending the day exits {count} open practice {trades} at the price you see now: {names}",
   dayEnded: "Day over",
   dayPeek: "Peek",
   dayPeekNone: "Pick a row to peek at its chart before the open",
@@ -477,7 +510,7 @@ export const PRACTICE_COPY = {
   reviewDayNone: "No practice trades this day",
   reviewDayHint: "Practice prices to the cent · no spread, slippage, or fees",
   reviewBalance: "Balance {before} → {after}",
-  reviewNoPicks: "You did not star or trade a name",
+  reviewNoPicks: "You did not open a name",
   reviewEmpty: "No moves to show for this day",
   backToList: "Back to the day list",
   dayAfter: "Next day",
@@ -517,6 +550,7 @@ export const PRACTICE_COPY = {
   threadTodayLine: "{pnl} realized so far · {trades}",
   threadBalanceLine: "Thread balance {balance}",
   threadTodayShort: "today {pnl}",
+  threadTodayOpen: "{count} open {pnl}",
   threadResume: "Resume thread",
   threadResumeHint: "Continues today's list. The balance carries over, also when you pass a day.",
   threadResumeNeedsPlan: "Set up the daily list below to start practicing in this thread",

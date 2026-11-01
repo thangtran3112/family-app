@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui/Field";
 import { OrdersOffNotice } from "@/components/shell/desktop/OrdersOffNotice";
 import styles from "./settingsDesktop.module.css";
 
@@ -13,11 +14,8 @@ export function BrokerRowsDisabled() {
       {ROWS.map((row) => (
         <div className={styles.row} key={row.id}>
           <label className={styles.rowTitle} htmlFor={row.id}>{row.title}</label>
-          <input
+          <Switch
             id={row.id}
-            type="checkbox"
-            role="switch"
-            className={styles.switch}
             checked={false}
             disabled
             aria-disabled="true"

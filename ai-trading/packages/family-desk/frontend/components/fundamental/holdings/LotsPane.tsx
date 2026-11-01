@@ -1,6 +1,8 @@
 "use client";
 
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Delta } from "@/components/ui/Delta";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { HoldingAccount } from "@/lib/api/fundamentalSchemas";
 import { loadLots } from "@/lib/desk/holdings";
@@ -21,25 +23,23 @@ export function LotsPane({ symbol, masked, accounts }: { symbol: string; masked:
     { key: "shares", label: "Shares", align: "right", render: (lot) => lot.shares },
     { key: "cost", label: "Cost/share", align: "right", render: (lot) => lot.cost },
     { key: "term", label: "Term", render: (lot) => lot.term },
-    { key: "gain", label: "Gain", align: "right", render: (lot) => <span className={fund.tone} data-tone={lot.gain.tone}>{lot.gain.text}</span> },
+    { key: "gain", label: "Gain", align: "right", render: (lot) => <Delta tone={lot.gain.tone}>{lot.gain.text}</Delta> },
   ];
 
   return (
     <div className={styles.lotsGrid} data-testid="fund-lots">
-      <section className={`${fund.panel} ${styles.pane}`} aria-label={`${symbol} tax lots`}>
-        <h2 className={fund.panelTitle}>{symbol} · tax lots</h2>
+      <Panel aria-label={`${symbol} tax lots`}>
+        <PanelHeader title={`${symbol} · tax lots`} />
         {query.error !== null && query.data === null ? (
           <ErrorBlock subject="lot list" onRetry={query.refresh} />
         ) : query.data === null ? (
           <LoadingBlock label="Loading lots…" height={80} />
         ) : (
-          <div className={fund.tight}>
-            <DenseTable caption={`${symbol} tax lots`} columns={columns} rows={lots} rowKey={(lot) => lot.key} density="compact" empty={<p className={fund.muted}>No tax lots for {symbol}</p>} />
-          </div>
+          <DenseTable caption={`${symbol} tax lots`} columns={columns} rows={lots} rowKey={(lot) => lot.key} density="compact" tight empty={<p className={fund.muted}>No tax lots for {symbol}</p>} />
         )}
-      </section>
-      <section className={`${fund.panel} ${styles.pane}`} aria-label={`${symbol} short calls`}>
-        <h2 className={fund.panelTitle}>{symbol} · short calls</h2>
+      </Panel>
+      <Panel aria-label={`${symbol} short calls`}>
+        <PanelHeader title={`${symbol} · short calls`} />
         {query.data === null ? null : calls.length === 0 ? (
           <p className={fund.muted}>No open short calls on {symbol}</p>
         ) : (
@@ -55,7 +55,7 @@ export function LotsPane({ symbol, masked, accounts }: { symbol: string; masked:
             </div>
           ))
         )}
-      </section>
+      </Panel>
     </div>
   );
 }
