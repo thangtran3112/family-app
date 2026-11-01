@@ -870,7 +870,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
   });
 
-  test("the portfolio reflects a new held position, in the replay and back on the day page", async ({ page, context }) => {
+  test("the portfolio reflects a new held position, in the replay and on the Portfolio tab, never on the day list", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     await openFirstDay(page);
@@ -892,18 +892,17 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(flat.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
     await expect(flat.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
     const held = ((await flat.locator('[data-symbol="TSLA"]').textContent()) ?? "").match(/Long \d+ @ \$[\d,.]+/)![0];
-    // Back to the day list: the same row, and a day total.
+    // Back to the day list: it shows the list of names only, no portfolio section and no Portfolio tab in the right rail.
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
-    const onDay =
-      test.info().project.name === "desktop-1180"
-        ? await (async () => {
-            await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-            return page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
-          })()
-        : page.getByRole("complementary", { name: "Practice side panel" }).getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-    await expect(onDay.locator('[data-symbol="TSLA"]')).toContainText(held);
-    await expect(onDay.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    // The Portfolio subtab holds the same row and a day total.
+    await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: "Portfolio", exact: true }).click();
+    await page.waitForURL(/\/practice\/thread\?id=\d+&tab=portfolio/);
+    const onTab = page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
+    await expect(onTab.locator('[data-symbol="TSLA"]')).toContainText(held);
+    await expect(onTab.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
   });
 
   test("no star or names cap anywhere on the day page", async ({ page, context }) => {
@@ -1044,7 +1043,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(row.getByRole("button", { name: "Start a new plan" })).toBeVisible();
   });
 
-  test("the portfolio sits above the block's days in the left rail at 1440 and opens from the right rail at 1180, and the block's days stay open for a short block (D-097)", async ({ page, context }) => {
+  test("the day list's left rail carries only the block's days, with no portfolio at 1440 or at 1180, and the block's days stay open for a short block (D-097)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await saveFilter(context);
     const dialog = await openNewPlan(page);
@@ -1055,16 +1054,8 @@ test.describe("Practice day list · fix wave 5S", () => {
     const side = page.getByRole("complementary", { name: "Practice side panel" });
     const block = side.locator("details").filter({ hasText: "This block · 10 days" });
     await expect(block, "ten days or fewer start open").toHaveAttribute("open", "");
-    if (test.info().project.name === "desktop-1180") {
-      await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-      await expect(page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio })).toContainText(PRACTICE_COPY.dayPortfolioEmpty);
-      return;
-    }
-    const portfolio = side.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-    await expect(portfolio).toContainText(PRACTICE_COPY.dayPortfolioEmpty);
-    const [p, b] = [(await portfolio.boundingBox())!, (await block.boundingBox())!];
-    expect(p.y, "the portfolio comes first").toBeLessThan(b.y);
-    expect(p.y + p.height, "and it is on screen, above the footer").toBeLessThan(page.viewportSize()!.height - 40);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio }), "the portfolio is the Portfolio tab's").toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
   });
 
   test("a day that is not chosen and one that is not found say different things, and a journal with no thread says one thing (D-116, D-117)", async ({ page }) => {

@@ -52,7 +52,7 @@ import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
-import { PortfolioPanel, useDayPortfolio } from "@/components/practice/replay/Portfolio";
+import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
@@ -202,9 +202,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const practicing = list.sessions.at(-1) ?? null;
   const opened = new Set(list.sessions.map((session) => session.symbol));
   const columns = columnsOf(list);
-  // The portfolio re-reads whenever the day page's own data moves (a name opened, the day ended).
+  // The End-day confirm names the open trades from this read, which re-reads whenever the day page's own data moves (a name opened, the day ended).
   const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
-  // One read of the day list serves the rail's Portfolio and the End-day confirm, so both name the same open trades.
   const portfolio = useDayPortfolio(list.id, portfolioRevision);
   const exits = endDayExitText(portfolioRows(portfolio.data ?? list), list.clock);
 
@@ -482,7 +481,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
-      <DayLeftPanel list={list} thread={thread.data} portfolio={portfolio} />
+      <DayLeftPanel list={list} />
       {peeking && selected !== null && !ended && (
         <Dialog
           title={PRACTICE_COPY.dayPeek}
@@ -510,8 +509,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         openIds={railOpen}
         onOpenIdsChange={setRailOpen}
         sections={[
-          // At 1440 the portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from this drawer.
-          ...(band === "1180" ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: <PortfolioPanel dayListId={list.id} query={portfolio} /> }] : []),
           {
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
