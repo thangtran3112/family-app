@@ -29,7 +29,7 @@ function watchReplayAnswers(page: Page) {
   return bodies;
 }
 
-const playhead = (page: Page) => page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd");
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 const marksTab = (page: Page) => page.getByRole("tab", { name: "Marks" });
 
 /** A right-rail section: stacked in the rail at 1440, a drawer behind the strip at 1180 (it opens here). */
@@ -127,7 +127,7 @@ test.describe("Practice", () => {
     await page.keyboard.press("4");
     await page.keyboard.press("Space");
     await expect(page.getByText(practiceText("playing", { speed: 10 }))).toBeVisible();
-    await expect(page.getByText("Playing · 10x")).toBeVisible(); // D-025: the player's state as a pill in the header
+    await expect(page.getByText("Playing · 10x")).toBeVisible(); // D-025: the player's state as a pill beside the thread's clock
     // D-024: the tape has its BIG column and names the pace window.
     await expect(page.getByRole("columnheader", { name: "Big" })).toBeVisible();
     await expect(page.getByText("Pace · 10 seconds")).toBeVisible();

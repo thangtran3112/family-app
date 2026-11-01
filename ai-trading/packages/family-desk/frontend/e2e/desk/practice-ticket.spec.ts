@@ -16,7 +16,7 @@ async function openTicket(page: Page, context: Parameters<typeof createStubSessi
   await expect(page.getByText(practiceText("ready", { time: "9:30 AM" }))).toBeVisible();
   // Reveal two bars so the replay has a last price to trade at.
   for (let step = 0; step < 2; step += 1) await page.getByRole("button", { name: "Step", exact: true }).click();
-  await expect(page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd")).not.toContainText("9:30:00");
+  await expect(page.getByTestId("thread-clock-time")).not.toContainText("9:30:00");
   return replayRail(page, "Practice");
 }
 

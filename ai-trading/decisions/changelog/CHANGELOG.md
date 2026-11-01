@@ -2,6 +2,7 @@
 
 One line per shipped phase. Session-level detail lives in the matching handoff (`../plans/handoffs/`); design detail in the ADR it proved.
 
+- **Practice thread clock (2026-11-01):** the replay transport (Play, Step, speed, Jump, the time) moves from under one name's chart to a "Thread time" bar across the top of the workspace; the chart keeps only its own controls (interval, Chart settings, Full screen, Buy/Sell); the bar shows the shared day clock; Step from a name behind the clock moves the thread one bar. [ADR-0017](../adr/ADR-0017-thread-clock.md)
 - **Practice multi-position (2026-11-01):** one average-cost position per name with any number of fills: scale in, sell part, flip, cash the only size rule; swing holds split slices with `part_exit`; migration `0017`. Branch `feature/practice-multi-position`. [ADR-0016](../adr/ADR-0016-practice-broker-ticket.md)
 - **Practice broker ticket (2026-11-01):** Buy/Sell, quantity and order type (Market, Limit, Stop, Stop-limit; Bracket named, not simulated), optional stop, cash as the only size rule, honest limit/stop fills from `advance`, migration `0016`, Back/End day row aligned. Branch `feature/practice-neutral-broker`. [ADR-0016](../adr/ADR-0016-practice-broker-ticket.md)
 - **5R (2026-10-31):** Tradier + marketdata.app adapters behind the registry, in no default chain. PR #206 → `dev`, release #207 → `main`, deploy 41166875184. [ADR-0004](../adr/ADR-0004-adapter-pattern.md)
