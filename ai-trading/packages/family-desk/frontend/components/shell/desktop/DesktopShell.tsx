@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { hasMoreLeftRail, hasPracticeLeftRail, isPracticePath } from "@/lib/lanes";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { DeskHoldingsProvider, DeskStatusProvider, DeskUiProvider, LeftSlotContext, RailSlotContext, useDeskUi } from "./DeskContext";
+import { MainFocus } from "@/components/shell/MainFocus";
 import { LeftRail } from "./LeftRail";
 import { MoreRail } from "./MoreRail";
 import { PracticeBand, PracticeChromeProvider } from "./PracticeChrome";
@@ -57,6 +58,7 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
         <main className="dk-center" id="main-content" tabIndex={-1}>
           {children}
         </main>
+        <Suspense fallback={null}><MainFocus /></Suspense>
         <aside className="dk-right" ref={setSlot} aria-label="Context" />
         <div className="dk-status"><StatusBar /></div>
       </div>
