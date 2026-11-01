@@ -28,17 +28,13 @@ export type PracticeChromeState = {
 type PracticeChromeValue = {
   state: PracticeChromeState | null;
   setState: (state: PracticeChromeState | null) => void;
-  /** The hub registers this so a click on a left-rail symbol fills the setup instead of leaving the page. */
-  picker: { pick: (symbol: string) => void } | null;
-  setPicker: (picker: { pick: (symbol: string) => void } | null) => void;
 };
 
 const Context = createContext<PracticeChromeValue | null>(null);
 
 export function PracticeChromeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PracticeChromeState | null>(null);
-  const [picker, setPicker] = useState<{ pick: (symbol: string) => void } | null>(null);
-  const value = useMemo<PracticeChromeValue>(() => ({ state, setState, picker, setPicker }), [state, picker]);
+  const value = useMemo<PracticeChromeValue>(() => ({ state, setState }), [state]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -78,23 +74,6 @@ export function useReportPracticeChrome(next: PracticeChromeState | null): void 
   }, [setState, present, day, hidden, playhead, scope, statusKey, canReveal]);
   useEffect(() => () => setState(null), [setState]);
 }
-
-/** The hub registers its symbol handler while mounted. */
-export function useRegisterSymbolPicker(pick: (symbol: string) => void): void {
-  const { setPicker } = useValue();
-  const latest = useRef(pick);
-  useEffect(() => {
-    latest.current = pick;
-  });
-  useEffect(() => {
-    const picker = { pick: (symbol: string) => latest.current(symbol) };
-    setPicker(picker);
-    return () => setPicker(null);
-  }, [setPicker]);
-}
-
-/** The left-rail watchlist panel asks: `null` means a symbol click navigates as usual. */
-export const useSymbolPicker = (): ((symbol: string) => void) | null => useValue().picker?.pick ?? null;
 
 /** The 28 px band under the top bar on every Practice page. A hidden session says why, and offers to show the date (D-023). */
 export function PracticeBand() {

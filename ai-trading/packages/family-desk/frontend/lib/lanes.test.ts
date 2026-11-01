@@ -208,9 +208,11 @@ test("the More rail lists the Settings sections and Feedback, and selects the on
   assert.equal(moreSectionFor("/settings", "#unknown"), "defaults");
 });
 
-test("the replay, the day list and the journal own the left rail", () => {
-  for (const path of ["/practice/replay", "/practice/day", "/practice/journal", "/practice/day/"]) assert.equal(hasPracticeLeftRail(path), true, path);
-  for (const path of ["/practice", "/", "/watchlists", "/practice/other"]) assert.equal(hasPracticeLeftRail(path), false, path);
+test("every Practice route owns the left slot, so the global watchlists never show there; no other route does", () => {
+  for (const path of ["/practice", "/practice/", "/practice/thread", "/practice/week", "/practice/replay", "/practice/day", "/practice/journal", "/practice/day/"]) {
+    assert.equal(hasPracticeLeftRail(path), true, path);
+  }
+  for (const path of ["/", "/watchlists", "/screener", "/practices", "/paper", "/backtests", "/settings"]) assert.equal(hasPracticeLeftRail(path), false, path);
 });
 
 test("the futures specs page is shared, so its way back is the active mode's own futures screen, never the other mode's", () => {

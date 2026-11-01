@@ -410,3 +410,30 @@ test.describe("Practice week review · fix wave 5S", () => {
     await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/thread?id=${id}`);
   });
 });
+
+// The Watchlists rail was inert on Practice (a Backtest symbol has no link) and showed live quotes beside a practice day, so the
+// landing, the thread page and the week review leave the left slot empty at zero width, like the other Practice routes own theirs.
+test.describe("Practice · no Watchlists rail", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("the landing, the thread page and the week review have no Watchlists rail and no left column; Technical keeps its rail", async ({ page, context }) => {
+    const id = await createThreadByApi(context);
+    for (const path of ["/practice", overviewUrl(id), `/practice/week?thread=${id}&week=1`]) {
+      await openDesk(page, path);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(page.getByRole("complementary", { name: /^Watchlists/ }), path).toHaveCount(0);
+      await expect(page.getByRole("tab", { name: "Watchlists", exact: true }), path).toHaveCount(0);
+      await expect(page.getByText("Add symbols to start watching"), path).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Open Watchlists" }), path).toHaveCount(0);
+      const [left, center] = [await page.locator(".dk-left").boundingBox(), await page.locator("#main-content").boundingBox()];
+      expect(Math.round(left!.width), `${path}: no left column`).toBe(0);
+      expect(Math.round(center!.x), `${path}: the page starts at the window's left edge`).toBe(0);
+      await expectCleanScreen(page);
+    }
+    // The other modes are untouched.
+    await openDesk(page, "/screener");
+    await expect(page.getByRole("complementary", { name: "Watchlists and filters" })).toBeVisible();
+  });
+});

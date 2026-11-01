@@ -122,7 +122,7 @@ export type ShellSection = keyof typeof SECTION_LANES;
 export const shows = (lane: Lane, section: ShellSection): boolean => (SECTION_LANES[section] as readonly Lane[]).includes(lane);
 
 export type LeftRailTab = "holdings" | "watchlists" | "filters";
-/** Left-rail tabs per mode, first one open. On the Backtest hub the watchlists are the setup picker. */
+/** Left-rail tabs per mode, first one open. Backtest keeps the one entry for its two fixture routes (/paper, /backtests): no Practice route reaches this rail (`hasPracticeLeftRail`). */
 export const LEFT_RAIL_TABS: Record<Lane, readonly LeftRailTab[]> = {
   technical: ["watchlists", "filters"],
   fundamental: ["holdings", "watchlists"],
@@ -187,8 +187,10 @@ export function isPracticePath(pathname: string): boolean {
 /** The replay workspace puts its Session panel in the left rail instead of the watchlists. */
 export const isReplayWorkspacePath = (pathname: string): boolean => normalize(pathname) === "/practice/replay";
 
-/** The replay, the day list and the thread journal fill the left rail themselves (D-013, D-039) instead of showing the watchlists. */
-export const hasPracticeLeftRail = (pathname: string): boolean => ["/practice/replay", "/practice/day", "/practice/journal"].includes(normalize(pathname));
+/** Every Practice route owns the left slot, never the global watchlists: the replay, the day list and the journal fill it (D-013, D-039);
+ * the hub, the thread page and the week review leave it empty, and the shell collapses an empty slot to 0 px. The watchlists were inert
+ * there (a Backtest symbol has no link, `SYMBOL_HREF.backtest`) and showed live quotes beside a practice day. */
+export const hasPracticeLeftRail = (pathname: string): boolean => isPracticePath(pathname);
 
 /** The More group (Settings, More and the Feedback log, 02s) swaps the watchlists for the "Settings & More" section list (board `KSZ-0`). */
 export const hasMoreLeftRail = (pathname: string): boolean => ["/settings", "/more", "/feedback", "/feedback/new"].includes(normalize(pathname));

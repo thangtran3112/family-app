@@ -237,8 +237,8 @@ test("Backtest mode: Practice and Journal tabs, no market pill, search or bell, 
   await expect(top.getByRole("link", { name: "Family Desk" })).toHaveAttribute("href", "/practice");
   await expect(top.getByRole("button", { name: "Account menu" })).toBeVisible();
   await expect(top.getByRole("status")).toHaveCount(0);
-  const left = page.getByRole("complementary", { name: "Watchlists", exact: true });
-  await expect(left.getByRole("tab")).toHaveText(["Watchlists"]);
+  // Practice has no Watchlists rail (it was inert here: a Backtest symbol has no link); the hub leaves the left slot empty.
+  await expect(page.getByRole("complementary", { name: "Watchlists", exact: true })).toHaveCount(0);
   const footer = page.getByRole("contentinfo", { name: "Status" });
   await expect(footer).toContainText("Practice · past market data");
   await expect(footer).not.toContainText("Market closed");
