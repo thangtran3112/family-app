@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StrategyList } from "@/components/strategies/StrategyList";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FormActionBar } from "@/components/ui/FormActionBar";
 import { deskFetch } from "@/lib/api/client";
 import {
@@ -65,6 +66,8 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
   const [saving, setSaving] = useState(false);
   const [stagePending, setStagePending] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // What she was about to do (pick another version or template) while the question about her unsaved edits is open.
+  const [discarding, setDiscarding] = useState<{ proceed: () => void } | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [initialTemplate, setInitialTemplate] = useState(STRATEGY_TEMPLATES[0]?.slug ?? "");
 
@@ -118,34 +121,38 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
   const validation = useMemo(() => form ? validateSpecForm(form) : null, [form]);
   const canSave = validation?.result.success === true;
 
-  function confirmDiscard(): boolean {
-    return !dirty || window.confirm("You have unsaved changes. Discard them?");
+  /** Runs `proceed` now, or after she agrees to drop her unsaved edits. */
+  function afterDiscard(proceed: () => void) {
+    if (dirty) setDiscarding({ proceed });
+    else proceed();
   }
 
   function selectVersion(version: StrategyVersion) {
-    if (!confirmDiscard()) return;
-    const nextForm = initialForm(version.spec);
-    setSelectedVersionId(version.id);
-    setDirty(false);
-    setSaveError("");
-    if (!nextForm) {
-      setForm(null);
-      setFormError("This stored version does not match the current schema. Its exact stored JSON remains available below.");
-      return;
-    }
-    setFormError("");
-    setForm(nextForm);
+    afterDiscard(() => {
+      const nextForm = initialForm(version.spec);
+      setSelectedVersionId(version.id);
+      setDirty(false);
+      setSaveError("");
+      if (!nextForm) {
+        setForm(null);
+        setFormError("This stored version does not match the current schema. Its exact stored JSON remains available below.");
+        return;
+      }
+      setFormError("");
+      setForm(nextForm);
+    });
   }
 
   function selectInitialTemplate(slug: string) {
-    if (!confirmDiscard()) return;
-    const template = STRATEGY_TEMPLATES.find((item) => item.slug === slug);
-    if (!template || !loaded) return;
-    const nextForm = initialForm({ ...template.spec, name: loaded.strategy.name });
-    setInitialTemplate(slug);
-    setForm(nextForm);
-    setFormError("");
-    setDirty(true);
+    afterDiscard(() => {
+      const template = STRATEGY_TEMPLATES.find((item) => item.slug === slug);
+      if (!template || !loaded) return;
+      const nextForm = initialForm({ ...template.spec, name: loaded.strategy.name });
+      setInitialTemplate(slug);
+      setForm(nextForm);
+      setFormError("");
+      setDirty(true);
+    });
   }
 
   async function saveVersion() {
@@ -277,6 +284,20 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
               {saving ? "Saving…" : `Save as v${nextVersion}`}
             </Button>
           }
+        />
+      )}
+      {discarding && (
+        <ConfirmDialog
+          title="Discard your changes?"
+          body="You have unsaved changes to this strategy. Continuing drops them."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          tone="danger"
+          onCancel={() => setDiscarding(null)}
+          onConfirm={() => {
+            setDiscarding(null);
+            discarding.proceed();
+          }}
         />
       )}
     </section>

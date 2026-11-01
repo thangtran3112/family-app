@@ -69,7 +69,7 @@ export function SymbolSearch({ compact }: { compact: boolean }) {
   }
 
   function choose(symbol: string) {
-    if (!confirmLeave()) return;
+    if (!confirmLeave(() => choose(symbol))) return;
     latest.current = "";
     window.clearTimeout(timer.current);
     setText("");

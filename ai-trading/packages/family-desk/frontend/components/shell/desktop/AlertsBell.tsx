@@ -31,7 +31,8 @@ export function AlertsBell() {
     const href = alert.symbol ? SYMBOL_HREF[lane]?.(alert.symbol) : undefined;
     if (href) {
       setOpen(false);
-      if (confirmLeave()) router.push(href);
+      const go = () => router.push(href);
+      if (confirmLeave(go)) go();
     } else {
       alerts.refresh();
     }
