@@ -37,7 +37,12 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
 
   # Establish the Worker route before removing interim ingress at cutover.
   # No dependency on the hub/terminal routes and no DNS replacement.
-  depends_on = [cloudflare_workers_route.desk_static]
+  # The Access application goes first when the SSH endpoint is on: the ssh://
+  # ingress must never be live before Access gates its hostname.
+  depends_on = [
+    cloudflare_workers_route.desk_static,
+    cloudflare_zero_trust_access_application.laptop_ssh,
+  ]
 
   config = {
     ingress = concat(
@@ -97,6 +102,16 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
         hostname = host
         service  = "http://gateway:8080"
       }],
+      var.laptop_ssh_enabled ? [
+        {
+          # laptop-ssh.tf: operator SSH, only while laptop_ssh_enabled. The
+          # connector is a container, so laptop_ssh_origin must resolve from
+          # inside it (host.docker.internal + extra_hosts host-gateway); the
+          # hostname is gated by an Access application, not by Caddy.
+          hostname = var.laptop_ssh_hostname
+          service  = "ssh://${var.laptop_ssh_origin}"
+        },
+      ] : [],
       [
         {
           # hub-static-variables.tf's hub_origin_hostname: unrouted BY THE
@@ -167,6 +182,7 @@ locals {
       vibe_trading = var.vibe_trading_hostname
     },
     var.terminal_hostnames,
+    var.laptop_ssh_enabled ? { laptop_ssh = var.laptop_ssh_hostname } : {},
   )
 }
 

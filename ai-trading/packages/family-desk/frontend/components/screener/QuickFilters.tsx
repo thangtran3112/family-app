@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/Button";
 import { QUICK_FILTERS, quickFiltersActive, type QuickPicks } from "@/lib/desk/screenerView";
 import styles from "./screener.module.css";
 
@@ -23,7 +24,7 @@ export function QuickFilters({ picks, onChange }: { picks: QuickPicks; onChange:
         </label>
       ))}
       {quickFiltersActive(picks) && (
-        <button type="button" className={`${styles.button} ${styles.quickClear}`} onClick={() => onChange({})}>Clear</button>
+        <Button className={styles.quickClear} onClick={() => onChange({})}>Clear</Button>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import { DeskApiError } from "../api/client.ts";
 import type { WatchlistTableRow } from "../api/schemas.ts";
 import { formatEtTime } from "./format.ts";
@@ -12,12 +13,13 @@ export function tagLine(tags: WatchlistTableRow["tags"]): string[] {
 /** Chips a watchlist row shows before the rest fold into "+N": three long ones pushed the table to 982 px inside 808. */
 export const STRATEGY_CHIPS_SHOWN = 2;
 
-export type StrategyChip = { text: string; armed: boolean };
+/** A chip is its text and a tone: a strategy still watching is `warn` (amber), a pattern that fired is `neutral`. */
+export type StrategyChip = { text: string; tone: Tone };
 
 /** The first chips for a row's Strategy cell, and the ones folded into its "+N" chip. */
 export function strategyChips(tags: WatchlistTableRow["tags"], max: number = STRATEGY_CHIPS_SHOWN): { shown: StrategyChip[]; hidden: StrategyChip[] } {
   const lines = tagLine(tags);
-  const chips = tags.map((tag, index) => ({ text: lines[index]!, armed: tag.kind === "armed" }));
+  const chips = tags.map((tag, index) => ({ text: lines[index]!, tone: tag.kind === "armed" ? ("warn" as const) : ("neutral" as const) }));
   return { shown: chips.slice(0, max), hidden: chips.slice(max) };
 }
 

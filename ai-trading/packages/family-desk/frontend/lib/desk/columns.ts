@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { CellAlign, ColumnKind } from "./denseTable.ts";
-import { changeTone, EMPTY_VALUE, formatMetric, type MetricFormat, type Tone } from "./format.ts";
+import { EMPTY_VALUE, formatMetric, signTone, type MetricFormat, type SignTone } from "./format.ts";
 import type { SortValue } from "./sort.ts";
 import type { ShellBand } from "./viewport.ts";
 
@@ -76,12 +76,12 @@ export type SpecColumn<R> = {
 
 /**
  * A table column from a spec. The cell is `formatMetric(spec.format, value)`; `paint` wraps a `pct_signed` cell in its
- * `changeTone` (green, red or flat), and no other format carries a tone. `value` is the raw number, string or null.
+ * `signTone` (up, down or neutral), and no other format carries a tone. `value` is the raw number, string or null.
  */
 export function columnFromSpec<R>(
   spec: ColumnSpec,
   value: (row: R) => number | string | null,
-  paint?: (text: string, tone: Tone) => ReactNode,
+  paint?: (text: string, tone: SignTone) => ReactNode,
 ): SpecColumn<R> {
   const text = spec.format === "text" || spec.format === "time";
   const format = spec.format === "text" ? "number" : spec.format;
@@ -97,7 +97,7 @@ export function columnFromSpec<R>(
       const raw = value(row);
       // A text column shows its string as it is; every other format goes through formatMetric.
       const shown = spec.format === "text" ? (raw === null ? EMPTY_VALUE : String(raw)) : formatMetric(format, raw);
-      return paint && spec.format === "pct_signed" ? paint(shown, changeTone(typeof raw === "number" ? raw : null)) : shown;
+      return paint && spec.format === "pct_signed" ? paint(shown, signTone(typeof raw === "number" ? raw : null)) : shown;
     },
   };
 }

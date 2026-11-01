@@ -245,7 +245,7 @@ renames are the Postgres container (Q6) and the bootstrap directory in the repo 
   pre-auth key. Its state goes to `gs://tobytran-portfolio-tfstate` prefix `tailscale`. It is
   operator-applied (Q19). Credentials live in Firestore `shared/tailscale`, names only:
   - `TAILSCALE_TF_OAUTH_CLIENT_ID` and `TAILSCALE_TF_OAUTH_CLIENT_SECRET` (Terraform);
-  - `TS_CI_OAUTH_CLIENT_ID` and `TS_CI_OAUTH_SECRET` (CI).
+  - `TS_CI_OAUTH_CLIENT_ID` and `TS_CI_OAUTH_CLIENT_SECRET` (CI).
 - This root is the "Tailscale ACL as code under `infrastructure/`" that 02t ruling 4 approved,
   repurposed (§3.4).
 
@@ -477,7 +477,7 @@ uses neither: it is local (§3.4).
 3. **`expense-tax-deploy.yml`** (expense lane, 0001b-2):
    - Same Tailscale step.
    - Credentials come as GitHub environment secret **copies** (`TS_CI_OAUTH_CLIENT_ID`,
-     `TS_CI_OAUTH_SECRET`), set with `gh secret set` from Firestore. This is the documented
+     `TS_CI_OAUTH_CLIENT_SECRET`), set with `gh secret set` from Firestore. This is the documented
      CI-copy pattern, because the deploy has no GCP auth and a test pins that.
    - Add laptop copies (`LAPTOP_HOST`, `LAPTOP_PORT` and `LAPTOP_USER` vars;
      `LAPTOP_DEPLOY_SSH_KEY` and `LAPTOP_DEPLOY_KNOWN_HOSTS` secrets) beside the VPS copies. The

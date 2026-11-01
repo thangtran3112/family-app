@@ -1,6 +1,6 @@
 # Tailscale (tailnet policy)
 
-Terraform for the family-app tailnet policy file. Tailscale is for **admin and CI SSH only**: public traffic stays on the Cloudflare tunnels and never touches the tailnet. The policy is therefore default-deny and holds exactly two flows, both to the host's sshd (plain sshd on TCP `ssh_port`, default `2222`; no Tailscale SSH, so no `ssh` section):
+Terraform for the family-app tailnet policy file. The tailnet is for **CI/CD deployment only**: the GitHub deploy runners join as `tag:ci`. Public traffic stays on the Cloudflare tunnels and never touches the tailnet, and operator SSH goes through the Cloudflare tunnel behind Access (skill `manage-cloudflare-tunnel`), not over this tailnet. The `autogroup:admin` grant below is break-glass for a device that is already a member. The policy is default-deny and holds exactly two flows, both to the host's sshd (plain sshd on TCP `ssh_port`, default `2222`; no Tailscale SSH, so no `ssh` section):
 
 | Source | Destination | Port |
 |---|---|---|
@@ -68,6 +68,21 @@ This root has no `tailscale_tailnet_key` and no `tailscale_oauth_client`. A host
 ```
 
 The key expires after one hour or its first use. The request shape comes from Tailscale's OAuth-client documentation (token endpoint, `scope` and `tags` parameters) and the official clients' key-creation call (`capabilities.devices.create`, `expirySeconds`).
+
+## Laptop: sshd on the tailnet port
+
+The policy allows `tcp:2222` only, but the laptop's sshd listens on 22 (`01-family-app-hardening.conf`). Ubuntu 24.04 starts sshd through `ssh.socket`, so a `Port` line alone opens nothing until the socket unit is restarted. On the laptop (keep 22 as the LAN fallback, open 2222 on `tailscale0` only):
+
+```bash
+echo 'Port 2222' | sudo tee /etc/ssh/sshd_config.d/02-family-app-tailnet-port.conf
+sudo sshd -t
+sudo systemctl daemon-reload                    # sshd-socket-generator derives ListenStream from `sshd -T`
+sudo ufw allow in on tailscale0 to any port 2222 proto tcp comment 'SSH over tailnet'
+sudo systemctl restart ssh.socket               # binds 2222; KillMode=process keeps open sessions
+ss -ltn | grep -E ':(22|2222) '                 # both must listen
+```
+
+CI and operator deploys reach the host by its MagicDNS name on 2222 (`LAPTOP_HOST` / `LAPTOP_PORT` in the GitHub `production` environment, `VPS_HOST` / `VPS_PORT` in `shared/laptop`). With `StrictHostKeyChecking=yes`, `ssh -p 2222` looks up `[<magicdns-name>]:2222` in the pinned known hosts, so `VPS_SSH_KNOWN_HOSTS` (and its `LAPTOP_DEPLOY_KNOWN_HOSTS` copy) must hold an entry under that name as well as the LAN address.
 
 ## Offline checks
 

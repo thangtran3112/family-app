@@ -40,13 +40,15 @@ import {
   sourceNote,
   threadDayNo,
   universeNote,
+  endDayExitText,
+  portfolioRows,
 } from "@/lib/replay/dayView";
 import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { BackLink } from "@/components/practice/hub/BackLink";
-import { Portfolio } from "@/components/practice/replay/Portfolio";
+import { PortfolioPanel, useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
@@ -128,9 +130,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const hidden = datesHidden(list.plan.spec) && !ended;
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // The name a click is opening, and the name holding the open trade when that open was refused (D-020 style recovery link).
+  // The name a click is opening.
   const [opening, setOpening] = useState<string | null>(null);
-  const [goTo, setGoTo] = useState<{ id: number; symbol: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // The gateway cut a slow open or re-scan short and the screen is asking again; the server is still finishing (D-058, D-059).
   const [still, setStill] = useState<"open" | "rescan" | null>(null);
@@ -183,6 +184,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const columns = columnsOf(list);
   // The portfolio re-reads whenever the day page's own data moves (a name opened, the day ended).
   const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
+  // One read of the day list serves the rail's Portfolio and the End-day confirm, so both name the same open trades.
+  const portfolio = useDayPortfolio(list.id, portfolioRevision);
+  const exits = endDayExitText(portfolioRows(portfolio.data ?? list));
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -203,16 +207,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const practice = (symbol: string) => {
     if (busy) return Promise.resolve();
     setOpening(symbol);
-    setGoTo(null);
     return run(async () => {
-      try {
-        const session = await startDaySession(list.id, symbol);
-        router.push(`/practice/replay?id=${session.id}`);
-      } catch (error) {
-        const held = list.sessions.find((item) => item.has_open_trade && item.symbol !== symbol);
-        if (held) setGoTo({ id: held.id, symbol: held.symbol });
-        throw error;
-      }
+      const session = await startDaySession(list.id, symbol);
+      router.push(`/practice/replay?id=${session.id}`);
     }, PRACTICE_COPY.dayStartError).finally(() => setOpening(null));
   };
   const peekAt = (symbol: string) => {
@@ -309,6 +306,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                   }}
                 >
                   <p className={styles.line}>{PRACTICE_COPY.dayEndWarning}</p>
+                  {exits && <p className={styles.line}>{exits}</p>}
                   <div className={styles.actions}>
                     <button ref={yesRef} type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void finish()}>{PRACTICE_COPY.dayEndYes}</button>
                     <button type="button" className={styles.button} onClick={cancelEnd}>{PRACTICE_COPY.dayKeepPracticing}</button>
@@ -346,7 +344,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         )}
         {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
-        {goTo && <Link href={`/practice/replay?id=${goTo.id}`} className={styles.link}>{practiceText("dayGoTo", { symbol: goTo.symbol })}</Link>}
 
         {!ended && (
           <section className={styles.section} aria-label="Candidates">
@@ -434,7 +431,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
-      <DayLeftPanel list={list} thread={thread.data} revision={portfolioRevision} />
+      <DayLeftPanel list={list} thread={thread.data} portfolio={portfolio} />
       {changing && thread.data !== null && (
         <NewPlanModal thread={thread.data.thread} onClose={() => setChanging(false)} onSaved={(id) => router.push(`/practice/thread?id=${id}`)} />
       )}
@@ -464,7 +461,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                 },
               ]),
           // At 1440 the portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from this drawer.
-          ...(band === "1180" ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: <Portfolio dayListId={list.id} revision={portfolioRevision} /> }] : []),
+          ...(band === "1180" ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: <PortfolioPanel dayListId={list.id} query={portfolio} /> }] : []),
           {
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
