@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { DeskApiError } from "../api/client.ts";
 import { advanceReplay, cancelOrder, endReplay, loadReplayFeed, loadReplaySession, placeMark, placeOrder, undoMark, type AdvanceTarget, type OrderBody, type TapeParams } from "../desk/replay.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import { delayUntilNextTick, isSpeed, jumpMinutes, nextTo, type Speed } from "./clock.ts";
+import { delayUntilNextTick, isSpeed, jumpMinutes, nextTo, threadClock, type Speed } from "./clock.ts";
 import { applyAdvance, applyFeedSwing, dismissPause as withoutPause, viewFromFeed, withHoldMarker, type ReplayView } from "./feedState.ts";
 import { markForAction, noteMark, stopMark, type MarkBuild, type MarkDraft } from "./markInput.ts";
 import type { EntryOrExit } from "./keys.ts";
@@ -235,7 +235,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       const target = sessionRef.current;
       if (!current || !target) return;
       lastStart.current = Date.now();
-      void exec(() => advance({ to: nextTo(current.revealedThrough, playerRef.current.speed, target.window_end) }));
+      void exec(() => advance({ to: nextTo(threadClock(current.revealedThrough, current.dayClock), playerRef.current.speed, target.window_end) }));
     }, delayUntilNextTick(lastStart.current, Date.now()));
     return () => clearTimeout(timer);
   }, [playStatus, playBusy, revealed, speed, session, exec, advance]);
@@ -257,7 +257,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     (minutes: number) => {
       const current = viewRef.current;
       const target = sessionRef.current;
-      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(current.revealedThrough, minutes, target.window_end) }), true);
+      if (current && target && guard()) void exec(() => advance({ to: jumpMinutes(threadClock(current.revealedThrough, current.dayClock), minutes, target.window_end) }), true);
     },
     [exec, advance],
   );

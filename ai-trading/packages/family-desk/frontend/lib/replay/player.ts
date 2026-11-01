@@ -59,7 +59,7 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
 /** A new request may start only when none is in flight and the session has a playhead to move. */
 export const canRequest = (state: PlayerState): boolean => !state.busy && state.status !== "loading" && state.status !== "at_end";
 
-/** The line beside the transport buttons: ready, playing, paused or at the window end. */
+/** The line in the thread bar beside the clock: ready, playing, paused or at the window end. */
 export function statusLine(status: PlayerStatus, speed: Speed, revealedThrough: string, windowStart: string): string {
   const time = formatEtTime(revealedThrough);
   if (status === "playing") return practiceText("playing", { speed });

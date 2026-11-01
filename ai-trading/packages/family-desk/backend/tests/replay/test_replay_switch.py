@@ -208,6 +208,70 @@ def test_a_catch_up_past_the_ask_still_moves_the_clock_only_forward(db_session, 
     assert row.revealed_through == et(DAYS[0], "11:00")  # the clock never goes back
 
 
+def _step(db_session, user_id, svc, session_id, step):
+    return session_mod.advance(
+        db_session,
+        user_id,
+        session_id,
+        svc,
+        to=None,
+        step=step,
+        interval=None,
+        min_size=0,
+        min_notional=0,
+        max_prints=50,
+    )
+
+
+def test_a_step_is_a_step_of_the_shared_clock_whichever_name_is_on_screen(db_session, user_id, svc) -> None:
+    """The thread has ONE time: Step moves it one bar from the day clock, even from a name left behind it."""
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    _advance(db_session, user_id, svc, flat.id, "10:30")  # the clock moves on FLAT; GAPPER is left at the open
+    assert _row(db_session, gapper.id).revealed_through == et(DAYS[0], "09:30")
+    stepped = _step(db_session, user_id, svc, gapper.id, "bar")  # 5m bars: one bar past the clock, not one past 09:30
+    assert stepped["revealed_through"] == et(DAYS[0], "10:35") and stepped["behind_clock"] is False
+    assert stepped["day_clock"] == et(DAYS[0], "10:35")
+    db_session.refresh(row)
+    assert row.revealed_through == et(DAYS[0], "10:35")  # every name's clock is this one
+    # FLAT was not touched, and it reads the same thread time: it is one bar behind it, not on a clock of its own.
+    flat_feed = _feed(db_session, user_id, svc, flat.id)
+    assert (flat_feed["revealed_through"], flat_feed["day_clock"], flat_feed["behind_clock"]) == (
+        et(DAYS[0], "10:30"),
+        et(DAYS[0], "10:35"),
+        True,
+    )
+    again = _step(db_session, user_id, svc, flat.id, "bar")  # FLAT was behind the 10:35 clock: one bar past it
+    assert again["revealed_through"] == et(DAYS[0], "10:40")
+    assert [s["behind_clock"] for s in plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"]] == [
+        True,
+        False,
+    ]
+
+
+def test_next_signal_from_a_name_behind_the_clock_looks_past_the_clock(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    _advance(db_session, user_id, svc, flat.id, "10:30")
+    gapper.signals = signals_mod.dump_fires([_fire("10:20", "mid"), _fire("10:45", "later")])
+    db_session.commit()
+    jumped = _step(db_session, user_id, svc, gapper.id, "next_signal")  # the 10:20 fire is behind the clock: history
+    assert jumped["revealed_through"] == et(DAYS[0], "10:45")
+    assert [s["name"] for s in jumped["signals"]] == ["mid", "later"]
+    assert [(s["name"], s["seen"]) for s in jumped["signals"]] == [("mid", False), ("later", True)]
+
+
+def test_a_standalone_session_steps_from_its_own_playhead(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc)
+    first = _step(db_session, user_id, svc, gapper.id, "bar")
+    assert first["revealed_through"] == et(DAYS[0], "09:35")
+    db_session.refresh(row)
+    assert row.revealed_through == et(DAYS[0], "09:35")
+
+
 # -- one position a name -----------------------------------------------------------------------------------
 
 

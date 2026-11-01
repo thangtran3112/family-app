@@ -14,8 +14,6 @@ import { MAX_FILTERS, MAX_UNIVERSE, MIN_UNIVERSE, MAX_WATCHLISTS, noEdits, parse
 export const MIN_SESSIONS = 15;
 export const MAX_SESSIONS = 23;
 export const DEFAULT_SESSIONS = 20;
-export const DEFAULT_MAX_OPEN_HOLDS = 3;
-export const MAX_OPEN_HOLDS = 5;
 /** `screen.EARLIEST_LIST_DAY`: a 52-week filter needs history before the first day. */
 export const EARLIEST_SWING_DAY = "2017-01-03";
 /** The interval choices of a swing session (the chart also offers Daily; that is a display switch, not an interval). */
@@ -34,7 +32,6 @@ export type SwingDraft = {
   hideDates: boolean;
   interval: (typeof SWING_INTERVALS)[number];
   tape: (typeof SWING_TAPES)[number];
-  maxOpenHolds: string;
   /** Whole dollars as typed; empty means no per-hold risk. */
   riskPerHoldUsd: string;
   // The universe builder's inputs (they feed the preview, not the contract).
@@ -85,7 +82,6 @@ export const defaultSwingDraft = (now: Date): SwingDraft => ({
   hideDates: true,
   interval: "15m",
   tape: "off",
-  maxOpenHolds: String(DEFAULT_MAX_OPEN_HOLDS),
   riskPerHoldUsd: "",
   watchlistIds: [],
   filterIds: [],
@@ -121,7 +117,7 @@ export function calendarLine(draft: Pick<SwingDraft, "firstDay" | "sessions">): 
 // -- validation --------------------------------------------------------------------------------------------------
 
 export type SwingField =
-  | "firstDay" | "sessions" | "hideDates" | "universe" | "interval" | "tape" | "armed" | "maxOpenHolds" | "riskPerHoldUsd" | "target";
+  | "firstDay" | "sessions" | "hideDates" | "universe" | "interval" | "tape" | "armed" | "riskPerHoldUsd" | "target";
 export type SwingFormField = ThreadField | SwingField;
 export type SwingProblems = Partial<Record<SwingFormField, string>>;
 
@@ -133,12 +129,11 @@ const FIELD_MESSAGE: Record<SwingField, string> = {
   interval: "Interval: pick 15m or 5m",
   tape: "Tape: pick off or on",
   armed: "Arm up to 5 strategies",
-  maxOpenHolds: `Open holds: a whole number from 1 to ${MAX_OPEN_HOLDS}`,
   riskPerHoldUsd: "Risk per hold: whole dollars from 1 to 100,000",
   target: `Target size: a whole number from ${MIN_UNIVERSE} to ${MAX_UNIVERSE}`,
 };
 
-const SWING_FIELDS: ReadonlySet<string> = new Set<SwingField>(["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed", "maxOpenHolds", "riskPerHoldUsd", "target"]);
+const SWING_FIELDS: ReadonlySet<string> = new Set<SwingField>(["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed", "riskPerHoldUsd", "target"]);
 
 /** Maps a contract or server path (`swing.universe.3.symbol`, `swing.armed.0.id`, `swing.firstDay`) to the field that shows it. */
 export function swingFieldOfPath(path: string): SwingField | "form" {
@@ -227,7 +222,6 @@ export function swingBlock(draft: SwingDraft, rows: readonly Pick<UniverseRow, "
     interval: draft.interval,
     tape: draft.tape,
     armed: [], // a new swing thread starts with nothing armed (D-153): the contract wants the field, the form no longer offers it
-    maxOpenHolds: numberOrNaN(draft.maxOpenHolds),
   };
   if (draft.riskPerHoldUsd.trim() !== "") block.riskPerHoldUsd = numberOrNaN(draft.riskPerHoldUsd);
   return block;

@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
+import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
@@ -50,7 +50,7 @@ import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
-import { BackLink } from "@/components/practice/hub/BackLink";
+import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { PortfolioPanel, useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -105,14 +105,12 @@ export function DayListScreen() {
 function DayNotice({ title }: { title: string }) {
   return (
     <div className={styles.body}>
-      <EmptyBlock title={title}>
-        <Link href="/practice" className={styles.link}>Open Practice</Link>
-      </EmptyBlock>
+      <EmptyBlock framed title={title} action={{ label: PRACTICE_COPY.openPractice, href: "/practice", primary: true }} />
     </div>
   );
 }
 
-/** The day page while it loads: grey blocks where the header, the counts and the candidate rows will be (D-116). */
+/** The day page while it loads: grey blocks where the header, the counts, the candidate rows and the left rail will be (D-116). */
 function DaySkeleton() {
   return (
     <div className={styles.screen} role="status" aria-busy="true" aria-label={PRACTICE_COPY.dayLoading}>
@@ -124,6 +122,18 @@ function DaySkeleton() {
         <Skeleton width="60%" />
         <Skeleton height={240} />
       </div>
+      <LeftRailPortal>
+        <div className={styles.side} aria-hidden="true">
+          <section className={styles.sideSection}>
+            <Skeleton width={96} height={11} />
+            <Skeleton height={72} />
+          </section>
+          <section className={styles.sideSection}>
+            <Skeleton width={120} height={11} />
+            <Skeleton height={96} />
+          </section>
+        </div>
+      </LeftRailPortal>
     </div>
   );
 }
@@ -271,7 +281,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
-      <BackLink threadId={list.thread?.id ?? list.plan.thread_id} />
+      <PracticeTabs threadId={list.thread?.id ?? list.plan.thread_id} active="day" mode={list.thread?.mode} />
       <header className={styles.header}>
         <div className={styles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={styles.title}>{title}</h1>
@@ -522,6 +532,8 @@ function columnsOf(list: DayList): DenseColumn<Candidate>[] {
       key: column.key,
       label: column.label,
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",
+      // No name reports before the open: the column would be a row of dashes to scroll past (D-136).
+      hideWhenEmpty: column.format === "earnings",
       render: (row) => {
         const text = dayCellText(column, row);
         if (column.format === "earnings") return text === "—" ? text : <Badge tone="warn">{text}</Badge>;

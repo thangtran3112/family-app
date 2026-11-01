@@ -37,6 +37,7 @@ export const WEEK_TEXT = {
   throughDay: "Through Day {n}",
   daysRange: "Days {first} to {last}",
   daysSoFar: "{played} of {planned} days so far",
+  universeMore: "Why this list leans toward survivors",
 } as const;
 
 // -- the URL ---------------------------------------------------------------------------------------------------
@@ -68,6 +69,12 @@ export function weekTitle(week: Pick<WeekOut, "label" | "to_date" | "week_no" | 
   const { first_day_no: first, last_day_no: last } = week.review.week;
   const days = last - first + 1;
   return `${week.label} · ${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/** The universe line split at its first full stop: what the list is ("Fixed universe · 12 symbols chosen today …"), and the caveat behind it. A one-sentence label has no rest (D-130: the caveat is folded away, not printed on every week). */
+export function universeLines(label: string): { lead: string; rest: string | null } {
+  const stop = label.indexOf(". ");
+  return stop === -1 ? { lead: label, rest: null } : { lead: label.slice(0, stop + 1), rest: label.slice(stop + 2) };
 }
 
 /** "Days 6 to 10", or while the week is open "Through Day 7 · 2 of 5 days so far". */

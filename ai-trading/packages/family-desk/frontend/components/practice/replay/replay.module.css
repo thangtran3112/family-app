@@ -9,12 +9,10 @@
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
 .footnote { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 
-/* Header */
-/* The header is two fixed rows: the identity and the player pill, then the readouts of P2 (playhead, last, VWAP, prior close, P/L). The pill has its own cell, so a wider P/L never pushes it onto a row of its own and the chart top does not move (D-146). */
-.header { display: grid; min-height: 48px; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-1) var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) var(--space-4); font-variant-numeric: tabular-nums; }
-.header .readout { grid-column: 1 / -1; grid-row: 2; }
-.header .statePill { grid-column: 2; grid-row: 1; justify-self: end; min-width: 104px; justify-content: center; }
-.identity { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); grid-column: 1; grid-row: 1; }
+/* Header: one name. Two fixed rows: the identity, then the readouts (last, VWAP, prior close, P/L). The thread's clock and the player state are not here: they are the bar above it (.threadBar). */
+.header { display: grid; min-height: 48px; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); align-items: center; gap: var(--space-1) var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) var(--space-4); font-variant-numeric: tabular-nums; }
+.header .readout { grid-row: 2; }
+.identity { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); grid-row: 1; }
 .symbol { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-bold); line-height: 24px; }
 .readout { display: flex; flex-wrap: wrap; margin: 0; gap: var(--space-1) var(--space-4); }
 .readout div { display: flex; flex-direction: column; align-items: flex-end; }
@@ -22,12 +20,7 @@
 .readout dd { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); }
 .readout dd[data-tone="up"], .tradeCard dd[data-tone="up"] { color: var(--color-up); }
 .readout dd[data-tone="down"], .tradeCard dd[data-tone="down"] { color: var(--color-down); }
-.clock { white-space: nowrap; }
 .readout dd.pnl { display: flex; align-items: center; gap: var(--space-2); }
-.statePill { display: inline-flex; min-height: 24px; flex: 0 0 auto; align-items: center; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-3); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); white-space: nowrap; }
-.statePill::before { width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-muted); content: ""; }
-.statePill[data-state="playing"] { color: var(--color-text); }
-.statePill[data-state="playing"]::before { background: var(--color-amber); }
 
 /* Buttons that carry a direction, not a decoration: long is the buy side (up tone), short the sell side (down tone). */
 .long:not(:disabled) { border-color: var(--color-up); color: var(--color-up); }
@@ -50,9 +43,22 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .chartSlot { display: flex; min-height: 280px; flex: 1 1 0; flex-direction: column; }
 .chartArea { position: relative; display: flex; min-height: 0; flex: 1 1 0; flex-direction: column; }
 
-/* Transport */
-.transport { display: flex; flex: 0 0 auto; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
-.transportRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Thread clock: the one time of every name on the day, across the top of the workspace. Its menus open downward (the bar is at the top). */
+.threadBar { display: flex; flex: 0 0 auto; flex-direction: column; gap: var(--space-1); border-bottom: 1px solid var(--color-hairline); background: var(--color-panel); padding: var(--space-2) var(--space-4); }
+.threadBar .menu { top: 100%; right: 0; bottom: auto; left: auto; margin: var(--space-1) 0 0; }
+.threadRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.threadTime { display: inline-flex; align-items: center; gap: var(--space-2); font-variant-numeric: tabular-nums; }
+.threadLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.threadValue { min-width: 108px; font-size: var(--text-heading); font-weight: var(--weight-bold); line-height: 24px; white-space: nowrap; }
+.statePill { display: inline-flex; min-height: 24px; min-width: 104px; flex: 0 0 auto; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-3); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); white-space: nowrap; }
+.statePill::before { width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-muted); content: ""; }
+.statePill[data-state="playing"] { color: var(--color-text); }
+.statePill[data-state="playing"]::before { background: var(--color-amber); }
+
+/* Chart toolbar: what belongs to one name's chart, under that chart. */
+.chartToolbar { display: flex; flex: 0 0 auto; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }
+.chartLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.toolbarRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .status { margin: 0 0 0 auto; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
 .quick { display: inline-flex; gap: var(--space-1); }
 .timelineWrap { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -113,7 +119,7 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .tradeCard dt { color: var(--color-muted); font-size: var(--text-micro); }
 .tradeCard dd { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); }
 
-/* Chart settings (design-replay-chart §b.1): a popover that opens upward from the transport row, above the legend (3) and the menus. */
+/* Chart settings (design-replay-chart §b.1): a popover that opens upward from the chart toolbar, above the legend (3) and the menus. */
 .chartMenu { position: relative; display: inline-flex; }
 .chartPopover { position: absolute; right: 0; bottom: 100%; z-index: 12; display: flex; width: 300px; max-width: calc(100vw - 32px); flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3); box-shadow: 0 8px 24px rgb(0 0 0 / 0.5); }
 .setGroup { min-width: 0; margin: 0; border: 0; padding: 0; }

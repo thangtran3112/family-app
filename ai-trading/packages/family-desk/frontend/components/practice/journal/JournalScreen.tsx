@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
@@ -93,6 +94,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
 
   return (
     <div className={styles.screen}>
+      {session.thread && <PracticeTabs threadId={session.thread.id} active="journal" mode={session.thread.mode} />}
       <header className={styles.header}>
         <h1 className={styles.title}>{spec.symbol} · {dayLabel} · attempt {session.attempt} · Practice journal</h1>
         <div className={styles.actions}>

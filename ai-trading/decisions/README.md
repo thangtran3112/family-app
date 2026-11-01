@@ -22,5 +22,6 @@ Index:
 | [ADR-0014](adr/ADR-0014-global-ui-modes.md) | Three global UI modes (Fundamental/Technical/Backtest) scoped by a declarative route/tab/section seam; Backtest owns Practice |
 | [ADR-0015](adr/ADR-0015-reenable-ci-tests.md) | ai-trading CI runs the test gates again on PRs and pushes to `dev` (free public-repo minutes); `main` stays deploy-only |
 | [ADR-0016](adr/ADR-0016-practice-broker-ticket.md) | Practice trades through a broker-style ticket (Market/Limit/Stop/Stop-limit; Bracket named, not simulated): a stop is optional, cash is the only size rule, limit/stop fills come from the replayed tape; amended: one average-cost position per name takes any number of fills (scale in, sell part, flip) |
+| [ADR-0017](adr/ADR-0017-thread-clock.md) | A day-trade thread has one clock for every ticker: Play, Step, speed, Jump and the time sit in a thread bar above the chart, never under one name; Step measures from the shared day clock; the name's own chart controls stay under its chart |
 
 Changelog: one line per shipped phase in [changelog/CHANGELOG.md](changelog/CHANGELOG.md); session handoffs moved in from `plans/handoffs/` stay there as the session-level log.

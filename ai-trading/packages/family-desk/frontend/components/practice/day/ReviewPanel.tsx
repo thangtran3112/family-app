@@ -34,10 +34,12 @@ const TRADE_COLUMNS: DenseColumn<TradeLineRow>[] = [
   { key: "side", label: "Side", render: (row) => row.side },
   { key: "shares", label: "Shares", align: "right", render: (row) => row.shares },
   { key: "entry", label: "Entry", align: "right", render: (row) => row.entry },
-  { key: "entryTime", label: "In at", render: (row) => row.entryTime },
+  { key: "entryTime", label: "In at", align: "right", render: (row) => row.entryTime },
   { key: "exit", label: "Exit", align: "right", render: (row) => row.exit },
-  { key: "exitTime", label: "Out at", render: (row) => row.exitTime },
+  { key: "exitTime", label: "Out at", align: "right", render: (row) => row.exitTime },
+  { key: "held", label: "Held", align: "right", render: (row) => row.held },
   { key: "pnl", label: "P/L", align: "right", render: (row) => <span className={styles[row.tone]}>{row.pnl}</span> },
+  { key: "ret", label: "Return", align: "right", render: (row) => <span className={styles[row.tone]}>{row.ret}</span> },
 ];
 
 /** The list review (02o-b v1): every candidate's move from its list price, ranked by signed move to the window end
@@ -87,6 +89,7 @@ export function ReviewPanel({ review, journal, footnote }: { review: DayReview; 
               columns={TRADE_COLUMNS}
               rows={journal.lines.length > 1 ? [...tradeLineRows(journal), tradeTotalRow(journal)] : tradeLineRows(journal)}
               rowKey={(row) => row.key}
+              scrollX
               empty={<EmptyBlock title={PRACTICE_COPY.reviewDayNone} />}
             />
           )}

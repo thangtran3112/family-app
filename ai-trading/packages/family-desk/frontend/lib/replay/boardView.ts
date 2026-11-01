@@ -21,6 +21,8 @@ export type BoardColumn = ListColumn & {
   firstSort: "asc" | "desc";
   /** Present: dropped at the 1180 band (all of them at once, as `lib/desk/columns.ts` does). */
   priority?: number;
+  /** The column is left out of a board where every cell of it is a dash (D-136). */
+  hideWhenEmpty?: boolean;
 };
 
 /** The API's columns in its order, then the earnings chip (a row field, not a metric column). The ones that drop at 1180 are registered as `boardView` in `lib/desk/columns.ts`. */
@@ -31,6 +33,8 @@ export function boardColumns(columns: readonly ListColumn[]): BoardColumn[] {
       align: column.format === "text" ? ("left" as const) : ("right" as const),
       // Numbers and the match count read biggest first; the source order and the soonest report read first-to-last.
       firstSort: column.key === "source" || column.key === "earnings" ? ("asc" as const) : ("desc" as const),
+      // The names that matched a filter and the names that report soon are often none at all: an all-dash column is only width to scroll past.
+      hideWhenEmpty: column.key === "matches" || column.key === "earnings",
     })),
     "boardView",
   );

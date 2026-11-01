@@ -127,7 +127,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
   );
 }
 
-/** The Full screen button in the transport row: a text button that keeps its label and shows the mode with `aria-pressed`. */
+/** The Full screen button in the chart toolbar: a text button that keeps its label and shows the mode with `aria-pressed`. */
 export function FullScreenButton({ full, onToggle }: { full: boolean; onToggle: () => void }) {
   return (
     <Button size="md" aria-pressed={full} aria-keyshortcuts="F" title="Full screen (F)" onClick={onToggle}>

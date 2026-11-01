@@ -47,7 +47,6 @@ test("the curve draws balance and equity from the starting balance, with room fo
   const series = swingState.equity_series;
   const layout = swingCurveLayout(series, 50000, swingState.days, BOX);
   assert.equal(layout.days.length, series.length + 1);
-  assert.equal(layout.days[0]!.label, "Start");
   assert.equal(layout.days[0]!.x, layout.plot.x);
   assert.equal(layout.days[0]!.balanceY, layout.startY);
   const last = layout.days[layout.days.length - 1]!;
@@ -61,7 +60,11 @@ test("the curve draws balance and equity from the starting balance, with room fo
   assert.ok(layout.balanceLine.startsWith("M64.0 "));
   assert.equal(layout.balanceLine.split("L").length, series.length + 1);
   assert.equal(layout.equityLine.split("L").length, series.length + 1);
-  assert.deepEqual(layout.days.map((point) => point.label), ["Start", "D1", null, null, null, "D5", null]);
+  // D-123: the axis is labelled at a regular step over the whole span, so D10, D15 and D20 show before those days are played.
+  assert.deepEqual(layout.xTicks.map((tick) => tick.label), ["Start", "D5", "D10", "D15", "D20"]);
+  assert.equal(layout.xTicks[0]!.x, layout.plot.x);
+  assert.equal(layout.xTicks[4]!.x, layout.plot.x + layout.plot.width, "the last tick is the right edge");
+  assert.equal(layout.xTicks[1]!.x, layout.days[5]!.x, "D5 sits where the fifth day's point sits");
   const top = layout.ticks[layout.ticks.length - 1]!;
   assert.ok(top.value >= 51895 && layout.ticks[0]!.value <= 50000, "the axis covers every figure");
 });
@@ -71,6 +74,7 @@ test("a thread with no finished day has a start point and no newest point", () =
   assert.equal(layout.days.length, 1);
   assert.equal(layout.now, null);
   assert.ok(layout.ticks.length >= 2);
+  assert.deepEqual(layout.xTicks.map((tick) => tick.label), ["Start", "D5", "D10", "D15", "D20"], "the axis is there before a day ends");
 });
 
 test("the curve reads out in words for a screen reader, and every new copy row is plain", () => {
@@ -110,6 +114,12 @@ test("the Starting balance note moves off the end labels when the balance is sti
     const clear = noteRight <= label.x - label.text.length * 7 || noteLeft >= label.x || moved.y + 3 <= label.y - 11 || moved.y - 11 >= label.y + 3;
     assert.equal(clear, true, `the note clears "${label.text}"`);
   }
+  // The balance rests on the bottom tick (a flat balance at the start): the spots under the start line are the row of the day labels, so the note takes the right end, above the line (D-123).
+  const floor = { plot, startY: plot.y + plot.height };
+  const flat = [{ x: 224, y: floor.startY - 8, text: "Balance $50,000.00", anchor: "end" as const }];
+  const onFloor = startNoteSpot(floor, "Starting balance", flat);
+  assert.deepEqual([onFloor.anchor, onFloor.y], ["end", floor.startY - 6]);
+  assert.ok(startNoteSpot(floor, "Starting balance", []).y <= floor.startY, "never under the plot");
   // No free spot at all: the first one stays rather than dropping the note.
   const wall = [0, 1, 2, 3].map((n) => ({ x: n % 2 === 0 ? 400 : 736, y: n < 2 ? 106 : 126, text: "x".repeat(120), anchor: "end" as const }));
   assert.equal(startNoteSpot(layout, "Starting balance", wall).y, 106);

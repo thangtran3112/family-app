@@ -165,17 +165,17 @@ export function weekFigures(holds: readonly Pick<Hold, "entry_day_no" | "exit_da
 }
 
 /**
- * The swing plan as live ticks (02p b2: all scored, none blocks): open holds against the thread's limit, then, when the
- * week's holds are known, the entries and the realized result of the week. A number that is not known is left off.
+ * The swing plan as live ticks (02p b2: all scored, none blocks): the open holds (a count; cash is the only size rule),
+ * then, when the week's holds are known, the entries and the realized result of the week. A number that is not known is left off.
  */
-export function swingPlanItems(input: { holdsOpen: number; maxOpenHolds: number | null; maxTrades: number | null; maxLossUsd: number | null; week: WeekFigures | null }): PlanItem[] {
-  const { holdsOpen, maxOpenHolds, maxTrades, maxLossUsd, week } = input;
+export function swingPlanItems(input: { holdsOpen: number; maxTrades: number | null; maxLossUsd: number | null; week: WeekFigures | null }): PlanItem[] {
+  const { holdsOpen, maxTrades, maxLossUsd, week } = input;
   const items: PlanItem[] = [
     {
       id: "open_holds",
       label: SWING_PLAY_COPY.openHoldsLabel,
-      state: maxOpenHolds !== null && holdsOpen > maxOpenHolds ? "warn" : "ok",
-      detail: maxOpenHolds === null ? String(holdsOpen) : `${holdsOpen} of ${maxOpenHolds}`,
+      state: "ok",
+      detail: String(holdsOpen),
     },
   ];
   if (week === null) return items;

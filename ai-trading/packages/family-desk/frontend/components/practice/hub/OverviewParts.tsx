@@ -13,8 +13,8 @@ import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
-/** The page frame of the thread overview: the shared header (back link, name, mode and status chips) over the content. */
-export function OverviewShell({ title, titleRef, aside, children }: { title: string; titleRef?: Ref<HTMLHeadingElement>; aside?: ReactNode; children: ReactNode }) {
+/** The page frame of the thread overview: the shared header (back link, name, mode and status chips), the thread's tab strip when it has loaded, then the content. */
+export function OverviewShell({ title, titleRef, aside, tabs, children }: { title: string; titleRef?: Ref<HTMLHeadingElement>; aside?: ReactNode; tabs?: ReactNode; children: ReactNode }) {
   return (
     <div className={styles.page}>
       <header className={`${hub.header} ${styles.headerSplit}`}>
@@ -24,6 +24,7 @@ export function OverviewShell({ title, titleRef, aside, children }: { title: str
         </div>
         {aside && <div className={hub.inline}>{aside}</div>}
       </header>
+      {tabs}
       <div className={styles.pageBody}>{children}</div>
     </div>
   );

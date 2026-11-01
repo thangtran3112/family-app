@@ -582,7 +582,6 @@ def test_adherence_is_scored_from_the_plan_the_entries_the_board_and_the_signals
         firstDay=START.isoformat(),
         plan={"stopNoteOnEntry": "yes", "tradeOnlyOnSignal": "yes", "maxLossUsd": 1, "maxTrades": 3},
         riskPerHoldUsd=100,
-        maxOpenHolds=1,
         armed=[{"source": "filter", "id": fid}],
     )
     day = DAYS[2]
@@ -619,7 +618,7 @@ def test_adherence_is_scored_from_the_plan_the_entries_the_board_and_the_signals
     out = swing_weeks.week_out(db_session, svc, thread, 1)  # Week to date through Day 1
     checks = _checks(out)
     assert list(checks) == [
-        "stop_set", "stop_honored", "risk_per_hold", "open_holds_within_plan",
+        "stop_set", "stop_honored", "risk_per_hold",
         "week_loss_limit", "entries_per_week", "on_signal", "focus_before_open",
     ]  # fmt: skip
     got = {k: (c["applicable"], c["passed"], c["detail"]) for k, c in checks.items()}
@@ -627,14 +626,13 @@ def test_adherence_is_scored_from_the_plan_the_entries_the_board_and_the_signals
         "stop_set": (True, False, "2 of 4"),  # the two S01 entries have no stop
         "stop_honored": (False, True, "0 of 0"),
         "risk_per_hold": (True, False, "1 of 4"),  # $150 is over $100, $5 is within; no stop is no known risk
-        "open_holds_within_plan": (True, False, "2 of 1"),  # S05 and the first S01 were open together
         "week_loss_limit": (True, False, "1 of 4"),  # the other three were entered after the S04 loss passed -$1
         "entries_per_week": (True, False, "4 of 3"),
         "on_signal": (True, True, "4 of 4"),  # S04 by the intraday fire, the rest by the board
         "focus_before_open": (True, False, "3 of 4"),  # the first S01 was starred late; its re-entry was a name held
     }
-    assert out["review"]["adherence"]["score_pct"] == 14  # 1 of the 7 applicable checks
-    assert out["review"]["days"][0]["entries"] == 4 and out["review"]["days"][0]["adherence_pct"] == 20
+    assert out["review"]["adherence"]["score_pct"] == 17  # 1 of the 6 applicable checks
+    assert out["review"]["days"][0]["entries"] == 4 and out["review"]["days"][0]["adherence_pct"] == 25
 
     # the same board and stars feed the quality pictures: four names were flagged, S06 was starred and never held
     returns = _returns(world, BASIS, day)
@@ -674,13 +672,14 @@ def test_the_loss_limit_counts_each_week_on_its_own(db_session, owner, world, sv
     assert (check["applicable"], check["passed"], check["detail"]) == (True, True, "1 of 1")
 
 
-def test_with_no_plan_set_only_the_open_hold_limit_applies(db_session, owner, svc) -> None:
+def test_with_no_plan_set_no_check_applies_and_the_week_scores_none(db_session, owner, svc) -> None:
     thread, _ = ready_thread(db_session, owner, svc, firstDay=START.isoformat())
     _end(db_session, owner, svc, _open(db_session, owner, svc, thread))
     out = swing_weeks.week_out(db_session, svc, thread, 1)
-    applicable = [c["id"] for c in out["review"]["adherence"]["checks"] if c["applicable"]]
-    # every swing plan carries `maxOpenHolds`, so a week can never score None the way a day thread's can
-    assert applicable == ["open_holds_within_plan"] and out["review"]["adherence"]["score_pct"] == 100
+    checks = out["review"]["adherence"]["checks"]
+    # ADR-0016: no swing plan field is a cap, so a week with no rule set of her own has nothing to score
+    assert [c["id"] for c in checks if c["applicable"]] == [] and out["review"]["adherence"]["score_pct"] is None
+    assert "open_holds_within_plan" not in {c["id"] for c in checks}
 
 
 # -- the end of a thread, and a review that cannot be built -----------------------------------------------------------

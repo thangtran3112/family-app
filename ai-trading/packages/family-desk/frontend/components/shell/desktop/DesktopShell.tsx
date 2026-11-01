@@ -33,7 +33,7 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
   const { leftCollapsed, chartFocus } = useDeskUi();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [leftSlot, setLeftSlot] = useState<HTMLElement | null>(null);
-  // Practice pages (02o §a1) get the amber band; the replay, the day list and the journal swap the watchlists for their own left panel.
+  // Practice pages (02o §a1) get the amber band and never the watchlists: the replay, the day list and the journal fill the left slot, the other Practice pages leave it empty (zero width).
   const practice = isPracticePath(pathname);
   const ownLeft = hasPracticeLeftRail(pathname);
   // Settings, More and the Feedback log (02s) show the "Settings & More" sections instead of the watchlists.
