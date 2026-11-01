@@ -164,7 +164,7 @@ test.describe("Swing practice", () => {
     await practice.getByLabel("Quantity").fill("1000");
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
+    await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
     await practice.getByLabel("Quantity").fill("100");
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();
@@ -513,7 +513,7 @@ test.describe("Swing practice", () => {
     await page.getByRole("button", { name: "Step", exact: true }).click();
     await page.getByRole("button", { name: "Step", exact: true }).click();
     await page.getByRole("button", { name: /^Jump/ }).click();
-    await page.getByRole("menuitem", { name: "+1 hour" }).click();
+    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: "+1 hour" }).click();
     await expect(page.getByText(/^Paused at 11:/)).toBeVisible();
     const toggle = page.getByRole("group", { name: "Chart interval" });
     await toggle.getByRole("button", { name: "Daily", exact: true }).click();
@@ -592,7 +592,7 @@ test.describe("Swing practice", () => {
 
     // Run the day to the close: both holds have a last price there, which is the close they leave at.
     await page.getByRole("button", { name: /^Jump/ }).click();
-    await page.getByRole("menuitem", { name: "To the close" }).click();
+    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the close/ }).click();
     await expect(page.getByText(/^End Day 3 · 2 holds stay open overnight/)).toBeVisible();
     const lastOf = async (symbol: string) => {
       const label = (await strip.getByRole("button", { name: new RegExp(`^${symbol}, practice hold`) }).getAttribute("aria-label"))!;

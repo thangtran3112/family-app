@@ -111,6 +111,7 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
         chartType={prefs.type}
         markers={markers}
         volume={series.volume && prefs.on.volume}
+        sessionShading={bars.some((bar) => bar.ext)}
         onCrosshair={setCrosshair}
         chrome="bare"
         height="fill"

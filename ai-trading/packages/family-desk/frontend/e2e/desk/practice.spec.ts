@@ -31,6 +31,11 @@ function watchReplayAnswers(page: Page) {
 
 const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 const marksTab = (page: Page) => page.getByRole("tab", { name: "Marks" });
+/** Opens the Marks tab and hands the keyboard back to the replay: a focused tab owns the arrow keys (ui/Tabs), and → steps the replay. */
+const openMarks = async (page: Page) => {
+  await marksTab(page).click();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+};
 
 /** A right-rail section: stacked in the rail at 1440, a drawer behind the strip at 1180 (it opens here). */
 async function railSection(page: Page, rail: string, section: string) {
@@ -189,7 +194,7 @@ test.describe("Practice", () => {
 
     // A practice long, priced at the replayed last price.
     await page.keyboard.press("b");
-    await marksTab(page).click();
+    await openMarks(page);
     const marks = page.getByRole("tabpanel");
     await expect(marks).toContainText("Practice buy");
 
@@ -250,7 +255,7 @@ test.describe("Practice", () => {
   test("jump to the window end shows the end prompt, and the journal of an unfinished session stays open", async ({ page, context }) => {
     await startStubSession(page, context);
     await page.getByRole("button", { name: /^Jump/ }).click();
-    await page.getByRole("menuitem", { name: /^To the window end/ }).click();
+    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the window end/ }).click();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.endAndScore })).toBeVisible();
     await expect(page.getByText(/^Session over/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Play" })).toBeDisabled();
@@ -357,7 +362,7 @@ test.describe("Practice", () => {
     await practice.getByRole("textbox", { name: "Quantity" }).fill("100000");
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
+    await expect(practice.getByRole("textbox", { name: "Quantity" }), "the refusal names shares, so Quantity is the invalid field").toHaveAttribute("aria-invalid", "true");
     await practice.getByRole("textbox", { name: "Quantity" }).fill("100");
     // A stop is optional even when the thread plan asks for one: Buy places the entry, with no refusal and no warning.
     await practice.getByRole("button", { name: "Buy" }).click();
@@ -369,7 +374,7 @@ test.describe("Practice", () => {
     const stopForm = practice.getByRole("form", { name: "Stop" });
     await stopForm.getByRole("textbox").fill("150");
     await stopForm.getByRole("button", { name: "Save" }).click();
-    await marksTab(page).click();
+    await openMarks(page);
     await expect(page.getByRole("tabpanel")).toContainText("Practice stop");
     await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     await page.keyboard.press("x");
@@ -604,7 +609,7 @@ test.describe("Practice", () => {
     await page.keyboard.press("ArrowRight");
     await expect(playhead(page)).not.toContainText("9:30:00");
     await page.keyboard.press("b");
-    await marksTab(page).click();
+    await openMarks(page);
     await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     for (let step = 0; step < 6; step += 1) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("x");
@@ -954,6 +959,14 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await page.getByRole("button", { name: PRACTICE_COPY.daySkip }).click();
+    // Skipping ends the day, so it asks first, as End day does (F-11): Keep practicing leaves the empty block, the yes ends it.
+    const confirmSkip = page.getByRole("group", { name: "Confirm skipping the day" });
+    await expect(confirmSkip).toContainText(PRACTICE_COPY.daySkipWarning);
+    await confirmSkip.getByRole("button", { name: PRACTICE_COPY.dayKeepPracticing }).click();
+    await expect(confirmSkip).toHaveCount(0);
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.daySkip })).toBeFocused();
+    await page.getByRole("button", { name: PRACTICE_COPY.daySkip }).click();
+    await page.getByRole("group", { name: "Confirm skipping the day" }).getByRole("button", { name: PRACTICE_COPY.daySkipYes }).click();
     const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
     await expect(review).toBeVisible();
     await expect(page.getByRole("table", { name: "Candidates" })).toHaveCount(0);

@@ -13,7 +13,7 @@
 
 /* Text and sections */
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
-.hint { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.hint { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .lead { margin: 0; font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
 .alert { margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: var(--line-label); }
 .alertBar { padding: var(--space-2) var(--space-4); }
@@ -40,7 +40,7 @@
 
 /* Equity chart: balance and equity per close, this week shaded. */
 .chartBlock { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
-.legend { display: flex; flex-wrap: wrap; margin: 0; padding: 0; gap: var(--space-1) var(--space-4); list-style: none; color: var(--color-muted); font-size: var(--text-micro); }
+.legend { display: flex; flex-wrap: wrap; margin: 0; padding: 0; gap: var(--space-1) var(--space-4); list-style: none; color: var(--color-muted); font-size: var(--text-meta); }
 .legendItem { display: inline-flex; align-items: center; gap: var(--space-1); }
 .swatch { width: 14px; height: 2px; flex-shrink: 0; }
 .swatchBalance { background: var(--color-chart-alt); }
@@ -48,8 +48,8 @@
 /* The thin green ticks are each day's close (the chart draws a flat bar per day); this week is a filled block, not a box that looks ticked. */
 .swatchClose { width: 10px; background: var(--color-up); }
 .swatchWeek { width: 18px; height: 10px; border-radius: 2px; background: var(--color-raised); }
-.details { font-size: var(--text-micro); }
-.summary { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-muted); font-size: var(--text-micro); cursor: pointer; }
+.details { font-size: var(--text-meta); }
+.summary { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-muted); font-size: var(--text-meta); cursor: pointer; }
 
 /* Tables: the DenseTable cells; a day's link and a hold's symbol read as text with a role. */
 .stopGutter { display: inline-block; padding-left: var(--space-6); }
@@ -58,7 +58,7 @@
 
 /* Universe heat strip: the names best to worst; a hold has a solid amber edge and "Held", a focus name a dashed edge and "Focus". */
 .heat { display: flex; flex-wrap: wrap; margin: 0; padding: 0; gap: var(--space-1); list-style: none; }
-.heatItem { display: inline-flex; min-height: 24px; align-items: center; gap: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); font-size: var(--text-micro); white-space: nowrap; }
+.heatItem { display: inline-flex; min-height: 24px; align-items: center; gap: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); font-size: var(--text-meta); white-space: nowrap; }
 .heatSymbol { font-weight: var(--weight-bold); }
 .heatTag { color: var(--color-amber); font-weight: var(--weight-semibold); }
 .heatHeld { border-color: var(--color-amber); background: var(--color-raised); }

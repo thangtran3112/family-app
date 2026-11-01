@@ -20,7 +20,7 @@
 
 /* Text and sections */
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
-.hint { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.hint { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
@@ -46,7 +46,7 @@
 .list { display: flex; min-width: 0; margin: 0; padding: 0; flex-direction: column; list-style: none; }
 .rowMain { display: flex; min-width: 0; flex-direction: column; }
 .rowTitle { font-size: var(--text-label); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
-.rowMeta { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.rowMeta { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 .weekRow { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) 0; }
 .money { flex-shrink: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .legendRow { display: flex; min-height: 24px; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
@@ -82,7 +82,7 @@
 .tileValue { font-size: clamp(var(--text-body), 11cqi, var(--text-title)); line-height: var(--line-title); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tileValue[data-tone="up"] { color: var(--color-up); }
 .tileValue[data-tone="down"] { color: var(--color-down); }
-.tileSub { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
+.tileSub { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
 
 /* Right rail: improvement and plan */
 .stack { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); }
