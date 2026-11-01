@@ -3,7 +3,7 @@ import test from "node:test";
 import { HoldingsSchema, IncomeSchema, ShortCallsSchema, type Holdings, type ShortCall } from "../api/fundamentalSchemas.ts";
 import { loadFundamentalFixture } from "../fixtures/desk-fundamental/load.ts";
 import { containsBannedTerm, COPY } from "./freshness.ts";
-import { daysBetween, FEED_LIMIT, incomeTile, needsYouFeed, openCallsTile, portfolioTiles, upcomingEarnings } from "./fundamentalToday.ts";
+import { daysBetween, FEED_LIMIT, feedKindView, incomeTile, needsYouFeed, openCallsTile, portfolioTiles, upcomingEarnings } from "./fundamentalToday.ts";
 import { MASK } from "./mask.ts";
 
 const holdings = (): Holdings => HoldingsSchema.parse(loadFundamentalFixture("holdings"));
@@ -115,6 +115,7 @@ test("portfolio tiles hide dollars while masked, keep percentages, and show dash
   assert.deepEqual(masked.map((item) => item.value), [MASK, `${MASK} · +0.52%`, "+27.50%"]);
   assert.equal(masked[2]!.note, MASK);
   assert.equal(masked[1]!.tone, "up");
+  assert.deepEqual(masked.map((item) => item.tone), ["neutral", "up", "up"], "the plain value is neutral, the signed ones follow the sign");
   const shown = portfolioTiles(holdings(), false);
   assert.deepEqual(shown.map((item) => item.value), ["$483,720", "+$2,521 · +0.52%", "+27.50%"]);
   assert.equal(shown[2]!.note, "+$104,280");
@@ -139,4 +140,11 @@ test("open calls count the positions and name the first expiry", () => {
   assert.deepEqual([tile.value, tile.note], ["3", "Next expiry Fri 2026-10-30"]);
   assert.equal(openCallsTile([]).value, "None");
   assert.equal(openCallsTile(null).value, "—");
+});
+
+test("a feed row names its kind and tones the two that need action amber", () => {
+  assert.deepEqual(feedKindView("short_call_risk"), { label: "Call risk", tone: "warn" });
+  assert.deepEqual(feedKindView("import"), { label: "Holdings", tone: "warn" });
+  assert.deepEqual(feedKindView("earnings_soon"), { label: "Earnings", tone: "neutral" });
+  assert.deepEqual(feedKindView("ex_dividend"), { label: "Ex-dividend", tone: "neutral" });
 });

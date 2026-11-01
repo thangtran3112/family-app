@@ -34,6 +34,7 @@
 
 /* Stat tiles: a label over a value, like the market strip. */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.tiles > li { min-width: 0; }
 .tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
 .tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tileValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
