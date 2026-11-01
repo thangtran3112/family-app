@@ -107,6 +107,7 @@ export function DayPlanFields({
           </Field>
           <Field id="plan-days" label={PRACTICE_COPY.planDays} group error={problems.sessions}>
             <Segmented
+              fill
               value={draft.sessions}
               options={SESSION_CHOICES.map((count) => ({ value: String(count), label: String(count) }))}
               onChange={(sessions) => onDraft({ ...draft, sessions })}
@@ -121,6 +122,7 @@ export function DayPlanFields({
           </Field>
           <Field id="plan-list-at" label={PRACTICE_COPY.planListAt} group className={modal.span} note={anyHeld ? needText : PRACTICE_COPY.planListAtHint} error={problems.listAt} reserve>
             <Segmented
+              fill
               value={draft.listAt}
               options={LIST_TIMES.map((item) => ({ value: item.value, label: item.label, ...(listTimeHeld(item.value, need) ? { disabledReason: needText, reasonId: "plan-list-at-note" } : {}) }))}
               onChange={(listAt) => onDraft(withListTime(draft, listAt))}
@@ -131,6 +133,7 @@ export function DayPlanFields({
           </Field>
           <Field id="plan-interval" label={PRACTICE_COPY.planInterval} group>
             <Segmented
+              fill
               value={setup.interval}
               options={INTERVALS.map((interval) => ({ value: interval, label: interval }))}
               onChange={(interval) => patchSetup({ ...setup, interval })}
