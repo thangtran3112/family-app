@@ -3,12 +3,14 @@
 import { useMemo } from "react";
 import { MarketChart } from "@/components/charts/MarketChart";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { chartPalette } from "@/lib/desk/chartPalette";
 import { WEEK_TEXT, equityCaption, equityRows, type EquityDayRow } from "@/lib/replay/weekScreen";
+import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import type { EquitySeries } from "@/lib/replay/weekView";
 import styles from "./week.module.css";
 
-const BALANCE = "#E5E5EA";
-const EQUITY = "#FFB020";
+const BALANCE = chartPalette.alt;
+const EQUITY = chartPalette.amber;
 
 const COLUMNS: DenseColumn<EquityDayRow>[] = [
   { key: "day", label: "Day", render: (row) => row.day },
@@ -19,8 +21,9 @@ const COLUMNS: DenseColumn<EquityDayRow>[] = [
 
 /**
  * Balance and equity at each close from Day 1, drawn on `MarketChart` as two lines on one money scale with this week
- * shaded (the chart's session shading, fed by the series' flat bars). The axis names no day and no date, so the same
- * numbers sit under the chart as a caption and a table: a screen reader and a keyboard get the whole picture too.
+ * shaded (the chart's session shading, fed by the series' flat bars). The time axis names each close "D1", "D2" (no date: the
+ * real ones stay hidden) and the price axis reads in dollars (D-087, D-128). The same numbers sit under the chart as a caption
+ * and a table: a screen reader and a keyboard get the whole picture too.
  */
 export function EquityPanes({ series }: { series: EquitySeries }) {
   const overlays = useMemo(
@@ -31,6 +34,7 @@ export function EquityPanes({ series }: { series: EquitySeries }) {
     [series],
   );
   const rows = useMemo(() => equityRows(series), [series]);
+  const moneyAxis = useMemo(() => ({ days: series.points.map((point) => point.label), label: formatBalance, tick: (price: number) => formatAxisDollars(price) }), [series]);
 
   return (
     <div className={styles.chartBlock}>
@@ -51,6 +55,7 @@ export function EquityPanes({ series }: { series: EquitySeries }) {
         lastPricePill={false}
         hideDates
         rowLabels={rows.map((row) => row.day)}
+        moneyAxis={moneyAxis}
         chrome="bare"
         height={300}
       />

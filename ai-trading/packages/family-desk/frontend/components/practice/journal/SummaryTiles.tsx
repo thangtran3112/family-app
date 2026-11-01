@@ -1,7 +1,7 @@
 "use client";
 
+import { ThreadTiles } from "@/components/practice/journal/thread/ThreadTiles";
 import type { SummaryTile } from "@/lib/replay/journalView";
-import styles from "./journal.module.css";
 
 export type SummaryTilesProps = {
   tiles: SummaryTile[];
@@ -9,25 +9,7 @@ export type SummaryTilesProps = {
   hint: string | null;
 };
 
-/** Eight journal tiles in a responsive grid; each reads as "Label: value" to a screen reader. */
+/** Eight journal tiles: the same tile as the thread journal and the week review, so a value scales with its tile and never wraps mid-number (D-086). */
 export function SummaryTiles({ tiles, hint }: SummaryTilesProps) {
-  return (
-    <ul role="list" className={styles.tiles}>
-      {tiles.map((tile) => (
-        <li key={tile.id} role="listitem" className={styles.tile}>
-          <span className={styles.tileLabel}>{tile.label}</span>
-          <span className="sr-only">{": "}</span>
-          <span className={styles.tileValue} data-tone={tile.tone}>
-            {tile.value}
-          </span>
-          {tile.id === "adherence" && hint ? (
-            <>
-              {" "}
-              <span className={styles.tileHint}>{hint}</span>
-            </>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  );
+  return <ThreadTiles tiles={tiles.map((tile) => ({ ...tile, sub: tile.id === "adherence" && hint ? hint : "" }))} />;
 }

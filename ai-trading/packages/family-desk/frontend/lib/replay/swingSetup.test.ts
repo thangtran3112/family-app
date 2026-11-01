@@ -56,7 +56,6 @@ test("the form starts as 02p c1 says", () => {
     hideDates: true,
     interval: "15m",
     tape: "off",
-    maxOpenHolds: "3",
     riskPerHoldUsd: "",
     watchlistIds: [],
     filterIds: [],
@@ -90,8 +89,8 @@ test("the preview request is the draft in the API's names", () => {
 
 test("the swing block and the create body carry the contract's names and no empty optional", () => {
   const block = swingBlock(draft(), rows);
-  assert.deepEqual(Object.keys(block), ["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed", "maxOpenHolds"]);
-  assert.deepEqual([block.firstDay, block.sessions, block.hideDates, block.interval, block.tape, block.maxOpenHolds], ["2026-07-20", 20, "yes", "15m", "off", 3]);
+  assert.deepEqual(Object.keys(block), ["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed"]);
+  assert.deepEqual([block.firstDay, block.sessions, block.hideDates, block.interval, block.tape], ["2026-07-20", 20, "yes", "15m", "off"]);
   assert.equal((block.universe as unknown[]).length, 50);
   assert.deepEqual(block.armed, [], "D-153: a new swing thread is created with nothing armed");
   const withRisk = swingBlock(draft({ riskPerHoldUsd: "1,500", hideDates: false, tape: "on" }), rows);
@@ -122,8 +121,6 @@ test("each field has its own plain message", () => {
   };
   assert.equal(check({ sessions: "30" }).sessions, "Sessions: a whole number from 15 to 23");
   assert.equal(check({ sessions: "" }).sessions, "Sessions: a whole number from 15 to 23");
-  assert.equal(check({ maxOpenHolds: "9" }).maxOpenHolds, "Open holds: a whole number from 1 to 5");
-  assert.equal(check({ maxOpenHolds: "0" }).maxOpenHolds, "Open holds: a whole number from 1 to 5");
   assert.equal(check({ riskPerHoldUsd: "0" }).riskPerHoldUsd, "Risk per hold: whole dollars from 1 to 100,000");
   assert.equal(check({ riskPerHoldUsd: "2.5" }).riskPerHoldUsd, "Risk per hold: whole dollars from 1 to 100,000");
   assert.equal(check({}, rows.slice(0, 5)).universe, "Universe: 10 to 50 symbols, each once");
@@ -213,7 +210,7 @@ test("every message the setup builds avoids the Practice banned words", () => {
     firstDayProblem({ firstDay: "2026-07-18", sessions: "20" }, NOW),
     firstDayProblem({ firstDay: "2026-10-12", sessions: "20" }, NOW),
     ...Object.values(previewProblems(draft({ sessions: "9", firstDay: "", target: "3" }), NOW)),
-    ...Object.values((validateSwingDraft(defaultThreadDraft(), draft({ maxOpenHolds: "9", riskPerHoldUsd: "0", sessions: "30" }), rows.slice(0, 3), NOW) as { problems: Record<string, string> }).problems),
+    ...Object.values((validateSwingDraft(defaultThreadDraft(), draft({ riskPerHoldUsd: "0", sessions: "30" }), rows.slice(0, 3), NOW) as { problems: Record<string, string> }).problems),
     ...Object.values((validateSwingDraft(defaultThreadDraft(), draft(), [...rows.slice(0, 11), rows[0]!], NOW) as { problems: Record<string, string> }).problems),
   ];
   for (const text of messages) if (text != null) assert.equal(containsPracticeBannedTerm(text), false, text);

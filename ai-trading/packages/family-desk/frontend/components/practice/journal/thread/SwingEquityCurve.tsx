@@ -21,14 +21,16 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
   const { plot, now } = layout;
   const bottom = plot.y + plot.height;
   const summary = swingCurveSummary(state.equity_series, startingBalance, formatBalance);
-  // The higher figure's label sits above its point and the other below, so two close lines do not print on each other.
+  // The higher figure's label sits above its point and the other below, so two close lines do not print on each other. A label
+  // never goes below a point that rests on the bottom tick: that is the row of the day labels ("Balance $50,000.00" ran into "D5", D-123).
   const equityAbove = now !== null && now.equity >= now.balance;
+  const below = (y: number) => y + 16 < bottom - 6;
   const endLabels: CurveLabel[] =
     now === null
       ? []
       : [
-          { x: now.x - 8, y: now.equityY + (equityAbove ? -8 : 16), text: `${HUB_SWING_COPY.curveEquity} ${formatBalance(now.equity)}`, anchor: "end" },
-          { x: now.x - 8, y: now.balanceY + (equityAbove ? 16 : -8), text: `${HUB_SWING_COPY.curveBalance} ${formatBalance(now.balance)}`, anchor: "end" },
+          { x: now.x - 8, y: now.equityY + (!equityAbove && below(now.equityY) ? 16 : -8), text: `${HUB_SWING_COPY.curveEquity} ${formatBalance(now.equity)}`, anchor: "end" },
+          { x: now.x - 8, y: now.balanceY + (equityAbove && below(now.balanceY) ? 16 : -8), text: `${HUB_SWING_COPY.curveBalance} ${formatBalance(now.balance)}`, anchor: "end" },
         ];
   // The start note moves off the end labels when the balance sits near its start ("Starting balance" printed over "Balance $25,000.00" on a live thread).
   const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, endLabels);
@@ -53,9 +55,9 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
             <circle cx={point.x} cy={point.balanceY} r={3.5} className={point === now ? styles.dotNow : styles.dot} />
           </g>
         ))}
-        {layout.days.map((point) =>
-          point.label ? <text key={point.dayNo} x={point.x} y={bottom + 20} textAnchor={point.dayNo === layout.days[0]?.dayNo ? "start" : "middle"} className={styles.axis}>{point.label}</text> : null,
-        )}
+        {layout.xTicks.map((tick, index) => (
+          <text key={tick.label} x={tick.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{tick.label}</text>
+        ))}
         {endLabels[0] && (
           <text x={endLabels[0].x} y={endLabels[0].y} textAnchor="end" className={styles.equityLabel}>{endLabels[0].text}</text>
         )}

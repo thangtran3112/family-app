@@ -237,7 +237,6 @@
         "source": "filter",
         "id": 5
       }
-    ],
-    "maxOpenHolds": 5
+    ]
   }
 }

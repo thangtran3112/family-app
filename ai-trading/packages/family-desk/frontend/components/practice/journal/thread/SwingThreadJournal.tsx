@@ -5,6 +5,7 @@ import { useState } from "react";
 import { SwingContinue } from "@/components/practice/hub/SwingContinue";
 import { HoldsTable } from "@/components/practice/swing/HoldsTable";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
@@ -16,6 +17,7 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
 import { swingDatesHidden, swingCardView } from "@/lib/replay/swing";
+import { swingGate } from "@/lib/replay/overviewView";
 import { loadHolds, loadWeeks } from "@/lib/replay/swingApi";
 import { journalStatusLine } from "@/lib/replay/statusLine";
 import type { Thread } from "@/lib/replay/threads";
@@ -55,10 +57,11 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
   const nextText =
     view?.action.kind === "none"
       ? PRACTICE_COPY.swingThreadFinished
-      : (view?.notice ?? `${where} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`);
+      : (swingGate(thread)?.locked ?? view?.notice ?? `${where} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`);
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
+      <PracticeTabs threadId={thread.thread.id} active="journal" mode="swing" />
       <header className={styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
@@ -159,7 +162,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
   );
 }
 
-/** What the thread was started with (02p c1): the calendar, the interval and tape, the cap on open holds, and the frozen universe's mix. */
+/** What the thread was started with (02p c1): the calendar, the interval and tape, the risk per hold, and the frozen universe's mix. */
 function SwingSetupPanel({ thread, hidden }: { thread: Thread; hidden: boolean }) {
   const setup = thread.thread.swing;
   if (!setup) return null;
@@ -168,7 +171,6 @@ function SwingSetupPanel({ thread, hidden }: { thread: Thread; hidden: boolean }
     { label: "Dates", value: hidden ? "Hidden" : `From ${formatEtDay(setup.firstDay)}` },
     { label: "Interval", value: setup.interval },
     { label: "Tape", value: setup.tape === "on" ? PRACTICE_COPY.swingTapeYes : PRACTICE_COPY.swingTapeNo },
-    { label: "Open holds at most", value: String(setup.maxOpenHolds) },
     { label: "Risk per hold", value: setup.riskPerHoldUsd === undefined ? "None" : formatBalance(setup.riskPerHoldUsd), money: setup.riskPerHoldUsd !== undefined },
   ];
   return (

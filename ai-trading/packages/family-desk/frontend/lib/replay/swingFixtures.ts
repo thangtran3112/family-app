@@ -45,7 +45,6 @@ export const swingSetup = {
   interval: "15m",
   tape: "off",
   armed: [{ source: "filter", id: 4 }],
-  maxOpenHolds: 3,
   riskPerHoldUsd: 100,
 } as const;
 
@@ -543,7 +542,6 @@ export const weekClosed: WeekOut = {
       checks: [
         { id: "stop_set", label: "Stop on every entry", applicable: true, passed: true, detail: "2 of 2" },
         { id: "stop_honored", label: "Stop honored", applicable: false, passed: true, detail: "No stop was hit" },
-        { id: "open_holds_within_plan", label: "Open holds within plan", applicable: true, passed: true, detail: "Most open: 2 of 3" },
         { id: "week_loss_limit", label: "Week loss limit", applicable: true, passed: true, detail: "No entry after a loss over $600" },
         { id: "focus_before_open", label: "Focus before the open", applicable: true, passed: false, detail: "1 of 2 entries" },
       ],

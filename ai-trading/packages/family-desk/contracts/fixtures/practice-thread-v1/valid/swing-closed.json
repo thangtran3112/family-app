@@ -239,8 +239,7 @@
         "source": "filter",
         "id": 5
       }
-    ],
-    "maxOpenHolds": 5
+    ]
   },
   "createdAt": "2026-10-24T14:00:00Z",
   "closedAt": "2026-10-30T20:00:00Z",

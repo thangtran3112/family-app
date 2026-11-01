@@ -2,7 +2,7 @@ import { practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingOpenNext, UniversePreview } from "./swingApi.ts";
 import type { SwingProblems } from "./swingSetup.ts";
 import { startBlocker } from "./universeView.ts";
-import { balanceTicks, type Box, type Tick } from "./threadChart.ts";
+import { balanceTicks, dayTickStep, type Box, type Tick } from "./threadChart.ts";
 import type { SwingEquityPoint } from "./threads.ts";
 
 // What the hub and the thread journal need for swing threads beyond F1's `swing*.ts`: the thread modes,
@@ -97,8 +97,6 @@ export type SwingCurveDay = {
   equity: number;
   balanceY: number;
   equityY: number;
-  /** "Start", "D1", "D5": only some days carry a label so the axis stays readable. */
-  label: string | null;
 };
 
 export type SwingCurve = {
@@ -107,6 +105,8 @@ export type SwingCurve = {
   startY: number;
   plot: { x: number; y: number; width: number; height: number };
   days: SwingCurveDay[];
+  /** The x axis labels, "Start" then a regular step over the whole span ("D5", "D10", "D15"), played or not. */
+  xTicks: Array<{ x: number; label: string }>;
   balanceLine: string;
   equityLine: string;
   /** The newest day: where the "Balance" and "Equity" labels sit. */
@@ -127,26 +127,25 @@ export function swingCurveLayout(series: readonly SwingEquityPoint[], startingBa
   const yOf = (value: number) => plot.y + plot.height - ((value - lo) / (hi - lo || 1)) * plot.height;
   const span = Math.max(days, series.length, 1);
   const xOf = (dayNo: number) => plot.x + (dayNo / span) * plot.width;
-  const pointOf = (dayNo: number, balance: number, equity: number, label: string | null): SwingCurveDay => ({
+  const pointOf = (dayNo: number, balance: number, equity: number): SwingCurveDay => ({
     dayNo,
     x: xOf(dayNo),
     balance,
     equity,
     balanceY: yOf(balance),
     equityY: yOf(equity),
-    label,
   });
-  const labelled = (dayNo: number) => (dayNo === 1 || dayNo % 5 === 0 ? `D${dayNo}` : null);
-  const points = [
-    pointOf(0, startingBalance, startingBalance, "Start"),
-    ...series.map((point) => pointOf(point.day_no, point.balance_usd, point.equity_usd, labelled(point.day_no))),
-  ];
+  const step = dayTickStep(span);
+  const xTicks = [{ x: xOf(0), label: "Start" }];
+  for (let dayNo = step; dayNo <= span; dayNo += step) xTicks.push({ x: xOf(dayNo), label: `D${dayNo}` });
+  const points = [pointOf(0, startingBalance, startingBalance), ...series.map((point) => pointOf(point.day_no, point.balance_usd, point.equity_usd))];
   const path = (pick: (point: SwingCurveDay) => number) => points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${pick(point).toFixed(1)}`).join(" ");
   return {
     ticks: ticks.map((value) => ({ value, y: yOf(value) })),
     startY: yOf(startingBalance),
     plot,
     days: points,
+    xTicks,
     balanceLine: path((point) => point.balanceY),
     equityLine: path((point) => point.equityY),
     now: series.length > 0 ? points[points.length - 1]! : null,
@@ -175,18 +174,20 @@ const overlaps = (a: CurveLabel, b: CurveLabel): boolean => {
  * Where the "Starting balance" note sits on the curve. The note belongs on the start line, but the end labels ("Balance $25,000.00",
  * "Equity ...") land on that line too whenever the balance is still near its start, so the note tries the left end above the line,
  * the left end below it, then the right end, and takes the first spot that prints on none of `others`. With no free spot it keeps the first.
+ * A spot under the plot is the row of the day labels, so a start line that rests on the bottom tick has no "below" spots (D-123).
  */
 export function startNoteSpot(layout: Pick<SwingCurve, "plot" | "startY">, text: string, others: readonly CurveLabel[]): CurveLabel {
   const { plot, startY } = layout;
   const left = plot.x + 6;
   const right = plot.x + plot.width - 6;
-  const spots: CurveLabel[] = [
+  const all: CurveLabel[] = [
     { x: left, y: startY - 6, text, anchor: "start" },
     { x: left, y: startY + 14, text, anchor: "start" },
     { x: right, y: startY - 6, text, anchor: "end" },
     { x: right, y: startY + 14, text, anchor: "end" },
   ];
-  return spots.find((spot) => others.every((other) => !overlaps(spot, other))) ?? spots[0]!;
+  const spots = all.filter((spot) => spot.y <= plot.y + plot.height);
+  return spots.find((spot) => others.every((other) => !overlaps(spot, other))) ?? spots[0] ?? all[0]!;
 }
 
 /** The alt text of the curve for a screen reader. */

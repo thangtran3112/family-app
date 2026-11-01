@@ -15,6 +15,12 @@ export function balanceTicks(min: number, max: number): number[] {
 
 export type Tick = { value: number; y: number };
 
+/** The step of an x axis that counts days: every day up to ten, then 5, 10, 25 or 50, so the labels sit at one regular
+ *  interval ("Start", D5, D10, D15) and never crowd the "Start" label (D-123). */
+export function dayTickStep(days: number): number {
+  return [1, 5, 10, 25, 50].find((step) => days / step <= 10) ?? 50;
+}
+
 export type CurveLayout = {
   ticks: Tick[];
   /** Y of the starting balance, the dashed line; the area below it is the red shading. */

@@ -341,7 +341,6 @@ class WeekCheckOut(BaseModel):
         "stop_set",
         "stop_honored",
         "risk_per_hold",
-        "open_holds_within_plan",
         "week_loss_limit",
         "entries_per_week",
         "on_signal",

@@ -14,6 +14,7 @@ import {
   startOutcome,
   threadHref,
   threadOverviewHref,
+  universeLines,
   weekAction,
   weekLoadProblem,
   weekMissingText,
@@ -152,4 +153,11 @@ test("a week that cannot open has a heading and a full sentence, and the way bac
   assert.deepEqual(other, { title: "Weekly review", text: "This week has not started yet." });
   assert.equal(weekMissingText("Week 3 is not open yet.", null).text, "Week 3 is not open yet.", "a sentence stays as it is");
   for (const text of [day.title, day.text, other.text]) assert.equal(containsPracticeBannedTerm(text), false, text);
+});
+
+test("the universe line folds its caveat away: the first sentence stays, the rest is behind a summary (D-130)", () => {
+  const { lead, rest } = universeLines(weekClosed.universe_label);
+  assert.match(lead, /^Fixed universe · \d+ symbols chosen today from the symbols the Desk tracks now\.$/);
+  assert.match(rest ?? "", /^Stocks that were delisted or renamed/);
+  assert.deepEqual(universeLines("Fixed universe · 5 symbols."), { lead: "Fixed universe · 5 symbols.", rest: null });
 });

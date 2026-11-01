@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
-import { BackLink } from "@/components/practice/hub/BackLink";
+import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
@@ -198,7 +198,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
   return (
     <div className={dayStyles.screen}>
-      <BackLink threadId={threadId} />
+      <PracticeTabs threadId={threadId} active="day" mode="swing" />
       <header className={dayStyles.header}>
         <div className={dayStyles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={dayStyles.title}>{swingBoardTitle(list, hidden)}</h1>
@@ -373,7 +373,7 @@ function boardColumnsOf(
   options: { held: Record<string, string>; locked: boolean; starred: (symbol: string) => boolean; onStar: (symbol: string) => void },
 ): DenseColumn<BoardRow>[] {
   return [
-    { key: "star", label: "Star", render: (row) => <StarCell symbol={row.symbol} on={options.starred(row.symbol)} locked={options.locked} onToggle={options.onStar} /> },
+    { key: "star", label: "Star", align: "center", render: (row) => <StarCell symbol={row.symbol} on={options.starred(row.symbol)} locked={options.locked} onToggle={options.onStar} /> },
     {
       key: "symbol",
       label: "Symbol",
@@ -391,6 +391,7 @@ function boardColumnsOf(
       label: column.label,
       align: column.align,
       firstSort: column.firstSort,
+      hideWhenEmpty: column.hideWhenEmpty,
       ...(column.priority === undefined ? {} : { priority: column.priority }),
       sortValue: (row) => boardSortValue(column.key, row),
       render: (row) => {
@@ -399,7 +400,9 @@ function boardColumnsOf(
           return chip ? <Badge tone="warn">{chip}</Badge> : "—";
         }
         const tone = boardCellTone(column, row);
-        return <span className={tone ? dayStyles[tone] : undefined}>{boardCellText(column, row)}</span>;
+        const text = boardCellText(column, row);
+        // A dash with no tone is plain text, so a column of dashes can be left out (hideWhenEmpty).
+        return tone ? <span className={dayStyles[tone]}>{text}</span> : text;
       },
     })),
   ];

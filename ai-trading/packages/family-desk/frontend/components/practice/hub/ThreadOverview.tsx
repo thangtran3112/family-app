@@ -3,14 +3,18 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
+import { TabPanel } from "@/components/ui/Tabs";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { parseThreadTab } from "@/lib/replay/practiceTabs";
 import { threadName } from "@/lib/replay/threadView";
 import { DayOverview } from "./DayOverview";
 import { NewPlanModal } from "./NewPlanModal";
 import { OverviewChips, OverviewShell } from "./OverviewParts";
+import { PortfolioTab } from "./PortfolioTab";
+import { PracticeTabs, PRACTICE_TABS_ID } from "./PracticeTabs";
 import { SwingOverview } from "./SwingOverview";
 import { planOpensIn } from "./ThreadAction";
 import styles from "./landing.module.css";
@@ -21,9 +25,12 @@ const POLL_MS = 4000;
 
 /** `/practice/thread?id=`: the thread's overview, where she lands after a click on a row or New plan and where she returns to
  *  between days (02r2, 5R). A day thread and a swing thread each have their own dashboard (`DayOverview`, `SwingOverview`)
- *  under one header. Reads the URL, so the page wraps it in Suspense. */
+ *  under one header and the thread's tab strip. `?tab=portfolio` shows the Portfolio tab; anything else is Summary. Both tabs share
+ *  this component, so a switch keeps the loaded thread. Reads the URL, so the page wraps it in Suspense. */
 export function ThreadOverview() {
-  const raw = useSearchParams().get("id");
+  const params = useSearchParams();
+  const raw = params.get("id");
+  const tab = parseThreadTab(params.get("tab"));
   const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
   const [revision, setRevision] = useState(0);
   const changed = useCallback(() => setRevision((n) => n + 1), []);
@@ -62,12 +69,21 @@ export function ThreadOverview() {
   const { thread } = summary;
 
   return (
-    <OverviewShell title={threadName(thread)} titleRef={titleRef} aside={<OverviewChips thread={thread} />}>
-      {thread.mode === "swing" && summary.swing ? (
-        <SwingOverview summary={summary} plan={plan} onChanged={changed} />
-      ) : (
-        <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setReplacing(true)} />
-      )}
+    <OverviewShell
+      title={threadName(thread)}
+      titleRef={titleRef}
+      aside={<OverviewChips thread={thread} />}
+      tabs={<PracticeTabs threadId={thread.id} active={tab} mode={thread.mode} back={false} panelMounted />}
+    >
+      <TabPanel idBase={PRACTICE_TABS_ID} id={tab}>
+        {tab === "portfolio" ? (
+          <PortfolioTab summary={summary} />
+        ) : thread.mode === "swing" && summary.swing ? (
+          <SwingOverview summary={summary} plan={plan} onChanged={changed} />
+        ) : (
+          <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setReplacing(true)} />
+        )}
+      </TabPanel>
       {replacing && (
         <NewPlanModal
           thread={thread}

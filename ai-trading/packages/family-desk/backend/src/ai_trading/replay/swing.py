@@ -539,7 +539,6 @@ def plan_snapshot(thread: PracticeThread, plan: PracticePlan) -> dict[str, Any]:
         "maxLossUsd": thread.max_loss_usd,
         "maxTrades": thread.max_trades,
         "riskPerHoldUsd": plan.spec.get("riskPerHoldUsd"),
-        "maxOpenHolds": plan.spec["maxOpenHolds"],
     }
     return {key: value for key, value in fields.items() if value is not None}
 

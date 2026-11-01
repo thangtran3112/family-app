@@ -57,7 +57,7 @@
     "interval": "15m",
     "tape": "off",
     "armed": [],
-    "maxOpenHolds": 0,
-    "riskPerHoldUsd": 500
+    "riskPerHoldUsd": 500,
+    "maxOpenHolds": 3
   }
 }

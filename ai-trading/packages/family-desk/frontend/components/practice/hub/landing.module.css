@@ -49,9 +49,6 @@
 /* Delete: muted until the pointer is on it, then the down colour. */
 button.deleteButton { color: var(--color-muted); }
 button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); color: var(--color-down); }
-/* No threads yet: one centred card, one sentence, one primary button (D-115). */
-.emptyCard { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); margin: var(--space-8) auto 0; max-width: 420px; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); padding: var(--space-6); text-align: center; }
-.emptyTitle { margin: 0; font-size: var(--text-body); line-height: var(--line-body); }
 .notice { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
 /* Empty it takes no room (and no flex gap) but stays in the accessibility tree, so the text is announced when it arrives. */
 .notice:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; }

@@ -54,9 +54,9 @@ export const SWING_SETUP_RULES = [
 
 // The swing calendar and universe (02p): what a swing thread is created with and what it reads back.
 // `firstDay` (a session from 2017-01-03), the universe coverage and the daily-cadence arms are server
-// rules; the form defaults (20 sessions, hidden dates, 15m, tape off, 3 holds) are the form's, not the
-// contract's. The universe is frozen at creation; in a swing thread the plan's `maxLossUsd` and
-// `maxTrades` count per week.
+// rules; the form defaults (20 sessions, hidden dates, 15m, tape off) are the form's, not the
+// contract's. There is no cap on open holds (ADR-0016): cash is the only size rule. The universe is frozen
+// at creation; in a swing thread the plan's `maxLossUsd` and `maxTrades` count per week.
 export const SwingSetupV1Schema = z
   .strictObject({
     firstDay: IsoDaySchema,
@@ -76,7 +76,6 @@ export const SwingSetupV1Schema = z
     interval: z.enum(["5m", "15m"]),
     tape: z.enum(["off", "on"]),
     armed: ArmedRefsSchema,
-    maxOpenHolds: z.int().min(1).max(5),
     riskPerHoldUsd: z.int().min(1).max(100_000).optional(),
   })
   .superRefine((swing, ctx) => {

@@ -4,7 +4,7 @@ import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
-import { expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
+import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
 import { openNextDay, replayRail, send } from "./swing-helpers";
 
@@ -29,7 +29,7 @@ function watchReplayAnswers(page: Page) {
   return bodies;
 }
 
-const playhead = (page: Page) => page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd");
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 const marksTab = (page: Page) => page.getByRole("tab", { name: "Marks" });
 
 /** A right-rail section: stacked in the rail at 1440, a drawer behind the strip at 1180 (it opens here). */
@@ -127,7 +127,7 @@ test.describe("Practice", () => {
     await page.keyboard.press("4");
     await page.keyboard.press("Space");
     await expect(page.getByText(practiceText("playing", { speed: 10 }))).toBeVisible();
-    await expect(page.getByText("Playing · 10x")).toBeVisible(); // D-025: the player's state as a pill in the header
+    await expect(page.getByText("Playing · 10x")).toBeVisible(); // D-025: the player's state as a pill beside the thread's clock
     // D-024: the tape has its BIG column and names the pace window.
     await expect(page.getByRole("columnheader", { name: "Big" })).toBeVisible();
     await expect(page.getByText("Pace · 10 seconds")).toBeVisible();
@@ -220,6 +220,7 @@ test.describe("Practice", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Practice journal");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("TSLA");
     await expect(page.getByRole("listitem").filter({ hasText: /^Trades/ })).toContainText("1");
+    expect(await brokenTileValues(page), "a journal tile value wraps or spills (D-086)").toEqual([]);
     await expect(page.getByRole("table", { name: "Practice trades" }).getByRole("row")).toHaveCount(2); // header + the trade
     await expectCleanScreen(page);
 
@@ -309,7 +310,9 @@ test.describe("Practice", () => {
     await expect(left).toContainText("Risk plan comes from the thread: ");
     await expect(page.getByRole("list", { name: "Filters" }).getByRole("listitem").first()).toHaveAttribute("data-active", "true");
     await expect(page.getByText("Chosen at setup")).toBeVisible();
-    for (const label of ["Prev close", "Prev RVOL", "Prev change %", "Earnings"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
+    for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
+    // D-136: no name reports before the open, so there is no Earnings column of dashes to scroll past.
+    await expect(table.getByRole("columnheader", { name: "Earnings" })).toHaveCount(0);
     // D-043: the day list's own status line.
     await expect(page.getByLabel("Status")).toContainText("Day lists built before the open");
     await expect(page.getByLabel("Status")).toContainText("List built 8:30 AM ET");
@@ -329,7 +332,8 @@ test.describe("Practice", () => {
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", /^\/practice\/thread\?id=\d+$/);
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", "/practice");
+    await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabTrade })).toHaveAttribute("aria-selected", "true");
     // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
     await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
@@ -383,7 +387,9 @@ test.describe("Practice", () => {
     await expect(review).toContainText("Your names moved");
     await expect(review).toContainText(PRACTICE_COPY.reviewDayFinished); // D-029: the finished day shows its date, and says so
     await expect(review).toContainText(PRACTICE_COPY.reviewRankNote); // D-031: signed, biggest gain first
-    await expect(review.getByRole("table", { name: "Your practice trades" })).toBeVisible(); // D-032: a line per trade
+    const trades = review.getByRole("table", { name: "Your practice trades" });
+    await expect(trades).toBeVisible(); // D-032: a line per trade
+    for (const label of ["In at", "Out at", "Held", "P/L", "Return"]) await expect(trades.getByRole("columnheader", { name: label })).toBeVisible(); // D-142: time, hold time and return each get a column
     await expect(review).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("row")).toHaveCount(2); // header + TSLA
     await expect(review).toContainText("Practice universe");
@@ -1030,6 +1036,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await openDesk(page, "/practice/journal");
     await expect(page.getByText(PRACTICE_COPY.threadPickNone)).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.threadPickTitle), "one statement, not two stacked").toHaveCount(0);
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.openPractice }), "and the way forward is one primary link").toBeVisible();
   });
 
   test("while the day list loads the page shows its own shape and says it is busy (D-116)", async ({ page, context }) => {

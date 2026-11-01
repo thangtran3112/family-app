@@ -20,6 +20,7 @@ import {
   startOutcome,
   threadHref,
   threadOverviewHref,
+  universeLines,
   weekAction,
   weekSubtitle,
   weekTitle,
@@ -69,6 +70,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
   const sourceLine = bySource === null ? null : `${WEEK_TEXT.sourceLead} · ${bySource}`;
   const filterLine = filterQualityLine(review.filter_quality);
   const untraded = focusUntradedLines(review.focus_untraded);
+  const universe = universeLines(week.universe_label);
   const action = weekAction({ weekNo: week.week_no, toDate, lastDayNo: review.week.last_day_no, state: thread?.swing, daily: thread?.daily, today: thread?.today });
 
   // The rating shows the moment she picks it and goes back, with a line saying so, if the save fails. The notes stay in the
@@ -122,7 +124,13 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
           </div>
           <p className={styles.sub}>{weekSubtitle(week)}</p>
           {heading.note !== null && <p className={styles.sub}>{heading.note}</p>}
-          <p className={styles.sub}>{week.universe_label}</p>
+          <p className={styles.sub}>{universe.lead}</p>
+          {universe.rest !== null && (
+            <details className={styles.details}>
+              <summary className={styles.summary}>{WEEK_TEXT.universeMore}</summary>
+              <p className={styles.hint}>{universe.rest}</p>
+            </details>
+          )}
         </div>
         {/* The way on sits beside the "Final" chip, not 1,770 px down under the tables and the notes (D-088). A final week's one way on is the ← Thread link. */}
         <div className={styles.actions}>
@@ -142,7 +150,7 @@ export function WeekReview({ threadId, week, thread }: { threadId: number; week:
             <h2 id="week-summary-title" className={styles.sectionTitle}>{WEEK_TEXT.summaryTitle}</h2>
             <SimulatedBadge />
           </div>
-          <ThreadTiles tiles={tiles} />
+          <ThreadTiles tiles={tiles} fourAcross />
           <p className={styles.lead}>{weekSelectionText(review)}</p>
         </section>
 

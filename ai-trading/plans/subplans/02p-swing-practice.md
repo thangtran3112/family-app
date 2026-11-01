@@ -46,7 +46,7 @@ by the server, the Practice band, no orders) is the 02o core.
    and Peek are cut at D−1's close. Holds and the day strip are marked only at revealed prices. A week's review reads nothing
    after that week's last close. A swing day cannot be replayed again inside its thread. Details in §a3.
 6. **Practice holds.** At most one hold per symbol; no scaling in and no partial exits. The plan field `maxOpenHolds` (1 to
-   5, default 3) is scored. A hard cap of 5 open holds is enforced. A **1x cash rule** applies: open notional, long and short
+   5, default 3) and the hard cap of 5 open holds were removed on 2026-11-01 (ADR-0016, neutrality amendment): cash is the only size rule. A **1x cash rule** applies: open notional, long and short
    alike, may not exceed free cash. There is no margin and no interest (02r).
 7. **Stops never exit; play pauses instead.** A stop note is still a note (02o §6: an auto-exit would simulate an order).
    Play, Step, Jump, and End-of-window **pause at the first one-minute bar that crosses an open hold's stop**, gap opens

@@ -1,0 +1,4 @@
+/* The practice thread's tab strip: one 28 px row (the height the back link had), the hairline under it carries the amber underline. Layout only. */
+.bar { display: flex; min-width: 0; flex: 0 0 auto; align-items: stretch; gap: var(--space-4); border-bottom: 1px solid var(--color-hairline); padding: 0 var(--space-4); }
+.bar[aria-busy="true"] { cursor: progress; }
+.back { align-self: center; white-space: nowrap; }

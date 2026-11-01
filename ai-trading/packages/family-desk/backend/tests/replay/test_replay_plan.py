@@ -587,6 +587,31 @@ def test_peek_is_fed_the_rebased_daily_frame_not_the_raw_one(db_session, user_id
     assert {bar["c"] for bar in peek["daily"]} == {50.0}  # the raw series would show 100 before the split
 
 
+def test_peek_of_a_name_with_no_minute_bars_answers_its_daily_chart_not_a_500(
+    db_session, user_id, svc, monkeypatch
+) -> None:
+    """D-145: a candidate whose minute bars did not load (a provider outage, or a legacy-seeded stack with none) used to
+    compare an empty RangeIndex with a Timestamp and answer 500. It now answers the daily chart and no minutes."""
+    row = _first_list(db_session, user_id, svc)
+    monkeypatch.setattr(screen, "minutes_loader", lambda history, store, day: lambda symbol: None)
+    peek = plan_mod.day_list_out(db_session, user_id, row.id, svc, peek="GAPPER")["peek"]
+    assert peek["minutes"] == [] and peek["daily"] and peek["daily"][-1]["t"] < DAYS[0]
+    assert peek["levels"]["prior_close"] == 100.0
+    assert peek["levels"]["premarket_high"] is None and peek["levels"]["premarket_low"] is None
+
+
+_SATURDAY_ONLY = pd.DataFrame({"high": [1.0], "low": [1.0], "close": [1.0]}, index=[DAYS[0].replace(day=26)])
+
+
+@pytest.mark.parametrize("daily", [None, _SATURDAY_ONLY])
+def test_peek_of_a_name_with_no_daily_bars_answers_no_data(db_session, user_id, svc, monkeypatch, daily) -> None:
+    """No as-of daily frame, or one whose only bar is no session (a Saturday): both read as no data, never a 500."""
+    row = _first_list(db_session, user_id, svc)
+    monkeypatch.setattr(screen, "asof_loader", lambda history, store, day: lambda symbol: daily)
+    peek = plan_mod.day_list_out(db_session, user_id, row.id, svc, peek="GAPPER")["peek"]
+    assert peek["daily"] == [] and peek["minutes"] == [] and peek["levels"] == {}
+
+
 def test_end_day_unseals_the_review_and_ranks_the_candidates_by_move_from_the_list_price(
     db_session, user_id, svc
 ) -> None:
