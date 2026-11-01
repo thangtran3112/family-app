@@ -881,6 +881,7 @@ export const PRACTICE_COPY = {
   notesUnsaved: "Not saved yet",
   dayNotFound: "That practice day was not found · open a day from your thread",
   landingStartFirst: "Start your first practice thread",
+  openPractice: "Open Practice",
   swingWeekFinalHolds: "Final · {n} {noun} open",
   threadOpenJournal: "Open journal",
   dayEndYes: "Yes, end day",
