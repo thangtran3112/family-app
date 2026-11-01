@@ -25,7 +25,7 @@
 .link:hover { text-decoration: underline; }
 .link:focus-visible, .star:focus-visible, .tab:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
-.star { width: 24px; height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.star { width: 24px; height: 24px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: var(--text-body); line-height: 1; cursor: pointer; }
 .star:hover:not(:disabled) { background: var(--color-raised); color: var(--color-text); }
 .star[aria-pressed="true"] { color: var(--color-amber); }
 .star:disabled { cursor: default; opacity: 0.5; }

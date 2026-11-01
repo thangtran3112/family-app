@@ -41,8 +41,8 @@
 .legend { display: flex; flex-wrap: wrap; margin: 0; padding: 0; gap: var(--space-1) var(--space-4); list-style: none; color: var(--color-muted); font-size: var(--text-micro); }
 .legendItem { display: inline-flex; align-items: center; gap: var(--space-1); }
 .swatch { width: 14px; height: 2px; flex-shrink: 0; }
-.swatchBalance { background: #E5E5EA; }
-.swatchEquity { background: #FFB020; }
+.swatchBalance { background: var(--color-chart-alt); }
+.swatchEquity { background: var(--color-amber); }
 /* The thin green ticks are each day's close (the chart draws a flat bar per day); this week is a filled block, not a box that looks ticked. */
 .swatchClose { width: 10px; background: var(--color-up); }
 .swatchWeek { width: 18px; height: 10px; border-radius: 2px; background: var(--color-raised); }
