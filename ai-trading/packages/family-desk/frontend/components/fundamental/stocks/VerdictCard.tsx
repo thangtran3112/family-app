@@ -1,5 +1,7 @@
 import type { Research } from "@/lib/api/fundamentalSchemas";
 import { AiRatingChip } from "@/components/fundamental/shared/AiRatingChip";
+import { Banner } from "@/components/ui/Banner";
+import { PanelHeader } from "@/components/ui/Panel";
 import { DeskAiNotStarted } from "@/components/fundamental/shared/DeskAiNotStarted";
 import { formatEtDay } from "@/lib/desk/format";
 import { formatUsdPrice } from "@/lib/desk/mask";
@@ -19,7 +21,7 @@ export function VerdictCard({ verdict, price }: { verdict: Research["verdict"]; 
   const bar = targetBar(verdict.target, price);
   const stale = verdictStale(verdict.stale_days, verdict.as_of);
   return (
-    <section className={`${styles.panel} ${styles.ai}`} aria-label="Desk AI verdict" data-testid="fund-verdict-card">
+    <section className={styles.aiPanel} aria-label="Desk AI verdict" data-testid="fund-verdict-card">
       <h2 className={styles.aiTitle}>Desk AI verdict</h2>
       <div className={local.verdictHead}>
         <AiRatingChip rating={verdict.rating} />
@@ -27,7 +29,7 @@ export function VerdictCard({ verdict, price }: { verdict: Research["verdict"]; 
         <span className={styles.caption}>{confidenceText(verdict.confidence)}</span>
         <span className={styles.caption}>As of {formatEtDay(verdict.as_of)}</span>
       </div>
-      {stale && <p className={styles.banner} role="status">{stale}</p>}
+      {stale && <Banner>{stale}</Banner>}
       <div className={local.range} role="img" aria-label={`Target range ${formatUsdPrice(verdict.target.low)} to ${formatUsdPrice(verdict.target.high)}${price === null ? "" : `, price ${formatUsdPrice(price)}`}`}>
         <span className={local.rangeTrack} />
         <span className={local.rangeSpan} style={{ left: `${bar.low}%`, width: `${bar.high - bar.low}%` }} />
@@ -40,22 +42,22 @@ export function VerdictCard({ verdict, price }: { verdict: Research["verdict"]; 
         <li>High {formatUsdPrice(verdict.target.high)}</li>
         {price !== null && <li>Price {formatUsdPrice(price)}</li>}
       </ul>
-      <p className={local.subTitle}>What changed</p>
+      <PanelHeader variant="label" level={3} title="What changed" />
       <p className={styles.muted}>{verdict.changed}</p>
       <div className={local.twoCols}>
         <div>
-          <p className={local.subTitle}>Reasons</p>
+          <PanelHeader variant="label" level={3} title="Reasons" />
           <ul className={local.bullets}>{verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
         </div>
         <div>
-          <p className={local.subTitle}>Risks</p>
+          <PanelHeader variant="label" level={3} title="Risks" />
           <ul className={local.bullets}>{verdict.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
         </div>
       </div>
       <details className={local.how}>
         <summary>How Desk AI decided</summary>
         <div>
-          <p className={local.subTitle}>Votes</p>
+          <PanelHeader variant="label" level={3} title="Votes" />
           <ul className={local.bullets}>
             {verdict.votes.map((vote) => (
               <li key={vote.name}>
@@ -66,7 +68,7 @@ export function VerdictCard({ verdict, price }: { verdict: Research["verdict"]; 
           </ul>
           <p><strong>Bull case.</strong> {verdict.bull}</p>
           <p><strong>Bear case.</strong> {verdict.bear}</p>
-          <p className={local.subTitle}>Inputs</p>
+          <PanelHeader variant="label" level={3} title="Inputs" />
           <ul className={local.bullets}>{verdict.inputs.map((input) => <li key={input.name}>{input.name} · as of {formatEtDay(input.as_of)}</li>)}</ul>
         </div>
       </details>

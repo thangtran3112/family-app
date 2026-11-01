@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { DeskAiNotStarted } from "@/components/fundamental/shared/DeskAiNotStarted";
 import type { TimelineItem } from "@/lib/api/fundamentalSchemas";
+import { Button } from "@/components/ui/Button";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadTimeline } from "@/lib/desk/research";
 import { TIMELINE_FILTERS, TIMELINE_PAGE, timelineHasMore, timelineRows, type TimelineFilterId } from "@/lib/desk/researchView";
@@ -14,17 +16,19 @@ import local from "./stocks.module.css";
 export function StockTimeline({ symbol }: { symbol: string }) {
   const [filter, setFilter] = useState<TimelineFilterId>("all");
   return (
-    <section className={styles.panel} aria-label="Timeline" data-testid="fund-timeline">
-      <h2 className={styles.panelTitle}>Timeline</h2>
-      <div className={local.chips} role="group" aria-label="Timeline filter">
-        {TIMELINE_FILTERS.map((item) => (
-          <button key={item.id} type="button" className={local.chip} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)} data-testid={`fund-timeline-filter-${item.id}`}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <TimelineList key={`${symbol}:${filter}`} symbol={symbol} filter={filter} />
-    </section>
+    <div data-testid="fund-timeline">
+      <Panel aria-label="Timeline">
+        <PanelHeader title="Timeline" />
+        <div className={local.chips} role="group" aria-label="Timeline filter">
+          {TIMELINE_FILTERS.map((item) => (
+            <Button key={item.id} size="md" aria-pressed={filter === item.id} onClick={() => setFilter(item.id)} data-testid={`fund-timeline-filter-${item.id}`}>
+              {item.label}
+            </Button>
+          ))}
+        </div>
+        <TimelineList key={`${symbol}:${filter}`} symbol={symbol} filter={filter} />
+      </Panel>
+    </div>
   );
 }
 
@@ -81,7 +85,7 @@ function TimelineList({ symbol, filter }: { symbol: string; filter: TimelineFilt
       </div>
       {timelineHasMore(items.length, first.data.total) && (
         <div>
-          <button type="button" className={styles.button} onClick={() => void showMore()} disabled={loadingMore}>{loadingMore ? "Loading…" : "Show more"}</button>
+          <Button size="md" onClick={() => void showMore()} loading={loadingMore}>{loadingMore ? "Loading…" : "Show more"}</Button>
           {moreFailed && <span className={styles.caption}> Couldn&apos;t load more · Try again</span>}
         </div>
       )}

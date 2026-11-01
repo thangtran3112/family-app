@@ -1,6 +1,7 @@
 "use client";
 
 import { useHoldings } from "@/components/shell/desktop/DeskContext";
+import { Banner } from "@/components/ui/Banner";
 import { Freshness } from "@/components/ui/Freshness";
 import { AsOfLine } from "@/components/ui/AsOfLine";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -41,7 +42,7 @@ export function StockPage({ symbol, view }: { symbol: string; view: StockView })
         ))}
       </nav>
       {bad ? (
-        <p className={styles.banner} role="status">That doesn&apos;t look like a ticker · try a symbol such as AAPL</p>
+        <Banner>That doesn&apos;t look like a ticker · try a symbol such as AAPL</Banner>
       ) : view === "overview" ? (
         data ? (
           <StockOverview symbol={symbol} research={data} price={valuation.data?.price ?? null} />

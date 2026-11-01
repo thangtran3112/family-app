@@ -6,50 +6,31 @@
 .pageTitle { margin: 0 auto 0 0; font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-bold); }
 .caption { color: var(--color-muted); font-size: var(--text-label); }
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
-.banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-label); }
 .dim { opacity: 0.55; }
 .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.button { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
-.button:hover:not(:disabled) { background: var(--color-raised); }
-.button:disabled { color: var(--color-muted); cursor: default; }
-.button:focus-visible, .link:focus-visible, .tab:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.link:focus-visible, .tab:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-text); font-weight: var(--weight-semibold); }
 .link:hover { text-decoration: underline; }
 .inlineLink { color: var(--color-text); font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: 2px; }
-.inlineLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.inlineLink:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
-/* Signed text carries the meaning; the colour repeats it. */
-.tone { font-size: inherit; }
-.tone[data-tone="up"] { color: var(--color-up); }
-.tone[data-tone="down"] { color: var(--color-down); }
-.tone[data-tone="flat"] { color: var(--color-muted); }
-
-.panel { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3) var(--space-4); }
-.panelTitle { margin: 0; font-size: var(--text-body); line-height: var(--line-body); font-weight: var(--weight-semibold); }
-.panelHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .row { display: flex; min-height: 28px; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); font-size: var(--text-label); }
 
-/* Stat tiles: a label over a value, like the market strip. */
+/* The grid the ui/StatTile tiles sit in. */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); }
-.tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.tileValue { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
-.tileNote { color: var(--color-muted); font-size: var(--text-micro); }
+.tiles > li { min-width: 0; }
 
 /* Import line: one sentence with a state dot. */
 .importLine { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-muted); font-size: var(--text-label); }
-.importLine[data-tone="problem"] { color: var(--color-amber); }
-.importDot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--color-muted); }
-.importLine[data-tone="ok"] .importDot { background: var(--color-up); }
-.importLine[data-tone="problem"] .importDot { background: var(--color-amber); }
+.importLine[data-tone="warn"] { color: var(--tone); }
+.importDot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--tone); }
 
-/* Desk AI content is violet and nothing else is (02n §f). */
-.ai { border-color: color-mix(in srgb, var(--color-ai) 45%, var(--color-hairline)); }
+/* Desk AI content is violet and nothing else is (02n §f). ui/Panel has no violet variant yet, so a Desk AI box is its own class. */
+.aiPanel { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); border: 1px solid color-mix(in srgb, var(--color-ai) 45%, var(--color-hairline)); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3) var(--space-4); }
 .aiTitle { margin: 0; color: var(--color-ai); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.rating { display: inline-flex; min-height: 20px; align-items: center; gap: 6px; border: 1px solid var(--color-ai); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-ai); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
+.ratingBadge { gap: var(--space-1-5); }
 .ratingDot { display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--color-ai); }
 .ratingDot[data-rating="hold"] { background: transparent; border: 1.5px solid var(--color-ai); }
 .ratingDot[data-rating="sell"] { background: transparent; border: 1.5px solid var(--color-ai); box-shadow: inset 0 0 0 2px var(--color-ground); }

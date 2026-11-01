@@ -1,26 +1,27 @@
 import type { ImportState, Rating } from "../api/fundamentalSchemas.ts";
+import type { Tone } from "../../components/ui/tone.ts";
 import { COPY, holdingsFreshText, holdingsImportFailedText } from "./freshness.ts";
 
 // Small view helpers every Fundamental screen shares (02n §b3): the import line and the Desk AI rating words.
 
-export type ImportTone = "ok" | "busy" | "problem" | "empty";
-export type ImportLine = { text: string; tone: ImportTone };
+/** up = a good import, warn = the import failed, neutral = importing, not connected or nothing yet. */
+export type ImportLine = { text: string; tone: Tone };
 
 /** The one line that says what the holdings are: fresh, importing, failed, not connected, or none for this user. */
 export function importLine(state: ImportState): ImportLine {
   switch (state.state) {
     case "ok": {
       const base = state.statement_date ? holdingsFreshText(state.statement_date) : "Holdings imported · IBKR Flex";
-      return { text: state.lots > 0 ? `${base} · ${state.lots} ${state.lots === 1 ? "lot" : "lots"}` : base, tone: "ok" };
+      return { text: state.lots > 0 ? `${base} · ${state.lots} ${state.lots === 1 ? "lot" : "lots"}` : base, tone: "up" };
     }
     case "running":
-      return { text: COPY.holdingsImporting, tone: "busy" };
+      return { text: COPY.holdingsImporting, tone: "neutral" };
     case "failed":
-      return { text: holdingsImportFailedText(state.statement_date), tone: "problem" };
+      return { text: holdingsImportFailedText(state.statement_date), tone: "warn" };
     case "not_configured":
-      return { text: COPY.holdingsNotConnected, tone: "empty" };
+      return { text: COPY.holdingsNotConnected, tone: "neutral" };
     case "none":
-      return { text: COPY.holdingsNone, tone: "empty" };
+      return { text: COPY.holdingsNone, tone: "neutral" };
   }
 }
 

@@ -2,7 +2,10 @@
 
 import { AiRatingChip } from "@/components/fundamental/shared/AiRatingChip";
 import { OrdersOffNotice } from "@/components/shell/desktop/OrdersOffNotice";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { CoveredCallCandidate, CoverageRow } from "@/lib/api/fundamentalSchemas";
 import { withPriorities } from "@/lib/desk/columns";
@@ -49,44 +52,43 @@ export function CandidatesPanel({ row, accountName }: { row: Pick<CoverageRow, "
   const flags = distinctFlags(data.candidates);
 
   return (
-    <section className={styles.panel} aria-label={`${data.symbol} covered calls`} data-testid="fund-cc-candidates">
-      <div className={styles.panelHead}>
-        <h2 className={styles.panelTitle}>{data.symbol} · {accountName}</h2>
-        {data.ai_context && <AiRatingChip rating={data.ai_context.rating} />}
-      </div>
-      <div className={local.stamps}>
-        <p className={styles.muted}>Stock {formatUsdPrice(data.spot)} · {asOfLine(data.spot_stamp)}</p>
-        <p className={styles.muted}>Option quotes · {asOfLine(data.chain_stamp)}</p>
-      </div>
-      {state === "not_connected" ? (
-        <p className={styles.notice} role="status" data-testid="fund-cc-notconnected">{COPY.optionQuotesNotConnected}</p>
-      ) : (
-        <>
-          {banner && <p className={local.opportunity} role="status" data-testid="fund-cc-opportunity">{banner}</p>}
-          <p className={styles.muted} data-testid="fund-cc-ivrank">{ivRankLine(data)}</p>
-          {state === "no_match" ? (
-            <p className={styles.notice} role="status" data-testid="fund-cc-nomatch">{NO_MATCH_TEXT}</p>
-          ) : (
-            <>
-              <div className={local.tableBleed}>
-                <DenseTable caption="Covered-call candidates" columns={columns} rows={data.candidates} rowKey={(c) => `${c.expiry}:${c.strike}`} density="compact" tight />
-              </div>
-              {flags.length > 0 && (
-                <ul className={local.notes} aria-label="What the flags mean">
-                  {flags.map((flag) => <li key={flag}>{flagText(flag)}</li>)}
-                </ul>
-              )}
-              {top && <PayoffSketch spot={data.spot} strike={top.strike} bid={top.bid} />}
-            </>
-          )}
-        </>
-      )}
-      {data.ai_context?.note && <p className={local.aiNote} style={{ color: "var(--color-ai)" }}>{data.ai_context.note}</p>}
-      <div className={local.actions}>
-        <button type="button" className={styles.button} disabled aria-describedby="cc-alert-note">Alert me</button>
-        <span className={styles.caption} id="cc-alert-note">{COPY.alertTemplatesNotStarted}</span>
-      </div>
-      <OrdersOffNotice />
-    </section>
+    <div data-testid="fund-cc-candidates">
+      <Panel aria-label={`${data.symbol} covered calls`}>
+        <PanelHeader title={`${data.symbol} · ${accountName}`} actions={data.ai_context ? <AiRatingChip rating={data.ai_context.rating} /> : undefined} />
+        <div className={local.stamps}>
+          <p className={styles.muted}>Stock {formatUsdPrice(data.spot)} · {asOfLine(data.spot_stamp)}</p>
+          <p className={styles.muted}>Option quotes · {asOfLine(data.chain_stamp)}</p>
+        </div>
+        {state === "not_connected" ? (
+          <p className={styles.notice} role="status" data-testid="fund-cc-notconnected">{COPY.optionQuotesNotConnected}</p>
+        ) : (
+          <>
+            {banner && <Banner tone="up"><span data-testid="fund-cc-opportunity">{banner}</span></Banner>}
+            <p className={styles.muted} data-testid="fund-cc-ivrank">{ivRankLine(data)}</p>
+            {state === "no_match" ? (
+              <p className={styles.notice} role="status" data-testid="fund-cc-nomatch">{NO_MATCH_TEXT}</p>
+            ) : (
+              <>
+                <div className={local.tableBleed}>
+                  <DenseTable caption="Covered-call candidates" columns={columns} rows={data.candidates} rowKey={(c) => `${c.expiry}:${c.strike}`} density="compact" tight />
+                </div>
+                {flags.length > 0 && (
+                  <ul className={local.notes} aria-label="What the flags mean">
+                    {flags.map((flag) => <li key={flag}>{flagText(flag)}</li>)}
+                  </ul>
+                )}
+                {top && <PayoffSketch spot={data.spot} strike={top.strike} bid={top.bid} />}
+              </>
+            )}
+          </>
+        )}
+        {data.ai_context?.note && <p className={local.aiNote} data-tone="ai">{data.ai_context.note}</p>}
+        <div className={local.actions}>
+          <Button size="md" disabled aria-describedby="cc-alert-note">Alert me</Button>
+          <span className={styles.caption} id="cc-alert-note">{COPY.alertTemplatesNotStarted}</span>
+        </div>
+        <OrdersOffNotice />
+      </Panel>
+    </div>
   );
 }
