@@ -2,7 +2,7 @@
 
 import type { Condition, Operand } from "@ai-trading/contracts";
 import type { Problem } from "@/lib/api/schemas";
-import { OperandPicker } from "@/components/screener/editor/ConditionRows";
+import { OperandPicker } from "@/components/conditions/OperandPicker";
 import { ALERT_OPERATORS, PATTERN_OPTIONS, operatorOf, withOperator, type AlertForm, type AlertOperatorId } from "@/lib/desk/alertForm";
 import { problemsForRow } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";

@@ -3,7 +3,7 @@
 import type { Problem } from "@/lib/api/schemas";
 import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG } from "@/lib/desk/operands";
-import { OperandPicker } from "./ConditionRows";
+import { OperandPicker } from "@/components/conditions/OperandPicker";
 import styles from "./editor.module.css";
 import { problemText } from "@/lib/desk/problems";
 

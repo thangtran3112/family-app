@@ -1,70 +1,17 @@
 "use client";
 
 import type { Condition, Operand } from "@ai-trading/contracts";
+import { Button } from "@/components/ui/Button";
 import type { Problem } from "@/lib/api/schemas";
 import { OPERATORS, addRow, problemsForRow, removeRow, rowKind, updateRow, type FilterForm } from "@/lib/desk/filterForm";
-import { OPERAND_CATALOG, choiceOf, operandDef, operandFor, type OperandDef } from "@/lib/desk/operands";
+import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
-import styles from "./editor.module.css";
 import { problemText } from "@/lib/desk/problems";
+import { OperandPicker, parse, shown } from "./OperandPicker";
+import styles from "./conditions.module.css";
 
-const GROUPS = ["Price", "Indicators", "Levels"] as const;
 type CompareLike = Extract<Condition, { left: Operand; right: Operand }>;
 type CompareOp = Exclude<CompareLike["op"], "within_pct">;
-
-const shown = (value: number | undefined) => (value !== undefined && Number.isFinite(value) ? value : "");
-const parse = (text: string) => (text.trim() === "" ? Number.NaN : Number(text));
-
-/** Metric select grouped by the catalog's groups, with its parameters as number inputs. Shared with RankFields. */
-export function OperandPicker({ label, operand, defs, allowNumber = false, onChange }: {
-  label: string;
-  operand: Operand;
-  defs: readonly OperandDef[];
-  allowNumber?: boolean;
-  onChange: (next: Operand) => void;
-}) {
-  const choice = choiceOf(operand);
-  const isNumber = choice !== null && "value" in choice;
-  const metric = choice !== null && !("value" in choice) ? choice : null;
-  const params = metric ? (operandDef(metric.id)?.params ?? []) : [];
-  return (
-    <>
-      <label className={styles.field}>
-        <span>{label}</span>
-        <select
-          value={choice?.id ?? ""}
-          onChange={(event) => onChange(operandFor(event.target.value === "value" ? { id: "value", value: 0 } : { id: event.target.value, params: {} }))}
-        >
-          {choice === null && <option value="">Choose</option>}
-          {GROUPS.map((group) => (
-            <optgroup key={group} label={group}>
-              {defs.filter((def) => def.group === group).map((def) => <option key={def.id} value={def.id}>{def.label}</option>)}
-            </optgroup>
-          ))}
-          {(allowNumber || isNumber) && <option value="value">Number</option>}
-        </select>
-      </label>
-      {choice !== null && "value" in choice && (
-        <label className={styles.field}>
-          <span>Value</span>
-          <input type="number" step="any" value={shown(choice.value)} onChange={(event) => onChange(operandFor({ id: "value", value: parse(event.target.value) }))} />
-        </label>
-      )}
-      {metric && params.map((param) => (
-        <label key={param.key} className={styles.field}>
-          <span>{param.label}</span>
-          <input
-            type="number"
-            min={param.min}
-            max={param.max}
-            value={shown(metric.params[param.key] ?? param.defaultValue)}
-            onChange={(event) => onChange(operandFor({ id: metric.id, params: { ...metric.params, [param.key]: parse(event.target.value) } }))}
-          />
-        </label>
-      ))}
-    </>
-  );
-}
 
 function withOperator(cond: CompareLike, op: string): Condition {
   return op === "within_pct"
@@ -80,9 +27,9 @@ function ConditionRow({ condition, index, form, onChange, problems }: {
   problems: readonly Problem[];
 }) {
   const remove = (
-    <button type="button" className={styles.button} aria-label={`Remove condition ${index + 1}`} onClick={() => onChange(removeRow(form, index))}>
+    <Button aria-label={`Remove condition ${index + 1}`} onClick={() => onChange(removeRow(form, index))}>
       Remove
-    </button>
+    </Button>
   );
   const rowProblems = problemsForRow(problems, form, index).map((problem, position) => (
     <span key={position} className={styles.problem}>{problemText(problem)}</span>
@@ -150,7 +97,7 @@ export function ConditionRows({ form, onChange, problems }: { form: FilterForm; 
         <span key={index} className={styles.problem}>{problemText(problem)}</span>
       ))}
       <div className={styles.controls}>
-        <button type="button" className={styles.button} onClick={() => onChange(addRow(form))}>Add condition</button>
+        <Button onClick={() => onChange(addRow(form))}>Add condition</Button>
       </div>
     </fieldset>
   );

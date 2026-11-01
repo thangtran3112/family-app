@@ -1,6 +1,7 @@
 "use client";
 
-import styles from "./editor.module.css";
+import { Button } from "@/components/ui/Button";
+import styles from "./conditions.module.css";
 
 export function JsonPanel({ spec }: { spec: Record<string, unknown> }) {
   const text = JSON.stringify(spec, null, 2);
@@ -8,7 +9,7 @@ export function JsonPanel({ spec }: { spec: Record<string, unknown> }) {
     <details className={styles.panel}>
       <summary className={styles.summary}>View JSON</summary>
       <div className={styles.jsonBody}>
-        <button type="button" className={styles.button} onClick={() => void navigator.clipboard?.writeText(text).catch(() => undefined)}>Copy</button>
+        <Button onClick={() => void navigator.clipboard?.writeText(text).catch(() => undefined)}>Copy</Button>
         <pre className={styles.pre}>{text}</pre>
       </div>
     </details>
