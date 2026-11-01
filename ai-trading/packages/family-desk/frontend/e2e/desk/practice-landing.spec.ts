@@ -5,6 +5,7 @@ import { universeNeedLine } from "../../lib/replay/universeView.ts";
 import { origin } from "../helpers";
 import type { Locator } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { railSection } from "./swing-helpers";
 import { ANY_CLOSE, DAY_URL, START_BUTTON, THREAD_URL, clickNewPlan, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread, threadIdOf } from "./hub-helpers";
 
 // The Practice landing, its New plan modal and the thread page (02r2, Paper mocks LEW-0 and X9Y-0).
@@ -431,6 +432,29 @@ test.describe("New plan modal redesign", () => {
     await page.unrouteAll({ behavior: "wait" }); // let the last preview answer finish before the test ends
   });
 
+  // D-103, D-104: a name in the universe table can always be removed (its button is inside the table's visible box), and a table that no
+  // setting can refresh says so instead of looking current.
+  test("the swing universe's Remove buttons sit inside the table, and a wrong Sessions says the list is not refreshed", async ({ page }) => {
+    const dialog = await openNewPlan(page);
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    await dialog.getByRole("checkbox", { name: /Day movers/ }).check();
+    const remove = dialog.getByRole("table", { name: "Swing universe" }).getByRole("button", { name: /^Remove / }).first();
+    await expect(remove).toBeVisible({ timeout: 30_000 });
+    const gap = await remove.evaluate((node) => {
+      let scroller = node.parentElement;
+      while (scroller && getComputedStyle(scroller).overflowX === "visible") scroller = scroller.parentElement;
+      return scroller!.getBoundingClientRect().right - node.getBoundingClientRect().right;
+    });
+    expect(gap, "the Remove button ends inside the table's visible edge").toBeGreaterThanOrEqual(-0.5);
+
+    await dialog.getByLabel("Sessions").fill("999");
+    await expect(dialog.getByText(PRACTICE_COPY.swingListOld, { exact: false })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: START_BUTTON })).toHaveAccessibleName("Start swing practice"); // not "Start 999-day swing practice"
+    await dialog.getByLabel("Sessions").fill("20");
+    await expect(dialog.getByText(PRACTICE_COPY.swingListOld, { exact: false })).toHaveCount(0);
+    await page.unrouteAll({ behavior: "wait" }); // let the last preview answer finish before the test ends
+  });
+
   // M-05: Escape on a form she has edited asks before it throws the form away.
   test("Escape on an edited swing form asks first, Keep editing keeps it, Discard closes it", async ({ page }) => {
     const dialog = await openNewPlan(page);
@@ -510,5 +534,30 @@ test.describe("Practice landing · fix wave 5S", () => {
     await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
     expect((await table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance }).boundingBox())!.x).toBe(before);
+  });
+});
+
+// D-133: the journal's Edit plan form is on the same field kit as the New plan modal: one control height, one radius, sentence-case labels.
+test.describe("Edit plan form", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("its segmented controls, inputs and buttons share one height and radius, and no label is upper-cased", async ({ page, context }) => {
+    const id = await createThreadByApi(context, { maxLoss: 600 });
+    await openDesk(page, `/practice/journal?thread=${id}`);
+    const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle); // a tab and drawer at 1180
+    await plan.getByRole("button", { name: PRACTICE_COPY.threadEditPlan }).click();
+    const form = plan.getByRole("form", { name: PRACTICE_COPY.threadEditPlan });
+    await expect(form.getByLabel("Max loss ($)")).toBeVisible();
+    const look = await form.evaluate((node) => {
+      const measure = (selector: string) => [...node.querySelectorAll(selector)].map((el) => `${Math.round(el.getBoundingClientRect().height)}px ${getComputedStyle(el).borderRadius}`);
+      return {
+        controls: [...new Set([...measure('[role="radiogroup"]'), ...measure("input"), ...measure("button:not([role=radio])")])],
+        caps: [...node.querySelectorAll("label, legend")].filter((el) => getComputedStyle(el).textTransform !== "none").map((el) => el.textContent),
+      };
+    });
+    expect(look.controls, "one height and one radius for every control").toHaveLength(1);
+    expect(look.caps, "no label is upper-cased").toEqual([]);
   });
 });

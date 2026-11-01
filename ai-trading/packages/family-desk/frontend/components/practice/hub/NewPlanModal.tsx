@@ -223,7 +223,7 @@ export function NewPlanModal({
               aria-describedby="new-plan-note"
             >
               {submitting && <span className={landing.spinner} aria-hidden="true" />}
-              {submitting ? PRACTICE_COPY.newPlanSubmitting : startLabel(swing ? swingNow.sessions : plan.sessions, swing)}
+              {submitting ? PRACTICE_COPY.newPlanSubmitting : startLabel(swing ? (shown.sessions ? "" : swingNow.sessions) : plan.sessions, swing)}
             </Button>
           )}
         </>

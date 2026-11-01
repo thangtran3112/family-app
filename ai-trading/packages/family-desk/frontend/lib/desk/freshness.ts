@@ -737,6 +737,7 @@ export const PRACTICE_COPY = {
   swingStartThreadError: "Couldn't start the swing thread · Try again",
   swingPreviewError: "Couldn't build the universe · Try again",
   swingBuildFirst: "Build the universe first",
+  swingListOld: "This list is from your earlier settings · fix the settings above to update it",
   swingUniverseNeed: "Pick {min} to {max} names · you have {n}",
   swingWaitForData: "Wait for the data to finish · {done} of {total} ({pct}%)",
   swingNeedMore: "Pick at least {min} symbols · you have {n}",
