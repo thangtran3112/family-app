@@ -129,6 +129,7 @@ def open_trade_out(trade: Trade | None, last_price: float | None) -> dict[str, A
         "side": trade.side,
         "shares": trade.shares,
         "entry_price": trade.entry_price,
+        "entry_at": trade.entry_at,
         "stop_price": trade.stops[-1][1] if trade.stops else None,
         "last_price": last_price,
         "unrealized_usd": trade.unrealized(last_price),

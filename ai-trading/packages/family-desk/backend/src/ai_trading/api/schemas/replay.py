@@ -74,7 +74,14 @@ class OpenTradeOut(SwingOptional):
     """The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
     four last fields say how long it has been held and which price it is valued at; a day session leaves them out."""
 
-    swing_only: ClassVar[tuple[str, ...]] = ("opened_day_no", "days_held", "gap_usd", "price_basis", "stop_hit_at")
+    swing_only: ClassVar[tuple[str, ...]] = (
+        "opened_day_no",
+        "days_held",
+        "gap_usd",
+        "price_basis",
+        "stop_hit_at",
+        "entry_at",
+    )
 
     trade_no: int
     side: Side
@@ -91,6 +98,9 @@ class OpenTradeOut(SwingOptional):
     # a day's `DaySessionOut.position` only: when play paused because this trade's stop was crossed (an exit, a new
     # entry or a new stop note clears it). Left out while there is no pause.
     stop_hit_at: datetime | None = None
+    # a day trade only: when the entry mark was placed (the Portfolio shows it and orders the open trades by it).
+    # A swing hold leaves it out; its entry is a day number.
+    entry_at: datetime | None = None
 
 
 # -- swing session shapes (02p): holds, the stop pause, the day strip and the daily block ------------------------------
