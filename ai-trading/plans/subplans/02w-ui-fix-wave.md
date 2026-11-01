@@ -1,6 +1,6 @@
 # 02w: UI fix wave (122-finding visual audit, streams F1 to F6)
 
-Status: **planned 2026-11-01; audit done, no fix started.** STATUS row 6B. Source: `runs/frontend-modes-audit-20261031/consolidated-findings.md` in the Hermes run directory (outside the repo), with per-surface `findings-v-*.json` / `notes-v-*.md` and screenshots in the frontend `.screenshots/v-*` (git-ignored).
+Status: **delivered 2026-11-01.** PR #239 (`69272838`) to `dev` carried F1 to F6; it reached `main` in #249 and #261. STATUS row 6B. The wave's own rule held: every fix landed at the primitive, and the primitives it implied shipped as the design-system rows 6D (DS-0 #241, DS-2 #248, DS-3 A/B/C #251/#254/#258, DS-4 #260, DS-5 #262, DS-6 #275, ratchet cleanup #281), with the Feedback screen adopting them in #281. Source: `runs/frontend-modes-audit-20261031/consolidated-findings.md` with per-surface `findings-v-*.json` / `notes-v-*.md` (Hermes run directory, outside the repo).
 
 Audit: 7-surface browser pass (1440x900) found **122 findings (18 P1, 63 P2, 41 P3)**; 7 code-read audits added 136 more. Per-surface P1/P2/P3: Technicals 5/9/6, Screener 4/8/7, Today 3/6/5, Watchlists 3/11/5, Fundamental 2/8/6, Alerts 1/11/9, Strategies 0/10/3.
 
