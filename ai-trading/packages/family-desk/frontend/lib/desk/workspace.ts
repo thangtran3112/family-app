@@ -4,6 +4,7 @@ import { AlertStrategySpecV1Schema } from "@ai-trading/contracts/alert-strategy"
 import type { Condition, Operand } from "@ai-trading/contracts";
 import type { AlertStrategy, Bars, BiasLabel, Technicals } from "../api/schemas.ts";
 import { currentValue, type CrosshairPoint } from "../chart-data.ts";
+import { chartPalette } from "./chartPalette.ts";
 import { calcEMAWithGaps, calcMACDWithGaps, calcMAWithGaps, calcRSIWithGaps, calcVWAPWithGaps } from "../indicators-with-gaps.ts";
 import { formatPrice, formatSignedPct } from "./format.ts";
 import { isIntraday } from "./timeframes.ts";
@@ -163,8 +164,30 @@ export function keyLevelRows(technicals: Technicals | null): KeyLevel[] {
 
 export type LegendModel = {
   title: string;
-  items: Array<{ id: string; label: string; color: string; value: string; style: "solid" | "dashed"; hidden: boolean }>;
+  items: Array<{ id: string; label: string; color: string; value: string; style: "solid" | "dashed" | "dotted"; hidden: boolean }>;
 };
+
+/**
+ * The key levels as a legend in normal flow, highest price first (the order the lines sit on the chart): one swatch, name and
+ * price each. The chart draws these lines `plain`, so the names never print over the plot or over each other. A level
+ * without a price is left out, as the chart leaves out its line.
+ */
+export function levelsLegend(title: string, levels: readonly MarketChartLevel[]): LegendModel {
+  const priced = levels.flatMap((level) => (level.price !== null && Number.isFinite(level.price) ? [{ level, price: level.price }] : []));
+  return {
+    title,
+    items: priced
+      .sort((a, b) => b.price - a.price)
+      .map(({ level, price }) => ({
+        id: level.id ?? level.label,
+        label: level.label,
+        color: level.color ?? chartPalette.muted,
+        value: formatPrice(price),
+        style: level.style === "dotted" ? "dotted" : "dashed",
+        hidden: false,
+      })),
+  };
+}
 
 /** `NVDA · 15m · O … H … L … C …` plus one line per overlay, at the crosshair or at the last bar (02l §b5). An overlay in `hidden` stays listed with the value "hidden" (the replay legend turns it back on). */
 export function legendModel(

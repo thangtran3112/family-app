@@ -5,7 +5,9 @@ import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketCh
 import { Badge } from "@/components/ui/Badge";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
+import { ChartLegend } from "@/components/workspace/ChartLegend";
 import { EMPTY_VALUE, formatPrice, formatSignedPct, signTone } from "@/lib/desk/format";
+import { levelsLegend } from "@/lib/desk/workspace";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { Candidate, Peek } from "@/lib/replay/daily";
 import { peekDailyBars } from "@/lib/replay/dayView";
@@ -14,24 +16,28 @@ import { FactList } from "@/components/ui/FactList";
 
 const AMBER = "#FFB020";
 const PEEK_TABS_ID = "peek-view";
+/** The chart's height in the drawer: tall enough to tell levels apart, short enough to keep the facts in view on a laptop. */
+const PEEK_CHART_HEIGHT = 400;
 
+/** The levels are `plain` lines: the legend under the title names them, so no tag prints over the candles or over a level close in price. */
 function levelLines(peek: Peek, view: "daily" | "today"): MarketChartLevel[] {
   const { levels } = peek;
-  const rows: MarketChartLevel[] = [{ label: "List price", price: peek.list_price ?? null, color: AMBER, style: "dashed" }];
+  const rows: MarketChartLevel[] = [{ label: "List price", price: peek.list_price ?? null, color: AMBER, style: "dashed", plain: true }];
   if (view === "daily") return rows;
   return [
     ...rows,
-    { label: "Prior close", price: levels.prior_close ?? null, style: "dotted" },
-    { label: "Prior high", price: levels.prior_high ?? null, style: "dotted" },
-    { label: "Prior low", price: levels.prior_low ?? null, style: "dotted" },
-    { label: "Premarket high", price: levels.premarket_high ?? null, style: "dotted" },
-    { label: "Premarket low", price: levels.premarket_low ?? null, style: "dotted" },
+    { label: "Prior close", price: levels.prior_close ?? null, style: "dotted", plain: true },
+    { label: "Prior high", price: levels.prior_high ?? null, style: "dotted", plain: true },
+    { label: "Prior low", price: levels.prior_low ?? null, style: "dotted", plain: true },
+    { label: "Premarket high", price: levels.premarket_high ?? null, style: "dotted", plain: true },
+    { label: "Premarket low", price: levels.premarket_low ?? null, style: "dotted", plain: true },
   ];
 }
 
 /**
  * Peek (02o-b v1): one candidate's chart before the open, cut at the time the list was built. The daily bars are the
- * list's own share-adjusted frame (never the raw one), and with dates hidden they sit on a stand-in timeline.
+ * list's own share-adjusted frame (never the raw one), and with dates hidden they sit on a stand-in timeline. The day list
+ * shows it in a drawer (`ui/Dialog` size "drawer"), wide enough for the chart and its level legend.
  */
 export function PeekPanel({
   symbol,
@@ -42,7 +48,7 @@ export function PeekPanel({
   onRetry,
   hideDates,
 }: {
-  symbol: string | null;
+  symbol: string;
   /** The list row of the peeked name: its prev close, list-price change and earnings flag (P7's facts under the chart). */
   row: Candidate | null;
   peek: Peek | null;
@@ -54,10 +60,10 @@ export function PeekPanel({
   const [view, setView] = useState<"daily" | "today">("today");
   const daily = useMemo(() => (peek ? peekDailyBars(peek.daily, hideDates) : []), [peek, hideDates]);
   const levels = useMemo(() => (peek ? levelLines(peek, view) : []), [peek, view]);
+  const legend = useMemo(() => levelsLegend(PRACTICE_COPY.dayPeekLevels, levels), [levels]);
 
-  if (symbol === null) return <p className={styles.muted}>{PRACTICE_COPY.dayPeekNone}</p>;
   if (failed) return <ErrorBlock subject="chart" onRetry={onRetry} />;
-  if (loading || peek === null) return <LoadingBlock label={`Loading the ${symbol} chart…`} height={240} />;
+  if (loading || peek === null) return <LoadingBlock label={`Loading the ${symbol} chart…`} height={PEEK_CHART_HEIGHT} />;
 
   const showToday = view === "today" && peek.minutes.length > 0;
   return (
@@ -76,6 +82,7 @@ export function PeekPanel({
         />
       </div>
       <TabPanel idBase={PEEK_TABS_ID} id={view}>
+      {legend.items.length > 0 && <div data-testid="peek-levels"><ChartLegend model={legend} /></div>}
       {showToday ? (
         <MarketChart
           symbol={peek.symbol}
@@ -89,7 +96,7 @@ export function PeekPanel({
           clockTicks
           sessionShading
           chrome="bare"
-          height={260}
+          height={PEEK_CHART_HEIGHT}
         />
       ) : (
         <MarketChart
@@ -102,7 +109,7 @@ export function PeekPanel({
           volume
           hideDates={hideDates}
           chrome="bare"
-          height={260}
+          height={PEEK_CHART_HEIGHT}
         />
       )}
       </TabPanel>

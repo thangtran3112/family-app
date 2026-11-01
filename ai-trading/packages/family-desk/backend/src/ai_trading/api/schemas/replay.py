@@ -675,26 +675,37 @@ class CandidateOut(BaseModel):
     prior_close: FiniteFloat | None
     reported_before_open: bool  # an explicit before-the-open report (or yesterday's after-close one); never directional
     metrics: dict[str, FiniteFloat | None]
-
-
-class RescanCandidateOut(CandidateOut):
-    """A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised)."""
-
-    new_since_list: bool
+    # A re-scan repopulates the list (2026-11-01). `new_since_list`: the scan added it, the list before did not hold it.
+    # `held_over`: the scan no longer matches it, and it stays because she opened or starred it. Both false on a list
+    # no re-scan has touched (and on days stored before they existed).
+    new_since_list: bool = False
+    held_over: bool = False
 
 
 class RescanOut(BaseModel):
     """The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.
-    It is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans."""
+    Its names ARE the day list above (the scan repopulated it); this is the label: which scan, the clock it ran at, the
+    time its data stops, and how many names it added. `seq` counts the day's scans."""
 
     seq: int
     as_of: datetime
     data_through: datetime
-    universe: ListUniverseOut
-    columns: list[ListColumnOut]
-    candidates: list[RescanCandidateOut]
     new_count: int
     created_at: datetime
+
+
+RescanState = Literal["running", "done", "failed"]
+
+
+class RescanJobOut(BaseModel):
+    """A re-scan's progress, for the screen to poll while `state` is `running`: `done` of `total` symbols read
+    (`total` is 0 until the job has counted them), at the day clock `as_of`. `failed` carries a plain `message`."""
+
+    state: RescanState
+    as_of: datetime
+    done: int
+    total: int
+    message: str | None
 
 
 class StarOut(BaseModel):
@@ -880,7 +891,8 @@ class DayListOut(BaseModel):
     thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
     warnings: list[str]
     relist: RelistOfferOut | None
-    rescan: RescanOut | None  # the latest re-scan at the day clock; null until she runs one
+    rescan: RescanOut | None  # the latest re-scan at the day clock (it repopulated this list); null until she runs one
+    rescan_job: RescanJobOut | None  # the re-scan in flight or last run: the screen polls it while it is running
     peek: PeekOut | None
     journal: DayJournalOut | None
     review: ReviewOut | None
