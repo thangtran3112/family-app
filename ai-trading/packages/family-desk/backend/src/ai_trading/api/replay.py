@@ -68,13 +68,14 @@ from ai_trading.api.schemas.swing import (
     WeekPatch,
     WeeksOut,
 )
-from ai_trading.api.schemas.threads import ThreadLedgerOut, ThreadOut, ThreadSummaryOut
+from ai_trading.api.schemas.threads import ThreadFillsOut, ThreadLedgerOut, ThreadOut, ThreadSummaryOut
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1
 from ai_trading.contracts.replay_session import PracticeMarkV1, ReplaySessionV1
 from ai_trading.db.engine import session_scope
 from ai_trading.replay import days as days_mod
 from ai_trading.replay import fixture, swing_weeks
+from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as svc_mod
 from ai_trading.replay import swing as swing_mod
@@ -754,6 +755,22 @@ def get_thread_ledger(
 ) -> dict[str, Any]:
     """The thread's realized practice trades (`PracticeLedgerEntryV1`), newest first: the rows its balance is of."""
     return threads_mod.ledger_page(db, _call(threads_mod.get_thread, db, user.id, thread_id), limit=limit)
+
+
+@router.get("/threads/{thread_id}/fills", response_model=ThreadFillsOut)
+def get_thread_fills(
+    thread_id: int,
+    limit: int = Query(default=100, ge=1, le=threads_mod.LEDGER_LIMIT),
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """The day thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how
+    many of the shares closed the name's position. The server keeps the book; the screen never rebuilds a trade from
+    memory. A swing thread keeps its positions as holds (`/holds`): 404 here."""
+    thread = _call(threads_mod.get_thread, db, user.id, thread_id)
+    if thread.mode != "day":
+        raise HTTPException(status_code=404, detail="day threads only")
+    return ledger_mod.fills_page(db, thread.id, limit=limit)
 
 
 # -- swing threads (02p): holds and weeks -----------------------------------------------------------------------

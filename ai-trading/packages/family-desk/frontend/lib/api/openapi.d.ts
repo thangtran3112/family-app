@@ -1177,6 +1177,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desk/replay/threads/{thread_id}/fills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Fills
+         * @description The day thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how
+         *     many of the shares closed the name's position. The server keeps the book; the screen never rebuilds a trade from
+         *     memory. A swing thread keeps its positions as holds (`/holds`): 404 here.
+         */
+        get: operations["get_thread_fills_api_desk_replay_threads__thread_id__fills_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desk/replay/threads/{thread_id}/holds": {
         parameters: {
             query?: never;
@@ -3483,6 +3505,49 @@ export interface components {
             report_id: number | null;
             /** Size Bytes */
             size_bytes: number;
+        };
+        /**
+         * FillOut
+         * @description One execution of a day thread: a Buy or a Sell with its shares, price and time. `closes` of the shares closed the
+         *     name's position and `opens` opened or added to one (a flip has both).
+         */
+        FillOut: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "buy" | "sell";
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Closes */
+            closes: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Id */
+            id: number;
+            /** Opens */
+            opens: number;
+            /** Price */
+            price: number;
+            /** Session Id */
+            session_id: number;
+            /** Shares */
+            shares: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "her" | "auto";
+            /** Symbol */
+            symbol: string;
+            /** Trade No */
+            trade_no: number | null;
         };
         /** Filter */
         Filter: {
@@ -6680,6 +6745,18 @@ export interface components {
             weekday: "Mon" | "Tue" | "Wed" | "Thu" | "Fri";
         };
         /**
+         * ThreadFillsOut
+         * @description The newest executions of a day thread, newest booking first. `total` counts every one.
+         */
+        ThreadFillsOut: {
+            /** Fills */
+            fills: components["schemas"]["FillOut"][];
+            /** Thread Id */
+            thread_id: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * ThreadLedgerOut
          * @description The newest ledger rows, newest first. `total` counts every row.
          */
@@ -9629,6 +9706,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_thread_fills_api_desk_replay_threads__thread_id__fills_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadFillsOut"];
                 };
             };
             /** @description Validation Error */

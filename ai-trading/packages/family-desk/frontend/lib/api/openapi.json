@@ -5084,6 +5084,92 @@
         "title": "FeedbackUploadOut",
         "type": "object"
       },
+      "FillOut": {
+        "description": "One execution of a day thread: a Buy or a Sell with its shares, price and time. `closes` of the shares closed the\nname's position and `opens` opened or added to one (a flip has both).",
+        "properties": {
+          "action": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "closes": {
+            "title": "Closes",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "opens": {
+            "title": "Opens",
+            "type": "integer"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "integer"
+          },
+          "shares": {
+            "title": "Shares",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "her",
+              "auto"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "trade_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade No"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "symbol",
+          "day",
+          "action",
+          "shares",
+          "price",
+          "at",
+          "closes",
+          "opens",
+          "trade_no",
+          "source"
+        ],
+        "title": "FillOut",
+        "type": "object"
+      },
       "Filter": {
         "additionalProperties": false,
         "properties": {
@@ -14528,6 +14614,33 @@
         "title": "ThreadDayOut",
         "type": "object"
       },
+      "ThreadFillsOut": {
+        "description": "The newest executions of a day thread, newest booking first. `total` counts every one.",
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillOut"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id",
+          "total",
+          "fills"
+        ],
+        "title": "ThreadFillsOut",
+        "type": "object"
+      },
       "ThreadLedgerOut": {
         "description": "The newest ledger rows, newest first. `total` counts every row.",
         "properties": {
@@ -20538,6 +20651,61 @@
           }
         },
         "summary": "Close Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/{thread_id}/fills": {
+      "get": {
+        "description": "The day thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how\nmany of the shares closed the name's position. The server keeps the book; the screen never rebuilds a trade from\nmemory. A swing thread keeps its positions as holds (`/holds`): 404 here.",
+        "operationId": "get_thread_fills_api_desk_replay_threads__thread_id__fills_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadFillsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread Fills",
         "tags": [
           "replay"
         ]

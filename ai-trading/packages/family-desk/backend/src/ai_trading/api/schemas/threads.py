@@ -125,6 +125,32 @@ class ThreadOut(ThreadSummaryOut):
     curve: list[CurvePointOut]
 
 
+class FillOut(BaseModel):
+    """One execution of a day thread: a Buy or a Sell with its shares, price and time. `closes` of the shares closed the
+    name's position and `opens` opened or added to one (a flip has both)."""
+
+    id: int
+    session_id: int
+    symbol: str
+    day: date
+    action: Literal["buy", "sell"]
+    shares: int
+    price: FiniteFloat
+    at: datetime
+    closes: int
+    opens: int
+    trade_no: int | None
+    source: Literal["her", "auto"]
+
+
+class ThreadFillsOut(BaseModel):
+    """The newest executions of a day thread, newest booking first. `total` counts every one."""
+
+    thread_id: int
+    total: int
+    fills: list[FillOut]
+
+
 class ThreadLedgerOut(BaseModel):
     """The newest ledger rows, newest first. `total` counts every row."""
 

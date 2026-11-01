@@ -306,6 +306,44 @@ def test_marks_move_the_balance_and_every_screen_carries_the_thread_header(world
     _strict(detail["thread"])
 
 
+def test_the_thread_fills_list_every_buy_and_sell_with_shares_price_and_time(world, db_session) -> None:
+    client, _, _ = world
+    list_id = _day_one(world, db_session)
+    tid = client.get(f"{BASE}/daily", headers=auth_headers()).json()["thread"]["thread"]["id"]
+    sid = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()).json()[
+        "id"
+    ]
+    assert client.get(f"{BASE}/threads/{tid}/fills", headers=auth_headers()).json() == {
+        "thread_id": tid,
+        "total": 0,
+        "fills": [],
+    }
+    _advance(client, sid, "09:30")
+    _mark(client, sid, "long_entry", shares=10)
+    _advance(client, sid, "09:45")
+    _mark(client, sid, "short_entry", shares=4)  # a Sell of part of the long
+    _advance(client, sid, "10:00")
+    _mark(client, sid, "long_exit")  # Close position: sells the remaining 6
+    _mark(client, sid, "note", note="not an execution")
+
+    fills = client.get(f"{BASE}/threads/{tid}/fills", headers=auth_headers())
+    assert fills.status_code == 200, fills.text
+    body = fills.json()
+    assert body["total"] == 3 and body["thread_id"] == tid
+    sell_rest, sell_part, buy = body["fills"]  # newest first
+    assert (buy["action"], buy["shares"], buy["closes"], buy["opens"]) == ("buy", 10, 0, 10)
+    assert (sell_part["action"], sell_part["shares"], sell_part["closes"], sell_part["opens"]) == ("sell", 4, 4, 0)
+    assert (sell_rest["action"], sell_rest["shares"], sell_rest["closes"], sell_rest["opens"]) == ("sell", 6, 6, 0)
+    assert {f["symbol"] for f in body["fills"]} == {"GAPPER"} and {f["session_id"] for f in body["fills"]} == {sid}
+    assert [f["at"][11:16] for f in body["fills"]] == ["14:00", "13:45", "13:30"]  # UTC (EDT), the replayed times
+    assert all(f["price"] > 0 and f["source"] == "her" and f["day"] for f in body["fills"])
+    # the realized side agrees: sell 4 + sell 6 are the two ledger rows, with the same shares
+    ledger = client.get(f"{BASE}/threads/{tid}/ledger", headers=auth_headers()).json()["entries"]
+    assert sorted(e["shares"] for e in ledger) == [4, 6]
+    # the day's end auto-exit of nothing adds nothing; a stranger and a swing thread get 404
+    assert client.get(f"{BASE}/threads/{tid + 999}/fills", headers=auth_headers()).status_code == 404
+
+
 def test_a_standalone_session_has_no_thread_header(world) -> None:
     client, _, _ = world
     _create(client)
