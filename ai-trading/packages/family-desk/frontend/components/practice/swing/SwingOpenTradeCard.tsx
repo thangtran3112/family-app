@@ -1,5 +1,5 @@
 import { FactList, type Fact } from "@/components/ui/FactList";
-import { formatPrice, signTone } from "@/lib/desk/format";
+import { formatPrice, signTone, signToneAt } from "@/lib/desk/format";
 import { formatSignedUsd } from "@/lib/desk/mask";
 import { formatR } from "@/lib/replay/journalView";
 import { SWING_PLAY_COPY } from "@/lib/replay/playView";
@@ -22,8 +22,8 @@ export function SwingOpenTradeCard({ trade, tape }: { trade: OpenTrade | null; t
     ...(gap !== null ? [{ id: "gap", label: "Overnight move", value: gap, tone: signTone(trade.gap_usd) }] : []),
     { id: "stop", label: "Stop", value: trade.stop_price == null ? "None" : formatPrice(trade.stop_price) },
     { id: "price", label: "Price", value: priceBasisLabel(trade.price_basis, trade.last_price, tape) },
-    { id: "unrealized", label: "Unrealized", value: formatSignedUsd(trade.unrealized_usd, { cents: true }), tone: signTone(trade.unrealized_usd) },
-    ...(trade.r != null ? [{ id: "r", label: "R", value: formatR(trade.r), tone: signTone(trade.r) }] : []),
+    { id: "unrealized", label: "Unrealized", value: formatSignedUsd(trade.unrealized_usd, { cents: true }), tone: signToneAt(trade.unrealized_usd, 2) },
+    ...(trade.r != null ? [{ id: "r", label: "R", value: formatR(trade.r), tone: signToneAt(trade.r, 2) }] : []),
   ];
   return <FactList label={SWING_PLAY_COPY.holdOpenCardLabel} columns={2} facts={facts} />;
 }

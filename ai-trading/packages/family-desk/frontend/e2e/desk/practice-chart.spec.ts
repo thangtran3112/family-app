@@ -295,7 +295,8 @@ test.describe("Practice replay chart: full screen and settings", () => {
   test("a press outside closes the popover", async ({ page }) => {
     await chartSettings(page).click();
     await expect(popover(page)).toBeVisible();
-    await page.getByRole("heading", { name: "TSLA", level: 1 }).click();
+    // The thread clock bar is clear of the popover, which opens upward over the chart and the header at the left.
+    await page.getByTestId("thread-clock").click({ position: { x: 4, y: 4 } });
     await expect(popover(page)).toHaveCount(0);
   });
 
@@ -411,6 +412,8 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     await openReplay(page, await createStubSession(context));
     const chart = page.locator("section[aria-label='TSLA 1m market chart']");
     const before = (await chart.boundingBox())!;
+    const marksPanel = page.getByRole("button", { name: "Marks and levels panel" });
+    const panelBefore = await marksPanel.getAttribute("aria-expanded");
     // The player's state is the thread's, not the name's: its pill is in the thread bar, never in the ticker header.
     const heading = page.getByRole("heading", { name: "TSLA", level: 1 });
     const bar = page.getByTestId("thread-clock");
@@ -424,7 +427,10 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     const widened = (await chart.boundingBox())!;
     expect(widened.y, "the chart top does not move when P/L changes").toBeCloseTo(before.y, 0);
     expect((await bar.boundingBox())!.height, "the thread bar keeps its height as the clock and the state change").toBeCloseTo(barBefore.height, 0);
-    // (The Marks panel opens by itself on the first mark and changes the chart's height: returned to the owner, not part of this check.)
+    // D-146: a mark never opens, closes or resizes the Marks panel, so it never moves the chart; a closed panel names the newest mark.
+    expect(await marksPanel.getAttribute("aria-expanded"), "a mark leaves the Marks panel as it was").toBe(panelBefore);
+    expect(widened.height, "a mark does not change the chart's height").toBeCloseTo(before.height, 0);
+    await expect(page.getByText(/Practice buy \d+/).first()).toBeVisible();
 
     await page.getByRole("button", { name: "End session…" }).click();
     const confirm = page.getByRole("group", { name: "Confirm ending the session" });

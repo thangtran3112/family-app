@@ -26,6 +26,7 @@ import {
   currentValue,
   lineData,
   paneHeights,
+  pinnedRange,
   seriesMarkers,
   shadingData,
   volumeData,
@@ -104,6 +105,8 @@ export type MarketChartProps = {
   follow?: boolean;
   /** Bars on the first draw of a followed chart (90 by default). */
   firstDraw?: number;
+  /** Index of the session's first bar (the bars before it are lookback). While the revealed bars fit, the followed chart starts there, so the axis starts at the open. */
+  sessionStart?: number;
   /** Replay of a hidden day: axis, crosshair and data table show the time of day only, never the date. */
   hideDates?: boolean;
   /** Axis ticks read as time of day ("11:00 AM") with "Oct 22" at day changes, instead of a date on every tick. On for followed and hidden-date charts. */
@@ -223,6 +226,7 @@ export function MarketChart({
   dimmed = false,
   follow = false,
   firstDraw = FOLLOW_VISIBLE_BARS,
+  sessionStart,
   hideDates = false,
   clockTicks = false,
   rowLabels,
@@ -537,16 +541,22 @@ export function MarketChart({
     const key = `${symbol}:${interval}`;
     const count = candleData.length;
     if (bars.length && fitKey.current !== key) {
-      if (follow) currentChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
-      else currentChart.timeScale().fitContent();
+      if (follow) {
+        const pinned = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1, FOLLOW_RIGHT_PAD);
+        currentChart.timeScale().setVisibleLogicalRange(pinned ?? { from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
+      } else currentChart.timeScale().fitContent();
       fitKey.current = key;
     } else if (keepRange) {
       currentChart.timeScale().setVisibleLogicalRange(keepRange);
     } else if (follow && atNewest) {
-      currentChart.timeScale().scrollToRealTime();
+      // The view keeps its zoom: pinned to the session's first bar while the revealed bars fit in it, else it scrolls with the newest bar.
+      const span = visible === null ? null : visible.to - visible.from;
+      const pinned = sessionStart === undefined || span === null ? null : pinnedRange(count, sessionStart, span, FOLLOW_RIGHT_PAD);
+      if (pinned) currentChart.timeScale().setVisibleLogicalRange(pinned);
+      else currentChart.timeScale().scrollToRealTime();
     }
     lastIndex.current = count - 1;
-  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, firstDraw, hideDates, clockTicks, chartType, moneyAxis]);
+  }, [ready, symbol, interval, bars, overlays, panes, levels, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, hideDates, clockTicks, chartType, moneyAxis]);
 
   // Move the crosshair to the asked-for bar, scrolling it into view when it is off screen. Never touches the data.
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, changeTone, formatEtDay, formatMetric, formatPrice, formatSignedPct, type MetricFormat, type Tone } from "../desk/format.ts";
+import { EMPTY_VALUE, changeToneAt, formatEtDay, formatMetric, formatPrice, formatSignedPct, type MetricFormat, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { formatR } from "./journalView.ts";
 import type { Hold, Paused, PriceBasis, StripRow } from "./schemas.ts";
@@ -50,7 +50,7 @@ export function stopDistanceText(pct: number | null | undefined, stopped: "yes" 
   return Number(size.slice(0, -1)) === 0 ? PRACTICE_COPY.swingStopAt : practiceText("swingStopAway", { pct: size });
 }
 
-/** "Prior close 187.40" before anything of the day is revealed, "Last 182.10" after; "Last 182.35 · one-minute close" with the tape off. */
+/** "Prior close 187.40" before anything of the day is revealed, "Last 182.10" after; "Last 182.35 (1m close)" with the tape off. */
 export function priceBasisLabel(basis: PriceBasis | null | undefined, price: number | null | undefined, tape: "on" | "off" = "on"): string {
   if (price === null || price === undefined || !Number.isFinite(price)) return EMPTY_VALUE;
   const text = formatPrice(price);
@@ -195,8 +195,7 @@ export function stripRowView(row: StripRow): StripRowView {
     .filter((part) => part !== null)
     .join(", ");
   // The colour follows the rounded text: -0.01% reads "0.0%" and is flat, not red (D-148).
-  const shown = row.chg_pct == null ? row.chg_pct : Number(row.chg_pct.toFixed(1));
-  return { symbol: row.symbol, source: row.source, last, change, changeTone: changeTone(shown), sub, amber, label };
+  return { symbol: row.symbol, source: row.source, last, change, changeTone: changeToneAt(row.chg_pct, 1), sub, amber, label };
 }
 
 // -- header lines ---------------------------------------------------------------------------------------------
@@ -310,7 +309,7 @@ export function boardCellText(column: { key: string; format: string }, row: Boar
 export function boardCellTone(column: { key: string; format: string }, row: BoardRow): Tone | null {
   if (column.format !== "pct_signed") return null;
   const value = (row as Record<string, unknown>)[column.key];
-  return changeTone(typeof value === "number" ? value : null);
+  return changeToneAt(typeof value === "number" ? value : null, 2); // a pct_signed cell prints two decimals (D-148)
 }
 
 /** Names she can practise today: her open holds first, then the starred names (entries are allowed only on these). */

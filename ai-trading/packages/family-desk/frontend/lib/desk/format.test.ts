@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   changeTone,
+  changeToneAt,
   formatAgo,
   formatClock,
   formatCompact,
@@ -18,6 +19,7 @@ import {
   formatRatio,
   formatSignedPct,
   initialOf,
+  signToneAt,
 } from "./format.ts";
 
 test("Eastern time formatting follows daylight saving", () => {
@@ -55,6 +57,18 @@ test("numbers format compactly and never leak null or NaN", () => {
   assert.equal(formatMetric("pct_signed", 49.642), "+49.64%");
   assert.equal(formatMetric("time", "2026-10-23T18:00:00Z"), "2:00 PM");
   assert.equal(formatMetric("time", 5), "—");
+});
+
+test("a tone follows the number as printed: -0.01% at one decimal is flat, not red (D-148)", () => {
+  assert.equal(signToneAt(-0.01, 1), "neutral");
+  assert.equal(signToneAt(0.04, 1), "neutral");
+  assert.equal(signToneAt(-0.06, 1), "down");
+  assert.equal(signToneAt(0.06, 1), "up");
+  assert.equal(signToneAt(-0.004, 2), "neutral", "a P/L of -$0.004 prints $0.00");
+  assert.equal(changeToneAt(0.004, 2), "flat");
+  assert.equal(changeToneAt(0.01, 2), "up");
+  assert.equal(changeToneAt(null, 2), "flat");
+  assert.equal(signToneAt(undefined, 2), "neutral");
 });
 
 test("tones, relative time and initials", () => {

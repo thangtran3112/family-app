@@ -1,6 +1,6 @@
 import {
   EMPTY_VALUE,
-  changeTone,
+  changeToneAt,
   formatPrice,
   formatEtDay,
   formatEtTime,
@@ -196,7 +196,7 @@ export function cellText(column: Pick<ListColumn, "key" | "format">, row: Pick<C
 }
 
 export function cellTone(column: Pick<ListColumn, "key" | "format">, row: Pick<Candidate, "metrics">): Tone | null {
-  return column.format === "pct_signed" ? changeTone(row.metrics[column.key] ?? null) : null;
+  return column.format === "pct_signed" ? changeToneAt(row.metrics[column.key] ?? null, 2) : null;
 }
 
 /** One column of the day list: the API's own metric columns, plus the P7 columns it only holds in part (D-018). */
@@ -261,7 +261,7 @@ export function dayCellText(column: DayColumn, row: Candidate): string {
 
 export function dayCellTone(column: DayColumn, row: Candidate): Tone | null {
   const value = column.value(row);
-  return column.format === "pct_signed" && typeof value === "number" ? changeTone(value) : null;
+  return column.format === "pct_signed" && typeof value === "number" ? changeToneAt(value, 2) : null;
 }
 
 /** "Gap up · Abnormal volume" */
@@ -498,7 +498,7 @@ export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd"> & 
   held: "",
   pnl: formatSignedUsd(journal.pnl_usd, { cents: true }),
   ret: journal.lines ? returnText(journal.pnl_usd, journal.lines.reduce((sum, line) => sum + line.entry_price * line.shares, 0)) : "",
-  tone: changeTone(journal.pnl_usd),
+  tone: changeToneAt(journal.pnl_usd, 2),
 });
 
 /** The practice window of a day: the plan's window, but not before the list time, so a re-list moves its start (D-144). Both are ET "HH:MM". */
@@ -522,7 +522,7 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
     held: heldText(line.entry_at, line.exit_at),
     pnl: formatSignedUsd(line.pnl_usd, { cents: true }),
     ret: returnText(line.pnl_usd, line.entry_price * line.shares),
-    tone: changeTone(line.pnl_usd),
+    tone: changeToneAt(line.pnl_usd, 2),
   }));
 }
 

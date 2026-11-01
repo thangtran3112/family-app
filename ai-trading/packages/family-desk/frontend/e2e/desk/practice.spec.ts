@@ -337,7 +337,7 @@ test.describe("Practice", () => {
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", "/practice");
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice }), "one back link on the workspace, the one at the foot (D-146)").toHaveCount(0);
     await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabTrade })).toHaveAttribute("aria-selected", "true");
     // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
     await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
