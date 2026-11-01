@@ -59,6 +59,7 @@ function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps
   return (
     <>
       <div className={styles.chartArea}>
+        <ChartLegend model={legend} />
         <MarketChart
           symbol={symbol}
           interval="1d"
@@ -76,7 +77,6 @@ function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps
           rowLabels={model.offsets ?? undefined}
           dimmed={dimmed}
         />
-        <div className={styles.legend}><ChartLegend model={legend} /></div>
       </div>
       <p className={play.dailyNote}>{model.note}</p>
     </>
@@ -98,6 +98,7 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
 
   return (
     <div className={styles.chartArea}>
+      <ChartLegend model={legend} onToggle={(id) => onTogglePref(id as PrefId)} />
       <MarketChart
         symbol={symbol}
         interval={view.interval}
@@ -119,7 +120,6 @@ function IntradayChart({ symbol, view, bars, series, marks, hideDates, focus, di
         focus={focus}
         dimmed={dimmed}
       />
-      <div className={styles.legend}><ChartLegend model={legend} onToggle={(id) => onTogglePref(id as PrefId)} /></div>
     </div>
   );
 }
