@@ -427,7 +427,7 @@ except (urllib.error.URLError, OSError, socket.timeout):
   # Task 4 (01g): every app route now runs an availability check against the
   # control helper's private Unix socket after existing app auth. This smoke
   # fixture is not the control-boundary test (that is
-  # deploy/ci/test-app-controls-gateway.sh) -- it is a dummy stand-in, always
+  # infrastructure/apps/ai-trading/tests/test-app-controls-gateway.sh) -- it is a dummy stand-in, always
   # answering 204 (app available), so none of this script's own pre-existing
   # assertions regress now that the gate sits in front of them.
   docker volume rm smoke-control-sock >/dev/null 2>&1 || true
@@ -474,7 +474,7 @@ srv.serve_forever()
   # production gateway service (docker-compose.yml networks: [..., research]).
   docker run -d --name smoke-caddy --network "$net" -p 127.0.0.1:18080:8080 \
     -e VIBE_API_AUTH_KEY=smoke-key \
-    -v "$PWD/ai-trading/deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    -v "$PWD/infrastructure/apps/ai-trading/Caddyfile:/etc/caddy/Caddyfile:ro" \
     -v smoke-control-sock:/run/family-app/ai-trading-control:ro \
     caddy:2-alpine >/dev/null
   containers+=(smoke-caddy)
