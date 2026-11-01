@@ -120,6 +120,7 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
   } else {
     chartArea = (
       <div className={styles.chartArea}>
+        <ChartLegend model={legend} />
         <MarketChart
           symbol={symbol}
           interval={timeframe}
@@ -147,7 +148,6 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
             />
           ))}
         />
-        <div className={styles.legend}><ChartLegend model={legend} /></div>
       </div>
     );
   }

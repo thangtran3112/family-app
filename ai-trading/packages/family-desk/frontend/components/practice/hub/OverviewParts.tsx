@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode, Ref } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { adherenceStat, overviewDayRows, threadProgress, type EquityDays, type OverviewDayRow } from "@/lib/replay/overviewView";
@@ -33,8 +34,8 @@ export function OverviewChips({ thread }: { thread: ThreadSummary["thread"] }) {
   const closed = thread.status === "closed";
   return (
     <>
-      <span className={hub.chip}>{threadModeLabel(thread.mode)}</span>
-      <span className={hub.chip}>{closed ? PRACTICE_COPY.threadClosedBadge : PRACTICE_COPY.threadActive}</span>
+      <Badge tone="neutral">{threadModeLabel(thread.mode)}</Badge>
+      <Badge tone="neutral">{closed ? PRACTICE_COPY.threadClosedBadge : PRACTICE_COPY.threadActive}</Badge>
     </>
   );
 }

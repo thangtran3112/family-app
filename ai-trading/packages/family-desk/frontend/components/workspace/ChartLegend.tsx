@@ -26,8 +26,10 @@ function LegendItem({ label, color, value, dashed }: LegendEntry) {
 }
 
 /**
- * Top-left overlay: the OHLC title and one line per overlay (02l §b5). The parent positions it. With `onToggle` each
- * overlay is a button that hides or shows its line (the replay chart); a hidden one stays listed, dimmed.
+ * The values bar above the chart: the OHLC title and one entry per overlay (02l §b5), in a wrapping row. It is in normal flow,
+ * so it takes its own height and never covers a candle, a line, a level or the price scale: the parent renders it before the
+ * chart in a column and the chart takes what is left. With `onToggle` each overlay is a button that hides or shows its line
+ * (the replay chart); a hidden one stays listed, its swatch dimmed and its value reading "hidden".
  */
 export function ChartLegend({ model, onToggle }: { model: LegendModel; onToggle?: (id: string) => void }) {
   return (

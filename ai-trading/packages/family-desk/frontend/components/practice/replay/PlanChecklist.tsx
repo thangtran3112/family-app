@@ -32,7 +32,7 @@ export function PlanChecklist({
         {items.map((item) => (
           <li key={item.id} className={styles.row} data-state={item.state}>
             <span className={styles.mark} data-state={item.state} aria-hidden="true">{MARK[item.state]}</span>
-            <span className={styles.srOnly}>{STATE_WORDS[item.state]}: </span>
+            <span className="sr-only">{STATE_WORDS[item.state]}: </span>
             <span className={styles.label}>{item.label}</span>
             <span className={styles.detail}>{item.detail}</span>
           </li>

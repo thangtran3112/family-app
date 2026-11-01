@@ -50,7 +50,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
       {note && <p className={styles.endNote}>{note}</p>}
       <div className={styles.endRow}>
         {backHref ? (
-          <Button href={backHref} size="touch">
+          <Button href={backHref} client size="touch">
             <Icon name="chevron-left" />
             {PRACTICE_COPY.backToList}
           </Button>

@@ -251,17 +251,24 @@
   background: var(--color-raised);
 }
 
-/* ---- Legends (the parent positions them) ---- */
+/* ---- Legends ---- */
 
+/* The values bar above the chart: in flow, so it reserves its own height and cannot cover the plot at any width. The
+   entries wrap onto a second row when the chart is narrow. */
 .legend {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--space-4);
+  min-width: 0;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+  background: var(--color-ground);
   color: var(--color-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   line-height: 16px;
-  pointer-events: none;
 }
 
 .legendTitle {
@@ -288,7 +295,7 @@
   background: linear-gradient(90deg, var(--swatch) 0 4px, transparent 4px 6px, var(--swatch) 6px 10px);
 }
 
-/* The replay legend's toggle: only the buttons take the pointer, so the rest of the legend still lets the crosshair through. */
+/* The replay legend's toggle. */
 .legendButton {
   min-height: 24px;
   border: 0;
@@ -299,15 +306,15 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  pointer-events: auto;
 }
 
 .legendButton:hover {
   color: var(--color-text);
 }
 
-.legendButton[data-hidden="true"] {
-  opacity: 0.55;
+/* Hidden: the swatch dims and the value reads "hidden". The text keeps its colour, so it stays at full contrast (a dimmed button was about 2.8:1). */
+.legendButton[data-hidden="true"] .swatch {
+  opacity: 0.4;
 }
 
 .legendButton:focus-visible {

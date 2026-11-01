@@ -57,7 +57,7 @@ export type PracticeControlsProps = {
 };
 
 /** A hotkey chip: shown, never read (the button names itself and `aria-keyshortcuts` carries the key). */
-const Key = ({ children }: { children: string }) => <kbd className={styles.kbd} aria-hidden="true">{children}</kbd>;
+const Key = ({ children }: { children: string }) => <kbd className={styles.key} aria-hidden="true">{children}</kbd>;
 
 const RECENT_ORDERS = 3;
 

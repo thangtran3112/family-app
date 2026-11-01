@@ -4,6 +4,8 @@ import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { SymbolField } from "@/components/practice/hub/SymbolField";
 import hub from "@/components/practice/hub/hub.module.css";
 import modal from "@/components/practice/hub/newplan.module.css";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { Field, NumberInput } from "@/components/ui/Field";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -43,7 +45,7 @@ function useWatchlistChoices() {
 
 const COLUMNS: DenseColumn<UniverseRowView>[] = [
   { key: "symbol", label: "Symbol", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
-  { key: "source", label: "Source", render: (row) => <span className={hub.chip}>{row.chip}</span> },
+  { key: "source", label: "Source", render: (row) => <Badge tone="neutral">{row.chip}</Badge> },
   { key: "prior_close", label: "Prior close", align: "right", render: (row) => row.priorClose },
   { key: "chg_20d", label: "20-day change", align: "right", render: (row) => <span className={styles[row.chg20dTone]}>{row.chg20d}</span> },
   { key: "dollar_volume", label: "Avg dollar volume", align: "right", render: (row) => row.dollarVolume },
@@ -144,7 +146,7 @@ export function UniverseBuilder({
             <div onKeyDown={onAddKey}>
               <SymbolField value={typed} onChange={(symbol) => { setTyped(symbol); setAddProblem(null); }} error={addProblem ?? undefined} />
             </div>
-            <button type="button" className={hub.button} onClick={add}>{HUB_SWING_COPY.addSymbol}</button>
+            <Button onClick={add}>{HUB_SWING_COPY.addSymbol}</Button>
           </div>
           <p className={modal.help}>{PRACTICE_COPY.swingTypeSymbol}</p>
         </fieldset>
@@ -213,7 +215,7 @@ export function UniverseBuilder({
         {state.failure && (
           <div className={hub.inline}>
             <p role="alert" className={modal.fieldError}>{state.failure}</p>
-            <button type="button" className={hub.button} onClick={state.retry}>Try again</button>
+            <Button onClick={state.retry}>Try again</Button>
           </div>
         )}
         {problems.universe && <p role="alert" className={modal.fieldError}>{problems.universe}</p>}
@@ -230,9 +232,9 @@ export function UniverseBuilder({
                 dim={!state.fresh}
                 empty={HUB_SWING_COPY.noRows}
                 rowActions={(row) => (
-                  <button type="button" className={hub.small} aria-label={hubSwingText("removeRow", { symbol: row.symbol })} onClick={() => remove(row.symbol)}>
+                  <Button size="sm" variant="primary" aria-label={hubSwingText("removeRow", { symbol: row.symbol })} onClick={() => remove(row.symbol)}>
                     Remove
-                  </button>
+                  </Button>
                 )}
               />
             </div>
@@ -241,9 +243,9 @@ export function UniverseBuilder({
                 {leftOut.map((item) => (
                   <li key={item.symbol} className={modal.leftOutRow}>
                     <span className={modal.help}>{practiceText("swingExcludedRow", { symbol: item.symbol, reason: item.reason })}</span>
-                    <button type="button" className={hub.small} aria-label={hubSwingText("removeRow", { symbol: item.symbol })} onClick={() => remove(item.symbol)}>
+                    <Button size="sm" variant="primary" aria-label={hubSwingText("removeRow", { symbol: item.symbol })} onClick={() => remove(item.symbol)}>
                       Remove
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

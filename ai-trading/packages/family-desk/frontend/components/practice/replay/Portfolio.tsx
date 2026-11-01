@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { Badge } from "@/components/ui/Badge";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { formatEtTimeZone, formatPrice } from "@/lib/desk/format";
 import { formatSignedUsd } from "@/lib/desk/mask";
@@ -136,8 +137,8 @@ function PortfolioRowView({ row, inert, busy, onOpen, onExit }: { row: Portfolio
         {row.unrealized !== null && <span>unrealized {formatSignedUsd(row.unrealized, { cents: true })}</span>}
         {(row.trades > 0 || row.holding) && <span>{practiceText("dayPortfolioRealized", { amount: formatSignedUsd(row.realized, { cents: true }) })}</span>}
         {row.trades > 0 && <span>{row.trades === 1 ? "1 trade" : `${row.trades} trades`}</span>}
-        {row.current && <span className={styles.chip} data-tone="up">{PRACTICE_COPY.dayOnNow}</span>}
-        {row.behind && <span className={styles.chip}>{PRACTICE_COPY.dayBehind}</span>}
+        {row.current && <Badge tone="up">{PRACTICE_COPY.dayOnNow}</Badge>}
+        {row.behind && <Badge tone="neutral">{PRACTICE_COPY.dayBehind}</Badge>}
         {row.stopHitAt !== null && <span className={styles.portfolioStop}>{stopCrossedText(row.stopHitAt)}</span>}
       </span>
     </>

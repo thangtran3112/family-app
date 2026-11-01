@@ -19,6 +19,8 @@
 .root[aria-pressed="true"], .root[aria-current="page"] { border-color: var(--color-amber); }
 .root:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .root:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
+/* A disabled primary or danger button loses its colour: it must not look live beside the one that is (D-129). */
+.root[data-variant="primary"]:disabled, .root[data-variant="danger"]:disabled { border-color: var(--color-hairline); }
 /* A disabled Buy or Sell keeps its hue, so a ticket that waits still reads as a ticket. */
 .root[data-variant="up"]:disabled { color: var(--color-up); }
 .root[data-variant="down"]:disabled { color: var(--color-down); }

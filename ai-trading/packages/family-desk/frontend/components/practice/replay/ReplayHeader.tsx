@@ -1,5 +1,6 @@
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import play from "@/components/practice/swing/play.module.css";
+import { Badge } from "@/components/ui/Badge";
 import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
 import type { Speed } from "@/lib/replay/clock";
 import { formatSignedUsd } from "@/lib/desk/mask";
@@ -40,9 +41,9 @@ export function ReplayHeader({ symbol, dayLabel, attempt, playhead, lastPrice, v
       <div className={styles.header}>
         <div className={styles.identity}>
           <h1 className={styles.symbol}>{symbol}</h1>
-          <span className={styles.chip}>{dayLabel}</span>
-          {attempt > 1 && <span className={styles.chip}>Attempt {attempt}</span>}
-          <span className={`${styles.chip} ${styles.practiceChip}`}>Practice</span>
+          <Badge tone="neutral">{dayLabel}</Badge>
+          {attempt > 1 && <Badge tone="neutral">Attempt {attempt}</Badge>}
+          <Badge tone="warn">Practice</Badge>
         </div>
         <dl className={styles.readout}>
           <div><dt>Playhead</dt><dd className={styles.clock}>{formatEtClock(playhead)}</dd></div>

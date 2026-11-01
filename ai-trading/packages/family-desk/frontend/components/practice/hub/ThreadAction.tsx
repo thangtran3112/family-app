@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type MouseEvent } from "react";
+import { Button } from "@/components/ui/Button";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
@@ -55,10 +55,12 @@ export function ThreadAction({
     return action.kind === "start" || action.kind === "continue" ? <SwingContinue threadId={thread.id} label={action.label} locked={busy} onBusy={onBusy} onChanged={onChanged} /> : null;
   }
 
-  if (today !== null) return <Link href={`/practice/day?id=${today.day_list_id}`} className={styles.primaryLink} {...lockLink(busy)}>{dayActionLabel(today, plan?.thread_id === thread.id ? plan : null)}</Link>;
+  if (today !== null) {
+    return <Button client href={`/practice/day?id=${today.day_list_id}`} variant="primary" {...lockLink(busy)}>{dayActionLabel(today, plan?.thread_id === thread.id ? plan : null)}</Button>;
+  }
   if (!planOpensIn(plan, thread)) {
     return onNewPlan ? (
-      <button type="button" className={styles.button} disabled={busy} aria-busy={busy || undefined} onClick={onNewPlan}>{PRACTICE_COPY.landingNeedsPlan}</button>
+      <Button disabled={busy} loading={busy} onClick={onNewPlan}>{PRACTICE_COPY.landingNeedsPlan}</Button>
     ) : (
       <p className={styles.muted}>{PRACTICE_COPY.landingNeedsPlan}</p>
     );
@@ -105,9 +107,9 @@ function OpenNextDay({ threadId, label, locked, onBusy, onChanged }: { threadId:
 
   return (
     <>
-      <button type="button" className={styles.primary} disabled={locked || own} aria-busy={locked || own || undefined} onClick={() => void open()}>
+      <Button variant="primary" disabled={locked || own} loading={locked || own} onClick={() => void open()}>
         {own ? PRACTICE_COPY.planOpening : label}
-      </button>
+      </Button>
       {still && <p role="status" className={styles.hint}>{PRACTICE_COPY.planStillWorking}</p>}
       {message && <ErrorBlock message={message} onRetry={() => void open()} />}
     </>
