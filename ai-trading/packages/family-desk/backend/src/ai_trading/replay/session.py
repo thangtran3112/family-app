@@ -37,6 +37,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ai_trading.contracts.practice_thread import DEFAULT_STARTING_BALANCE
 from ai_trading.contracts.replay_session import ReplaySessionV1
 from ai_trading.core.calendar import ET, annotate
 from ai_trading.core.calendar import session as trading_session
@@ -1304,16 +1305,20 @@ def _expire_orders(row: ReplaySession, at: pd.Timestamp) -> None:
         row.orders = orders
 
 
-def _day_free_cash(db: Session, row: ReplaySession) -> float | None:
-    """A day thread's buying power: the thread's balance (its starting balance plus every booked trade; a day trade is
-    booked when it exits) less the entry notional of the day's open positions, this name's included (what she already
-    holds in it is cash spent). Like the swing rule, a short's notional counts as a long's. None for a standalone
-    session: it has no account to check against."""
-    if row.thread_id is None or row.day_list_id is None:
-        return None
-    thread = db.get(PracticeThread, row.thread_id)
+def _day_free_cash(db: Session, row: ReplaySession) -> float:
+    """A day session's buying power: its account's balance (the starting balance plus every booked trade; a day trade is
+    booked when it exits) less the entry notional of the open positions, this name's included (what she already holds
+    in it is cash spent). Like the swing rule, a short's notional counts as a long's.
+
+    A thread session's account is the thread's. A standalone session (no thread) has an account of its own, the default
+    starting balance of a thread plus the session's own closed trades, so the same cash rule is the only size rule on
+    every path; nothing is booked from it and each attempt starts from the same balance."""
+    thread = None if row.thread_id is None or row.day_list_id is None else db.get(PracticeThread, row.thread_id)
     if thread is None:
-        return None
+        closed, open_ = journal_mod.assemble(_marks_of(_load_marks(db, row.id)))
+        held = 0.0 if open_ is None else open_.entry_price * open_.shares
+        realized = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed])
+        return round(DEFAULT_STARTING_BALANCE + realized - held, 2)
     held = sum(t.entry_price * t.shares for _, t in open_positions(db, row.day_list_id))
     return round(swing_play.balance(db, thread) - held, 2)
 
@@ -1331,8 +1336,6 @@ def _check_day_buying_power(
     the whole position before it opens the other way, so that notional comes back to the cash along with the closed
     shares' P/L."""
     free = _day_free_cash(db, row)
-    if free is None:
-        return
     if closing is not None and take:
         gain = journal_mod.pnl_usd(closing.sign, closing.entry_price, price, take)
         free = round(free + closing.entry_price * closing.shares + gain, 2)
@@ -1587,10 +1590,19 @@ def undo_mark(db: Session, user_id: int, session_id: int, mark_id: int, svc: Ser
         raise ReplayProblem("Only the last mark can be undone, before the replay moves on", path="kind", status=409)
     if ctx.swing:
         return _undo_swing_mark(db, ctx, target)
+    free_before = _day_free_cash(db, row)
     db.delete(db.get(PracticeMark, mark_id))
     row.updated_at = svc.now()
     row.stop_hit_at = None
     db.flush()
+    # Undoing an exit or a sale puts its shares back among the open ones (and its ledger row goes), so they pass the
+    # cash rule again as the other names stand: another name may have spent the cash since (the shared day clock lets
+    # a second name mark at the same moment). 409, and the request's transaction rolls the delete back.
+    free_after = _day_free_cash(db, row)
+    if free_after < 0 and free_after < free_before:
+        raise ReplayProblem(
+            "Can't undo that · it would leave you without enough practice cash", path="kind", status=409
+        )
     ctx.marks = [m for m in ctx.marks if m.id != mark_id]
     price = _price_or_none(ctx)
     return {

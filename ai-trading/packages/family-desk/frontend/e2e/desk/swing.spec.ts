@@ -97,7 +97,7 @@ test.describe("Swing practice", () => {
   });
   test("Day 1: the board, two stars, the workspace, a long and a short, the messages, and End day", async ({ page, context }) => {
     test.setTimeout(120_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     await openNextDay(context, threadId);
     await openDesk(page, "/practice");
     await swingRow(page).getByRole("button", { name: "Continue Day 1" }).click();
@@ -180,7 +180,7 @@ test.describe("Swing practice", () => {
     await expect(practice4.getByRole("definition").filter({ hasText: "Short 100" })).toBeVisible();
     await expect(strip.getByRole("button", { name: /^S04, practice hold/ })).toContainText("Short 100");
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText("Free cash $");
-    await expect(page.getByText("Open holds").locator("xpath=following-sibling::*").first()).toContainText("2 of 5");
+    await expect(page.getByText("Open holds").locator("xpath=following-sibling::*").first()).toHaveText("2");
 
     // No cap on how many names are held: three more holds by API make five, and a sixth is accepted (the cash is the only size rule).
     const dayListId = Number(new URL(page.url()).searchParams.get("id") && (await get(context, `/threads/${threadId}`)).today.day_list_id);
@@ -214,7 +214,7 @@ test.describe("Swing practice", () => {
   });
   test("Days 2 and 3: Pass with its confirm, a watched day with an exit, and the ledger rule for balance and equity", async ({ page, context }) => {
     test.setTimeout(120_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);
     await enterByApi(context, dayOne, { symbol: "S01", watch: ["S01", "S04"], day: DAY_ISO[0]!, stopPrice: 95 });
     await markByApi(context, dayOne, "S04", { kind: "long_entry", shares: 100 });
@@ -304,7 +304,7 @@ test.describe("Swing practice", () => {
   });
   test("the S03 split morning keeps a carried hold's P/L, and the S02 gap through a stop pauses the first advance", async ({ page, context }) => {
     test.setTimeout(180_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);
     await enterByApi(context, dayOne, { symbol: "S02", watch: ["S02", "S03"], day: DAY_ISO[0]!, stopPrice: 86 });
     await markByApi(context, dayOne, "S03", { kind: "long_entry", shares: 100 });
@@ -377,7 +377,7 @@ test.describe("Swing practice", () => {
   });
   test("Week 1 review: tiles, tables, heat strip, notes that persist, and Start Week 2; the open week is Week to date", async ({ page, context }) => {
     test.setTimeout(180_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);
     await enterByApi(context, dayOne, { symbol: "S01", watch: ["S01", "S04"], day: DAY_ISO[0]!, stopPrice: 95 });
     await markByApi(context, dayOne, "S04", { kind: "long_entry", shares: 100 });
@@ -484,7 +484,7 @@ test.describe("Swing practice", () => {
   });
   test("acceptance: nothing past the day clock reaches the browser, a carried hold hand-checks, and the thread closes at the last close", async ({ page, context }) => {
     test.setTimeout(180_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);
     await enterByApi(context, dayOne, { symbol: "S01", watch: ["S01", "S04"], day: DAY_ISO[0]!, stopPrice: 95 });
     await markByApi(context, dayOne, "S04", { kind: "long_entry", shares: 100 });
@@ -651,7 +651,7 @@ test.describe("Swing practice", () => {
   });
   test("a stop pause on another name: Exit on the toast books that name's exit and shows it", async ({ page, context }) => {
     test.setTimeout(180_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);
     await enterByApi(context, dayOne, { symbol: "S02", watch: ["S02", "S03"], day: DAY_ISO[0]!, stopPrice: 86 });
     await markByApi(context, dayOne, "S03", { kind: "long_entry", shares: 100 });
@@ -679,7 +679,7 @@ test.describe("Swing practice", () => {
   });
   test("a name left behind the day clock comes back at the clock: from the strip and from Resume Day, and a mark is accepted", async ({ page, context }) => {
     test.setTimeout(120_000);
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayList = await openNextDay(context, threadId);
     await send(context, "PATCH", `/day-lists/${dayList}`, { watch: ["S01", "S02"] });
     await openDesk(page, `/practice/day?id=${dayList}`);

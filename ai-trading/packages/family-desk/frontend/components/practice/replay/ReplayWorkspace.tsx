@@ -552,7 +552,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
               <SwingPlanChecklist
                 items={swingPlanItems({
                   holdsOpen,
-                  maxOpenHolds: swingContext.setup?.maxOpenHolds ?? null,
                   maxTrades: swingContext.plan?.maxTrades ?? null,
                   maxLossUsd: swingContext.plan?.maxLossUsd ?? null,
                   week: swingContext.week,

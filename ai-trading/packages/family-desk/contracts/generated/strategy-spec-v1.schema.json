@@ -1872,11 +1872,6 @@
           ],
           "type": "string"
         },
-        "maxOpenHolds": {
-          "maximum": 5,
-          "minimum": 1,
-          "type": "integer"
-        },
         "riskPerHoldUsd": {
           "maximum": 100000,
           "minimum": 1,
@@ -1910,8 +1905,7 @@
         "universe",
         "interval",
         "tape",
-        "armed",
-        "maxOpenHolds"
+        "armed"
       ],
       "type": "object"
     },

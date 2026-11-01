@@ -96,7 +96,6 @@ def _day_facts(w: _Week) -> list[week_mod.DayFact]:
                 unrealized_change_usd=j["unrealized_change_usd"],
                 balance_usd=j["balance_usd"],
                 equity_usd=j["equity_usd"],
-                max_open_seen=j["max_open_seen"],
             )
         )
     # An early thread close exits the open holds at the last ended close AFTER that day's summary was stored (which
@@ -293,7 +292,6 @@ def _week_plan(thread: PracticeThread, plan: PracticePlan, first: ReplayDayList 
     return week_mod.WeekPlan(
         stop_required=fields["stopNoteOnEntry"] == "yes",
         risk_per_hold_usd=fields.get("riskPerHoldUsd"),
-        max_open_holds=fields["maxOpenHolds"],
         max_loss_usd=fields.get("maxLossUsd"),
         max_trades=fields.get("maxTrades"),
         signal_only=fields["tradeOnlyOnSignal"] == "yes",

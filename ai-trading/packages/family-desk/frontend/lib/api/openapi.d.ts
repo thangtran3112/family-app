@@ -6410,8 +6410,6 @@ export interface components {
              * @enum {string}
              */
             interval: "5m" | "15m";
-            /** Maxopenholds */
-            maxOpenHolds: number;
             /** Riskperholdusd */
             riskPerHoldUsd?: number | null;
             /** Sessions */
@@ -7202,7 +7200,7 @@ export interface components {
              * Id
              * @enum {string}
              */
-            id: "stop_set" | "stop_honored" | "risk_per_hold" | "open_holds_within_plan" | "week_loss_limit" | "entries_per_week" | "on_signal" | "focus_before_open";
+            id: "stop_set" | "stop_honored" | "risk_per_hold" | "week_loss_limit" | "entries_per_week" | "on_signal" | "focus_before_open";
             /** Label */
             label: string;
             /** Passed */

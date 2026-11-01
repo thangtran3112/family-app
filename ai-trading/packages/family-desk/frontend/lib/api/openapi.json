@@ -13800,12 +13800,6 @@
             "title": "Interval",
             "type": "string"
           },
-          "maxOpenHolds": {
-            "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Maxopenholds",
-            "type": "integer"
-          },
           "riskPerHoldUsd": {
             "anyOf": [
               {
@@ -13848,7 +13842,6 @@
           "firstDay",
           "hideDates",
           "interval",
-          "maxOpenHolds",
           "sessions",
           "tape",
           "universe"
@@ -16039,7 +16032,6 @@
               "stop_set",
               "stop_honored",
               "risk_per_hold",
-              "open_holds_within_plan",
               "week_loss_limit",
               "entries_per_week",
               "on_signal",

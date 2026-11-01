@@ -201,7 +201,6 @@ def swing_setup(**overrides) -> dict:
         "interval": "15m",
         "tape": "off",
         "armed": [],
-        "maxOpenHolds": 3,
     }
     return {**setup, **overrides}
 

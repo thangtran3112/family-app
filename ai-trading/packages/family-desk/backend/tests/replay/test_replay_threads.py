@@ -409,6 +409,47 @@ def test_a_standalone_session_has_no_thread_and_books_nothing(db_session, user_i
     assert _ledger(db_session) == []
 
 
+def _standalone(db_session, user_id, svc):
+    make_thread(db_session, user_id)
+    spec = plan_mod._session_spec(
+        PracticePlan(spec=_block(db_session, user_id).model_dump(by_alias=True, exclude_none=True)),
+        DAYS[0],
+        "GAPPER",
+        _thread(db_session, user_id),
+    )
+    standalone = session_mod.create(db_session, user_id, spec, svc)
+    assert standalone.thread_id is None
+    _advance(db_session, user_id, svc, standalone.id, "09:35")  # GAPPER is 110 from the open
+    return standalone
+
+
+def test_a_standalone_session_runs_the_same_cash_rule_on_its_own_default_balance(db_session, user_id, svc) -> None:
+    standalone = _standalone(db_session, user_id, svc)
+    with pytest.raises(ReplayProblem) as broke:  # 500 * 110 = 55,000 > the default 50,000
+        _mark(db_session, user_id, svc, standalone.id, "long_entry", shares=500)
+    assert (broke.value.message, broke.value.path, broke.value.status) == (
+        "Not enough practice cash · $50,000 free",
+        "shares",
+        422,
+    )
+    assert session_mod._load_marks(db_session, standalone.id) == []  # nothing was written
+    _mark(db_session, user_id, svc, standalone.id, "long_entry", shares=400)  # 44,000 of 50,000
+    with pytest.raises(ReplayProblem) as rest:  # what it already holds is cash spent: 6,000 left buys 54, not 55
+        _mark(db_session, user_id, svc, standalone.id, "long_entry", shares=55)
+    assert rest.value.message == "Not enough practice cash · $6,000 free"
+    _mark(db_session, user_id, svc, standalone.id, "long_entry", shares=54)
+    assert _ledger(db_session) == []  # still books nothing
+
+
+def test_a_standalone_working_order_is_held_to_the_cash_rule_too(db_session, user_id, svc) -> None:
+    standalone = _standalone(db_session, user_id, svc)
+    body = {"side": "buy", "orderType": "limit", "limitPrice": 100.0, "shares": 600}  # 60,000 > 50,000
+    with pytest.raises(ReplayProblem) as broke:
+        session_mod.place_order(db_session, user_id, standalone.id, svc, body)
+    assert (broke.value.message, broke.value.path) == ("Not enough practice cash · $50,000 free", "shares")
+    assert session_mod.place_order(db_session, user_id, standalone.id, svc, {**body, "shares": 500})["order"]
+
+
 # -- the ledger ----------------------------------------
 
 

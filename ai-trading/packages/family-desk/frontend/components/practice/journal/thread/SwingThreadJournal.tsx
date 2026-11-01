@@ -159,7 +159,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
   );
 }
 
-/** What the thread was started with (02p c1): the calendar, the interval and tape, the cap on open holds, and the frozen universe's mix. */
+/** What the thread was started with (02p c1): the calendar, the interval and tape, the risk per hold, and the frozen universe's mix. */
 function SwingSetupPanel({ thread, hidden }: { thread: Thread; hidden: boolean }) {
   const setup = thread.thread.swing;
   if (!setup) return null;
@@ -168,7 +168,6 @@ function SwingSetupPanel({ thread, hidden }: { thread: Thread; hidden: boolean }
     { label: "Dates", value: hidden ? "Hidden" : `From ${formatEtDay(setup.firstDay)}` },
     { label: "Interval", value: setup.interval },
     { label: "Tape", value: setup.tape === "on" ? PRACTICE_COPY.swingTapeYes : PRACTICE_COPY.swingTapeNo },
-    { label: "Open holds at most", value: String(setup.maxOpenHolds) },
     { label: "Risk per hold", value: setup.riskPerHoldUsd === undefined ? "None" : formatBalance(setup.riskPerHoldUsd), money: setup.riskPerHoldUsd !== undefined },
   ];
   return (

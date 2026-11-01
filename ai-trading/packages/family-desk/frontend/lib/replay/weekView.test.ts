@@ -131,11 +131,10 @@ test("the adherence checks keep a check that did not apply apart from a pass", (
   assert.deepEqual(checks.map((check) => [check.id, check.state]), [
     ["stop_set", "pass"],
     ["stop_honored", "na"],
-    ["open_holds_within_plan", "pass"],
     ["week_loss_limit", "pass"],
     ["focus_before_open", "fail"],
   ]);
-  assert.equal(checks[4]!.detail, "1 of 2 entries");
+  assert.equal(checks[3]!.detail, "1 of 2 entries");
 });
 
 test("filter, source and untraded lines", () => {
