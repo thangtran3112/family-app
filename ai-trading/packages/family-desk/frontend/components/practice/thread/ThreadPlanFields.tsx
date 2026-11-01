@@ -1,7 +1,7 @@
 "use client";
 
-import { Segments } from "@/components/practice/hub/FormCells";
 import { Field, NumberInput, Textarea } from "@/components/ui/Field";
+import { Segmented } from "@/components/ui/Segmented";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { ThreadDraft, ThreadProblems } from "@/lib/replay/threadSetup";
 import styles from "./thread.module.css";
@@ -50,7 +50,7 @@ export function ThreadPlanFields({
 function YesNo({ id, label, value, error, onChange }: { id: string; label: string; value: boolean; error?: string; onChange: (value: boolean) => void }) {
   return (
     <Field id={id} label={label} group error={error}>
-      <Segments id={id} value={value ? "yes" : "no"} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={(next) => onChange(next === "yes")} />
+      <Segmented value={value ? "yes" : "no"} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={(next) => onChange(next === "yes")} />
     </Field>
   );
 }

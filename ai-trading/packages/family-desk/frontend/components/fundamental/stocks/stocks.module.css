@@ -33,9 +33,6 @@
 .kv dt { color: var(--color-muted); }
 .kv dd { margin: 0; }
 
-/* Chart */
-.toggle { display: inline-flex; gap: var(--space-0-5); }
-
 /* Valuation */
 .method { display: grid; grid-template-columns: minmax(150px, 1fr) 110px minmax(0, 2fr); gap: var(--space-3); align-items: start; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-hairline); font-size: var(--text-label); }
 .methodValue { font-weight: var(--weight-semibold); text-align: right; }

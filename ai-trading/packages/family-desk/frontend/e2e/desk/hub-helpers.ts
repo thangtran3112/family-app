@@ -68,9 +68,9 @@ export async function fillNewPlan(dialog: Locator, plan: NewPlan = {}) {
   if (!plan.replace && plan.balance) await dialog.getByLabel("Starting balance").fill(plan.balance);
   await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: plan.filter ?? "Any close" }).check();
   await dialog.locator('input[type="date"]').fill(DAY);
-  await dialog.getByRole("group", { name: "Days" }).getByRole("button", { name: plan.days ?? "5", exact: true }).click();
+  await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: plan.days ?? "5", exact: true }).click();
   await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).fill(plan.to ?? "09:40");
-  await dialog.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: plan.interval ?? "1m", exact: true }).click();
+  await dialog.getByRole("radiogroup", { name: "Chart interval" }).getByRole("radio", { name: plan.interval ?? "1m", exact: true }).click();
 }
 
 /** Sets the thread's risk plan through the API: the modal no longer asks for it (D-076). Stops are No unless `stop` is set (D-060). */

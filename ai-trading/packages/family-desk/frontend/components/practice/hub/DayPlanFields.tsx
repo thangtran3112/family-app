@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Field, Input, NumberInput } from "@/components/ui/Field";
+import { Segmented } from "@/components/ui/Segmented";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatClock } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -22,7 +23,6 @@ import {
 } from "@/lib/replay/planSetup";
 import { INTERVALS } from "@/lib/replay/setup";
 import { runLabels } from "@/lib/spec/describe";
-import { Segments } from "./FormCells";
 import styles from "./hub.module.css";
 import modal from "./newplan.module.css";
 
@@ -106,26 +106,23 @@ export function DayPlanFields({
             <Input type="date" value={firstDay} min={EARLIEST_LIST_DAY} max={maxDay} onChange={(event) => onFirstDay(event.target.value)} />
           </Field>
           <Field id="plan-days" label={PRACTICE_COPY.planDays} group error={problems.sessions}>
-            <Segments
-              id="plan-days"
+            <Segmented
               value={draft.sessions}
               options={SESSION_CHOICES.map((count) => ({ value: String(count), label: String(count) }))}
               onChange={(sessions) => onDraft({ ...draft, sessions })}
             />
           </Field>
           <Field id="plan-hide" label={PRACTICE_COPY.planHideDates} group className={modal.span} note={PRACTICE_COPY.planHideDatesHint}>
-            <Segments
-              id="plan-hide"
+            <Segmented
               value={draft.hideDates ? "yes" : "no"}
               options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
               onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
             />
           </Field>
           <Field id="plan-list-at" label={PRACTICE_COPY.planListAt} group className={modal.span} note={anyHeld ? needText : PRACTICE_COPY.planListAtHint} error={problems.listAt} reserve>
-            <Segments
-              id="plan-list-at"
+            <Segmented
               value={draft.listAt}
-              options={LIST_TIMES.map((item) => ({ value: item.value, label: item.label, held: listTimeHeld(item.value, need) }))}
+              options={LIST_TIMES.map((item) => ({ value: item.value, label: item.label, disabledReason: listTimeHeld(item.value, need) ? needText : undefined }))}
               onChange={(listAt) => onDraft(withListTime(draft, listAt))}
             />
           </Field>
@@ -133,8 +130,7 @@ export function DayPlanFields({
             <NumberInput fill inputMode="numeric" min={20} max={50} step={1} value={draft.maxList} onChange={(event) => onDraft({ ...draft, maxList: event.target.value })} />
           </Field>
           <Field id="plan-interval" label={PRACTICE_COPY.planInterval} group>
-            <Segments
-              id="plan-interval"
+            <Segmented
               value={setup.interval}
               options={INTERVALS.map((interval) => ({ value: interval, label: interval }))}
               onChange={(interval) => patchSetup({ ...setup, interval })}

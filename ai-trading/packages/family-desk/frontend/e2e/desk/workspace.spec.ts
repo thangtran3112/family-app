@@ -25,9 +25,9 @@ test("chart workspace shows the NVDA header, toolbar, chart legend and bottom pa
   const timeframes = page.getByRole("group", { name: "Timeframe" });
   await expect(timeframes.getByRole("button")).toHaveText(["1m", "5m", "15m", "1h", "4h", "1D", "1W"]);
   await expect(timeframes.getByRole("button", { name: "15m", exact: true, pressed: true })).toBeVisible();
-  const session = page.getByRole("group", { name: "Session" });
-  await expect(session.getByRole("button", { name: "Regular", exact: true, pressed: true })).toBeVisible();
-  await expect(session.getByRole("button", { name: "Extended", exact: true })).toBeVisible();
+  const session = page.getByRole("radiogroup", { name: "Session" });
+  await expect(session.getByRole("radio", { name: "Regular", exact: true, checked: true })).toBeVisible();
+  await expect(session.getByRole("radio", { name: "Extended", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Indicators", exact: true })).toBeVisible();
   // The rail repeats "+ Alert" for the symbol, so the toolbar's link is the one inside the content region.
   await expect(page.locator("#main-content").getByRole("link", { name: "+ Alert", exact: true })).toHaveAttribute("href", "/alerts/new?source=symbol:NVDA");

@@ -74,9 +74,9 @@ test("a stock's overview shows the not-started verdict, consensus EPS with revis
   await expect(main(page).getByRole("button", { name: "Alert me" })).toBeDisabled();
   await expect(main(page)).toContainText(COPY.alertTemplatesNotStarted);
   const chart = page.getByTestId("fund-chart");
-  await expect(chart.getByRole("button", { name: "1D" })).toHaveAttribute("aria-pressed", "true");
-  await chart.getByRole("button", { name: "1W" }).click();
-  await expect(chart.getByRole("button", { name: "1W" })).toHaveAttribute("aria-pressed", "true");
+  await expect(chart.getByRole("radio", { name: "1D" })).toBeChecked();
+  await chart.getByRole("radio", { name: "1W" }).click();
+  await expect(chart.getByRole("radio", { name: "1W" })).toBeChecked();
   await noSidewaysScroll(page);
   await expectCleanScreen(page);
   expect(gated()).toEqual([]);

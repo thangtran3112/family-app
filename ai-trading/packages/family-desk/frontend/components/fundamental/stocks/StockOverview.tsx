@@ -5,6 +5,7 @@ import { MarketChart } from "@/components/charts/MarketChart";
 import { Button } from "@/components/ui/Button";
 import { Delta } from "@/components/ui/Delta";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { Segmented } from "@/components/ui/Segmented";
 import { StatTile } from "@/components/ui/StatTile";
 import type { Research } from "@/lib/api/fundamentalSchemas";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -126,6 +127,10 @@ function Targets({ targets }: { targets: Research["targets"] }) {
 }
 
 type Interval = "1d" | "1w";
+const RANGES = [
+  { value: "1d", label: "1D" },
+  { value: "1w", label: "1W" },
+] as const;
 // Calendar days of bars to ask for: a year of daily bars, five of weekly (the same spans the Technicals chart uses).
 const DAYS: Record<Interval, number> = { "1d": 365, "1w": 1825 };
 
@@ -139,11 +144,7 @@ function PriceChart({ symbol }: { symbol: string }) {
         <PanelHeader
           title="Price"
           actions={
-            <div className={local.toggle} role="group" aria-label="Chart range">
-              {(["1d", "1w"] as const).map((value) => (
-                <Button key={value} variant="ghost" size="sm" aria-pressed={interval === value} onClick={() => setInterval(value)}>{value === "1d" ? "1D" : "1W"}</Button>
-              ))}
-            </div>
+            <Segmented label="Chart range" size="md" value={interval} options={RANGES} onChange={setInterval} />
           }
         />
         {bars.data ? (

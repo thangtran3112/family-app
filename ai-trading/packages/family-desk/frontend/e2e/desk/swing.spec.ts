@@ -20,8 +20,8 @@ test.describe("Swing practice", () => {
 
     // A plain landing load, and the modal open in Day mode, never ask for a universe (it would start the data prep).
     let dialog = await openNewPlan(page);
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).not.toBeChecked();
     await page.waitForTimeout(1_200);
     expect(swingCalls()).toEqual([]);
     await page.keyboard.press("Escape");
@@ -32,11 +32,11 @@ test.describe("Swing practice", () => {
     const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
     await expect(table.getByRole("row", { name: /Day trading/ })).toContainText("$50,000");
     dialog = await clickNewPlan(page);
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
     await expect(dialog.getByText("is already active")).toHaveCount(0);
-    await dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeChecked();
     await expect(dialog.getByRole("button", { name: START_BUTTON })).toBeDisabled(); // no universe yet
     await expectCleanScreen(page);
 

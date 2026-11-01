@@ -507,8 +507,8 @@ test.describe("Practice", () => {
     await expect(closedRow.getByRole("button", { name: /Day \d+$/ })).toHaveCount(0);
     await expect(closedRow.getByRole("link", { name: PRACTICE_COPY.landingJournal, exact: true })).toBeVisible(); // a closed thread's one action
     const again = await clickNewPlan(page);
-    await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
     await expectCleanScreen(page);
   });
 
@@ -563,9 +563,9 @@ test.describe("Practice", () => {
     // The server allows several active threads per mode, so the modal keeps both segments on and Day can start another thread.
     await openDesk(page, "/practice");
     const again = await clickNewPlan(page);
-    await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(again.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
-    await expect(again.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
     await expect(again).not.toContainText("is already active");
     await expect(again.getByRole("button", { name: START_BUTTON })).toBeVisible();
     await expectCleanScreen(page);
@@ -714,15 +714,15 @@ test.describe("Practice", () => {
   test("the plan form moves the list time for a 15-minute filter, disables earlier times and says why", async ({ page }) => {
     const daily = await openNewPlan(page);
     const filters = daily.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
-    const listTimes = daily.getByRole("group", { name: PRACTICE_COPY.planListAt, exact: true });
-    const premarket = listTimes.getByRole("button", { name: /^8:30/ });
-    const tenOclock = listTimes.getByRole("button", { name: /^10:00/ });
+    const listTimes = daily.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt, exact: true });
+    const premarket = listTimes.getByRole("radio", { name: /^8:30/ });
+    const tenOclock = listTimes.getByRole("radio", { name: /^10:00/ });
 
     await filters.getByRole("checkbox", { name: "Gap up" }).check();
-    await expect(premarket).toHaveAttribute("aria-pressed", "true"); // a premarket filter lists at 8:30
+    await expect(premarket).toBeChecked(); // a premarket filter lists at 8:30
 
     await filters.getByRole("checkbox", { name: "Abnormal volume" }).check();
-    await expect(tenOclock).toHaveAttribute("aria-pressed", "true"); // the default suggestion for an intraday filter
+    await expect(tenOclock).toBeChecked(); // the default suggestion for an intraday filter
     await expect(premarket).toBeDisabled();
     // D-017, M-02: 10:00 satisfies the filter, so the time she has is not called wrong; the reason for the disabled earlier time is in view, not in a tooltip, and Start is ready.
     await expect(daily.getByRole("alert")).toHaveCount(0);
