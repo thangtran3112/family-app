@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { TONES } from "../../components/ui/tone.ts";
 import { signTone } from "./format.ts";
-import { bannerRole, buttonState, countText, deltaView, factColumns, fieldWiring, formBarStatus, iconA11y, modeLabel, panelHeadingTag, railRowKind, railRowSelection, requirementText, retryLabel, rovingStop, rovingTarget, statTileTag, tabDomIds, UNSAVED_TEXT } from "./primitivesView.ts";
+import { bannerRole, buttonState, countText, deltaView, factColumns, fieldWiring, formBarStatus, iconA11y, modeLabel, panelHeadingTag, railRowKind, queryView, railRowSelection, requirementText, retryLabel, rovingStop, rovingTarget, statTileTag, tabDomIds, UNSAVED_TEXT } from "./primitivesView.ts";
 import { warnBeforeUnload } from "./unsavedGuard.ts";
 
 test("tone: every tone has a colour in globals.css, and a sign maps onto the model", () => {
@@ -138,4 +138,16 @@ test("FactList: one column unless two are asked for", () => {
 test("QueryBoundary: the retry says Trying again only while a retry runs", () => {
   assert.equal(retryLabel(false), "Try again");
   assert.equal(retryLabel(true), "Trying again");
+});
+
+test("QueryBoundary: data wins, a retry keeps the error block up, the rest is loading or error", () => {
+  const first = { data: null, error: null, loading: true };
+  assert.equal(queryView(first), "loading");
+  assert.equal(queryView({ data: null, error: new Error("x"), loading: false }), "error");
+  assert.equal(queryView({ data: null, error: null, loading: true }, { retrying: true }), "retrying", "the retry started: error cleared, loading true");
+  assert.equal(queryView({ data: null, error: new Error("again"), loading: false }, { retrying: true }), "error", "the retry failed: Try again is back");
+  assert.equal(queryView({ data: [1], error: new Error("refresh failed"), loading: false }), "ready", "a failed refresh keeps the old values");
+  assert.equal(queryView({ data: [], error: null, loading: false }, { isEmpty: true }), "empty");
+  assert.equal(queryView({ data: [1], error: null, loading: false }, { isEmpty: false }), "ready");
+  assert.equal(queryView({ data: null, error: null, loading: false }), "loading", "a query that is switched off waits");
 });

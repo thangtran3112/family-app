@@ -117,3 +117,16 @@ export const factColumns = (columns: number | undefined): 1 | 2 => (columns === 
 
 /** The label shown while a QueryBoundary retry is in flight: it says what is happening instead of staying "Try again". */
 export const retryLabel = (retrying: boolean): string => (retrying ? "Trying again" : "Try again");
+
+export type QueryView = "ready" | "empty" | "loading" | "error" | "retrying";
+
+/**
+ * What a QueryBoundary shows. Data wins: a failed refresh keeps the old values on screen. Without data, a retry in flight keeps the
+ * error block on screen saying "Trying again" (instead of flashing the loading block), a failure shows the error block, and the
+ * rest is loading. `isEmpty` is whether the data that arrived has nothing to list.
+ */
+export function queryView(query: { data: unknown; error: unknown; loading: boolean }, options: { retrying?: boolean; isEmpty?: boolean } = {}): QueryView {
+  if (query.data !== null) return options.isEmpty ? "empty" : "ready";
+  if (options.retrying && query.loading) return "retrying";
+  return query.error !== null ? "error" : "loading";
+}
