@@ -14,7 +14,7 @@ const COLUMNS: DenseColumn<LinkedDayRow>[] = [
       row.href === null ? (
         row.title
       ) : (
-        <Link href={row.href} className={styles.link}>
+        <Link href={row.href} className={`${styles.link} ${styles.dayLink}`}>
           {row.title}
         </Link>
       ),

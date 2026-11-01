@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { HUB_SWING_COPY } from "../../lib/replay/hubSwing.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { brokenTileValues, expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
 import { origin } from "../helpers";
 import { THREAD_URL, createThreadByApi, startThread, threadIdOf } from "./hub-helpers";
 import { DAY_ISO, createSwingThread, enterByApi, expectNoDates, markByApi, openNextDay, send, swingRow } from "./swing-helpers";
@@ -408,18 +408,24 @@ test.describe("Practice week review · fix wave 5S", () => {
     // D-088: Start Week 2 is in the first screen beside the "Final" chip, and ← Thread goes to the thread's page.
     await expect(page.getByRole("button", { name: "Start Week 2" })).toBeInViewport();
     await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
+    // D-126: the twelve tiles sit four across, three even rows, and the values of a row share one baseline.
+    const tiles = await page
+      .locator("#main-content ul[role=list] > li")
+      .filter({ has: page.locator("[data-tone]") })
+      .evaluateAll((items) => items.map((li) => ({ top: Math.round(li.getBoundingClientRect().top), value: Math.round(li.querySelector("[data-tone]")!.getBoundingClientRect().top) })));
+    const rows = Map.groupBy(tiles, (tile) => tile.top);
+    expect([...rows.values()].map((row) => row.length), "three rows of four tiles").toEqual([4, 4, 4]);
+    for (const row of rows.values()) expect(new Set(row.map((tile) => tile.value)).size, "one baseline a row").toBe(1);
+    // D-130: the universe line keeps its first sentence; the survivorship caveat is folded behind a summary.
+    await expect(page.getByText(/^Fixed universe · \d+ symbols chosen today/)).toBeVisible();
+    await expect(page.locator("summary", { hasText: "Why this list leans toward survivors" })).toBeVisible();
+    await expect(page.getByText(/delisted or renamed since Day 1/)).toBeHidden();
+    // D-127: the Days and Holds tables are one density: their rows are the same height.
+    const rowHeights = (name: string) => page.getByRole("table", { name }).locator("tbody tr").evaluateAll((trs) => trs.map((tr) => Math.round(tr.getBoundingClientRect().height)));
+    expect([...new Set([...(await rowHeights("Days this week")), ...(await rowHeights("Holds this week"))])], "one row height in both tables").toHaveLength(1);
     // D-086: every tile value is one line inside its tile, also in a narrow tile (the grid is squeezed to about 154 px a tile, as the audit saw it).
     await page.locator("#main-content ul[role=list]").filter({ has: page.locator("[data-tone]") }).first().evaluate((list) => ((list as HTMLElement).style.width = "470px"));
-    const broken = await page.locator("#main-content [data-tone]").evaluateAll((nodes) =>
-      nodes.flatMap((node) => {
-        const box = node.getBoundingClientRect();
-        const style = getComputedStyle(node);
-        const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
-        const wraps = box.height > line * 1.5;
-        const spills = node.scrollWidth > node.clientWidth + 1;
-        return wraps || spills ? [`${node.textContent} (${Math.round(box.width)}x${Math.round(box.height)})`] : [];
-      }),
-    );
+    const broken = await brokenTileValues(page);
     expect(broken, "a tile value wraps or spills").toEqual([]);
     expect(await page.locator("#main-content [data-tone]").count(), "the tiles are there").toBeGreaterThan(5);
     // D-087: the key lists the day-close ticks too, and "this week is shaded" is a filled block, not a box that looks ticked.
@@ -427,6 +433,10 @@ test.describe("Practice week review · fix wave 5S", () => {
     await expect(key).toContainText("Close of each day");
     const shade = key.getByRole("listitem").filter({ hasText: "This week is shaded" }).locator("span").first();
     await expect(shade).toHaveCSS("border-top-width", "0px");
+    // D-085: the swing journal's next step says why Day 6 waits, once, beside the review link.
+    await openDesk(page, `/practice/journal?thread=${threadId}`);
+    await expect(page.getByText("Week 1 is done. Review it to unlock Day 6.")).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
   });
 
   test("a day thread's week page has a heading, a full sentence and a link to the thread's page (D-089)", async ({ page, context }) => {
