@@ -1,4 +1,5 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
+import { chartPalette } from "../../lib/desk/chartPalette.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
@@ -65,6 +66,100 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(legendButton(page, "VWAP")).toHaveAttribute("aria-pressed", "false");
     await expect(headerVwap(page)).toHaveText(/^\d/);
     await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  // The OHLC / VWAP / EMA legend was laid over the top-left of the plot and covered the candles. It is now a values bar above
+  // the chart, in flow: it takes its own height, so no width can put it over a candle, a line, a level or the price scale.
+  test("the legend is a values bar above the chart and overlaps no plot pixel, at the normal width and in a narrow chart", async ({ page }) => {
+    await stepBars(page, 3);
+    const chart = page.locator("section[aria-label='TSLA 1m market chart']");
+    const area = chart.locator("xpath=..");
+    const plot = chart.locator("canvas").first();
+    const bar = legendButton(page, "VWAP").locator("xpath=..");
+    const entries = [page.getByText(/^TSLA · 1m · O /), legendButton(page, "VWAP"), legendButton(page, "EMA 9"), legendButton(page, "EMA 21")];
+    const inside = (inner: { x: number; y: number; width: number; height: number }, outer: { x: number; y: number; width: number; height: number }) =>
+      inner.x >= outer.x - 0.5 && inner.y >= outer.y - 0.5 && inner.x + inner.width <= outer.x + outer.width + 0.5 && inner.y + inner.height <= outer.y + outer.height + 0.5;
+
+    async function expectBarAbovePlot(label: string) {
+      const barBox = (await bar.boundingBox())!;
+      const plotBox = (await plot.boundingBox())!;
+      const areaBox = (await area.boundingBox())!;
+      expect(barBox.y + barBox.height, `${label}: the bar ends where the plot begins`).toBeLessThanOrEqual(plotBox.y + 0.5);
+      expect(inside(barBox, areaBox), `${label}: the bar is inside the chart column`).toBe(true);
+      for (const entry of entries) expect(inside((await entry.boundingBox())!, barBox), `${label}: every entry is inside the bar`).toBe(true);
+      expect(inside((await chart.boundingBox())!, areaBox), `${label}: the chart stays inside its column (no clipped pane)`).toBe(true);
+      // Painted, not only measured: the top-left of the plot is the chart's own canvas, and the bar's middle is the bar.
+      const hit = await page.evaluate(({ plotX, plotY, barX, barY }) => ({
+        plot: document.elementFromPoint(plotX, plotY)?.tagName,
+        bar: document.elementFromPoint(barX, barY)?.closest("button, div")?.textContent ?? "",
+      }), { plotX: plotBox.x + 4, plotY: plotBox.y + 4, barX: barBox.x + 2, barY: barBox.y + barBox.height / 2 });
+      expect(hit.plot, `${label}: the plot's top-left corner is the canvas, not the legend`).toBe("CANVAS");
+      expect(hit.bar).toContain("TSLA");
+      const scroll = await area.evaluate((el) => ({ over: el.scrollHeight - el.clientHeight, overX: el.scrollWidth - el.clientWidth }));
+      expect(scroll.over, `${label}: no vertical scrollbar in the chart column`).toBeLessThanOrEqual(1);
+      expect(scroll.overX, `${label}: no horizontal scrollbar in the chart column`).toBeLessThanOrEqual(1);
+      return { barBox, plotBox };
+    }
+
+    const wide = await expectBarAbovePlot("normal width");
+    // Moving the cursor over the plot rewrites the readout; the bar must not change height, or the plot would jump under it.
+    await page.mouse.move(wide.plotBox.x + wide.plotBox.width / 2, wide.plotBox.y + wide.plotBox.height / 2);
+    await page.mouse.move(wide.plotBox.x + wide.plotBox.width / 2 + 40, wide.plotBox.y + wide.plotBox.height / 2 + 10);
+    const hovered = await expectBarAbovePlot("cursor on the plot");
+    expect(hovered.barBox.height, "the bar keeps its height while the readout changes").toBeCloseTo(wide.barBox.height, 0);
+    expect(hovered.plotBox.y, "the plot does not move").toBeCloseTo(wide.plotBox.y, 0);
+
+    // A narrow chart: the entries wrap onto more rows, the bar grows, the plot still starts below it.
+    await area.evaluate((el) => { (el as HTMLElement).style.width = "300px"; });
+    await expect.poll(async () => (await plot.boundingBox())!.width).toBeLessThanOrEqual(300);
+    const narrow = await expectBarAbovePlot("a 300 px chart");
+    expect(narrow.barBox.height, "the entries wrapped").toBeGreaterThan(wide.barBox.height);
+
+    // A hidden overlay stays listed, still a button, with its text at full contrast (it used to be dimmed to about 2.8:1).
+    await area.evaluate((el) => { (el as HTMLElement).style.width = ""; });
+    await legendButton(page, "EMA 21").click();
+    await expect(legendButton(page, "EMA 21")).toHaveAttribute("aria-pressed", "false");
+    const ratio = await legendButton(page, "EMA 21").evaluate((button) => {
+      const channel = (value: number) => { const v = value / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      const luminance = (css: string) => { const [r, g, b] = css.match(/[\d.]+/g)!.map(Number); return 0.2126 * channel(r!) + 0.7152 * channel(g!) + 0.0722 * channel(b!); };
+      const text = getComputedStyle(button.querySelector("span:last-child")!);
+      const ground = getComputedStyle(button.parentElement!).backgroundColor;
+      const [hi, lo] = [luminance(text.color), luminance(ground)].sort((a, b) => b - a);
+      return { ratio: (hi! + 0.05) / (lo! + 0.05), opacity: Number(getComputedStyle(button).opacity) };
+    });
+    expect(ratio.opacity, "the whole button is not dimmed").toBe(1);
+    expect(ratio.ratio, "the hidden entry's value against the bar").toBeGreaterThanOrEqual(4.5);
+  });
+
+  // A trackpad pinch reaches the page as ctrl+wheel events of a few px each. lightweight-charts' own handler turned 30 of them
+  // (2 px) into a 1.06x zoom; the chart now takes them at the fingers' pace (about 1.8x), anchored under the cursor.
+  test("a trackpad pinch (ctrl+wheel, 2 px an event) zooms the chart at the fingers' pace, not a tenth of it", async ({ page }) => {
+    await stepBars(page, 3);
+    const plot = page.locator("section[aria-label='TSLA 1m market chart'] canvas").first();
+    const box = (await plot.boundingBox())!;
+    // Candle pixels (up and down colours) grow with the bar width, so they tell a 1.8x zoom from a 1.06x one.
+    const candlePixels = () => plot.evaluate((canvas: HTMLCanvasElement, colours: string[]) => {
+      const rgb = colours.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
+      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i + 3]! > 0 && rgb.some(([r, g, b]) => Math.abs(data[i]! - r!) < 12 && Math.abs(data[i + 1]! - g!) < 12 && Math.abs(data[i + 2]! - b!) < 12)) count++;
+      return count;
+    }, [chartPalette.up, chartPalette.down]);
+    const before = await candlePixels();
+    expect(before).toBeGreaterThan(200);
+    const pinch = await page.evaluate(async ({ x, y }) => {
+      const target = document.elementFromPoint(x, y)!;
+      let prevented = 0;
+      for (let i = 0; i < 30; i++) {
+        const event = new WheelEvent("wheel", { deltaY: -2, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        if (event.defaultPrevented) prevented++;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return { tag: target.tagName, prevented };
+    }, { x: box.x + box.width * 0.75, y: box.y + box.height / 2 });
+    expect(pinch).toEqual({ tag: "CANVAS", prevented: 30 });
+    await expect.poll(candlePixels, { message: "30 pinch events of 2 px zoom the candles in by well over the library's 1.06x" }).toBeGreaterThan(before * 1.3);
   });
 
   test("the type switch redraws the same bars and the legend still shows O H L C in Line and Area", async ({ page }) => {

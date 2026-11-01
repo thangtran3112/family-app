@@ -59,7 +59,6 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 /* Chart */
 .chartSlot { display: flex; min-height: 280px; flex: 1 1 0; flex-direction: column; }
 .chartArea { position: relative; display: flex; min-height: 0; flex: 1 1 0; flex-direction: column; }
-.legend { position: absolute; top: 8px; left: 12px; z-index: 3; pointer-events: none; }
 
 /* Transport */
 .transport { display: flex; flex: 0 0 auto; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding: var(--space-2) var(--space-4); }

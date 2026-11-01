@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chartTime, candlestickData, currentValue, lineData } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, currentValue, lineData, pinchFactor, zoomedRange } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -157,4 +157,106 @@ test("the price pane keeps at least 60% of the chart; indicator panes shrink to 
   // Room to spare: indicator panes keep their own height and the price pane takes the rest.
   assert.deepEqual(paneHeights(800, [120, 100]), [580, 120, 100]);
   assert.deepEqual(paneHeights(300, []), [300]);
+});
+
+// -- trackpad pinch (defect: pinch-zoom was about a tenth as fast as the fingers) ------------------------------------------
+// Chrome and Edge send a trackpad pinch as ctrl+wheel events with a deltaY of a few px. lightweight-charts 5.2 treats them as
+// a mouse wheel (a tenth of the bar spacing per 100 px), so 30 events of 2 px zoomed the chart by 1.06x (measured in Chromium).
+
+test("a pinch of a few px per event zooms at least 2% per event, in and out, symmetrically", () => {
+  assert.ok(pinchFactor(-2) >= 1.02, `${pinchFactor(-2)}`);
+  assert.ok(pinchFactor(2) <= 1 / 1.02 + 1e-9);
+  assert.equal(pinchFactor(0), 1);
+  assert.ok(Math.abs(pinchFactor(-7) * pinchFactor(7) - 1) < 1e-12);
+});
+
+test("one event is capped, so a ctrl+mouse-wheel notch (100 px) is not a jump of 2.7x; line-mode deltas count as lines", () => {
+  assert.equal(pinchFactor(-100), pinchFactor(-30));
+  assert.ok(pinchFactor(-100) < 1.4);
+  assert.equal(pinchFactor(-1, 1), pinchFactor(-16, 0));
+});
+
+/** The bar index under `x`, as the library computes it (float): the right edge is `to`, a bar is `width / count` px. */
+const barAt = (range: { from: number; to: number }, x: number, width: number) => range.to - (width - 1 - x) / (width / (range.to - range.from + 1));
+
+test("zooming keeps the bar under the cursor in place and scales the visible bars by the factor; factor 1 changes nothing", () => {
+  const range = { from: 290, to: 389 };
+  for (const [x, factor] of [[0, 2], [450, 1.37], [899, 0.5], [123, 1.0201]] as const) {
+    const next = zoomedRange(range, x, 900, factor);
+    assert.ok(Math.abs(barAt(next, x, 900) - barAt(range, x, 900)) < 1e-9, `anchor at ${x}px`);
+    assert.ok(Math.abs((next.to - next.from + 1) * factor - (range.to - range.from + 1)) < 1e-9, `visible bars at ${factor}x`);
+  }
+  const same = zoomedRange(range, 300, 900, 1);
+  assert.ok(Math.abs(same.from - 290) < 1e-9 && Math.abs(same.to - 389) < 1e-9);
+});
+
+type Wheel = Event & { ctrlKey: boolean; deltaY: number; deltaMode: number; clientX: number };
+const wheel = (init: { ctrlKey: boolean; deltaY: number; clientX?: number; deltaMode?: number }) =>
+  Object.assign(new Event("wheel", { cancelable: true }), { deltaMode: 0, clientX: 0, ...init }) as Wheel;
+
+function pinchRig(range: { from: number; to: number } | null = { from: 290, to: 389 }) {
+  const target = Object.assign(new EventTarget(), { getBoundingClientRect: () => ({ left: 100 }) }) as unknown as HTMLElement;
+  const calls: Array<{ from: number; to: number }> = [];
+  // The library queues a range and answers `getVisibleLogicalRange` with the old one until it draws (the next frame).
+  const chart = {
+    timeScale: () => ({
+      width: () => 900,
+      getVisibleLogicalRange: () => range,
+      setVisibleLogicalRange: (next: { from: number; to: number }) => { calls.push(next); },
+    }),
+  };
+  const frames: Array<() => void> = [];
+  const nextFrame = (callback: () => void) => frames.push(callback);
+  const drawFrame = (drawn?: { from: number; to: number }) => {
+    if (drawn) range = drawn;
+    frames.splice(0).forEach((callback) => callback());
+  };
+  return { target, chart, calls, nextFrame, drawFrame };
+}
+
+test("a ctrl+wheel pinch zooms the chart about the cursor and stops the library's slower handler", () => {
+  const { target, chart, calls, nextFrame } = pinchRig();
+  const detach = attachPinchZoom(target, chart, nextFrame);
+  const event = wheel({ ctrlKey: true, deltaY: -2, clientX: 500 });
+  let stopped = false;
+  event.stopImmediatePropagation = () => { stopped = true; };
+  target.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true, "the browser does not zoom the page");
+  assert.equal(stopped, true, "the library's own wheel handler never sees it");
+  assert.deepEqual(calls, [zoomedRange({ from: 290, to: 389 }, 400, 900, pinchFactor(-2))], "the cursor x is taken relative to the chart's left edge");
+  detach();
+  target.dispatchEvent(wheel({ ctrlKey: true, deltaY: -2, clientX: 500 }));
+  assert.equal(calls.length, 1, "detached: nothing more is handled");
+});
+
+test("events in one frame build on each other (the library has not drawn yet); the next frame starts from what it drew", () => {
+  const { target, chart, calls, nextFrame, drawFrame } = pinchRig();
+  attachPinchZoom(target, chart, nextFrame);
+  const start = { from: 290, to: 389 };
+  for (let i = 0; i < 3; i++) target.dispatchEvent(wheel({ ctrlKey: true, deltaY: -2, clientX: 500 }));
+  const step = pinchFactor(-2);
+  const once = zoomedRange(start, 400, 900, step);
+  const twice = zoomedRange(once, 400, 900, step);
+  assert.deepEqual(calls, [once, twice, zoomedRange(twice, 400, 900, step)]);
+  drawFrame(calls[2]);
+  target.dispatchEvent(wheel({ ctrlKey: true, deltaY: -2, clientX: 500 }));
+  assert.deepEqual(calls[3], zoomedRange(calls[2]!, 400, 900, step), "after the draw it reads the library's range again");
+});
+
+test("a plain wheel (mouse wheel, two-finger scroll) is left to the library", () => {
+  const { target, chart, calls, nextFrame } = pinchRig();
+  attachPinchZoom(target, chart, nextFrame);
+  const event = wheel({ ctrlKey: false, deltaY: -40 });
+  target.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(calls.length, 0);
+});
+
+test("a pinch on a chart with no visible range yet is swallowed without a zoom", () => {
+  const { target, chart, calls, nextFrame } = pinchRig(null);
+  attachPinchZoom(target, chart, nextFrame);
+  const event = wheel({ ctrlKey: true, deltaY: -2 });
+  target.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(calls.length, 0);
 });
