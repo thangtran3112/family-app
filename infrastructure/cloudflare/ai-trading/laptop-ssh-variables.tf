@@ -39,6 +39,12 @@ variable "laptop_ssh_ci_service_token_id" {
   default     = ""
 }
 
+variable "laptop_ssh_allowed_idps" {
+  type        = list(string)
+  description = "Identity providers the laptop-ssh Access app offers on its login page. Empty = offer every configured IdP. Pin to a specific IdP id to hide the rest (e.g. the email one-time-PIN fallback, once a passkey login has been proven). The passkeys IdP is API-managed because the pinned provider does not model its `passkeys` type, so its id lives in Firestore ai-trading/cloudflare as TF_VAR_laptop_ssh_allowed_idps, never in this repository."
+  default     = []
+}
+
 variable "laptop_ssh_origin" {
   type        = string
   description = "host:port the connector dials for the ssh:// ingress, as seen from inside the cloudflared container. The container is on bridge networks, so `localhost` is the container itself, not the host. The default needs `extra_hosts: [\"host.docker.internal:host-gateway\"]` on the cloudflared service in infrastructure/apps/ai-trading/docker-compose.yml, which that file does not have yet."
