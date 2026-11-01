@@ -1,18 +1,14 @@
 "use client";
 
 import { useRef, useState, type DragEvent } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Icon } from "@/components/ui/Icon";
 import { screenshotUrl } from "@/lib/desk/feedback";
 import { formatBytes, MAX_SCREENSHOTS, SCREENSHOT_TYPES, typeLabel, type UploadItem } from "@/lib/desk/feedbackView";
 import type { ScreenshotUploads } from "./useScreenshotUploads";
 import styles from "./feedbackForm.module.css";
-
-function CrossIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <path d="M2 2L10 10M10 2L2 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 /** The key that pastes: ⌘V on a Mac, Ctrl+V elsewhere. Read in the browser, where this form only ever mounts. */
 const pasteKey = () => (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘V" : "Ctrl+V");
@@ -31,11 +27,7 @@ export function ScreenshotsField({ uploads, notice, add, retry, remove }: Screen
   };
 
   return (
-    <div className={styles.field} role="group" aria-labelledby="feedback-shots">
-      <div className={styles.labelGroup}>
-        <span id="feedback-shots" className={styles.label}>Screenshots</span>
-        <span className={styles.hint}>{uploads.length} of {MAX_SCREENSHOTS}</span>
-      </div>
+    <Field id="feedback-shots" label="Screenshots" group hint={`${uploads.length} of ${MAX_SCREENSHOTS}`}>
       <button
         type="button"
         className={styles.drop}
@@ -55,7 +47,7 @@ export function ScreenshotsField({ uploads, notice, add, retry, remove }: Screen
       <input
         ref={input}
         type="file"
-        className={styles.fileInput}
+        className="sr-only"
         accept={SCREENSHOT_TYPES.join(",")}
         multiple
         tabIndex={-1}
@@ -71,7 +63,7 @@ export function ScreenshotsField({ uploads, notice, add, retry, remove }: Screen
           {uploads.map((item) => <UploadRow key={item.key} item={item} onRetry={() => retry(item.key)} onRemove={() => remove(item.key)} />)}
         </ul>
       )}
-    </div>
+    </Field>
   );
 }
 
@@ -85,12 +77,12 @@ function UploadRow({ item, onRetry, onRemove }: { item: UploadItem; onRetry: () 
             <span className={styles.upName}>{item.filename}</span>
             <span className={styles.upMeta}>{formatBytes(item.size)} · {typeLabel(item.contentType)}</span>
           </div>
-          <span className={styles.failChip}>Upload failed</span>
+          <Badge tone="down">Upload failed</Badge>
         </div>
         <p className={styles.failText} role="alert">{item.failure}</p>
         <div className={styles.failActions}>
-          <button type="button" className={styles.smallButton} onClick={onRetry}>Retry</button>
-          <button type="button" className={styles.smallButton} aria-label={`Remove ${item.filename}`} onClick={onRemove}>Remove</button>
+          <Button size="md" onClick={onRetry}>Retry</Button>
+          <Button size="md" aria-label={`Remove ${item.filename}`} onClick={onRemove}>Remove</Button>
           <span className={styles.hint}>Retry sends the same file again · remove it and add a smaller one to fix this.</span>
         </div>
       </li>
@@ -109,7 +101,7 @@ function UploadRow({ item, onRetry, onRemove }: { item: UploadItem; onRetry: () 
             <div className={styles.progressBar} style={{ width: `${item.progress}%` }} />
           </div>
         </div>
-        <button type="button" className={styles.iconButton} aria-label={`Cancel upload of ${item.filename}`} onClick={onRemove}><CrossIcon /></button>
+        <Button variant="ghost" size="md" iconOnly aria-label={`Cancel upload of ${item.filename}`} onClick={onRemove}><Icon name="cross" size={12} /></Button>
       </li>
     );
   }
@@ -126,7 +118,7 @@ function UploadRow({ item, onRetry, onRemove }: { item: UploadItem; onRetry: () 
         <span className={styles.upMeta}>{formatBytes(item.size)} · {typeLabel(item.contentType)} · uploaded</span>
         {item.failure && <p className={styles.failText} role="alert">{item.failure}</p>}
       </div>
-      <button type="button" className={styles.iconButton} aria-label={`Remove ${item.filename}`} onClick={onRemove}><CrossIcon /></button>
+      <Button variant="ghost" size="md" iconOnly aria-label={`Remove ${item.filename}`} onClick={onRemove}><Icon name="cross" size={12} /></Button>
     </li>
   );
 }

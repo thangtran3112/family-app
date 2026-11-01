@@ -6,7 +6,7 @@ import styles from "./Field.module.css";
 
 type Layout = { /** Layout only (grid-area, margin, width); never colour, size or type. */ className?: string };
 
-type Wired = FieldWiring & { id: string; required: boolean };
+type Wired = FieldWiring & { id: string; required: boolean; group: boolean };
 const FieldContext = createContext<Wired | null>(null);
 
 /** What a control inside a `Field` gets: its id, `aria-describedby`, `aria-invalid` and `aria-required`. Null outside a field. */
@@ -15,7 +15,7 @@ export const useFieldControl = (): Wired | null => useContext(FieldContext);
 const join = (...names: (string | undefined)[]) => names.filter(Boolean).join(" ");
 
 /**
- * A label, one control and one message line. `id` is the control's id; the label points at it (or, with `group`, names a
+ * A label, one control and one message line (or, with `group`, a group of controls under one label and one line). `id` is the control's id; the label points at it (or, with `group`, names a
  * group of controls by `${id}-label`). The line under the control is the `note`, or the `error` in its place (announced
  * as an alert), and the control's `aria-describedby` and `aria-invalid` follow it. `Input`, `NumberInput`, `Select` and
  * `Textarea` read that wiring, so a form never repeats an id by hand. Error words come from lib/desk/problems.ts.
@@ -56,7 +56,7 @@ export function Field({
   const cue = requirementText({ required, optional, hint });
   const name = group ? <span id={`${id}-label`} className={styles.label}>{label}</span> : <label htmlFor={id} className={styles.label}>{label}</label>;
   return (
-    <FieldContext.Provider value={{ ...wiring, id, required }}>
+    <FieldContext.Provider value={{ ...wiring, id, required, group }}>
       <div className={join(styles.field, className)}>
         <div className={styles.labelRow}>
           <div className={styles.labelGroup}>
@@ -97,7 +97,9 @@ export function FieldGroup({ legend, hideLegend = false, error, bare = false, ch
   );
 }
 
-function controlProps(wired: Wired | null, own: { id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean | "true" | "false" | "grammar" | "spelling"; "aria-required"?: boolean | "true" | "false" }) {
+function controlProps(field: Wired | null, own: { id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean | "true" | "false" | "grammar" | "spelling"; "aria-required"?: boolean | "true" | "false" }) {
+  // A group's controls (a list of link rows) are not the field's one control: the group wiring is for custom group controls only.
+  const wired = field?.group ? null : field;
   return {
     id: own.id ?? wired?.id,
     "aria-describedby": own["aria-describedby"] ?? wired?.describedBy,
