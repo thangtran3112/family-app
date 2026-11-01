@@ -175,7 +175,7 @@ def test_day_one_board_has_every_universe_name_sorted_with_figures_from_the_prio
         "filters": [],
         "listAt": "04:30",
         "maxList": 50,
-        "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", "maxOpenHolds": 3},  # the week's plan (M3)
+        "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no"},  # the week's plan (M3)
     }
     assert row.columns == swing.BOARD_COLUMNS
     assert row.universe["size"] == 12 and row.universe["source"] == "swing"
@@ -967,7 +967,6 @@ def test_a_swing_thread_reads_back_through_the_contract_summary_brief_and_state(
         "interval": "15m",
         "tape": "off",
         "armed": [],
-        "maxOpenHolds": 3,
     }
     brief = threads_mod.brief(db_session, thread.id)
     assert brief["balance"] == 50_000 and brief["today_pnl_usd"] is None

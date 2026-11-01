@@ -8,7 +8,7 @@ import { loadHolds, loadWeeks, type WeekRow } from "@/lib/replay/swingApi";
 import type { PracticeThread } from "@/lib/replay/threads";
 
 export type SwingContext = {
-  /** The thread's swing setup (open-hold limit, risk per hold); null until it loads. */
+  /** The thread's swing setup (calendar, interval, risk per hold); null until it loads. */
   setup: NonNullable<PracticeThread["swing"]> | null;
   /** The thread's plan (the swing week's loss and entry limits); null until it loads. */
   plan: PracticeThread["plan"] | null;

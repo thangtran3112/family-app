@@ -49,6 +49,10 @@ def _enter(db_session, user_id, svc, row, symbol: str, kind: str = "long_entry",
     return started, placed
 
 
+def _last_mark_id(db_session, session_id: int) -> int:
+    return session_mod._load_marks(db_session, session_id)[-1].id
+
+
 def _sessions(db_session, user_id, svc, row) -> dict[str, dict]:
     out = plan_mod.day_list_out(db_session, user_id, row.id, svc)
     return {s["symbol"]: s for s in out["sessions"]}
@@ -115,6 +119,27 @@ def test_a_day_entry_is_refused_only_when_it_costs_more_than_the_balance_less_th
     with pytest.raises(ReplayProblem) as short_too:  # a short counts like a long
         _enter(db_session, user_id, svc, row, "SPLITTER", "short_entry", shares=1)
     assert short_too.value.message == "Not enough practice cash · $0 free"
+
+
+def test_undoing_an_exit_must_still_pass_the_cash_rule_against_the_other_names(db_session, user_id, svc, world) -> None:
+    make_thread(db_session, user_id, starting_balance=1_000)
+    row, gapper = _names(db_session, user_id, svc, "FLAT")
+    _advance(db_session, user_id, svc, gapper.id, "09:35")
+    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=9)  # 990 of 1,000
+    leave = _mark(db_session, user_id, svc, gapper.id, "long_exit")["mark"]["id"]  # flat again: 1,000 free
+    _enter(db_session, user_id, svc, row, "FLAT", shares=19)  # another name spends 950 of it at the same moment
+    db_session.commit()
+    with pytest.raises(ReplayProblem) as stuck:  # putting the 990 back would leave -940 free
+        session_mod.undo_mark(db_session, user_id, gapper.id, leave, svc)
+    assert (stuck.value.message, stuck.value.status) == (
+        "Can't undo that · it would leave you without enough practice cash",
+        409,
+    )
+    db_session.rollback()  # the request's transaction: the exit is still there
+    assert [m.kind for m in session_mod._load_marks(db_session, gapper.id)] == ["long_entry", "long_exit"]
+    # a note (no shares move) never trips the rule
+    _mark(db_session, user_id, svc, gapper.id, "note", note="watching")
+    assert session_mod.undo_mark(db_session, user_id, gapper.id, _last_mark_id(db_session, gapper.id), svc)
 
 
 def test_a_realized_trade_changes_the_buying_power_and_a_stop_is_never_needed(db_session, user_id, svc) -> None:

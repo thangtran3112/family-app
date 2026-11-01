@@ -38,7 +38,7 @@ test.describe("Week review chart", () => {
   test("the balance and equity lines stay drawn, with no console error, while the cursor moves over the chart", async ({ page, context }) => {
     test.setTimeout(180_000);
     // The same week as the Week 1 review spec: two holds, so balance and equity differ and both lines have a shape.
-    const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+    const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);
     await enterByApi(context, dayOne, { symbol: "S01", watch: ["S01", "S04"], day: DAY_ISO[0]!, stopPrice: 95 });
     await markByApi(context, dayOne, "S04", { kind: "long_entry", shares: 100 });

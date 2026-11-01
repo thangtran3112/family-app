@@ -725,7 +725,6 @@ export const PRACTICE_COPY = {
   swingAddByLiquidityHint: "The Desk's names ranked by 20-day average dollar volume, above the live floor",
   swingTarget: "Target size",
   swingListOrder: "The list is built from your watchlists, then your adds, then filter matches, then liquidity",
-  swingMaxOpen: "Open holds at most",
   swingRiskPerHold: "Risk per hold ($)",
   swingInterval: "Interval",
   swingTape: "Tape",

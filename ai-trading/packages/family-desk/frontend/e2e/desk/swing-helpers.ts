@@ -37,7 +37,7 @@ export async function send(context: BrowserContext, method: "POST" | "PATCH", pa
 /** A swing thread made through the API: the preview (twelve names, `fill` off), the create, then the prep it started. */
 export async function createSwingThread(
   context: BrowserContext,
-  options: { sessions?: number; maxOpenHolds?: number; plan?: Record<string, unknown> } = {},
+  options: { sessions?: number; plan?: Record<string, unknown> } = {},
 ): Promise<number> {
   const preview = await send(context, "POST", "/threads/swing-universe", {
     first_day: FIRST_DAY,
@@ -54,7 +54,6 @@ export async function createSwingThread(
     interval: "15m",
     tape: "off",
     armed: [],
-    maxOpenHolds: options.maxOpenHolds ?? 3,
   };
   const plan = { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no", ...options.plan };
   const created = await send(context, "POST", "/threads", { schemaVersion: 1, mode: "swing", startingBalance: 50_000, plan, swing });

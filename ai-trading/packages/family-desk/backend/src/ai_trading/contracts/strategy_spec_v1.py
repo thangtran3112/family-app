@@ -606,7 +606,6 @@ class SwingSetupV1(SpecModel):
     firstDay: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")]
     hideDates: Literal["yes", "no"]
     interval: Literal["5m", "15m"]
-    maxOpenHolds: Annotated[int, Field(ge=1, le=5)]
     riskPerHoldUsd: Annotated[int | None, Field(ge=1, le=100000)] = None
     sessions: Annotated[int, Field(ge=15, le=23)]
     tape: Literal["off", "on"]

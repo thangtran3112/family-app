@@ -417,7 +417,7 @@ def _contract(db: Session, thread: PracticeThread, stats: dict[str, Any]) -> Pra
             .order_by(PracticePlan.id.desc())
             .limit(1)
         ).scalar_one()
-        doc["swing"] = {key: value for key, value in spec.items() if key != "mode"}
+        doc["swing"] = {key: value for key, value in spec.items() if key not in ("mode", "maxOpenHolds")}  # legacy cap
     return PracticeThreadV1.model_validate(doc)
 
 

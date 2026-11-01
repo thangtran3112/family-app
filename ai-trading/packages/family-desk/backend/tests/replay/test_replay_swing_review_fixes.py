@@ -244,7 +244,7 @@ def test_a_plan_edit_applies_from_the_next_week_and_the_weeks_own_days_keep_the_
 ) -> None:
     thread, _ = ready_thread(db_session, owner, svc, firstDay=START.isoformat(), plan={"maxTrades": 1})
     day1 = _open(db_session, owner, svc, thread)
-    snapshot = {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", "maxTrades": 1, "maxOpenHolds": 3}
+    snapshot = {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", "maxTrades": 1}
     assert day1.screen["plan"] == snapshot
     _enter(db_session, thread, world, "S04", "long", 10, START, hhmm="10:00")
     _enter(db_session, thread, world, "S05", "long", 10, START, hhmm="10:30")

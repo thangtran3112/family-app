@@ -59,7 +59,6 @@
     "interval": "15m",
     "tape": "off",
     "armed": [],
-    "maxOpenHolds": 3,
     "riskPerHoldUsd": 500
   },
   "createdAt": "2026-10-24T14:00:00Z",

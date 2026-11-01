@@ -50,7 +50,7 @@ Side = Literal["long", "short"]
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 SOURCE_ORDER = ("watchlist", "manual", "filter", "liquidity")
 # the checks one day's entries can answer on their own; the loss limit, the entry count and stops are week rules
-DAY_CHECKS = frozenset({"stop_set", "risk_per_hold", "open_holds_within_plan", "on_signal", "focus_before_open"})
+DAY_CHECKS = frozenset({"stop_set", "risk_per_hold", "on_signal", "focus_before_open"})
 
 
 # -- weeks --------------------------------------------------------------------------------------------------
@@ -194,7 +194,6 @@ class WeekPlan:
 
     stop_required: bool = False
     risk_per_hold_usd: int | None = None
-    max_open_holds: int | None = None
     max_loss_usd: int | None = None
     max_trades: int | None = None
     signal_only: bool = False
@@ -217,10 +216,11 @@ def _check(id_: str, label: str, applicable: bool, passed: bool, detail: str) ->
 
 
 def adherence_checks(
-    plan: WeekPlan, entries: Sequence[EntryFact], stop_events: Sequence[tuple[int, bool]], max_open_seen: int
+    plan: WeekPlan, entries: Sequence[EntryFact], stop_events: Sequence[tuple[int, bool]]
 ) -> list[dict[str, Any]]:
-    """02p e3 over the week's entries. `stop_events`: `(hold_id, honored)` for each stop hit; `max_open_seen`: the most
-    holds open at once. A check that cannot apply says so (`applicable` False) and is left out of the score."""
+    """02p e3 over the week's entries. `stop_events`: `(hold_id, honored)` for each stop hit. A check that cannot apply
+    says so (`applicable` False) and is left out of the score. Every check is a rule the user set on her own plan; there
+    is none for how many holds are open (ADR-0016: cash is the only size rule)."""
     n = len(entries)
     with_stop = sum(e.had_stop for e in entries)
     hit, honored = len(stop_events), sum(ok for _, ok in stop_events)
@@ -243,13 +243,6 @@ def adherence_checks(
             risk is not None and n > 0,
             within == n,
             f"{within} of {n}",
-        ),
-        _check(
-            "open_holds_within_plan",
-            "Stayed within the open-hold limit",
-            plan.max_open_holds is not None,
-            plan.max_open_holds is None or max_open_seen <= plan.max_open_holds,
-            f"{max_open_seen} of {plan.max_open_holds}",
         ),
         _check(
             "week_loss_limit",
@@ -295,7 +288,6 @@ class DayFact:
     unrealized_change_usd: float
     balance_usd: float
     equity_usd: float
-    max_open_seen: int = 0  # the most holds open at once that day
 
 
 @dataclass(frozen=True)
@@ -459,12 +451,12 @@ def compute_review(x: ReviewInputs) -> dict[str, Any]:
     facts = sorted((f for f in x.day_facts if f.day <= last and f.day in number), key=lambda f: f.day)
     in_week = [f for f in facts if f.day >= first]
     entries = [e for e in x.entries if week.first_day_no <= e.day_no <= week.last_day_no]
-    checks = adherence_checks(x.plan, entries, x.stop_events, max((f.max_open_seen for f in in_week), default=0))
+    checks = adherence_checks(x.plan, entries, x.stop_events)
     adherence = score_pct(checks)
     days_out = []
     for f in in_week:
         mine = [e for e in entries if e.day_no == number[f.day]]
-        day_checks = [c for c in adherence_checks(x.plan, mine, (), f.max_open_seen) if c["id"] in DAY_CHECKS]
+        day_checks = [c for c in adherence_checks(x.plan, mine, ()) if c["id"] in DAY_CHECKS]
         days_out.append(
             {
                 "day_no": number[f.day],
