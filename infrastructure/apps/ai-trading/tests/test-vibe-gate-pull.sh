@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# ShellCheck cannot see test shims called through the sourced deploy functions.
-# shellcheck disable=SC2317,SC2329
+# ShellCheck cannot see test shims called through the sourced deploy functions,
+# nor the gate variables those functions read (SC2034).
+# shellcheck disable=SC2034,SC2317,SC2329
 # Offline test for the Vibe release gate across a long `compose pull`
 # (production incident 2026-11-01, ai-trading-deploy runs 41272700983 ..
 # 41275454516): the drain lease Vibe issues expires 600 s after its last
@@ -8,6 +9,7 @@
 # aborted every deploy with no cause in the log.
 #
 # Cases:
+#   1  a pull longer than the lease TTL still ends with a valid gate (heartbeat)
 #   2  a lease that is genuinely lost mid-pull still aborts before the switch,
 #      and says why
 #   3  every other pre-switch refusal (chat admitted, container replaced,
@@ -65,7 +67,7 @@ shims() {
   FAKE_COUNTS="${FAKE_COUNTS:-0 0}"
   export D FAKE_TTL FAKE_COUNTS
   vibe_drain_request() {
-    local action="$2" lease="${3:-}" now deadline
+    local action="$2" lease="${3:-}" now deadline chat committees
     now="$(date +%s)"
     printf '%s\n' "$action" >>"$D/requests.log"
     if [[ "$action" == start ]]; then
@@ -78,8 +80,7 @@ shims() {
     ((now < deadline)) || return 1 # expired server-side, like a 409
     case "$action" in
       renew) echo $((now + FAKE_TTL)) >"$D/deadline"; printf '{"status":"renewed"}\n' ;;
-      # shellcheck disable=SC2086 # FAKE_COUNTS is two words on purpose
-      status) printf '{"active_chat":%s,"active_private_committees":%s}\n' ${FAKE_COUNTS} ;;
+      status) read -r chat committees <<<"$FAKE_COUNTS"; printf '{"active_chat":%s,"active_private_committees":%s}\n' "$chat" "$committees" ;;
       release) rm -f "$D/deadline"; printf '{"status":"released"}\n' ;;
       *) return 1 ;;
     esac
@@ -119,6 +120,26 @@ load_lib() {
   source "$LIB_FILE"
   CONTROL_SCRATCH_DIR="$1/scratch"
 }
+
+echo "=== Case 1 (RED): a pull longer than the lease TTL still ends with a valid gate ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+d1="$(new_dir case1)"
+rc1=0
+(
+  load_lib "$d1"
+  FAKE_TTL=4 FAKE_PULL_SECONDS=7
+  shims "$d1"
+  VIBE_HEARTBEAT_SECONDS=1
+  gate_open
+  deploy_tag "$IMAGE_TAG" 2>"$d1/stderr.log"
+) || rc1=$?
+[[ "$rc1" == 0 ]] || fail "case1: deploy_tag returned $rc1; a 7 s pull against a 4 s lease must keep the gate valid: $(cat "$d1/stderr.log")"
+[[ "$(cat "$d1/steps.log" 2>/dev/null)" == $'migrate\napp-up' ]] || fail "case1: expected the switch to proceed once after the pull: $(cat "$d1/steps.log" 2>/dev/null)"
+[[ "$(grep -c '^renew$' "$d1/requests.log" 2>/dev/null || true)" -ge 3 ]] || fail "case1: expected heartbeat renews during the pull plus the pre-switch renew: $(tr '\n' ' ' <"$d1/requests.log")"
+! grep -q 'deploy: vibe gate:' "$d1/stderr.log" || fail "case1: a healthy gate must not log a gate failure: $(cat "$d1/stderr.log")"
+renews1="$(grep -c '^renew$' "$d1/requests.log")"
+sleep 2
+[[ "$(grep -c '^renew$' "$d1/requests.log")" == "$renews1" ]] || fail "case1: a renew was sent after deploy_tag returned"
 
 echo "=== Case 2 (RED): a lease genuinely lost mid-pull aborts before the switch and says why ==="
 CASE_COUNT=$((CASE_COUNT + 1))

@@ -128,6 +128,9 @@ ADMISSION_MARKER_ACTIVE=0
 VIBE_GATE_MODE=none
 VIBE_GATE_CONTAINER_ID=""
 VIBE_DRAIN_LEASE=""
+# Seconds between lease renewals while the release images pull (Vibe's lease
+# lives 600 s from its last renewal; see pull_release_images).
+VIBE_HEARTBEAT_SECONDS=60
 FORWARD_SWITCH_STARTED=0
 MIROFISH_WAS_RUNNING=0
 DEPLOY_COMMITTED=0
@@ -1135,6 +1138,53 @@ verify_vibe_gate_before_switch() {
   esac
 }
 
+# vibe_gate_heartbeat: one lease renewal during the image pull. Returns 1 when
+# no further renewal should be attempted (the lease is gone, or the same bound
+# verify_vibe_gate_before_switch enforces has passed and the lease is left to
+# expire); verify_vibe_gate_before_switch stays the only judge of the gate.
+vibe_gate_heartbeat() {
+  local now
+  now="$(vibe_monotonic_seconds)" && [[ "$now" =~ ^[0-9]+$ ]] || { vibe_gate_log "heartbeat: monotonic clock unreadable; lease left to expire"; return 1; }
+  ((now < BOOTSTRAP_STARTED + 3900)) || { vibe_gate_log "heartbeat: bootstrap bound reached; lease left to expire"; return 1; }
+  vibe_drain_request "$VIBE_GATE_CONTAINER_ID" renew "$VIBE_DRAIN_LEASE" >/dev/null || { vibe_gate_log "heartbeat: lease renew rejected during image pull"; return 1; }
+}
+
+# pull_release_images: `compose pull`, keeping the drain lease alive meanwhile.
+# Vibe's lease expires 600 s after its last renewal (start_deploy_drain /
+# renew_deploy_drain in ai-trading/deploy/upstream/vibe-trading/family-sp5.patch),
+# and the last renewal is the one that saw Vibe idle, before staging began. A
+# release pull of ~17 GB took 683 s on 2026-11-01 (runs 41272700983 ..
+# 41275454516): the lease lapsed server-side, chat admission silently reopened,
+# and the pre-switch re-check rightly refused to switch, four deploys in a row.
+# So the pull runs as a child while this shell renews every
+# VIBE_HEARTBEAT_SECONDS; no process outlives this shell, so a killed deploy
+# stops renewing and the lease expires on its own (admission reopens within
+# 600 s), and renewals stop at the same 3900 s bound verify enforces. Only the
+# forward pull is covered: a rollback pull (switch already started, or an older
+# tag) has no live lease to keep.
+pull_release_images() {
+  local pull_pid last=$SECONDS heartbeat=1
+  if [[ "$VIBE_GATE_MODE" != runtime || -z "$VIBE_DRAIN_LEASE" || "$IMAGE_TAG" != "$TARGET_IMAGE_TAG" || "$FORWARD_SWITCH_STARTED" != 0 ]]; then
+    compose pull
+    return
+  fi
+  # The ERR/EXIT traps are the parent's rollback and cleanup; a failing pull
+  # must hand its status to the parent, not run them a second time here.
+  (
+    trap - ERR EXIT
+    compose pull
+  ) &
+  pull_pid=$!
+  while kill -0 "$pull_pid" 2>/dev/null; do
+    if ((heartbeat && SECONDS - last >= VIBE_HEARTBEAT_SECONDS)); then
+      last=$SECONDS
+      vibe_gate_heartbeat || heartbeat=0
+    fi
+    sleep 1
+  done
+  wait "$pull_pid"
+}
+
 release_vibe_drain() {
   [[ "$VIBE_GATE_MODE" == runtime && -n "$VIBE_DRAIN_LEASE" ]] || return 0
   local current
@@ -1240,7 +1290,7 @@ deploy_tag() {
   # tag it was asked to deploy.
   IMAGE_TAG="$tag"
   write_images_env_tag "$tag" || return 1
-  compose pull
+  pull_release_images
   if [[ "$tag" == "$TARGET_IMAGE_TAG" ]]; then
     # Rollback's previous tag has no live forward lease to recheck. Selection
     # sets the switch flag only just before Compose first mutates services.
