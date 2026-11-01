@@ -154,11 +154,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // A day's portfolio: every name she holds, read once here so the rail, the stop-pause toast and End day agree on it.
   // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
   // jump, a stop pause), not on every bar of a running replay: each read prices up to five names.
-  const [clockSeen, setClockSeen] = useState(view.revealedThrough);
+  // While paused the clock follows the playhead; while playing it stays at the playhead it had when the replay last paused. It is
+  // adjusted during render (as `pause` above is), so a paused reveal re-renders once before commit, not again after an effect.
   const playing = api.player.status === "playing";
-  useEffect(() => {
-    if (!playing) setClockSeen(view.revealedThrough);
-  }, [playing, view.revealedThrough]);
+  const [clockSeen, setClockSeen] = useState(view.revealedThrough);
+  if (!playing && clockSeen !== view.revealedThrough) setClockSeen(view.revealedThrough);
   const dayList = useDayPortfolio(swing ? null : dayListId, session.marks.length * 2 + (behind ? 1 : 0) + Math.floor(Date.parse(clockSeen) / 1000));
   const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: view.revealedThrough, openTrade: view.openTrade });
 
