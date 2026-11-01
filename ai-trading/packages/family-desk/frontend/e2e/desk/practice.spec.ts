@@ -309,7 +309,9 @@ test.describe("Practice", () => {
     await expect(left).toContainText("Risk plan comes from the thread: ");
     await expect(page.getByRole("list", { name: "Filters" }).getByRole("listitem").first()).toHaveAttribute("data-active", "true");
     await expect(page.getByText("Chosen at setup")).toBeVisible();
-    for (const label of ["Prev close", "Prev RVOL", "Prev change %", "Earnings"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
+    for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
+    // D-136: no name reports before the open, so there is no Earnings column of dashes to scroll past.
+    await expect(table.getByRole("columnheader", { name: "Earnings" })).toHaveCount(0);
     // D-043: the day list's own status line.
     await expect(page.getByLabel("Status")).toContainText("Day lists built before the open");
     await expect(page.getByLabel("Status")).toContainText("List built 8:30 AM ET");
@@ -383,7 +385,9 @@ test.describe("Practice", () => {
     await expect(review).toContainText("Your names moved");
     await expect(review).toContainText(PRACTICE_COPY.reviewDayFinished); // D-029: the finished day shows its date, and says so
     await expect(review).toContainText(PRACTICE_COPY.reviewRankNote); // D-031: signed, biggest gain first
-    await expect(review.getByRole("table", { name: "Your practice trades" })).toBeVisible(); // D-032: a line per trade
+    const trades = review.getByRole("table", { name: "Your practice trades" });
+    await expect(trades).toBeVisible(); // D-032: a line per trade
+    for (const label of ["In at", "Out at", "Held", "P/L", "Return"]) await expect(trades.getByRole("columnheader", { name: label })).toBeVisible(); // D-142: time, hold time and return each get a column
     await expect(review).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("row")).toHaveCount(2); // header + TSLA
     await expect(review).toContainText("Practice universe");

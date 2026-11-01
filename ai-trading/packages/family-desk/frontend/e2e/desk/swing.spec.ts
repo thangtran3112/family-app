@@ -123,6 +123,11 @@ test.describe("Swing practice", () => {
     await shot(page, "swing-board");
     await expectCleanScreen(page);
 
+    // D-138: Start Day 1 is dim until a name is starred, and the reason is its accessible description. D-136: STAR is centred over its glyph.
+    await expect(page.getByRole("button", { name: "Start Day 1" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Start Day 1" })).toHaveAccessibleDescription(PRACTICE_COPY.swingBoardStarFirst);
+    await expect(universe.getByRole("columnheader", { name: "Star" })).toHaveCSS("text-align", "center");
+
     // Two stars; Start Day 1 opens the workspace on the first of them.
     await page.getByRole("button", { name: "Star S01" }).click();
     await expect(page.getByRole("button", { name: "Unstar S01" }).first()).toBeVisible();
