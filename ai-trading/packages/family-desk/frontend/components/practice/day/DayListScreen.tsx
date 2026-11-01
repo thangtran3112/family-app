@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
@@ -105,9 +104,7 @@ export function DayListScreen() {
 function DayNotice({ title }: { title: string }) {
   return (
     <div className={styles.body}>
-      <EmptyBlock title={title}>
-        <Link href="/practice" className={styles.link}>Open Practice</Link>
-      </EmptyBlock>
+      <EmptyBlock framed title={title} action={{ label: PRACTICE_COPY.openPractice, href: "/practice", primary: true }} />
     </div>
   );
 }

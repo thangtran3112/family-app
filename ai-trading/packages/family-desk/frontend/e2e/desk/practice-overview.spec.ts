@@ -28,7 +28,7 @@ async function clipped(page: Page): Promise<string[]> {
 
 /** A swing thread whose Week 1 has ended: Day 1 held S01 and S04 open, Days 2 to 5 ended. The next day is gated behind the Week 1 review. */
 async function gatedSwingThread(context: Parameters<typeof createSwingThread>[0]): Promise<number> {
-  const threadId = await createSwingThread(context, { maxOpenHolds: 5 });
+  const threadId = await createSwingThread(context);
   const dayOne = await openNextDay(context, threadId);
   await enterByApi(context, dayOne, { symbol: "S01", watch: ["S01", "S04"], day: DAY_ISO[0]!, stopPrice: 95 });
   await markByApi(context, dayOne, "S04", { kind: "long_entry", shares: 100 });

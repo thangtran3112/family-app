@@ -75,7 +75,7 @@ def poison(series: pd.Series, last: date) -> pd.Series:
     return out
 
 
-PLAN = WeekPlan(stop_required=True, risk_per_hold_usd=100, max_open_holds=3, max_loss_usd=500, max_trades=4)
+PLAN = WeekPlan(stop_required=True, risk_per_hold_usd=100, max_loss_usd=500, max_trades=4)
 
 # Three holds in week 1. DDD long Mon-Thu, JJJ short Tue-Fri, HHH long Wed and still open at the Friday close.
 H1 = HoldFact(1, "DDD", "long", 100, DAYS[0], 100.2, 100.2, DAYS[3], 101.8, 101.8, 160.0, 30.0, 1.6, "set")
@@ -92,7 +92,6 @@ ENTRIES = (
 def day(
     i,
     *,
-    open_=0,
     entries=0,
     exits=0,
     realized=0.0,
@@ -102,21 +101,17 @@ def day(
     balance=50_000.0,
     equity=50_000.0,
 ):
-    """The day summary of session `i`: `open_` is the most holds open at once that day."""
-    return DayFact(
-        DAYS[i], False, entries, exits, realized, gap, intraday, change, balance, equity, max_open_seen=open_
-    )
+    """The day summary of session `i`."""
+    return DayFact(DAYS[i], False, entries, exits, realized, gap, intraday, change, balance, equity)
 
 
 # Week 1 as the day summaries would record it; week 2 is arbitrary and must never reach week 1's review.
 WEEK1 = [
-    day(0, open_=1, entries=1, intraday=30.0, change=30.0, equity=50_030.0),
-    day(1, open_=2, entries=1, gap=10.0, intraday=50.0, change=60.0, equity=50_090.0),
-    day(2, open_=3, entries=1, gap=5.0, intraday=65.0, change=70.0, equity=50_160.0),
-    day(3, open_=3, exits=1, realized=160.0, gap=-5.0, intraday=45.0, change=-120.0, balance=50_160.0, equity=50_200.0),
-    day(
-        4, open_=2, exits=1, realized=-40.0, gap=-5.0, intraday=-125.0, change=-90.0, balance=50_120.0, equity=50_070.0
-    ),
+    day(0, entries=1, intraday=30.0, change=30.0, equity=50_030.0),
+    day(1, entries=1, gap=10.0, intraday=50.0, change=60.0, equity=50_090.0),
+    day(2, entries=1, gap=5.0, intraday=65.0, change=70.0, equity=50_160.0),
+    day(3, exits=1, realized=160.0, gap=-5.0, intraday=45.0, change=-120.0, balance=50_160.0, equity=50_200.0),
+    day(4, exits=1, realized=-40.0, gap=-5.0, intraday=-125.0, change=-90.0, balance=50_120.0, equity=50_070.0),
 ]
 WEEK2_NOISE = [
     day(i, realized=777.0, gap=77.0, intraday=7.0, change=1.0, balance=60_000.0, equity=61_000.0) for i in range(5, 10)
@@ -267,12 +262,11 @@ def by_id(checks):
 
 
 def test_adherence_checks_on_the_golden_entries():
-    checks = adherence_checks(PLAN, ENTRIES, [], max_open_seen=3)
+    checks = adherence_checks(PLAN, ENTRIES, [])
     assert [c["id"] for c in checks] == [
         "stop_set",
         "stop_honored",
         "risk_per_hold",
-        "open_holds_within_plan",
         "week_loss_limit",
         "entries_per_week",
         "on_signal",
@@ -282,7 +276,6 @@ def test_adherence_checks_on_the_golden_entries():
     assert got == {
         "stop_set": (False, "2 of 3"),  # HHH had no stop
         "risk_per_hold": (False, "2 of 3"),  # 100 and 50 are within 100; no stop means no known risk
-        "open_holds_within_plan": (True, "3 of 3"),
         "week_loss_limit": (True, "3 of 3"),
         "entries_per_week": (True, "3 of 4"),
         "focus_before_open": (False, "2 of 3"),  # HHH was starred after the open
@@ -292,25 +285,26 @@ def test_adherence_checks_on_the_golden_entries():
         "on_signal",
     }  # no stop hit; no signal rule
     assert all(set(c) == {"id", "label", "applicable", "passed", "detail"} for c in checks)
-    assert score_pct(checks) == 50  # 3 of the 6 applicable checks passed
+    assert score_pct(checks) == 40  # 2 of the 5 applicable checks passed
 
 
 def test_stop_honored_applies_only_when_a_stop_was_hit():
-    checks = adherence_checks(PLAN, ENTRIES, [(1, True), (2, False)], max_open_seen=1)
+    checks = adherence_checks(PLAN, ENTRIES, [(1, True), (2, False)])
     assert (checks[1]["applicable"], checks[1]["passed"], checks[1]["detail"]) == (True, False, "1 of 2")
-    assert by_id(adherence_checks(PLAN, ENTRIES, [(1, True)], 1))["stop_honored"]["passed"] is True
+    assert by_id(adherence_checks(PLAN, ENTRIES, [(1, True)]))["stop_honored"]["passed"] is True
 
 
 def test_risk_per_hold_allows_exactly_the_limit_and_refuses_one_cent_over():
     at_limit = (EntryFact(1, "A", 1, True, 100.0, False, True, 0.0),)
     over = (EntryFact(1, "A", 1, True, 100.01, False, True, 0.0),)
-    assert by_id(adherence_checks(PLAN, at_limit, [], 1))["risk_per_hold"]["passed"] is True
-    assert by_id(adherence_checks(PLAN, over, [], 1))["risk_per_hold"]["passed"] is False
+    assert by_id(adherence_checks(PLAN, at_limit, []))["risk_per_hold"]["passed"] is True
+    assert by_id(adherence_checks(PLAN, over, []))["risk_per_hold"]["passed"] is False
 
 
-def test_open_holds_within_plan_compares_the_peak_to_the_limit():
-    checks = by_id(adherence_checks(replace(PLAN, max_open_holds=2), ENTRIES, [], max_open_seen=3))
-    assert (checks["open_holds_within_plan"]["passed"], checks["open_holds_within_plan"]["detail"]) == (False, "3 of 2")
+def test_there_is_no_check_on_how_many_holds_are_open():
+    # ADR-0016: cash is the only size rule; a plan scores only what she set (stop, risk, loss, trades, signals, focus)
+    ids = {c["id"] for c in adherence_checks(PLAN, ENTRIES, [])}
+    assert not any("open_hold" in i for i in ids) and not hasattr(PLAN, "max_open_holds")
 
 
 def test_week_loss_limit_counts_entries_made_after_the_limit_was_reached():
@@ -319,13 +313,13 @@ def test_week_loss_limit_counts_entries_made_after_the_limit_was_reached():
         EntryFact(2, "B", 2, True, 10.0, False, True, -500.0),  # the week was already down the whole limit
         EntryFact(3, "C", 3, True, 10.0, False, True, -499.99),
     )
-    check = by_id(adherence_checks(PLAN, late, [], 1))["week_loss_limit"]
+    check = by_id(adherence_checks(PLAN, late, []))["week_loss_limit"]
     assert (check["applicable"], check["passed"], check["detail"]) == (True, False, "2 of 3")
 
 
 def test_entries_per_week_fails_over_the_limit_and_on_signal_needs_every_entry_on_a_signal():
     entries = tuple(EntryFact(i, f"S{i}", 1, True, 10.0, i != 2, True, 0.0) for i in range(1, 6))
-    checks = by_id(adherence_checks(replace(PLAN, signal_only=True), entries, [], 1))
+    checks = by_id(adherence_checks(replace(PLAN, signal_only=True), entries, []))
     assert (checks["entries_per_week"]["passed"], checks["entries_per_week"]["detail"]) == (False, "5 of 4")
     assert (checks["on_signal"]["applicable"], checks["on_signal"]["passed"], checks["on_signal"]["detail"]) == (
         True,
@@ -339,7 +333,7 @@ def test_score_pct_rounds_and_is_none_when_nothing_applies():
     assert score_pct([{"applicable": False, "passed": True}]) is None
     two_of_three = [{"applicable": True, "passed": p} for p in (True, True, False)]
     assert score_pct(two_of_three) == 67
-    assert score_pct(adherence_checks(WeekPlan(), (), [], 0)) is None  # no plan, no entries: nothing to score
+    assert score_pct(adherence_checks(WeekPlan(), (), [])) is None  # no plan, no entries: nothing to score
 
 
 # -- the review ------------------------------------------------------------------------------------------------
@@ -358,7 +352,7 @@ def test_golden_review_numbers():
     assert t["avg_days_held"] == 4.0  # H1 Mon-Thu, H2 Tue-Fri: 4 sessions each, H3 is still open
     assert t["gap_usd"] == 5.0  # 0 + 10 + 5 - 5 - 5
     assert t["gap_share_pct"] == 7.1  # 5 / 70
-    assert t["adherence_pct"] == 50
+    assert t["adherence_pct"] == 40
     assert t["selection_pts"] == 0.05  # mean of the table's 1.40, -0.61, -0.65 (from her prices in, D-065)
     assert t["timing_pts"] == -1.17  # mean of -0.40, -3.22, +0.10
     assert t["spy_return_pct"] == 1.0  # 101 / 100 - 1
@@ -389,9 +383,9 @@ def test_golden_review_numbers():
         (160.0, -5.0, 45.0),
         (-40.0, -5.0, -125.0),
     ]
-    assert [d["adherence_pct"] for d in r["days"]] == [100, 100, 25, None, None]  # the day's entries only
+    assert [d["adherence_pct"] for d in r["days"]] == [100, 100, 0, None, None]  # the day's entries only
 
-    assert r["adherence"]["score_pct"] == 50 and len(r["adherence"]["checks"]) == 8
+    assert r["adherence"]["score_pct"] == 40 and len(r["adherence"]["checks"]) == 7
     assert r["copy"] == [
         "Selection +0.1 pts vs the universe median · your holds ranked 4th, 8th and 8th of 12 · Timing −1.2 pts"
     ]
@@ -489,13 +483,12 @@ def test_a_hold_opened_last_week_is_scored_over_this_weeks_span_only():
     facts = [
         day(0),
         day(1),
-        day(2, open_=1, entries=1, change=80.0, intraday=80.0, equity=50_080.0),
-        day(3, open_=1, gap=10.0, change=60.0, intraday=50.0, equity=50_140.0),
-        day(4, open_=1, gap=10.0, change=60.0, intraday=50.0, equity=50_200.0),
-        day(5, open_=1, gap=20.0, change=60.0, intraday=40.0, equity=50_260.0),
+        day(2, entries=1, change=80.0, intraday=80.0, equity=50_080.0),
+        day(3, gap=10.0, change=60.0, intraday=50.0, equity=50_140.0),
+        day(4, gap=10.0, change=60.0, intraday=50.0, equity=50_200.0),
+        day(5, gap=20.0, change=60.0, intraday=40.0, equity=50_260.0),
         day(
             6,
-            open_=1,
             exits=1,
             realized=300.0,
             gap=20.0,
@@ -506,7 +499,7 @@ def test_a_hold_opened_last_week_is_scored_over_this_weeks_span_only():
         ),
         *[day(i, balance=50_300.0, equity=50_300.0) for i in (7, 8, 9)],
     ]
-    r = compute_review(golden(week_no=2, holds=[carried], entries=(), day_facts=facts, plan=WeekPlan(max_open_holds=3)))
+    r = compute_review(golden(week_no=2, holds=[carried], entries=(), day_facts=facts, plan=WeekPlan()))
 
     assert r["week"] == {"week_no": 2, "label": "Week 2", "first_day_no": 6, "last_day_no": 10}
     (row,) = r["holds"]
@@ -521,7 +514,7 @@ def test_a_hold_opened_last_week_is_scored_over_this_weeks_span_only():
     assert (t["gap_usd"], t["gap_share_pct"], t["balance_usd"]) == (40.0, 40.0, 50_300.0)
     assert t["avg_days_held"] == 5.0 and t["win_rate"] == 1.0 and t["avg_loss_usd"] is None
     assert [e["day_no"] for e in r["equity"]] == list(range(1, 11))  # the curve runs from Day 1
-    assert r["adherence"]["score_pct"] == 100  # nothing entered; the open-hold limit (1 of 3) held
+    assert r["adherence"]["score_pct"] is None  # nothing entered and no rule of her own set: nothing to score
 
 
 def test_an_empty_week_keeps_its_tiles_and_has_no_selection_or_timing():

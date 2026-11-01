@@ -1031,6 +1031,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await openDesk(page, "/practice/journal");
     await expect(page.getByText(PRACTICE_COPY.threadPickNone)).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.threadPickTitle), "one statement, not two stacked").toHaveCount(0);
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.openPractice }), "and the way forward is one primary link").toBeVisible();
   });
 
   test("while the day list loads the page shows its own shape and says it is busy (D-116)", async ({ page, context }) => {

@@ -161,8 +161,8 @@ def test_the_gap_is_at_the_regular_open_and_the_premarket_sits_at_the_prior_clos
 
 
 def test_swing_setup_is_a_valid_contract_block_and_overrides_apply() -> None:
-    create = swing_create(sessions=20, maxOpenHolds=2)
-    assert create.swing is not None and (create.swing.sessions, create.swing.maxOpenHolds) == (20, 2)
+    create = swing_create(sessions=20, riskPerHoldUsd=250)
+    assert create.swing is not None and (create.swing.sessions, create.swing.riskPerHoldUsd) == (20, 250)
     assert [e.symbol for e in create.swing.universe] == SYMBOLS
     assert {e.symbol: e.source for e in create.swing.universe} == SOURCES
 
@@ -482,6 +482,22 @@ def test_create_writes_the_thread_and_one_plan_with_the_universe_frozen_in_order
     # the coverage check stored every symbol's data for the whole range: thread prep and the board read it
     store = svc.store_factory(db_session)
     assert all(swing.is_cached(store, s, plan_mod.plan_days(FIRST_DAY, 15)) for s in SYMBOLS)
+
+
+def test_a_swing_setup_has_no_cap_on_open_holds(db_session, owner, svc) -> None:
+    # ADR-0016: cash is the only size rule, so the setup no longer asks for "open holds at most"
+    with pytest.raises(ValueError, match="maxOpenHolds"):
+        swing_create(maxOpenHolds=3)
+    thread, plan = create_swing_thread(db_session, owner, svc)
+    assert "maxOpenHolds" not in plan.spec and "maxOpenHolds" not in swing.plan_snapshot(thread, plan)
+
+
+def test_a_thread_stored_with_the_removed_cap_still_reads(db_session, owner, svc) -> None:
+    thread, plan = create_swing_thread(db_session, owner, svc)
+    plan.spec = {**plan.spec, "maxOpenHolds": 3}  # a plan row written before the cap was removed
+    db_session.commit()
+    swing_block = threads_mod.detail(db_session, thread)["thread"].swing
+    assert swing_block is not None and "maxOpenHolds" not in swing_block.model_dump()
 
 
 def test_risk_per_hold_is_kept_and_an_absent_one_stays_absent(db_session, owner, svc) -> None:

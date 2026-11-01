@@ -4,7 +4,7 @@ import { Field, Input, NumberInput } from "@/components/ui/Field";
 import { Segmented } from "@/components/ui/Segmented";
 import modal from "@/components/practice/hub/newplan.module.css";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { EARLIEST_SWING_DAY, MAX_OPEN_HOLDS, MAX_SESSIONS, MIN_SESSIONS, SWING_INTERVALS, SWING_TAPES, calendarLine, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
+import { EARLIEST_SWING_DAY, MAX_SESSIONS, MIN_SESSIONS, SWING_INTERVALS, SWING_TAPES, calendarLine, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
 import { latestReplayDay } from "@/lib/replay/setup";
 import { UniverseBuilder } from "./UniverseBuilder";
 import type { UniversePreviewState } from "./useUniversePreview";
@@ -48,9 +48,6 @@ export function SwingSetupSection({
               options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
               onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
             />
-          </Field>
-          <Field id="swing-max-open" label={PRACTICE_COPY.swingMaxOpen} error={problems.maxOpenHolds}>
-            <NumberInput fill inputMode="numeric" min={1} max={MAX_OPEN_HOLDS} step={1} value={draft.maxOpenHolds} onChange={(event) => onDraft({ ...draft, maxOpenHolds: event.target.value })} />
           </Field>
           <Field id="swing-interval" label={PRACTICE_COPY.swingInterval} group error={problems.interval}>
             <Segmented

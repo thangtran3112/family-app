@@ -640,7 +640,8 @@ def test_weeks_serve_week_to_date_then_the_frozen_review_and_take_notes(world, d
     assert (week.to_date, week.status, week.label) == ("yes", "open", "Week 1 · 4 of 5 days")
     assert [d.day_no for d in week.review.days] == [1, 2, 3, 4] and {d.watched for d in week.review.days} == {"no"}
     assert week.review.tiles.realized_usd == 0 and week.review.holds == []
-    assert week.review.adherence.score_pct is not None and week.review.adherence.checks
+    # no rule of her own set: nothing to score
+    assert week.review.adherence.score_pct is None and week.review.adherence.checks
     assert len(week.review.heat) == 12 and week.review.lines == [] or isinstance(week.review.lines, list)
     assert "12 symbols" in week.universe_label and "Dividends" in week.footnote and week.notes is None
 
@@ -650,7 +651,7 @@ def test_weeks_serve_week_to_date_then_the_frozen_review_and_take_notes(world, d
     assert [d.day_no for d in closed.review.days] == [1, 2, 3, 4, 5]
     frozen = WeeksOut.model_validate(client.get(f"{BASE}/threads/{tid}/weeks", headers=auth_headers()).json())
     assert frozen.weeks[0].status == "closed" and frozen.weeks[0].realized_usd == 0
-    assert frozen.weeks[0].equity_change_usd == 0 and frozen.weeks[0].adherence_pct is not None
+    assert frozen.weeks[0].equity_change_usd == 0 and frozen.weeks[0].adherence_pct is None
     assert (
         "week"
         in client.get(f"{BASE}/threads/{tid}/weeks/2", headers=auth_headers()).json()["detail"]["problems"][0]["path"]
@@ -741,7 +742,8 @@ def test_closing_a_swing_thread_early_stores_the_partial_weeks_review(world, db_
     assert out.thread.status == "closed" and out.swing is not None and out.swing.next == "finished"
     weeks = WeeksOut.model_validate(client.get(f"{BASE}/threads/{tid}/weeks", headers=auth_headers()).json())
     assert [(w.status, w.days, w.label) for w in weeks.weeks] == [("closed", 3, "Week 1 · 3 of 5 days")]
-    assert weeks.weeks[0].equity_change_usd == 0 and weeks.weeks[0].adherence_pct is not None  # the review was stored
+    # the review was stored; no rule set, so nothing to score
+    assert weeks.weeks[0].equity_change_usd == 0 and weeks.weeks[0].adherence_pct is None
     assert client.post(f"{BASE}/threads/{tid}/close", headers=auth_headers()).json() == closed.json()  # idempotent
     after = _next(client, tid)
     assert after.status_code == 409

@@ -130,20 +130,19 @@ test("the week's entries and realized result come from the holds that fall insid
   assert.deepEqual(weekFigures([], range!), { entries: 0, realizedUsd: 0 });
 });
 
-test("the swing plan rows show open holds against the limit, then the week when it is known", () => {
-  assert.deepEqual(swingPlanItems({ holdsOpen: 2, maxOpenHolds: 3, maxTrades: null, maxLossUsd: null, week: null }), [
-    { id: "open_holds", label: "Open holds", state: "ok", detail: "2 of 3" },
+test("the swing plan rows count the open holds with no limit, then the week when it is known", () => {
+  assert.deepEqual(swingPlanItems({ holdsOpen: 2, maxTrades: null, maxLossUsd: null, week: null }), [
+    { id: "open_holds", label: "Open holds", state: "ok", detail: "2" },
   ]);
-  assert.equal(swingPlanItems({ holdsOpen: 4, maxOpenHolds: 3, maxTrades: null, maxLossUsd: null, week: null })[0]!.state, "warn");
-  assert.equal(swingPlanItems({ holdsOpen: 2, maxOpenHolds: null, maxTrades: null, maxLossUsd: null, week: null })[0]!.detail, "2");
-  const full = swingPlanItems({ holdsOpen: 2, maxOpenHolds: 3, maxTrades: 6, maxLossUsd: 500, week: { entries: 3, realizedUsd: -120 } });
+  assert.equal(swingPlanItems({ holdsOpen: 9, maxTrades: null, maxLossUsd: null, week: null })[0]!.state, "ok", "a count, never a warning: cash is the only size rule");
+  const full = swingPlanItems({ holdsOpen: 2, maxTrades: 6, maxLossUsd: 500, week: { entries: 3, realizedUsd: -120 } });
   assert.deepEqual(full.slice(1), [
     { id: "entries_week", label: "Entries this week · max 6", state: "ok", detail: "3 of 6" },
     { id: "week_loss", label: "Week loss limit $500.00", state: "ok", detail: "−$120.00 this week" },
   ]);
-  const over = swingPlanItems({ holdsOpen: 1, maxOpenHolds: 3, maxTrades: 2, maxLossUsd: 500, week: { entries: 3, realizedUsd: -500 } });
+  const over = swingPlanItems({ holdsOpen: 1, maxTrades: 2, maxLossUsd: 500, week: { entries: 3, realizedUsd: -500 } });
   assert.deepEqual(over.slice(1).map((item) => item.state), ["warn", "warn"]);
-  const none = swingPlanItems({ holdsOpen: 1, maxOpenHolds: 3, maxTrades: null, maxLossUsd: null, week: { entries: 0, realizedUsd: 0 } });
+  const none = swingPlanItems({ holdsOpen: 1, maxTrades: null, maxLossUsd: null, week: { entries: 0, realizedUsd: 0 } });
   assert.deepEqual(none.map((item) => [item.id, item.state]), [["open_holds", "ok"], ["entries_week", "pending"]]);
 });
 
@@ -164,7 +163,7 @@ test("no workspace string says a banned word", () => {
     ...Object.values(SWING_PLAY_COPY),
     dailyChartModel(dailyBlock, true).note,
     dailyLegend("NVDA", dailyChartModel(dailyBlock, true), null).title,
-    ...swingPlanItems({ holdsOpen: 2, maxOpenHolds: 3, maxTrades: 6, maxLossUsd: 500, week: { entries: 3, realizedUsd: -120 } }).flatMap((item) => [item.label, item.detail]),
+    ...swingPlanItems({ holdsOpen: 2, maxTrades: 6, maxLossUsd: 500, week: { entries: 3, realizedUsd: -120 } }).flatMap((item) => [item.label, item.detail]),
     ...dailyChartModel(dailyBlock, true).offsets!,
     ...dailyChartModel(dailyBlock, true).levels.map((level) => level.label),
     ...dailyChartModel(dailyBlock, true).markers.map((marker) => marker.label),
