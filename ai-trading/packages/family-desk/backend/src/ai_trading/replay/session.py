@@ -16,10 +16,12 @@ one-minute bar of the tape, from `advance`, at a price that bar proves.
 carry a strip and a daily block (`swing_play.py`). Every swing branch below is guarded by `ctx.swing`; the day-trade
 paths are unchanged.
 
-**A day holds several open trades** (N names, one open trade each, no cap on how many names). The one size rule is the
-cash check (`holds.check_buying_power`). They share the day clock: `positions` prices each at the clock, never at its
-own name's stale playhead, `advance` pauses at the first stop crossed on ANY open name, and ending the day flattens
-every one of them at the clock.
+**A day holds several open positions** (N names, one average-cost position each, no cap on how many names or fills).
+A Buy or Sell mark is a fill against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the
+walk is `journal.assemble`). The one size rule is the cash check (`holds.check_buying_power`), applied to the shares a
+fill OPENS. The positions share the day clock: `positions` prices each at the clock, never at its own name's stale
+playhead, `advance` pauses at the first stop crossed on ANY open name, and ending the day flattens every one of them
+at the clock.
 """
 
 import json
@@ -241,7 +243,8 @@ def day_books(db: Session, day_list_id: int) -> dict[int, tuple[list[journal_mod
 
 @dataclass(frozen=True)
 class Position:
-    """An open practice trade of the day, with its session and its price at the day clock."""
+    """An open practice position of the day (a name's average-cost aggregate), with its session and its price at the day
+    clock."""
 
     row: ReplaySession
     trade: journal_mod.Trade
@@ -249,8 +252,8 @@ class Position:
 
 
 def open_positions(db: Session, day_list_id: int) -> list[tuple[ReplaySession, journal_mod.Trade]]:
-    """`(session, open trade)` of every session of the day list that holds one, in the order she opened the names. A day
-    holds one open trade per name."""
+    """`(session, open position)` of every session of the day list that holds one, in the order she opened the names. A
+    name holds one average-cost position, however many fills built it."""
     by_id = {r.id: r for r in _sessions_of_day(db, day_list_id)}
     return [(by_id[sid], open_) for sid, (_, open_) in day_books(db, day_list_id).items() if open_ is not None]
 
@@ -1003,7 +1006,8 @@ def feed(
 
 def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: dict[str, Any]) -> dict[str, Any]:
     """Stamp a practice mark at the playhead. State rules answer 422 with `path: "kind"` or `"stopPrice"`. An entry
-    needs no stop: the thread's "stop on every entry" plan is scored, never a reason to refuse."""
+    needs no stop: the thread's "stop on every entry" plan is scored, never a reason to refuse. A Buy or Sell is a fill
+    against the name's position (adds, sells part, or flips); only the shares it opens must fit the cash."""
     _lock_day_list(db, session_id)  # the day list row first, then the session row: one lock order
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
@@ -1043,14 +1047,24 @@ def _place(
     stop_price = body.get("stopPrice")
     shares = None
     trade_no = None
+    take = rest = 0
     if kind in ENTRY_KINDS:
-        if open_ is not None:
-            raise ReplayProblem("Close the open practice trade first", path="kind")
+        # A fill against the name's position: it closes shares first, then opens (or adds to) a position with the rest.
+        side = "long" if kind == "long_entry" else "short"
         shares = body.get("shares") or row.spec["shares"]
-        trade_no = len(closed) + 1
-        if stop_price is not None:
-            _check_stop_side(kind == "long_entry", stop_price, price)
-        _check_day_buying_power(db, row, shares, price)
+        take, rest = journal_mod.fill_split(
+            None if open_ is None else open_.side, 0 if open_ is None else open_.shares, side, shares
+        )
+        if open_ is None:
+            trade_no = max((t.no for t in closed), default=0) + 1
+        else:
+            trade_no = open_.no + (1 if take and rest else 0)  # a flip is a new position
+        remaining = None if open_ is None else (open_.side if take < open_.shares else None)
+        stays = side if rest else remaining  # the side of the position the fill leaves behind, if any
+        if stop_price is not None and stays is not None:
+            _check_stop_side(stays == "long", stop_price, price)
+        if rest:
+            _check_day_buying_power(db, row, rest, price, closing=open_ if take else None, take=take)
     elif kind in EXIT_KINDS:
         wanted = "long" if kind == "long_exit" else "short"
         if open_ is None or open_.side != wanted:
@@ -1063,7 +1077,7 @@ def _place(
         trade_no = open_.no
 
     day_pnl_usd = None
-    if kind in ENTRY_KINDS and row.day_list_id is not None:
+    if rest and row.day_list_id is not None:
         # The max-loss rule's basis: the day's P/L when she entered (realized plus every open trade at the clock).
         books = day_books(db, row.day_list_id)
         day_pnl_usd = day_pnl(books, positions(db, svc, row.day_list_id, ctx.through, books), ctx.through)["total_usd"]
@@ -1087,7 +1101,7 @@ def _place(
         row.stop_hit_at = None
     db.flush()
     ctx.marks = _marks_of(_load_marks(db, row.id))
-    if kind in EXIT_KINDS:
+    if take or kind in EXIT_KINDS:  # the mark realized a trade: the ledger books it (and the balance moves)
         closed, _ = journal_mod.assemble(ctx.marks)
         ledger_mod.book(db, row, closed, svc.now())
     placed = next(m for m in ctx.marks if m.seq == mark.seq)
@@ -1101,8 +1115,8 @@ def _place(
 
 # -- working orders -------------------------------------------------------------------------------------------
 # A limit, stop or stop-limit entry that is not marketable waits in `replay_sessions.orders` and fills from `advance`
-# (replay/orders.py has the rules). A market entry is `place_mark`. One open trade per name still holds: a second fill
-# on a name that already has a trade open cancels that order with the reason.
+# (replay/orders.py has the rules). A market entry is `place_mark`. A fill is a Buy or Sell against the name's position
+# whatever it is when the order fills (it can add, sell part, or flip); only the cash can cancel it, with the reason.
 
 
 def _side_of(order: dict[str, Any]) -> str:
@@ -1127,9 +1141,9 @@ def _close_order(
 
 def _fill_working_orders(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp) -> list[Mark]:
     """Fill the session's working orders from the one-minute bars that closed in `(previous, target]` (an order is
-    read only from the moment it was placed). Each fill is an ordinary entry mark stamped at its bar's close, in time
-    order. An order the account cannot afford, or on a name that already has a trade open, is cancelled with that
-    reason. The caller has moved the playhead to `target`, so nothing here reaches past what is revealed."""
+    read only from the moment it was placed). Each fill is an ordinary Buy or Sell mark stamped at its bar's close, in
+    time order. An order whose opening shares the account cannot afford is cancelled with that reason. The caller has
+    moved the playhead to `target`, so nothing here reaches past what is revealed."""
     row = ctx.row
     if not any(o["status"] == "working" for o in row.orders or []):
         return []
@@ -1217,7 +1231,7 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
         out = _place(db, ctx, {"kind": entry, "shares": shares}, svc)
         _close_order(record, "filled", ctx.through, price=out["mark"]["price"], mark_id=out["mark"]["id"])
     else:
-        _check_can_work(db, ctx, shares, limit if limit is not None else trigger)
+        _check_can_work(db, ctx, side, shares, limit if limit is not None else trigger)
         out = {
             "mark": None,
             "open_trade": _open_trade(ctx, found[0]),
@@ -1230,26 +1244,34 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
     return {**out, "order": record, "orders": list(row.orders)}
 
 
-def _check_can_work(db: Session, ctx: Ctx, shares: int, reference: float | None) -> None:
-    """The rules a working order must pass now: the name has no trade open, and the notional at its own price fits the
-    free cash (a stop is priced at its trigger). The same rules run again when it fills."""
+def _check_can_work(db: Session, ctx: Ctx, side: str, shares: int, reference: float | None) -> None:
+    """The rule a working order must pass now: the shares it would open, at its own price (a stop is priced at its
+    trigger), fit the free cash as the position stands. The same rule runs again when it fills."""
     row = ctx.row
     assert reference is not None
     if ctx.swing:
         thread = swing_play.lock_thread(db, row.thread_id)
         rows = hold_rows.load(db, thread.id, lock=True)
-        if any(r.symbol == row.symbol and r.status == "open" for r in rows):
-            raise ReplayProblem(f"Close your open {row.symbol} practice hold first", path="kind")
-        try:
-            holds_mod.check_buying_power(
-                shares=shares, price=reference, free_cash_usd=swing_play.free_cash(db, thread, rows, row.day)
-            )
-        except holds_mod.HoldProblem as exc:
-            raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
+        mine = next((r for r in rows if r.symbol == row.symbol and r.status == "open"), None)
+        take, rest = journal_mod.fill_split(
+            None if mine is None else mine.side, 0 if mine is None else mine.shares, side, shares
+        )
+        if rest:
+            try:
+                holds_mod.check_buying_power(
+                    shares=rest,
+                    price=reference,
+                    free_cash_usd=_swing_free_cash(db, thread, rows, row.day, mine, take, reference),
+                )
+            except holds_mod.HoldProblem as exc:
+                raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
         return
-    if journal_mod.assemble(ctx.marks)[1] is not None:
-        raise ReplayProblem("Close the open practice trade first", path="kind")
-    _check_day_buying_power(db, row, shares, reference)
+    open_ = journal_mod.assemble(ctx.marks)[1]
+    take, rest = journal_mod.fill_split(
+        None if open_ is None else open_.side, 0 if open_ is None else open_.shares, side, shares
+    )
+    if rest:
+        _check_day_buying_power(db, row, rest, reference, closing=open_ if take else None, take=take)
 
 
 def cancel_order(db: Session, user_id: int, session_id: int, order_id: int, svc: Services) -> dict[str, Any]:
@@ -1281,34 +1303,70 @@ def _expire_orders(row: ReplaySession, at: pd.Timestamp) -> None:
 
 def _day_free_cash(db: Session, row: ReplaySession) -> float | None:
     """A day thread's buying power: the thread's balance (its starting balance plus every booked trade; a day trade is
-    booked when it exits) less the entry notional of the day's other open trades. Like the swing rule, a short's
-    notional counts as a long's. None for a standalone session: it has no account to check against."""
+    booked when it exits) less the entry notional of the day's open positions, this name's included (what she already
+    holds in it is cash spent). Like the swing rule, a short's notional counts as a long's. None for a standalone
+    session: it has no account to check against."""
     if row.thread_id is None or row.day_list_id is None:
         return None
     thread = db.get(PracticeThread, row.thread_id)
     if thread is None:
         return None
-    held = sum(t.entry_price * t.shares for other, t in open_positions(db, row.day_list_id) if other.id != row.id)
+    held = sum(t.entry_price * t.shares for _, t in open_positions(db, row.day_list_id))
     return round(swing_play.balance(db, thread) - held, 2)
 
 
-def _check_day_buying_power(db: Session, row: ReplaySession, shares: int, price: float) -> None:
+def _check_day_buying_power(
+    db: Session,
+    row: ReplaySession,
+    shares: int,
+    price: float,
+    *,
+    closing: journal_mod.Trade | None = None,
+    take: int = 0,
+) -> None:
+    """The cash rule for the `shares` a fill opens or adds. A flip (`closing`, `take` shares of it closed first) closes
+    the whole position before it opens the other way, so that notional comes back to the cash along with the closed
+    shares' P/L."""
     free = _day_free_cash(db, row)
     if free is None:
         return
+    if closing is not None and take:
+        gain = journal_mod.pnl_usd(closing.sign, closing.entry_price, price, take)
+        free = round(free + closing.entry_price * closing.shares + gain, 2)
     try:
         holds_mod.check_buying_power(shares=shares, price=price, free_cash_usd=free)
     except holds_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
 
 
+def _swing_free_cash(
+    db: Session,
+    thread: PracticeThread,
+    rows: list[PracticeHold],
+    day: date,
+    mine: PracticeHold | None,
+    take: int,
+    price: float,
+) -> float:
+    """A swing fill's free cash for the shares it opens: the thread's free cash with this name's hold still open, plus,
+    when the fill flips it (`take` shares close the whole hold first), the hold's notional and the closed P/L."""
+    free = swing_play.free_cash(db, thread, rows, day)
+    if mine is not None and take:
+        gain = journal_mod.pnl_usd(1 if mine.side == "long" else -1, float(mine.entry_price), price, take)
+        free = round(free + float(mine.entry_price) * mine.shares + gain, 2)
+    return free
+
+
 def _place_swing_mark(
     db: Session, ctx: Ctx, body: dict[str, Any], svc: Services, *, fill: orders_mod.Fill | None = None
 ) -> dict[str, Any]:
     """`place_mark` for a swing session (02p b2): the mark stays a per-session annotation, the practice HOLD is the
-    record. An entry creates the hold, a stop moves its line (and clears the pause flag), an exit closes the whole hold
-    at the revealed price. No ledger row is written here: the day's end credits the holds that exited on it (R9).
-    Lock order: the day list and the session (the caller), then the thread, then its holds."""
+    record. The name's open hold is its average-cost position (ADR-0016): a Buy or Sell adds to it
+    (`hold_rows.scale_in`), sells part of it (`split_off`: the slice closes at the hold's cost, the rest stays open), or
+    closes it and opens the other way (a flip); Close position closes the whole hold at the revealed price. A stop
+    moves the position's line (and clears the pause flag). No ledger row is written here: the day's end credits the
+    holds that exited on it (R9). Lock order: the day list and the session (the caller), then the thread, then its
+    holds."""
     row, kind, now = ctx.row, body["kind"], svc.now()
     price = warning = None
     at = ctx.through if fill is None else fill.at
@@ -1327,21 +1385,28 @@ def _place_swing_mark(
     mine = next((r for r in rows if r.symbol == row.symbol and r.status == "open"), None)
     stop_price = body.get("stopPrice")
     shares = None
+    position_before = closed_row = target = None
+    take = rest = 0
     try:
         if kind in ENTRY_KINDS:
+            side = "long" if kind == "long_entry" else "short"
             shares = body.get("shares") or row.spec["shares"]
-            holds_mod.check_entry(
-                open_holds=[hold_rows.to_hold(r) for r in rows if r.status == "open"],
-                symbol=row.symbol,
-                shares=shares,
-                price=price,
-                free_cash_usd=swing_play.free_cash(db, thread, rows, row.day),
+            take, rest = journal_mod.fill_split(
+                None if mine is None else mine.side, 0 if mine is None else mine.shares, side, shares
             )
-            if stop_price is not None:
-                holds_mod.check_stop("long" if kind == "long_entry" else "short", stop_price, price)
+            if rest:
+                holds_mod.check_buying_power(
+                    shares=rest,
+                    price=price,
+                    free_cash_usd=_swing_free_cash(db, thread, rows, row.day, mine, take, price),
+                )
+            stays = side if rest else (mine.side if mine is not None and take < mine.shares else None)
+            if stop_price is not None and stays is not None:
+                holds_mod.check_stop(stays, stop_price, price)
         elif kind in EXIT_KINDS:
             if mine is None or mine.side != ("long" if kind == "long_exit" else "short"):
                 raise holds_mod.HoldProblem("No open practice hold to exit")
+            take = mine.shares
         elif kind == "stop":
             if mine is None:
                 raise holds_mod.HoldProblem("Open a practice hold before setting a stop")
@@ -1362,31 +1427,47 @@ def _place_swing_mark(
         db.add(mark)
         row.updated_at = now
         db.flush()
-        if kind in ENTRY_KINDS:
-            mine = hold_rows.add_entry(
-                db,
-                thread,
-                symbol=row.symbol,
-                side="long" if kind == "long_entry" else "short",
-                shares=shares,
-                day=row.day,
-                at=at,
-                price=price,
-                stop=stop_price,
-                session_id=row.id,
-                mark_id=mark.id,
-                now=now,
-            )
-        elif kind in EXIT_KINDS:
-            hold_rows.apply(
-                mine,
-                holds_mod.exit_hold(hold_rows.to_hold(mine), day=row.day, at=ctx.through, price=price, source="her"),
-            )
-            mine.exit_session_id, mine.exit_mark_id = row.id, mark.id
+        if take:  # the shares a fill (or Close position) closes: the whole hold, or a slice of it
+            if take == mine.shares:
+                hold_rows.apply(
+                    mine, holds_mod.exit_hold(hold_rows.to_hold(mine), day=row.day, at=at, price=price, source="her")
+                )
+                mine.exit_session_id, mine.exit_mark_id = row.id, mark.id
+                closed_row, mine = mine, None
+                db.flush()  # the name has no open hold now: a flip may open the next
+            else:
+                closed_row = hold_rows.split_off(
+                    db, mine, shares=take, day=row.day, at=at, price=price, session_id=row.id, mark_id=mark.id, now=now
+                )
+        if rest:
+            if mine is None:
+                mine = hold_rows.add_entry(
+                    db,
+                    thread,
+                    symbol=row.symbol,
+                    side="long" if kind == "long_entry" else "short",
+                    shares=rest,
+                    day=row.day,
+                    at=at,
+                    price=price,
+                    stop=stop_price,
+                    session_id=row.id,
+                    mark_id=mark.id,
+                    now=now,
+                )
+            else:
+                position_before = hold_rows.scale_in(mine, shares=rest, price=price, stop=stop_price, now=now)
         elif kind == "stop":
             hold_rows.apply(mine, holds_mod.set_stop(hold_rows.to_hold(mine), stop_price))
-        if mine is not None and kind != "note":
-            mark.trade_no, mine.updated_at = mine.id, now
+        elif kind in ENTRY_KINDS and stop_price is not None and mine is not None:  # a sale that left the hold open
+            # Taken after the slice came off: the undo restores this, then puts the slice back.
+            position_before = hold_rows.snapshot(mine)
+            hold_rows.apply(mine, holds_mod.set_stop(hold_rows.to_hold(mine), stop_price))
+        target = mine if mine is not None else (closed_row if take else None)
+        if target is not None and kind != "note":
+            mark.trade_no, mark.position_before = target.id, position_before
+            if mine is not None:
+                mine.updated_at = now
         db.flush()
     except holds_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
@@ -1397,50 +1478,55 @@ def _place_swing_mark(
         "open_trade": _open_trade(ctx, shown),
         "journal": _journal(ctx, shown, final=False),
         "warning": warning,
-        "hold": None if mine is None else swing_play.hold_out(ctx, mine, shown),
+        "hold": None if target is None else swing_play.hold_out(ctx, target, shown),
     }
 
 
 def _check_reopen(
     db: Session, thread: PracticeThread, rows: list[PracticeHold], reopened: PracticeHold, day: date
 ) -> None:
-    """Undoing an exit puts the hold back among the open ones, so it has to pass the cash rule again against the
-    thread's other holds: another name may have spent the cash since the exit (the shared day clock lets a second name
-    mark at the same moment). 409, and nothing is written."""
+    """Undoing an exit puts its shares back among the open ones (as a hold of their own, or as shares of the name's open
+    hold), so they have to pass the cash rule again against the thread's other holds: another name may have spent the
+    cash since the exit (the shared day clock lets a second name mark at the same moment). 409, nothing is written."""
     others = [r for r in rows if r is not reopened]
     try:
-        holds_mod.check_entry(
-            open_holds=[hold_rows.to_hold(r) for r in others if r.status == "open"],
-            symbol=reopened.symbol,
+        holds_mod.check_buying_power(
             shares=reopened.shares,
             price=float(reopened.entry_price),
             free_cash_usd=swing_play.free_cash(db, thread, others, day),
         )
-    except holds_mod.HoldProblem as exc:
-        if exc.path != "shares":  # not the cash rule
-            raise
+    except holds_mod.HoldProblem:
         raise ReplayProblem(
             "Can't undo that exit · it would leave you without enough practice cash", path="kind", status=409
         ) from None
 
 
 def _undo_swing_mark(db: Session, ctx: Ctx, target: Mark) -> dict[str, Any]:
-    """`undo_mark` for a swing session (02p b2): undoing an entry deletes its hold, undoing an exit reopens it (nothing
-    was credited yet, and it must still fit the cash rule), undoing a stop puts the previous stop back and
-    recomputes whether that stop was already crossed."""
-    row = ctx.row
+    """`undo_mark` for a swing session (02p b2): undo the last mark's two halves in reverse. What it OPENED goes first:
+    a hold it created is deleted, a scale-in is restored from the hold the mark recorded (`position_before`). What it
+    CLOSED comes back second: a hold it closed whole is reopened, a slice it closed (a partial exit) rejoins the open
+    hold, and either must still fit the cash rule (nothing was credited yet). Undoing a stop puts the previous stop
+    back and recomputes whether that stop was already crossed."""
+    row, now = ctx.row, ctx.svc.now()
     thread = swing_play.lock_thread(db, row.thread_id)
     rows = hold_rows.load(db, thread.id, lock=True)
     mine = next((r for r in rows if r.symbol == row.symbol and r.status == "open"), None)
     try:
-        if target.kind in ENTRY_KINDS:
+        if target.kind in ENTRY_KINDS or target.kind in EXIT_KINDS:
             if (entered := next((r for r in rows if r.entry_mark_id == target.id), None)) is not None:
-                hold_rows.delete(db, entered)
-            mine = None
-        elif target.kind in EXIT_KINDS:
-            if (mine := next((r for r in rows if r.exit_mark_id == target.id), None)) is not None:
-                _check_reopen(db, thread, rows, mine, row.day)
-                hold_rows.reopen(db, mine)
+                hold_rows.delete(db, entered)  # a hold this mark opened
+                rows, mine = [r for r in rows if r is not entered], None
+            elif (before := db.get(PracticeMark, target.id).position_before) is not None and mine is not None:
+                hold_rows.restore(mine, before, now)  # a scale-in
+            if (
+                closed := next((r for r in rows if r.exit_mark_id == target.id and r.status == "closed"), None)
+            ) is not None:
+                _check_reopen(db, thread, rows, closed, row.day)
+                if mine is not None and closed.part_exit:
+                    hold_rows.merge_back(db, mine, closed, now)  # a slice of a partial exit
+                else:
+                    hold_rows.reopen(db, closed)
+                    mine = closed
         elif target.kind == "stop" and mine is not None:
             stop, set_at = swing_play.previous_stop(db, mine, target.id)
             restored = replace(hold_rows.to_hold(mine), stop_price=stop, stop_hit_at=None)
@@ -1450,9 +1536,9 @@ def _undo_swing_mark(db: Session, ctx: Ctx, target: Mark) -> dict[str, Any]:
     except holds_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
     if mine is not None:
-        mine.updated_at = row.updated_at = ctx.svc.now()
+        mine.updated_at = row.updated_at = now
     db.delete(db.get(PracticeMark, target.id))
-    row.updated_at = ctx.svc.now()
+    row.updated_at = now
     db.flush()
     ctx.marks = [m for m in ctx.marks if m.id != target.id]
     price = _price_or_none(ctx)

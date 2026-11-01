@@ -141,12 +141,14 @@ def test_load_filters_by_status_and_orders_by_entry(db_session, thread) -> None:
     assert hold_rows.load(db_session, thread.id + 1000) == []
 
 
-def test_a_second_open_hold_on_a_symbol_is_a_plain_problem_and_the_transaction_survives(db_session, thread) -> None:
+def test_a_second_open_row_on_a_symbol_is_a_plain_problem_and_the_transaction_survives(db_session, thread) -> None:
+    """The index is the name's one average-cost position: a second fill adds to the row (`hold_rows.scale_in`) and never
+    opens another, so the index only ever answers two requests that both thought the name flat."""
     _enter(db_session, thread)
     db_session.commit()
     with pytest.raises(HoldProblem) as caught:
         _enter(db_session, thread)
-    assert caught.value.message == "Close your open S01 practice hold first" and caught.value.status == 422
+    assert caught.value.message == "S01 was just opened by another request · try again" and caught.value.status == 422
     assert len(hold_rows.load(db_session, thread.id)) == 1  # the savepoint kept the session usable
     _enter(db_session, thread, "S02")  # another symbol is fine
 

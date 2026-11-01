@@ -74,7 +74,7 @@ function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null
         {since && <span className={styles.muted}>{` · since ${formatEtClock(since)}`}</span>}
       </p>
       <dl className={styles.tradeCard} aria-label="Open position">
-        <div><dt>Entry</dt><dd>{formatPrice(trade.entry_price)}</dd></div>
+        <div><dt>Avg price</dt><dd>{formatPrice(trade.entry_price)}</dd></div>
         <div><dt>Stop</dt><dd>{trade.stop_price == null ? "none" : formatPrice(trade.stop_price)}</dd></div>
         <div><dt>Last</dt><dd>{formatPrice(trade.last_price)}</dd></div>
         <div>
@@ -121,8 +121,9 @@ function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { compos
 /**
  * The order ticket and the position (02o §a3), laid out the way a broker lays them out: a side, a quantity and an order type,
  * the price fields that type needs and no others, one Buy or Sell button; below it the working orders, then the open position
- * with its Close position and Set stop. A stop is never required. Marks are priced by the server at the playhead; a limit,
- * stop or stop-limit order waits on the replayed tape and fills only on a later bar.
+ * with its Close position and Set stop. A Buy or Sell is a fill against the position: with a position open it adds to it, sells
+ * part of it, or flips it, and nothing but the cash limits that. A stop is never required. Marks are priced by the server at the
+ * playhead; a limit, stop or stop-limit order waits on the replayed tape and fills only on a later bar.
  */
 export function PracticeControls(props: PracticeControlsProps) {
   const { symbol, side, openTrade, lastPrice, ticket, onTicket, ticketError, composer, onComposer, disabled, swing } = props;

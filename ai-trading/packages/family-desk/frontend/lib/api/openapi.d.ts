@@ -870,7 +870,7 @@ export interface paths {
         /**
          * Start Day Session
          * @description Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list
-         *     name opens, one open trade at a time: a switch with a trade open is a 409 until it is closed.
+         *     name opens, and a position open on another name never blocks the switch.
          */
         post: operations["start_day_session_api_desk_replay_day_lists__day_list_id__sessions_post"];
         delete?: never;
@@ -4473,8 +4473,9 @@ export interface components {
         };
         /**
          * OpenTradeOut
-         * @description The name's open trade. For a swing session it is the name's practice hold (`trade_no` is the hold id) and the
-         *     four last fields say how long it has been held and which price it is valued at; a day session leaves them out.
+         * @description The name's open position: shares and `entry_price`, their average cost, however many fills built it. For a swing
+         *     session it is the name's practice hold (`trade_no` is the hold id) and the four last fields say how long it has been
+         *     held and which price it is valued at; a day session leaves them out.
          */
         OpenTradeOut: {
             /** Days Held */

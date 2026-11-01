@@ -51,18 +51,16 @@ export function isActivatable(target: KeyTarget | undefined): boolean {
   return tag === "BUTTON" || tag === "A" || tag === "SUMMARY" || target.role === "button" || target.role === "tab" || target.role === "menuitem";
 }
 
-/** What B, S or X (key or button) does for the current book: an entry, an exit, or a message why not. */
+/**
+ * What B, S or X (key or button) does for the current book. B and S are always a fill with the ticket as it stands: the
+ * server nets it against the position (a Buy adds to a long or buys back a short, a Sell the other way round, flipping past
+ * zero), so the keys never depend on the side held. X closes the whole position, or says there is none.
+ */
 export function markActionFor(letter: "b" | "s" | "x", side: OpenSide): ReplayAction {
-  if (side === "flat") {
-    if (letter === "b") return { type: "mark", kind: "long_entry" };
-    if (letter === "s") return { type: "mark", kind: "short_entry" };
-    return { type: "blocked", message: PRACTICE_COPY.noOpenTrade };
-  }
-  // Open trade: X always exits; the opposite-side key exits too; the same-side key would be a second entry.
-  const exit: EntryOrExit = side === "long" ? "long_exit" : "short_exit";
-  if (letter === "x") return { type: "mark", kind: exit };
-  const opposite = side === "long" ? "s" : "b";
-  return letter === opposite ? { type: "mark", kind: exit } : { type: "blocked", message: PRACTICE_COPY.tradeAlreadyOpen };
+  if (letter === "b") return { type: "mark", kind: "long_entry" };
+  if (letter === "s") return { type: "mark", kind: "short_entry" };
+  if (side === "flat") return { type: "blocked", message: PRACTICE_COPY.noOpenTrade };
+  return { type: "mark", kind: side === "long" ? "long_exit" : "short_exit" };
 }
 
 /**
@@ -121,8 +119,8 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
   {
     title: "Order ticket",
     rows: [
-      { keys: ["B"], label: "Buy with the ticket as it stands (a market ticket also closes a short)" },
-      { keys: ["S"], label: "Sell with the ticket as it stands (a market ticket also closes a long)" },
+      { keys: ["B"], label: "Buy with the ticket as it stands (adds to a long, buys back a short)" },
+      { keys: ["S"], label: "Sell with the ticket as it stands (sells part of a long, adds to a short)" },
       { keys: ["X"], label: "Close the open position" },
       { keys: ["T"], label: "Set a stop on the open position" },
       { keys: ["N"], label: "Add a note" },

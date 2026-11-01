@@ -355,7 +355,6 @@ export const PRACTICE_COPY = {
   markError: "Couldn't place that mark · Try again",
   markRejected: "That mark wasn't accepted",
   noOpenTrade: "No open practice trade to exit",
-  tradeAlreadyOpen: "This name already has an open position",
   undone: "Practice mark removed",
   orderFilled: "Working order filled at {price}",
   undoTooLate: "Can't undo · the playhead has moved",

@@ -208,12 +208,12 @@ def test_a_catch_up_past_the_ask_still_moves_the_clock_only_forward(db_session, 
     assert row.revealed_through == et(DAYS[0], "11:00")  # the clock never goes back
 
 
-# -- one open trade a name ---------------------------------------------------------------------------------
+# -- one position a name -----------------------------------------------------------------------------------
 
 
 def test_a_switch_with_a_trade_open_keeps_it_open_and_opens_the_next_name(db_session, user_id, svc) -> None:
-    """Flipped from the one-open-trade-a-day rule: a day holds one open trade per NAME (up to five), so switching with a
-    trade open is no longer a 409 and the second name can be entered too. The one-per-name rule stays."""
+    """Flipped from the one-open-trade-a-day rule: a day holds one position per NAME with no cap, so switching with a
+    trade open is no longer a 409 and the second name can be entered too. A second buy of a held name adds to it."""
     make_thread(db_session, user_id)
     row, gapper = _names(db_session, user_id, svc, "FLAT")
     _advance(db_session, user_id, svc, gapper.id, "09:35")
@@ -226,9 +226,8 @@ def test_a_switch_with_a_trade_open_keeps_it_open_and_opens_the_next_name(db_ses
         s["symbol"]: s["has_open_trade"] for s in plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"]
     }
     assert held == {"GAPPER": True, "FLAT": True}
-    with pytest.raises(ReplayProblem) as entry:
-        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # a second trade on the same name
-    assert entry.value.message == "Close the open practice trade first"
+    more = _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # the same name again: it adds
+    assert (more["open_trade"]["trade_no"], more["open_trade"]["shares"]) == (1, 6)
     _mark(db_session, user_id, svc, gapper.id, "long_exit")
     _mark(db_session, user_id, svc, gapper.id, "note", note="watching")  # a note is not an entry
 

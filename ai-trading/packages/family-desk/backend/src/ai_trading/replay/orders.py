@@ -4,7 +4,8 @@ A market entry never waits: it fills at the last print (`session.place_mark`). T
 one-minute bar, so a fill is always something the tape proved after the order was placed, and the forward-only clock
 decides what may be read: `first_fill` looks at bars that CLOSE in `(since, target]` and nothing else.
 
-Fill rules (OHLC of one-minute bars; a buy is a long entry, a sell is a short entry):
+Fill rules (OHLC of one-minute bars; a buy is a Buy fill and a sell a Sell fill, whatever the name's position is when
+the order fills: the session nets it against the position, `session._place`):
 
 - limit: a buy fills at the first bar whose low reaches the limit, at the limit, or at the bar's open when it opened
   through it. A sell mirrors it with the high.

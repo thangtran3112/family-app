@@ -69,6 +69,8 @@ export const ReplaySessionV1Schema = z
   })
   .meta({ id: "ReplaySessionV1" });
 
+// A Buy is `long_entry` and a Sell is `short_entry`: each is a fill the server nets against the name's one position
+// (it adds to it, closes part of it, or flips it). `long_exit` / `short_exit` close the whole position.
 export const PracticeMarkV1Schema = z
   .discriminatedUnion("kind", [
     z.strictObject({
