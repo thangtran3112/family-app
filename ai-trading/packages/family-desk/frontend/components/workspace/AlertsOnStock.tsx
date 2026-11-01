@@ -5,6 +5,7 @@ import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { AlertStrategy } from "@/lib/api/schemas";
 import { formatEtStamp } from "@/lib/desk/format";
 import styles from "./workspacePanels.module.css";
+import { alertNewHref } from "@/lib/desk/hrefs";
 
 const SHOWN = 5;
 
@@ -20,7 +21,7 @@ export function AlertsOnStock({
   onRetry: () => void;
 }) {
   const encoded = encodeURIComponent(symbol);
-  const addAlert = <a href={`/alerts/new?source=symbol:${encoded}`} className={styles.link}>+ Alert</a>;
+  const addAlert = <a href={alertNewHref({ symbol })} className={styles.link}>+ Alert</a>;
 
   let body: ReactNode;
   if (failed) {

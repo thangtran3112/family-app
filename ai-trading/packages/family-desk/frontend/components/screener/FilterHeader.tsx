@@ -13,6 +13,7 @@ import { createFilter, deleteFilter } from "@/lib/desk/screener";
 import { describeSpec } from "@/lib/spec/describe";
 import { parseFilterSpec } from "@/lib/spec/parse";
 import styles from "./screener.module.css";
+import { alertNewHref, filterHref } from "@/lib/desk/hrefs";
 
 type Action = "save" | "delete";
 
@@ -52,7 +53,7 @@ export function FilterHeader({
     run("save", async () => {
       const copy = await createFilter({ copy_of: filter.id });
       invalidate("filters");
-      router.push(`/screener/filters?id=${copy.id}`);
+      router.push(filterHref(copy.id));
     });
   const remove = () =>
     run("delete", async () => {
@@ -76,7 +77,7 @@ export function FilterHeader({
       </div>
       <div className={styles.controls}>
         {/* A default opens read-only, so it is a view, not an edit (A-SCR-15). */}
-        <Button href={`/screener/filters?id=${filter.id}`}>{filter.read_only ? "View rule" : "Edit"}</Button>
+        <Button href={filterHref(filter.id)}>{filter.read_only ? "View rule" : "Edit"}</Button>
         {filter.read_only ? (
           <>
             <Button variant="primary" loading={pending === "save"} disabled={pending !== null} onClick={saveCopy}>
@@ -112,7 +113,7 @@ export function FilterHeader({
         ) : (
           <Button ref={deleteRef} onClick={() => setConfirming(true)}>Delete</Button>
         )}
-        <a href={`/alerts/new?from=filter:${filter.id}`} className={styles.link}>Alert on this filter</a>
+        <a href={alertNewHref({ filter: filter.id })} className={styles.link}>Alert on this filter</a>
       </div>
     </header>
   );

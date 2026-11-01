@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/schemas";
 import { stageLabel, stageTone } from "@/lib/desk/strategyView";
 import styles from "./strategies.module.css";
+import { strategyHref } from "@/lib/desk/hrefs";
 
 type Strategy = ReturnType<typeof StrategiesResponseSchema.parse>[number];
 type StrategyVersion = ReturnType<typeof StrategyVersionsResponseSchema.parse>[number];
@@ -91,7 +92,7 @@ export function StrategyList() {
               {rows.map(({ strategy, currentVersion }) => (
                 <tr key={strategy.id}>
                   <td data-label="Name">
-                    <a className={styles.strategyName} href={`/strategies?id=${strategy.id}`}>
+                    <a className={styles.strategyName} href={strategyHref(strategy.id)}>
                       {strategy.name}
                     </a>
                   </td>
@@ -101,7 +102,7 @@ export function StrategyList() {
                   <td data-label="Current version">
                     {currentVersion
                       ? `v${currentVersion.version}`
-                      : <span className={styles.noVersion}>No version <a href={`/strategies?id=${strategy.id}`}>Add version</a></span>}
+                      : <span className={styles.noVersion}>No version <a href={strategyHref(strategy.id)}>Add version</a></span>}
                   </td>
                   <td data-label="30-day paper P&amp;L">
                     <span className={styles.fixtureValue}>Needs broker setup</span>

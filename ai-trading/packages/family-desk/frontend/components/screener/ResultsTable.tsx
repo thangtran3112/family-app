@@ -7,6 +7,7 @@ import type { ScreenerResults } from "@/lib/api/schemas";
 import { columnFromSpec } from "@/lib/desk/columns";
 import { cellValue, matchCaption, resultColumns } from "@/lib/desk/screenerView";
 import styles from "./screener.module.css";
+import { alertNewHref } from "@/lib/desk/hrefs";
 
 type Match = ScreenerResults["matches"][number];
 
@@ -49,7 +50,7 @@ export function ResultsTable({
         selectedKey={selected}
         onSelect={(match) => onSelect(match.symbol)}
         rowActions={(match) => (
-          <a href={`/alerts/new?source=symbol:${encodeURIComponent(match.symbol)}`} className={styles.link}>+ Alert</a>
+          <a href={alertNewHref({ symbol: match.symbol })} className={styles.link}>+ Alert</a>
         )}
         dim={dim}
       />

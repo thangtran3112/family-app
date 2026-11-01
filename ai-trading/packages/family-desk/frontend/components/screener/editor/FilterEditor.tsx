@@ -29,6 +29,7 @@ import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { Field, FieldError, FieldRow, Input, NumberInput } from "@/components/ui/Field";
 import { FormActionBar } from "@/components/ui/FormActionBar";
 import { fieldError, formProblems } from "@/lib/desk/problems";
+import { filterHref } from "@/lib/desk/hrefs";
 
 export function FilterEditor() {
   const param = useSearchParams().get("id");
@@ -124,7 +125,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
       if (filter === null) {
         const created = await createFilter({ spec: formToSpec(form) });
         invalidate("filters");
-        router.replace(`/screener/filters?id=${created.id}`);
+        router.replace(filterHref(created.id));
         return;
       }
       await updateFilter(filter.id, formToSpec(form));
@@ -147,7 +148,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
     try {
       const created = await createFilter({ copy_of: filter.id });
       invalidate("filters");
-      router.push(`/screener/filters?id=${created.id}`);
+      router.push(filterHref(created.id));
     } catch {
       setCopyFailed(true);
     } finally {
