@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { delayUntilNextTick, jumpMinutes, nextTo, reachedEnd, speedForDigit, SPEEDS, threadClock, TICK_MS } from "./clock.ts";
+import { delayUntilNextTick, jumpMinutes, nextTo, reachedEnd, SPEEDS, threadClock, TICK_MS } from "./clock.ts";
 
 const END = "2026-04-07T20:00:00Z";
 
@@ -28,12 +28,8 @@ test("the thread's time is the shared day clock, never a name's older playhead",
   assert.equal(jumpMinutes(threadClock(behind, clock), 5, END), "2026-04-07T14:35:00.000Z");
 });
 
-test("digits 1 to 4 pick 1x 2x 5x 10x", () => {
+test("the speeds are 1x 2x 5x 10x", () => {
   assert.deepEqual([...SPEEDS], [1, 2, 5, 10]);
-  assert.deepEqual(["1", "2", "3", "4"].map(speedForDigit), [1, 2, 5, 10]);
-  assert.equal(speedForDigit("0"), null);
-  assert.equal(speedForDigit("5"), null);
-  assert.equal(speedForDigit("x"), null);
 });
 
 test("a slow answer shortens the pause but never below zero, so requests cannot stack", () => {

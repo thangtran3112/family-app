@@ -3,6 +3,7 @@ import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
 import { THREAD_URL, openFirstDay, startThread } from "./hub-helpers";
+import { placeOrder } from "./swing-helpers";
 
 // The day thread's clock lives on the server (ADR-0018): it keeps running when she leaves a chart for the Portfolio, closes the
 // page or signs out; its controls are on the Summary and nowhere else; Skip day runs it to the close and opens the next day; and
@@ -98,7 +99,7 @@ test.describe("Practice: the thread clock", () => {
   test("the account is priced at the clock: equity moves with an open position while time runs and nobody is on the chart", async ({ page, context }) => {
     test.setTimeout(240_000);
     const threadId = await startDayOnTsla(page, context);
-    await page.keyboard.press("b"); // a long in TSLA at the open
+    await placeOrder(page, "Buy"); // a long in TSLA at the open
     await expect(page.getByRole("tab", { name: "Marks" })).toBeVisible();
 
     await page.getByRole("tab", { name: "Summary" }).click();
@@ -126,7 +127,7 @@ test.describe("Practice: the thread clock", () => {
   test("Skip day runs to the close, closes the position at it and opens the next day", async ({ page, context }) => {
     test.setTimeout(240_000);
     const threadId = await startDayOnTsla(page, context);
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await page.getByRole("tab", { name: "Summary" }).click();
     await page.waitForURL(THREAD_URL);
 

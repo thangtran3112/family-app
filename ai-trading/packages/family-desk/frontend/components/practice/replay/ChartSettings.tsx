@@ -42,8 +42,8 @@ export type ChartSettingsProps = {
 
 /**
  * "Chart ▾" and its settings popover (design-replay-chart §b.1): the chart type, the overlays and the levels, applied as
- * they are picked. Native radios and checkboxes. The popover keeps every key that reaches it, so Space on a checkbox or
- * → on a radio does what the control does and never plays or steps the replay.
+ * they are picked. Native radios and checkboxes. The popover keeps every key that reaches it, so Escape closes the popover and
+ * leaves full screen alone.
  */
 export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = false }: ChartSettingsProps) {
   const root = useRef<HTMLDivElement>(null);
@@ -58,7 +58,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
   };
   // A press outside closes it. Escape from elsewhere closes it too, and returns focus to the button only when focus was inside or nowhere.
   useDismiss(open, root, (via) => close(via === "escape" && (root.current?.contains(document.activeElement) === true || document.activeElement === document.body)));
-  // Opened by the button or by C: focus lands on the checked type.
+  // Opened by the button: focus lands on the checked type.
   useEffect(() => {
     if (open) popover.current?.querySelector<HTMLInputElement>('input[name="chart-type"]:checked')?.focus();
   }, [open]);
@@ -66,7 +66,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") close(true);
     event.stopPropagation();
-    // Next hydrates the whole document, so React's own key listener sits on `document`, the same node as the workspace's:
+    // Next hydrates the whole document, so React's own key listener sits on `document`, the same node as the full-screen Escape's:
     // `stopPropagation` alone would not keep the key from it. React's listener was added first, so this reaches it before.
     event.nativeEvent.stopImmediatePropagation();
   };
@@ -79,8 +79,6 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}
-        aria-keyshortcuts="C"
-        title="Chart settings (C)"
         onClick={() => onOpenChange(!open)}
       >
         Chart <span aria-hidden="true">▾</span>
@@ -132,7 +130,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
 /** The Full screen button in the chart toolbar: a text button that keeps its label and shows the mode with `aria-pressed`. */
 export function FullScreenButton({ full, onToggle }: { full: boolean; onToggle: () => void }) {
   return (
-    <Button size="md" aria-pressed={full} aria-keyshortcuts="F" title="Full screen (F)" onClick={onToggle}>
+    <Button size="md" aria-pressed={full} onClick={onToggle}>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
         <path d="M1 4.5V1h3.5M7.5 1H11v3.5M11 7.5V11H7.5M4.5 11H1V7.5" />
       </svg>

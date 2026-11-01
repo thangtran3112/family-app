@@ -4,6 +4,7 @@ import { origin } from "../helpers";
 import { stepBar } from "./clock-helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
 import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
+import { backToDayList, placeOrder, replayRail } from "./swing-helpers";
 
 // Switching names on the shared day clock (02o-b2). The stub holds TSLA on Fri 2026-09-25, and three stand-in names that
 // replay TSLA's day at a fraction of its prices (`replay/fixture.py`), so one daily list holds four names. Every session
@@ -81,7 +82,7 @@ test.describe("Practice: switching names", () => {
     await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
     const tslaPlayhead = (await playhead(page).textContent()) ?? "";
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect(await marks(page)).toContainText("Practice buy");
 
     // The portfolio shows it: TSLA is on now and Long.
@@ -90,11 +91,11 @@ test.describe("Practice: switching names", () => {
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayOnNow);
 
     // Exit TSLA here; the next section opens LRCX at the clock TSLA reached. Holding several names at once has its own test below.
-    await page.keyboard.press("x");
+    await placeOrder(page, "Close position");
     await expect(await marks(page)).toContainText("Practice exit");
 
     // Opening LRCX takes the clock TSLA reached, not the window start.
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await table.getByRole("row", { name: /LRCX/ }).getByText("LRCX", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
@@ -108,13 +109,13 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
 
     // A new Long on LRCX joins the portfolio; TSLA's row stays a plain switch (no "Close LRCX first").
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
     const tslaRow = portfolio.getByRole("button", { name: "Switch to TSLA" });
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText(/Close LRCX first/);
-    await page.keyboard.press("x");
+    await placeOrder(page, "Close position");
     await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText("Flat");
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
 
@@ -130,22 +131,22 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
     await expectCleanScreen(page);
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect((await marks(page)).getByText("Practice buy")).toHaveCount(2); // the first trade and the one after the lift
-    await page.keyboard.press("x");
+    await placeOrder(page, "Close position");
 
     // Past the old two-name limit: a third and a fourth name open, and a name in hand switches back.
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await page.getByRole("row", { name: /PANW/ }).getByRole("button", { name: "Open PANW" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "PANW", level: 1 })).toBeVisible();
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await page.getByRole("row", { name: /XOM/ }).getByText("XOM", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "XOM", level: 1 })).toBeVisible();
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await expect(page.locator("body")).not.toContainText(/names practiced today|allows \d+ names/);
     await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Switch to LRCX" })).toHaveText("Switch"); // a name in hand switches back
@@ -200,14 +201,14 @@ test.describe("Practice: switching names", () => {
     expect(slotBox.y + slotBox.height, "the chart toolbar sits under the chart").toBeLessThanOrEqual(toolbarBox.y + 1);
     expect(readBox.y, "the thread's time is above the chart").toBeLessThan(slotBox.y);
 
-    // The shortcut list has no Playback keys, and Space says where the controls are instead of playing.
+    // Practice has no keyboard shortcuts: ? lists nothing, and Space neither plays nor says anything (the time moves from the Summary only).
+    const at = await playhead(page).textContent();
     await page.keyboard.press("?");
-    const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
-    await expect(help).toBeVisible();
-    await expect(help.getByText("Playback", { exact: true })).toHaveCount(0);
-    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toHaveCount(0);
     await page.keyboard.press("Space");
-    await expect(page.getByText(PRACTICE_COPY.chartClockHint)).toBeVisible();
+    await page.waitForTimeout(1500);
+    await expect(readout).toContainText("Paused");
+    await expect(playhead(page)).toHaveText(at ?? "");
     await expectCleanScreen(page);
   });
 
@@ -250,7 +251,7 @@ test.describe("Practice: switching names", () => {
 
   /** Opens a name from the day list's table and lands on its replay. */
   async function openName(page: Page, dayUrl: string, symbol: string) {
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: new RegExp(symbol) }).getByText(symbol, { exact: true }).click();
     await page.waitForURL(SESSION_URL);
@@ -268,11 +269,11 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect(await marks(page)).toContainText("Practice buy");
     await openName(page, dayUrl, "LRCX");
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
-    await page.keyboard.press("s");
+    await placeOrder(page, "Sell");
     await expect(await marks(page)).toContainText("Practice sell");
     // Move the clock so both trades have a P/L worth adding up.
     await stepBar(page);
@@ -339,7 +340,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
 
     // The day page asks before it exits what is still open, and names it.
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     const confirm = page.getByRole("group", { name: "Confirm ending the day" });
@@ -358,12 +359,12 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
     await stepBar(page, 3);
     await expect(playhead(page)).toContainText("9:33");
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect(await marks(page)).toContainText("Practice buy");
     await openName(page, dayUrl, "TSLA");
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect(await marks(page)).toContainText("Practice buy");
-    await page.keyboard.press("t");
+    await (await replayRail(page, "Practice")).getByRole("button", { name: "Set stop" }).click();
     const stop = page.getByRole("form", { name: "Stop" });
     await stop.getByRole("textbox").fill("372");
     await stop.getByRole("button", { name: "Save" }).click();
@@ -443,7 +444,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await stepBar(page, 5);
     await expect(playhead(page)).toContainText("9:35");
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await expect(rescan).toBeEnabled();
 
@@ -495,7 +496,7 @@ test.describe("Practice: switching names", () => {
     await stepBar(page);
     await stepBar(page);
     await expect(playhead(page)).toContainText("9:37");
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await expect(page.getByTestId("rescan-stale")).toContainText("The day clock is now 9:37 AM ET · this scan is older");
     await expect(rescan).toBeEnabled();

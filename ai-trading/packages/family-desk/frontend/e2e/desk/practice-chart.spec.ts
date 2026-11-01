@@ -5,7 +5,7 @@ import { defaultDraft, draftToSpec } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
 import { expect, openDesk, prepareDesk, test } from "./helpers";
 import { DAY, createStubSession } from "./hub-helpers";
-import { createSwingThread, openNextDay, replayRail, send } from "./swing-helpers";
+import { createSwingThread, openNextDay, placeOrder, replayRail, send } from "./swing-helpers";
 
 // The replay chart's full screen and settings (design-replay-chart.md §(d), fix wave 5S stream 3). The stub day is TSLA on
 // Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars.
@@ -231,13 +231,13 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(popover(page).getByRole("radio", { name: "Candles" })).toBeChecked();
   });
 
-  test("F hides the left rail and the shell bars but keeps the tape, the thread clock and the amber band; Escape returns", async ({ page }) => {
+  test("Full screen hides the left rail and the shell bars but keeps the tape, the thread clock and the amber band; Escape returns", async ({ page }) => {
     const url = page.url();
     const inlineWidth = await chartWidth(page);
     await expect(leftRail(page)).toBeVisible();
     await expect(fullScreen(page)).toHaveAttribute("aria-pressed", "false");
 
-    await page.keyboard.press("f");
+    await fullScreen(page).click();
     await expect(shell(page)).toHaveAttribute("data-focus", "chart");
     await expect(fullScreen(page)).toHaveAttribute("aria-pressed", "true");
     await expect(leftRail(page)).toBeHidden();
@@ -257,25 +257,27 @@ test.describe("Practice replay chart: full screen and settings", () => {
     expect(Math.abs((await chartWidth(page)) - inlineWidth)).toBeLessThan(2);
     expect(page.url()).toBe(url);
 
-    // The button works the same way, and F again leaves.
+    // The button leaves too, and there is no F key: it does nothing.
     await fullScreen(page).click();
     await expect(shell(page)).toHaveAttribute("data-focus", "chart");
     await expect(fullScreen(page)).toBeFocused();
     await page.keyboard.press("f");
+    await expect(shell(page)).toHaveAttribute("data-focus", "chart");
+    await fullScreen(page).click();
     await expect(shell(page)).not.toHaveAttribute("data-focus", /.+/);
   });
 
   test("the workspace never links to /technicals, inline or in full screen (the live chart would show the rest of the day)", async ({ page }) => {
     const technicals = page.locator("#main-content a[href*='technicals'], .dk-right a[href*='technicals']");
     await expect(technicals).toHaveCount(0);
-    await page.keyboard.press("f");
+    await fullScreen(page).click();
     await expect(shell(page)).toHaveAttribute("data-focus", "chart");
     await expect(technicals).toHaveCount(0);
   });
 
   test("Escape closes the innermost layer first: the settings popover, then full screen", async ({ page }) => {
-    await page.keyboard.press("f");
-    await page.keyboard.press("c");
+    await fullScreen(page).click();
+    await chartSettings(page).click();
     await expect(popover(page)).toBeVisible();
     await expect(popover(page).getByRole("radio", { name: "Candles" })).toBeFocused();
 
@@ -288,10 +290,10 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(shell(page)).not.toHaveAttribute("data-focus", /.+/);
   });
 
-  test("the popover keeps its keys: an arrow on the type or Space on a checkbox never steps or plays the replay", async ({ page }) => {
+  test("the popover keys act on its own controls only, and the replay ignores the keyboard", async ({ page }) => {
     await stepBars(page, 1);
     const at = await playhead(page).innerText();
-    await page.keyboard.press("c");
+    await chartSettings(page).click();
     await expect(popover(page).getByRole("radio", { name: "Candles" })).toBeFocused();
 
     await page.keyboard.press("ArrowRight");
@@ -300,7 +302,7 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(popover(page).getByRole("checkbox", { name: "VWAP" })).toBeFocused();
     await page.keyboard.press("Space");
     await expect(popover(page).getByRole("checkbox", { name: "VWAP" })).not.toBeChecked();
-    await page.keyboard.press("1"); // a speed key is the popover's too while focus is inside it
+    await page.keyboard.press("1"); // no speed key either
 
     await expect(playhead(page)).toHaveText(at);
     await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
@@ -309,8 +311,9 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await page.keyboard.press("Escape");
     await expect(popover(page)).toHaveCount(0);
     await expect(chartSettings(page)).toBeFocused();
-    await page.keyboard.press("ArrowRight"); // outside the popover the arrow steps again
-    await expect(playhead(page)).not.toHaveText(at);
+    await page.keyboard.press("ArrowRight"); // outside the popover the arrow steps nothing: Step is a button
+    await expect(playhead(page)).toHaveText(at);
+    await expect(page.getByRole("button", { name: "Pause" })).toHaveCount(0);
   });
 
   test("a press outside closes the popover", async ({ page }) => {
@@ -443,7 +446,7 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     const barBefore = (await bar.boundingBox())!;
 
     await stepBars(page, 2);
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await stepBars(page, 3);
     const widened = (await chart.boundingBox())!;
     expect(widened.y, "the chart top does not move when P/L changes").toBeCloseTo(before.y, 0);
@@ -485,6 +488,11 @@ test.describe("Practice replay chart in a swing session (the Daily view)", () =>
     await page.keyboard.press("Escape");
     await page.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "Daily", exact: true }).click();
     await expect(page.getByRole("region", { name: "S01 1d market chart" })).toBeVisible();
+    // The left rail's indicators follow the chart: the Daily candles, with no intraday VWAP.
+    const indicators = page.getByTestId("indicators-panel");
+    await expect(indicators).toContainText("Daily");
+    await expect(indicators).toContainText("RSI (14)");
+    await expect(indicators).not.toContainText("VWAP");
 
     await chartSettings(page).click();
     await expect(popover(page).getByText("The daily view has no intraday lines.")).toBeVisible();

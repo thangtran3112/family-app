@@ -52,7 +52,7 @@ test("speed changes keep the status", () => {
 
 test("the status line reads ready at the open, then paused, playing and window end", () => {
   const start = "2026-04-07T13:30:00Z";
-  assert.equal(statusLine("paused", 1, start, start), "Paused at 9:30 AM · press Space to play");
+  assert.equal(statusLine("paused", 1, start, start), "Paused at 9:30 AM");
   assert.equal(statusLine("paused", 1, "2026-04-07T14:07:12Z", start), "Paused at 10:07 AM");
   assert.equal(statusLine("playing", 5, "2026-04-07T14:07:12Z", start), "Playing at 5x");
   assert.equal(statusLine("at_end", 1, "2026-04-07T20:00:00Z", start), "Window end · 4:00 PM");

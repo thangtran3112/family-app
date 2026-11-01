@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChartIntervalToggle } from "@/components/practice/swing/ChartIntervalToggle";
 import { DayStrip } from "@/components/practice/swing/DayStrip";
 import { StopPausedToast } from "@/components/practice/swing/StopPausedToast";
 import { SwingPlanChecklist } from "@/components/practice/swing/SwingPlanChecklist";
 import { useSwingContext } from "@/components/practice/swing/useSwingContext";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
-import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
@@ -25,16 +24,17 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { openRailTab } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { buildChartSeries } from "@/lib/desk/workspace";
-import { endDay, placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
-import { briefLine } from "@/lib/replay/threadView";
-import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
+import { placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
+import { whenReady } from "@/lib/desk/patience";
+import { endAnyDay } from "@/lib/replay/swingApi";
+import { portfolioRows } from "@/lib/replay/dayView";
 import { readChartPrefs, togglePref, writeChartPrefs, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
-import { actionForKey, layerToClose, markActionFor, type ReplayAction } from "@/lib/replay/keys";
 import { exitMark } from "@/lib/replay/markInput";
 import { entrySince, levelRows, markRows, openSide } from "@/lib/replay/marks";
-import { planChecklist, planNote, practicePnl, sessionFacts, tradeCount } from "@/lib/replay/planView";
+import { practicePnl, tradeCount } from "@/lib/replay/planView";
 import {
   SWING_PLAY_COPY,
+  dailyChartModel,
   initialChartMode,
   intradayOf,
   isSwingSession,
@@ -53,32 +53,27 @@ import { replayStatusLine } from "@/lib/replay/statusLine";
 import { freeCashText } from "@/lib/replay/swing";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
 import { buildTicket, initialTicket, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
-import { whenReady } from "@/lib/desk/patience";
-import { endAnyDay } from "@/lib/replay/swingApi";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
-import { chartBars, type ReplayView } from "@/lib/replay/feedState";
-import { ArmedStrategiesList } from "./ArmedStrategiesList";
+import { chartBars, dailyBlock, type ReplayView } from "@/lib/replay/feedState";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { ChartToolbar } from "./ChartToolbar";
 import { PortfolioPanel, useDayPortfolio } from "./Portfolio";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
-import { PlanChecklist } from "./PlanChecklist";
 import { PracticeControls, type Composer } from "./PracticeControls";
 import { REPLAY_INDICATORS, ReplayChart } from "./ReplayChart";
+import { IndicatorsPanel } from "./IndicatorsPanel";
 import { ReplayHeader } from "./ReplayHeader";
 import { ReplayToast } from "./ReplayToast";
-import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { SignalsRail, signalKey } from "./SignalsRail";
 import { TapePanel } from "./TapePanel";
 import { ThreadClockBar } from "./ThreadClockBar";
 import styles from "./replay.module.css";
-import { FactList } from "@/components/ui/FactList";
 
 const BOTTOM_TABS_ID = "replay-bottom";
 
-/** `/practice/replay?id=`: the chart, the tape, the controls and the keyboard map (02o §a3). Reads the URL, so the page wraps it in Suspense. */
+/** `/practice/replay?id=`: the chart, the tape and the controls (02o §a3). Reads the URL, so the page wraps it in Suspense. */
 export function ReplayWorkspace() {
   const params = useSearchParams();
   const raw = params.get("id");
@@ -139,7 +134,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     setTicketError(null);
   };
   const [composer, setComposer] = useState<Composer>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
   // The chart's own view settings (design-replay-chart §b): one object for this browser, read once (the desktop shell mounts on the client only).
   const [prefs, setPrefs] = useState<ChartPrefs>(() => readChartPrefs(window.localStorage));
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -161,9 +155,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [dateShown, setDateShown] = useState(false);
   const [bottomTab, setBottomTab] = useState<"marks" | "levels">("marks");
   const [bottomOpen, setBottomOpen] = useState<boolean | null>(null);
+  const [dayBusy, setDayBusy] = useState(false);
   const [focus, setFocus] = useState<{ time: string; at: number } | null>(null);
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
-  const [dayBusy, setDayBusy] = useState(false);
   const dayListId = session.day_list_id;
   const side = openSide(view.openTrade);
   const pnl = practicePnl(session.journal, view.openTrade);
@@ -193,6 +187,13 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const bars = useMemo(() => chartBars(view), [view]);
   const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval), [bars, view.interval]);
   const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
+  // The left rail's indicators are read off what the chart shows: the intraday bars, or the rebased daily bars while a swing session is on Daily.
+  const { daily, dailyForming } = view;
+  const dailyBars = useMemo(() => {
+    const block = dailyBlock({ daily, dailyForming });
+    return block === null ? null : dailyChartModel(block, hidden).bars;
+  }, [daily, dailyForming, hidden]);
+  const indicatorBars = swing && chartMode === "daily" && dailyBars !== null ? { bars: dailyBars, interval: "1d", timeframe: "Daily" } : { bars, interval: view.interval, timeframe: view.interval };
 
   // At the 1180 band the right rail is a drawer: the tape opens when play starts, the controls open for T and N.
   const toggle = () => {
@@ -242,66 +243,33 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       if (accepted && shownPause?.symbol === spec.symbol) answerPause();
     });
   };
-  const byLetter = (letter: "b" | "s" | "x") => perform(markActionFor(letter, side));
-
-  const perform = (action: ReplayAction) => {
-    // The buttons are off while the name is behind the day clock or the session has ended; the keys say so instead of marking anyway.
-    if ((action.type === "mark" || action.type === "stop_note" || action.type === "note") && (ended || behind)) {
+  /**
+   * The Buy, Sell and Close position buttons (there are no keys). Buy and Sell send the ticket as it stands and the server nets it
+   * against the position; Close exits the whole open side. The buttons are off while the name is behind the day clock or the session
+   * has ended; this says so instead of marking anyway.
+   */
+  const order = (choice: "buy" | "sell" | "close") => {
+    if (ended || behind) {
       api.notify("info", ended ? PRACTICE_COPY.markEnded : practiceText("markBehind", { symbol: spec.symbol }));
       return;
     }
-    switch (action.type) {
-      // A day thread's clock is the Summary's: its keys say so instead of moving anything (ADR-0018).
-      case "toggle_play": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else toggle(); break;
-      case "step": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.step(); break;
-      case "next_signal": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.nextSignal(); break;
-      case "speed": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.setSpeed(action.speed); break;
-      case "mark": placeMark(action.kind); break;
-      case "stop_note": openComposer("stop"); break;
-      case "note": openComposer("note"); break;
-      case "undo": api.undo(); break;
-      case "help": setHelpOpen((open) => !open); break;
-      case "toggle_full": setFull((on) => !on); break;
-      case "chart_settings": setSettingsOpen((open) => !open); break;
-      case "close":
-        switch (layerToClose({ settings: settingsOpen, help: helpOpen, composer: composer !== null, full })) {
-          case "settings": setSettingsOpen(false); break;
-          case "help": setHelpOpen(false); break;
-          case "composer": setComposer(null); break;
-          case "full": setFull(false); break;
-        }
-        break;
-      case "blocked": api.notify("info", action.message); break;
+    if (choice === "close") {
+      if (side !== "flat") placeMark(side === "long" ? "long_exit" : "short_exit");
+      return;
     }
+    placeMark(choice === "buy" ? "long_entry" : "short_entry");
   };
-  const performRef = useRef(perform);
-  useEffect(() => {
-    performRef.current = perform;
-  });
 
+  // Escape is the one key left, and it is the browser's own habit for a full-screen view: it leaves full screen. The settings popover and
+  // the stop or note form handle their own Escape first (they stop the key before it gets here).
   useEffect(() => {
+    if (!full) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || event.defaultPrevented) return;
-      const element = event.target instanceof HTMLElement ? event.target : null;
-      const action = actionForKey(
-        {
-          key: event.key,
-          shiftKey: event.shiftKey,
-          metaKey: event.metaKey,
-          ctrlKey: event.ctrlKey,
-          altKey: event.altKey,
-          target: element ? { tagName: element.tagName, isContentEditable: element.isContentEditable, type: (element as HTMLInputElement).type, role: element.getAttribute("role") } : null,
-        },
-        side,
-        helpOpen,
-      );
-      if (!action) return;
-      event.preventDefault();
-      performRef.current(action);
+      if (event.key === "Escape" && !event.defaultPrevented) setFull(false);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [side, helpOpen]);
+  }, [full]);
 
   // Daily needs no request (the daily block is in the view already); 15m and 5m re-read the feed at that interval.
   const pickMode = (mode: ChartMode) => {
@@ -349,12 +317,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // The swing Daily view draws none of the intraday lines, so the settings show those groups switched off.
   const dailyView = swing && chartMode === "daily" && view.daily !== null;
 
-  const armed = session.armed.map((item) => ({
-    key: `${item.source}:${item.id}`,
-    name: item.name,
-    bias: item.bias,
-    fires: view.signals.filter((signal) => signal.source === item.source && signal.id === item.id).length,
-  }));
   const dayLabel = masked ? PRACTICE_COPY.hiddenDay : formatEtDay(spec.day);
   const bottomShown = bottomOpen ?? band === "1440";
   const realized = practicePnl(session.journal, null);
@@ -377,7 +339,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       ticket={ticket}
       onTicket={editTicket}
       ticketError={ticketError}
-      onSubmit={(chosen) => byLetter(chosen === "buy" ? "b" : "s")}
+      onSubmit={order}
       orders={session.orders}
       onCancelOrder={api.cancelOrder}
       since={entrySince(session.marks, view.openTrade)}
@@ -385,7 +347,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       pnl={pnl}
       composer={composer}
       onComposer={openComposer}
-      onExit={() => byLetter("x")}
+      onExit={() => order("close")}
       onStop={api.stopNote}
       onNote={api.note}
       disabled={ended || behind}
@@ -420,7 +382,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         onLeave={() => {
           if (api.player.status === "playing") api.togglePlay();
         }}
-        onExitHere={() => byLetter("x")}
+        onExitHere={() => order("close")}
         onExited={(symbol) => {
           if (shownPause?.symbol === symbol) answerPause();
         }}
@@ -443,17 +405,16 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       ),
     },
     { id: "practice", label: "Practice", node: controls },
-    ...(band === "1180" ? [{ id: "signals", label: "Signals", node: signalsRail }] : []),
-    // At 1440 the day's portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from the right drawer.
+    { id: "signals", label: "Signals", node: signalsRail },
+    // At 1440 the day's portfolio sits in the left rail, under the indicators; at 1180 that rail is too narrow for it, so it opens from the right drawer.
     ...(band === "1180" && portfolio !== null ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: portfolio }] : []),
   ];
-  const fires = armed.reduce((sum, item) => sum + item.fires, 0);
 
   const quick = band === "1180" ? (
     <span className={styles.quick} role="group" aria-label="Practice buttons">
-      <Button variant="up" size="md" disabled={ended || behind} aria-keyshortcuts="B" onClick={() => byLetter("b")}>Buy</Button>
-      <Button variant="down" size="md" disabled={ended || behind} aria-keyshortcuts="S" onClick={() => byLetter("s")}>Sell</Button>
-      <Button size="md" disabled={ended || behind || side === "flat"} aria-keyshortcuts="X" onClick={() => byLetter("x")}>Close position</Button>
+      <Button variant="up" size="md" disabled={ended || behind} onClick={() => order("buy")}>Buy</Button>
+      <Button variant="down" size="md" disabled={ended || behind} onClick={() => order("sell")}>Sell</Button>
+      <Button size="md" disabled={ended || behind || side === "flat"} onClick={() => order("close")}>Close position</Button>
     </span>
   ) : null;
 
@@ -531,33 +492,32 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           </>
         }
       />
-      <EndPrompt
-        tradeCount={trades}
-        atEnd={atEnd}
-        busy={api.player.busy || dayBusy}
-        day={dayListId !== null}
-        exits={dayListId !== null && !swing ? endDayExitText(dayRows, view.dayClock) : null}
-        swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock, holdsOpen } : undefined}
-        backHref={dayListId !== null && !full ? `/practice/day?id=${dayListId}` : null}
-        ended={ended ? { swing, journalHref: `/practice/journal?id=${session.id}` } : null}
-        onEnd={() => {
-          if (dayListId === null) {
-            void api.end().then((done) => done && router.push(`/practice/journal?id=${done.id}`));
-            return;
-          }
-          // A daily-list session ends with its day, which also unseals the list review. A swing day leaves its holds open
-          // overnight and goes back to its board, ended.
-          if (api.player.status === "playing") api.togglePlay();
-          setDayBusy(true);
-          const ending: Promise<unknown> = whenReady(() => (swing ? endAnyDay(dayListId) : endDay(dayListId)));
-          ending
-            .then(() => router.push(`/practice/day?id=${dayListId}`))
-            .catch(() => {
-              api.notify("error", swing ? PRACTICE_COPY.swingEndError : PRACTICE_COPY.dayEndError);
-              setDayBusy(false);
-            });
-        }}
-      />
+      {/* A day-trade list's session has no foot: its day is ended from the Day list, which the tab strip above reaches. A standalone session and a swing day (whose Board cannot end a practiced day) keep the one End control. */}
+      {(dayListId === null || swing) && (
+        <EndPrompt
+          tradeCount={trades}
+          atEnd={atEnd}
+          busy={api.player.busy || dayBusy}
+          swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock, holdsOpen } : undefined}
+          ended={ended ? { swing, journalHref: `/practice/journal?id=${session.id}` } : null}
+          onEnd={() => {
+            if (dayListId === null) {
+              void api.end().then((done) => done && router.push(`/practice/journal?id=${done.id}`));
+              return;
+            }
+            // A swing day leaves its holds open overnight and goes back to its board, ended.
+            if (api.player.status === "playing") api.togglePlay();
+            setDayBusy(true);
+            const ending: Promise<unknown> = whenReady(() => endAnyDay(dayListId));
+            ending
+              .then(() => router.push(`/practice/day?id=${dayListId}`))
+              .catch(() => {
+                api.notify("error", PRACTICE_COPY.swingEndError);
+                setDayBusy(false);
+              });
+          }}
+        />
+      )}
       <section className={styles.bottom} aria-label="Marks and levels" data-open={bottomShown ? "true" : "false"}>
         <div className={styles.bottomTabs}>
           <Tabs
@@ -587,10 +547,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           </TabPanel>
         )}
       </section>
-      {helpOpen && <ShortcutsOverlay onClose={() => setHelpOpen(false)} followed={followed} />}
       <LeftRailPortal>
         <div className={styles.session}>
-          {swing ? (
+          {swing && (
             <>
               <div className={styles.sessionSection}>
                 <DayStrip rows={view.strip} current={spec.symbol} opening={opening} disabled={ended} onSwitch={switchTo} />
@@ -604,49 +563,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
                 })}
               />
             </>
-          ) : (
-            <>
-              <section className={styles.sessionSection} aria-label="Session">
-                <h2 className={styles.railTitle}>Session</h2>
-                <FactList facts={sessionFacts(spec, session.attempt, session.tape_feed)} />
-              </section>
-              <section className={styles.sessionSection} aria-label={session.thread ? PRACTICE_COPY.threadPlanTitle : "Plan"}>
-                {session.thread ? (
-                  <>
-                    <div className={styles.railHead}>
-                      <h2 className={styles.railTitle}>{PRACTICE_COPY.threadPlanTitle}</h2>
-                      <SimulatedBadge />
-                    </div>
-                    <p className={styles.threadBalance}>{briefLine(session.thread)}</p>
-                  </>
-                ) : (
-                  <h2 className={styles.railTitle}>Plan</h2>
-                )}
-                <PlanChecklist
-                  items={planChecklist(spec.plan, session.journal, view.openTrade)}
-                  shares={spec.shares}
-                  note={planNote(spec.plan)}
-                />
-              </section>
-              {band === "1440" && portfolio && (
-                <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayPortfolio}>
-                  <h2 className={styles.railTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
-                  {portfolio}
-                </section>
-              )}
-            </>
           )}
-          <section className={styles.sessionSection} aria-label="Armed strategies">
-            <div className={styles.railHead}>
-              <h2 className={styles.railTitle}>{`Armed strategies · ${armed.length}`}</h2>
-              <span className={styles.railHint}>{fires === 1 ? "1 fire so far" : `${fires} fires so far`}</span>
-            </div>
-            <ArmedStrategiesList armed={armed} />
-          </section>
-          {band === "1440" && (
-            <section className={styles.sessionSection} aria-label="Signals">
-              <h2 className={styles.railTitle}>Signals</h2>
-              {signalsRail}
+          <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} />
+          {!swing && band === "1440" && portfolio && (
+            <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayPortfolio}>
+              <h2 className={styles.railTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
+              {portfolio}
             </section>
           )}
         </div>

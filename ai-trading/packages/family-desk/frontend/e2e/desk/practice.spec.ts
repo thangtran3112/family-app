@@ -4,12 +4,12 @@ import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
-import { stepBar } from "./clock-helpers";
+import { stepBar, stepSession } from "./clock-helpers";
 import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
-import { openNextDay, replayRail, send } from "./swing-helpers";
+import { backToDayList, openNextDay, placeOrder, replayRail, send } from "./swing-helpers";
 
-// The Practice lane (02o §i, step 5): the landing and its New plan modal (02r2) start a thread; play, step, B, T, S/X, end, the
+// The Practice lane (02o §i, step 5): the landing and its New plan modal (02r2) start a thread; play, step, Buy, Set stop, Close position, end, the
 // journal, and a reloaded session follow. The landing no longer starts a single session, so those specs make one through the API.
 // The backend runs with `DESK_REPLAY_STUB=1` (`replay/fixture.py`): the one replayable day is TSLA on Fri 2026-09-25
 // and the tape holds its first ten minutes after the open, so every session here replays 09:30 to 09:40 ET.
@@ -123,26 +123,26 @@ test.describe("Practice", () => {
     expect(((await (await context.request.get(`${origin}/api/desk/replay/sessions`)).json()) as unknown[]).length, "nothing was opened").toBe(0);
   });
 
-  test("play moves the playhead, step moves it one bar, and the shortcuts overlay opens on ?", async ({ page, context }) => {
+  test("play moves the playhead, step moves it one bar, and Practice has no keyboard shortcuts", async ({ page, context }) => {
     const answers = watchReplayAnswers(page);
     await startStubSession(page, context);
     const clock = playhead(page);
     await expect(clock).toContainText("9:30");
 
-    // Space plays; key 4 picks 10x. The clock only ever moves forward.
-    await page.keyboard.press("4");
-    await page.keyboard.press("Space");
+    // The 10x chip picks the speed and Play runs it. The clock only ever moves forward.
+    await page.getByRole("group", { name: "Replay speed" }).getByRole("button", { name: "10x" }).click();
+    await page.getByRole("button", { name: "Play" }).click();
     await expect(page.getByText(practiceText("playing", { speed: 10 }))).toBeVisible();
     await expect(page.getByText("Playing · 10x")).toBeVisible(); // D-025: the player's state as a pill beside the thread's clock
     // D-024: the tape has its BIG column and names the pace window.
     await expect(page.getByRole("columnheader", { name: "Big" })).toBeVisible();
     await expect(page.getByText("Pace · 10 seconds")).toBeVisible();
     await expect(clock).not.toContainText("9:30:00", { timeout: 10_000 });
-    await page.keyboard.press("Space");
+    await page.getByRole("button", { name: "Pause" }).click();
     await expect(page.getByText(/^Paused at /)).toBeVisible();
 
     const before = await clock.innerText();
-    await page.keyboard.press("ArrowRight");
+    await page.getByRole("button", { name: "Step", exact: true }).click();
     await expect(clock).not.toHaveText(before);
 
     // D-036, D-025: the header's Practice P/L reads with its SIMULATED unit, beside VWAP and the prior close.
@@ -163,9 +163,9 @@ test.describe("Practice", () => {
       await expect(tabs.getByRole("tab", { name: "Practice" })).toHaveAttribute("aria-selected", "true");
     }
 
+    // Owner, 2026-11-01: no shortcut legend on the chart, and ? opens no list of them.
+    await expect(page.getByRole("group", { name: "Keyboard legend" })).toHaveCount(0);
     await page.keyboard.press("?");
-    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
-    await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toHaveCount(0);
     await expectCleanScreen(page);
 
@@ -187,34 +187,27 @@ test.describe("Practice", () => {
     }
   });
 
-  test("B, T and X place practice marks; undo removes the last one; End and score opens the journal with the trade", async ({ page, context }) => {
+  test("Buy, Set stop and Close position place practice marks; End and score opens the journal with the trade", async ({ page, context }) => {
     await startStubSession(page, context);
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
-    await expect(playhead(page)).not.toContainText("9:30:00");
+    await stepSession(page, 2);
 
     // A practice long, priced at the replayed last price.
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await openMarks(page);
     const marks = page.getByRole("tabpanel");
     await expect(marks).toContainText("Practice buy");
 
-    // T opens the stop note; Enter saves it.
-    await page.keyboard.press("t");
+    // Set stop opens the stop note; Save puts it on the position.
+    await (await replayRail(page, "Practice")).getByRole("button", { name: "Set stop" }).click();
     const stop = page.getByRole("form", { name: "Stop" });
     await expect(stop).toBeVisible();
     await stop.getByRole("textbox").fill("180");
     await stop.getByRole("button", { name: "Save" }).click();
     await expect(marks).toContainText("Practice stop");
 
-    // Exit with X, take it back with undo, exit again.
-    await page.keyboard.press("x");
+    // Close position exits the whole long.
+    await placeOrder(page, "Close position");
     await expect(marks).toContainText("Practice exit");
-    await page.keyboard.press("ControlOrMeta+z");
-    await expect(page.getByText(PRACTICE_COPY.undone)).toBeVisible();
-    await expect(marks).not.toContainText("Practice exit");
-    await page.keyboard.press("s"); // Sell with the ticket's quantity: every share of the long, so it closes
-    await expect(marks).toContainText("Practice sell");
     await expectCleanScreen(page);
 
     // Ending early asks first, then scores and opens the journal.
@@ -241,8 +234,7 @@ test.describe("Practice", () => {
 
   test("a reloaded session restores the playhead", async ({ page, context }) => {
     await startStubSession(page, context);
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await stepSession(page, 2);
     const clock = playhead(page);
     await expect(clock).not.toContainText("9:30:00");
     const placed = await clock.innerText();
@@ -379,8 +371,9 @@ test.describe("Practice", () => {
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice }), "one back link on the workspace, the one at the foot (D-146)").toHaveCount(0);
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList }), "no Back bar at the foot: the tab strip is the way back").toHaveCount(0);
+    await expect(page.getByRole("button", { name: "End day…" }), "no End day on the chart: it is on the Day list").toHaveCount(0);
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice }), "the tab strip stands in for the back link").toHaveCount(0);
     await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabOrder })).toHaveAttribute("aria-selected", "true");
     // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
     await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
@@ -390,15 +383,15 @@ test.describe("Practice", () => {
     await expect(playhead(page)).not.toContainText("9:30:00");
     await expectCleanScreen(page);
 
-    // The workspace carries the thread: its balance and today's result (SIMULATED), and the thread plan in the rail.
+    // The workspace carries the thread: its balance and today's result (SIMULATED). The left rail is the technical indicators.
     const strip = page.getByRole("group", { name: "Practice thread" });
     await expect(strip).toContainText("Thread balance $50,000");
     await expect(strip).toContainText(PRACTICE_COPY.threadSimulated);
-    // D-021: the THREAD PLAN rail lists every rule, the plan note and the SIMULATED pill.
     const side = page.getByRole("complementary", { name: "Practice side panel" });
-    for (const label of ["Shares per trade", "Stop note on every entry", "Trade only on a signal", "Max loss $600.00", "Max trades 3"]) await expect(side).toContainText(label);
-    await expect(side).toContainText("Plan note: Trade only clean pullbacks.");
-    await expect(side.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
+    const indicators = side.getByTestId("indicators-panel");
+    await expect(indicators.getByRole("heading", { name: PRACTICE_COPY.indicatorsTitle })).toBeVisible();
+    for (const label of ["RSI (14)", "MACD (12, 26, 9)", "Signal", "Histogram", "VWAP", "EMA 9", "EMA 21"]) await expect(indicators).toContainText(label);
+    for (const gone of ["Shares per trade", "Plan note:", "Armed strategies"]) await expect(side, `the old ${gone} block is gone`).not.toContainText(gone);
     // A practice trade: the exit mark books one ledger row, so the thread balance moves with it.
     // The one size rule is the account's cash: a quantity the balance cannot cover (here far past 10,000 shares) is refused with the free cash, and nothing else limits a size.
     const practice = await replayRail(page, "Practice");
@@ -412,7 +405,7 @@ test.describe("Practice", () => {
     await expect(page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) })).toHaveCount(0);
     await expect(practice.getByRole("button", { name: "Buy" })).toBeEnabled();
     await expect(practice.getByRole("button", { name: "Buy" }), "no hint ties the buttons to a stop").not.toHaveAccessibleDescription(/stop/i);
-    // Set stop (T) on the open position afterwards; it is the same optional stop, typed in the stop form.
+    // Set stop on the open position afterwards; it is the same optional stop, typed in the stop form.
     await practice.getByRole("button", { name: "Set stop" }).click();
     const stopForm = practice.getByRole("form", { name: "Stop" });
     await stopForm.getByRole("textbox").fill("150");
@@ -420,15 +413,16 @@ test.describe("Practice", () => {
     await openMarks(page);
     await expect(page.getByRole("tabpanel")).toContainText("Practice stop");
     await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
-    await page.keyboard.press("x");
+    await placeOrder(page, "Close position");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
     await expect(strip).toContainText("today");
     await expectCleanScreen(page);
 
-    // End the day from the workspace: it asks first, then opens the list with its review.
-    await page.getByRole("button", { name: "End day…" }).click();
-    await expect(page.getByText(PRACTICE_COPY.dayEndWarning)).toBeVisible();
+    // End the day from the Day list (the chart has no End day): it asks first, then shows the list with its review.
+    await backToDayList(page);
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    await expect(page.getByText(PRACTICE_COPY.dayEndWarning)).toBeVisible();
+    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
     await page.waitForURL(dayUrl);
     const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
     await expect(review).toBeVisible();
@@ -651,11 +645,11 @@ test.describe("Practice", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await stepBar(page);
     await expect(playhead(page)).not.toContainText("9:30:00");
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await openMarks(page);
     await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     await stepBar(page, 6);
-    await page.keyboard.press("x");
+    await placeOrder(page, "Close position");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
 
     // Replace the plan while that day is half practiced (the thread page's Replace plan): the old day ends, and the new plan's Day 1 is the only open day.
@@ -875,8 +869,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
     // The same from the keyboard: focus the row on the list, then Enter.
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
-    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    await backToDayList(page);
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).focus();
     await page.keyboard.press("Enter");
     await page.waitForURL(SESSION_URL);
@@ -901,13 +894,13 @@ test.describe("Practice day list · fix wave 5S", () => {
     await stepBar(page);
     const flat = await portfolioOf();
     await expect(flat.locator('[data-symbol="TSLA"]')).toContainText("Flat");
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect(flat.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
     await expect(flat.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
     await expect(flat.getByTestId("portfolio-count")).toHaveText("1 open position");
     const held = ((await flat.locator('[data-symbol="TSLA"]').textContent()) ?? "").match(/Long \d+ @ \$[\d,.]+/)![0];
     // Back to the day list: it shows the list of names only, no portfolio section and no Portfolio tab in the right rail.
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page);
     await page.waitForURL(dayUrl);
     await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
