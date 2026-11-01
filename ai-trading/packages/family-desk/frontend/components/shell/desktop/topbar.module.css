@@ -254,9 +254,11 @@
   background: var(--color-amber);
 }
 
+/* The count sits above the bell's dome, not on it: the dome starts 1.5 px inside the 16 px icon box and a "9+" count is 22 px wide.
+   Its top edge lands on the bar's top edge, as high as it can go (D-106). */
 .bellCount {
   position: absolute;
-  top: -4px;
+  top: -8px;
   right: -6px;
 }
 

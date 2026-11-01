@@ -1,11 +1,12 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages -- Full document navigation lets the strategy builder's beforeunload guard run. */
 
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useViewportBand } from "@/lib/desk/useViewportBand";
 import { DesktopNav } from "./DesktopNav";
 import { DesktopShell } from "./desktop/DesktopShell";
+import { MainFocus } from "./MainFocus";
 import { MobileTabs } from "./MobileTabs";
 
 /** Desktop shell from 1100 px; the existing mobile shell below it (02m §c1). Prerender is always mobile. */
@@ -47,6 +48,7 @@ function MobileShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="desk-shell-content" id="main-content" tabIndex={-1}>{children}</main>
+      <Suspense fallback={null}><MainFocus /></Suspense>
       <MobileTabs pathname={pathname} />
     </div>
   );
