@@ -76,12 +76,14 @@ on:
         description: >-
           Host the deploy job targets: the Firestore group (shared/<target>)
           its SSH host, port, user, deploy key and known hosts are read from.
-          A push to main always deploys to vps. Only takes effect when
-          deploy_app is also true. laptop stays unusable until the Tailscale
-          join step below exists (0001a/0001c).
+          A push to main deploys to laptop (prod serves from the laptop since
+          the 2026-11-01 cutover); vps is an explicit opt-in only (stopped
+          rollback reference). Only takes effect when deploy_app is also true.
+          laptop fails closed at ssh until the Tailscale join step below
+          exists (0001a/0001c).
         type: choice
-        options: [vps, laptop]
-        default: vps
+        options: [laptop, vps]
+        default: laptop
       dark:
         description: >-
           Dark deploy (DEPLOY_DARK=1 to deploy.sh): start the stack without
@@ -224,8 +226,8 @@ jobs:
       id-token: write
     env:
       # Firestore group holding the host's SSH details (VPS_HOST, VPS_PORT, VPS_USER,
-      # VPS_DEPLOY_SSH_PRIVATE_KEY, VPS_SSH_KNOWN_HOSTS). Push to main is always vps.
-      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'vps' }}
+      # VPS_DEPLOY_SSH_PRIVATE_KEY, VPS_SSH_KNOWN_HOSTS). Push to main is always laptop.
+      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'laptop' }}
       # Already-pushed tag to deploy; empty means the commit this run built.
       IMAGE_TAG_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || '' }}
     steps:
