@@ -110,5 +110,5 @@ Phase 0 baseline, Phase 1A CI (retired 2026-10-31: the pipeline is deployment-on
 ## Tailscale
 
 - The family-app tailnet carries admin and CI SSH only (port 2222 on `tag:family-host`); public traffic stays on the Cloudflare tunnel.
-- All of it is Terraform under `infrastructure/tailscale/`. Rule: `.claude/rules/tailscale.md`; skill: `manage-family-tailscale`.
+- All of it is Terraform under `infrastructure/tailscale/`. The rule is shared by both packages and lives at the repository root: `.claude/rules/tailscale.md`, with the skill `manage-family-tailscale` at `.claude/skills/`.
 - Never the employer tailnet, never a console edit.

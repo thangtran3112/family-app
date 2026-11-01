@@ -62,7 +62,7 @@ Owner decision, 2026-10-10 (Desk plan: `plans/subplans/02a-desk-v1-strategies-de
 ## Tailscale
 
 - The family-app tailnet carries admin and CI SSH only (port 2222 on `tag:family-host`); public traffic stays on the Cloudflare tunnel.
-- All of it is Terraform under `infrastructure/tailscale/`. Rule: `ai-trading/.claude/rules/tailscale.md`; skill: `manage-family-tailscale`.
+- All of it is Terraform under `infrastructure/tailscale/`. The rule is shared by both packages and lives at the repository root: `.claude/rules/tailscale.md`, with the skill `manage-family-tailscale` at `.claude/skills/`.
 - Never the employer tailnet, never a console edit.
 
 ## Upstream Apps
