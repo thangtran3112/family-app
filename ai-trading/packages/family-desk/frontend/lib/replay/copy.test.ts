@@ -5,18 +5,15 @@ import { markLabel } from "./marks.ts";
 import { fastTapeText } from "./tape.ts";
 import { noTradesText, sessionOverText, tradesCountText } from "./journalView.ts";
 
-test("every Practice copy string passes the banned-term check (Practice list and the global list)", () => {
+test("every Practice copy string passes the banned-term check (the global list)", () => {
   for (const [key, text] of Object.entries(PRACTICE_COPY)) {
     assert.equal(containsPracticeBannedTerm(text), false, `${key}: ${text}`);
   }
   assert.ok(Object.keys(PRACTICE_COPY).length > 40);
 });
 
-test("order, position, fill, broker and execute words are caught; Practice labels and dates are not", () => {
-  for (const text of ["Place an order", "Open position", "Order filled", "Your broker", "Execute now"]) {
-    assert.equal(containsPracticeBannedTerm(text), true, text);
-  }
-  for (const text of ["Practice long 100", "Border", "Replay · Fri 2026-10-23 · 10:07 AM ET"]) {
+test("the Practice lane may say order, position and fill; the desk-wide technical words are still caught", () => {
+  for (const text of ["Place an order", "Open position", "Order filled", "Order type", "Close position"]) {
     assert.equal(containsPracticeBannedTerm(text), false, text);
   }
   for (const text of ["Fetch failed", "Error 503", "value is null"]) {

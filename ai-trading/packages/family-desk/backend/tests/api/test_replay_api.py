@@ -316,23 +316,65 @@ def test_mark_state_rules_answer_422(replay: TestClient) -> None:
     assert mark(replay, sid, {"kind": "note", "note": "watching the tape"}).status_code == 200
 
 
-def test_an_entry_without_a_stop_is_refused_when_the_plan_asks_for_one(replay: TestClient) -> None:
-    sid = start(replay)["id"]  # the session's plan says stopRequired: yes
+def test_an_entry_without_a_stop_is_accepted_even_when_the_plan_asks_for_one(replay: TestClient) -> None:
+    sid = start(replay)["id"]  # the session's plan says stopRequired: yes, which is scored and never a refusal
     advance(replay, sid, 120)
-    refused = mark(replay, sid, {"kind": "long_entry", "shares": 10})
-    assert refused.status_code == 422
-    assert refused.json()["detail"]["problems"][0] == {
-        "path": "stopPrice",
-        "message": "Your plan asks for a stop on every entry · type a stop price first",
-    }
-    assert replay.get(f"{BASE}/sessions/{sid}", headers=OWNER).json()["marks"] == []
-    assert mark(replay, sid, {"kind": "long_entry", "shares": 10, "stopPrice": 1.0}).status_code == 200
+    placed = mark(replay, sid, {"kind": "long_entry", "shares": 10})
+    assert placed.status_code == 200 and placed.json()["open_trade"]["stop_price"] is None
+    assert mark(replay, sid, {"kind": "stop", "stopPrice": 1.0}).status_code == 200  # a stop can come later
+
+
+def order(client: TestClient, session_id: int, body: dict[str, Any]):
+    return client.post(f"{BASE}/sessions/{session_id}/orders", json=body, headers=OWNER)
+
+
+def test_a_working_order_is_placed_listed_cancelled_and_a_marketable_limit_fills_at_once(replay: TestClient) -> None:
+    sid = start(replay)["id"]
+    advance(replay, sid, 120)
+    last = advance(replay, sid, 180)["last"]["price"]
+    low = order(replay, sid, {"side": "buy", "orderType": "limit", "limitPrice": round(last * 0.5, 2), "shares": 5})
+    assert low.status_code == 200, low.text
+    body = low.json()
+    assert body["mark"] is None and body["open_trade"] is None
+    assert (body["order"]["status"], body["order"]["type"], body["order"]["side"]) == ("working", "limit", "buy")
+    assert replay.get(f"{BASE}/sessions/{sid}", headers=OWNER).json()["orders"] == body["orders"]
+
+    cancelled = replay.delete(f"{BASE}/sessions/{sid}/orders/{body['order']['id']}", headers=OWNER)
+    assert cancelled.status_code == 200 and cancelled.json()["order"]["status"] == "cancelled"
+    again = replay.delete(f"{BASE}/sessions/{sid}/orders/{body['order']['id']}", headers=OWNER)
+    assert again.status_code == 409
+    assert again.json()["detail"]["problems"][0]["message"] == "That order is no longer working"
+    assert replay.delete(f"{BASE}/sessions/{sid}/orders/999", headers=OWNER).status_code == 404
+
+    now = order(replay, sid, {"side": "buy", "orderType": "limit", "limitPrice": round(last * 2, 2), "shares": 5})
+    assert now.status_code == 200
+    assert now.json()["mark"]["kind"] == "long_entry" and now.json()["order"]["status"] == "filled"
+    assert now.json()["open_trade"]["shares"] == 5
+
+
+def test_a_bad_order_body_is_the_plain_problems_list_and_a_stranger_gets_404(replay: TestClient) -> None:
+    sid = start(replay)["id"]
+    advance(replay, sid, 120)
+    for body, path in (
+        ({"side": "hold", "orderType": "limit", "limitPrice": 1.0}, "side"),
+        ({"side": "buy", "orderType": "market"}, "orderType"),
+        ({"side": "buy", "orderType": "limit"}, "limitPrice"),
+        ({"side": "buy", "orderType": "limit", "limitPrice": 1.0, "shares": 0}, "shares"),
+        ({"side": "buy", "orderType": "limit", "limitPrice": 1.0, "price": 5}, "price"),
+    ):
+        response = order(replay, sid, body)
+        assert response.status_code == 422, body
+        assert response.json()["detail"]["problems"][0]["path"] == path, body
+    stranger = replay.post(
+        f"{BASE}/sessions/{sid}/orders", json={"side": "buy", "orderType": "limit", "limitPrice": 1.0}, headers=OTHER
+    )
+    assert stranger.status_code == 404
 
 
 def test_a_bad_mark_body_is_the_plain_problems_list(replay: TestClient) -> None:
     sid = start(replay)["id"]
     for body in (
-        {"kind": "long_entry", "shares": 10001},
+        {"kind": "long_entry", "shares": 0},
         {"kind": "long_exit", "shares": 10},
         {"kind": "stop"},
         {"kind": "limit_buy"},

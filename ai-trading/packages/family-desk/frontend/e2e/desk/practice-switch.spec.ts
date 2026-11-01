@@ -134,7 +134,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(playhead(page)).toHaveText(clock);
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^Long/ }).first()).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
     await expectCleanScreen(page);
     await page.keyboard.press("b");
     await expect((await marks(page)).getByText("Practice long")).toHaveCount(2); // the first trade and the one after the lift
@@ -215,7 +215,7 @@ test.describe("Practice: switching names", () => {
     await expect(lrcx.getByRole("button", { name: "Exit LRCX" })).toBeVisible();
     const total = portfolio.getByTestId("portfolio-total");
     await expect(total).toContainText(PRACTICE_COPY.dayPortfolioTotal);
-    await expect(total).toContainText("2 open of 5");
+    await expect(total).toContainText("2 open");
     await expect(total).toContainText("as of");
     await expect(portfolio.getByTestId("portfolio-row-total")).toHaveCount(2);
     // The footer is read from the server after the clock settles, so it can trail the rows by one read: wait for it to agree.
@@ -246,7 +246,7 @@ test.describe("Practice: switching names", () => {
     portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("1 trade");
-    await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open of 5");
+    await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
 
     // The day page asks before it exits what is still open, and names it.
@@ -275,7 +275,7 @@ test.describe("Practice: switching names", () => {
     await page.keyboard.press("b");
     await expect(await marks(page)).toContainText("Practice long");
     await page.keyboard.press("t");
-    const stop = page.getByRole("form", { name: "Stop note" });
+    const stop = page.getByRole("form", { name: "Stop" });
     await stop.getByRole("textbox").fill("372");
     await stop.getByRole("button", { name: "Save" }).click();
     await expect(await marks(page)).toContainText("Practice stop");
@@ -307,7 +307,7 @@ test.describe("Practice: switching names", () => {
     portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText("Stop crossed");
-    await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open of 5");
+    await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
     await expect(toast).toHaveCount(0);
     await expectCleanScreen(page);

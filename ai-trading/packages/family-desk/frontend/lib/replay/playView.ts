@@ -6,7 +6,7 @@ import type { LegendModel } from "../desk/workspace.ts";
 import { syntheticDays } from "./dayView.ts";
 import type { PlanItem } from "./planView.ts";
 import type { DailyBlock, Hold, Paused, ReplayInterval, StripRow } from "./schemas.ts";
-import { sizingHint, swingBriefLine, swingDayTitle, type SizingHint } from "./swing.ts";
+import { swingBriefLine, swingDayTitle } from "./swing.ts";
 import type { SwingDayList, WeekRow } from "./swingApi.ts";
 import type { ThreadBrief } from "./threads.ts";
 import { formatBalance, formatDayResult } from "./threadView.ts";
@@ -27,8 +27,6 @@ export const SWING_PLAY_COPY = {
   today: "Today",
 } as const;
 
-/** What a mark carries when nothing sized it: the form's own default (the session spec says the same). */
-export const DEFAULT_SWING_SHARES = 100;
 
 /** A swing session is one that belongs to a swing thread (the session answer carries the thread brief). */
 export const isSwingSession = (session: { thread: { mode: string } | null }): boolean => session.thread?.mode === "swing";
@@ -116,22 +114,7 @@ export function dailyLegend(symbol: string, model: Pick<DailyChartModel, "bars" 
   return { title: [symbol, "Daily", offset, ohlc].filter((part): part is string => part !== null).join(" · "), items: [] };
 }
 
-// -- marks: sizing and the stop pause --------------------------------------------------------------------------------
-
-/**
- * The sizing hint for an entry she is about to place: risk ÷ |last − stop|, capped by free cash. Needs a stop in the stop
- * field and a price; otherwise null (no hint is shown). A hint only: nothing blocks a bigger size.
- */
-export function entrySizing(input: { riskUsd: number | undefined; last: number | null; stopText: string | undefined; freeCash: number | null | undefined }): SizingHint | null {
-  const text = input.stopText?.trim() ?? "";
-  if (text === "") return null;
-  const stop = Number(text);
-  if (!Number.isFinite(stop)) return null;
-  return sizingHint({ riskUsd: input.riskUsd, last: input.last, stop, freeCash: input.freeCash });
-}
-
-/** The shares field's value until she types in it: the hint's size when it has one, else 100. */
-export const defaultSharesText = (hint: SizingHint | null): string => String(hint !== null && hint.shares >= 1 ? hint.shares : DEFAULT_SWING_SHARES);
+// -- marks: the stop pause ---------------------------------------------------------------------------------------
 
 export const exitKindFor = (side: "long" | "short"): "long_exit" | "short_exit" => (side === "long" ? "long_exit" : "short_exit");
 

@@ -119,13 +119,13 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
     ],
   },
   {
-    title: "Practice marks",
+    title: "Order ticket",
     rows: [
-      { keys: ["B"], label: "Practice long (or exit a short)" },
-      { keys: ["S"], label: "Practice short (or exit a long)" },
-      { keys: ["X"], label: "Exit the open practice trade" },
-      { keys: ["T"], label: "Stop note" },
-      { keys: ["N"], label: "Note" },
+      { keys: ["B"], label: "Buy with the ticket as it stands (a market ticket also closes a short)" },
+      { keys: ["S"], label: "Sell with the ticket as it stands (a market ticket also closes a long)" },
+      { keys: ["X"], label: "Close the open position" },
+      { keys: ["T"], label: "Set a stop on the open position" },
+      { keys: ["N"], label: "Add a note" },
       { keys: ["⌘", "Z"], label: "Undo the last mark (before the playhead moves)" },
     ],
   },
@@ -143,9 +143,9 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; rows: ReadonlyArray
 /** The one-line key legend under the timeline (D-026), a short form of the `?` overlay. */
 export const KEY_LEGEND: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: "Space", label: "Play / Pause" },
-  { keys: "B", label: "Long" },
-  { keys: "S", label: "Short" },
-  { keys: "X", label: "Exit" },
+  { keys: "B", label: "Buy" },
+  { keys: "S", label: "Sell" },
+  { keys: "X", label: "Close" },
   { keys: "T", label: "Stop" },
   { keys: "N", label: "Note" },
   { keys: "⌘Z", label: "undo" },

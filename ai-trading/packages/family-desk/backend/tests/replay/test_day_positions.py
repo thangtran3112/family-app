@@ -77,17 +77,54 @@ def test_three_names_hold_open_trades_at_once(db_session, user_id, svc, world) -
         _enter(db_session, user_id, svc, row, symbol, shares=1)
     assert sum(s["has_open_trade"] for s in _sessions(db_session, user_id, svc, row).values()) == 5
 
-    sixth = plan_mod.start_session(db_session, user_id, row.id, "N3", svc)  # opening the name is fine
-    with pytest.raises(ReplayProblem) as capped:
-        _mark(db_session, user_id, svc, sixth.id, "long_entry", shares=1)
-    assert (capped.value.status, capped.value.message) == (409, "Five open practice trades is the most at once")
+    sixth = plan_mod.start_session(db_session, user_id, row.id, "N3", svc)  # no cap on how many names are held
+    _mark(db_session, user_id, svc, sixth.id, "long_entry", shares=1)
+    assert sum(s["has_open_trade"] for s in _sessions(db_session, user_id, svc, row).values()) == 6
+    _mark(db_session, user_id, svc, sixth.id, "long_exit")
 
     with pytest.raises(ReplayProblem) as same_name:  # one open trade per name is still the rule
         _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)
     assert same_name.value.message == "Close the open practice trade first"
 
-    _mark(db_session, user_id, svc, gapper.id, "long_exit")  # a slot frees up
+    _mark(db_session, user_id, svc, gapper.id, "long_exit")
     assert _mark(db_session, user_id, svc, sixth.id, "long_entry", shares=1)["mark"]["kind"] == "long_entry"
+
+
+# -- buying power is the only size rule -------------------------------------------------------------------------------
+
+
+def test_a_day_entry_is_refused_only_when_it_costs_more_than_the_balance_less_the_open_trades(
+    db_session, user_id, svc, world
+) -> None:
+    make_thread(db_session, user_id, starting_balance=1_000)
+    row, gapper = _names(db_session, user_id, svc, "FLAT", "SPLITTER")  # GAPPER 110, FLAT 50, SPLITTER 100
+    _advance(db_session, user_id, svc, gapper.id, "09:35")
+    with pytest.raises(ReplayProblem) as broke:  # 10 * 110 = 1,100 > 1,000
+        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=10)
+    assert (broke.value.message, broke.value.path, broke.value.status) == (
+        "Not enough practice cash · $1,000 free",
+        "shares",
+        422,
+    )
+    assert session_mod._load_marks(db_session, gapper.id) == []  # nothing was written
+    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)  # 550 of 1,000
+    with pytest.raises(ReplayProblem) as rest:  # FLAT costs 50 a share: 450 left buys 9, not 10
+        _enter(db_session, user_id, svc, row, "FLAT", shares=10)
+    assert rest.value.message == "Not enough practice cash · $450 free"
+    _enter(db_session, user_id, svc, row, "FLAT", shares=9)  # exactly the 450 left: allowed
+    with pytest.raises(ReplayProblem) as short_too:  # a short counts like a long
+        _enter(db_session, user_id, svc, row, "SPLITTER", "short_entry", shares=1)
+    assert short_too.value.message == "Not enough practice cash · $0 free"
+
+
+def test_a_realized_trade_changes_the_buying_power_and_a_stop_is_never_needed(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id, starting_balance=1_000, stopNoteOnEntry="yes")
+    _, session = _names(db_session, user_id, svc, "FLAT")
+    _advance(db_session, user_id, svc, session.id, "09:35")
+    placed = _mark(db_session, user_id, svc, session.id, "long_entry", shares=9)  # 990 of 1,000; no stop: accepted
+    assert placed["open_trade"]["stop_price"] is None
+    _mark(db_session, user_id, svc, session.id, "long_exit")  # flat again; the ledger credits the (zero) P/L
+    _mark(db_session, user_id, svc, session.id, "long_entry", shares=9)  # the cash is back
 
 
 # -- the stop pause over every open name ----------------------------------------------------------------------------

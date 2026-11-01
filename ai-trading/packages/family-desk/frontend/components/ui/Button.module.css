@@ -1,14 +1,16 @@
-/* The one button (design-component-system §4.3). Heights are the ruling's ladder: sm 24, md 28, lg 32. */
+/* The one button (design-component-system §4.3). Heights are the ruling's ladder: sm 24, md 28, lg 32, touch 44. */
 .root { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1-5); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); line-height: var(--line-label); white-space: nowrap; text-decoration: none; cursor: pointer; }
 .root[data-size="sm"] { min-height: var(--size-sm); padding: 0 var(--space-2); }
 .root[data-size="md"] { min-height: var(--size-md); }
 .root[data-size="lg"] { min-height: var(--size-lg); }
+.root[data-size="touch"] { min-height: var(--size-touch); }
 .root[data-icon="true"] { flex-shrink: 0; padding: 0; }
 .root[data-icon="true"][data-size="sm"] { width: var(--size-sm); }
 .root[data-icon="true"][data-size="md"] { width: var(--size-md); }
 .root[data-icon="true"][data-size="lg"] { width: var(--size-lg); }
 .root[data-variant="primary"] { border-color: var(--color-amber); color: var(--color-amber); }
-.root[data-variant="danger"] { border-color: var(--color-down); color: var(--color-down); }
+.root[data-variant="danger"], .root[data-variant="down"] { border-color: var(--color-down); color: var(--color-down); }
+.root[data-variant="up"] { border-color: var(--color-up); color: var(--color-up); }
 .root[data-variant="ghost"] { border-color: transparent; }
 .root[data-variant="ghost"][data-icon="true"] { color: var(--color-muted); }
 .root:hover:not(:disabled, [aria-disabled="true"]) { background: var(--color-raised); }
@@ -17,4 +19,7 @@
 .root[aria-pressed="true"], .root[aria-current="page"] { border-color: var(--color-amber); }
 .root:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .root:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
+/* A disabled Buy or Sell keeps its hue, so a ticket that waits still reads as a ticket. */
+.root[data-variant="up"]:disabled { color: var(--color-up); }
+.root[data-variant="down"]:disabled { color: var(--color-down); }
 .root[aria-busy="true"] { cursor: progress; }

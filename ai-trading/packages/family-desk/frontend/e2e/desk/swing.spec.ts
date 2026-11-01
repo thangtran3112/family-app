@@ -154,15 +154,14 @@ test.describe("Swing practice", () => {
     await page.getByRole("button", { name: "Step", exact: true }).click();
     await expect(playhead(page)).not.toContainText("9:30:00");
 
-    // A long on S01 with a stop typed in the mark box; too many shares says what the cash covers.
+    // A buy on S01 with no stop (a stop is optional); too many shares says what the cash covers, and nothing else limits a size.
     const practice = await replayRail(page, "Practice");
-    await practice.getByLabel("Shares").fill("1000");
-    await practice.getByRole("button", { name: "Long (B)" }).click();
+    await practice.getByLabel("Quantity").fill("1000");
+    await practice.getByRole("button", { name: "Buy" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
     await page.getByRole("button", { name: "Dismiss message" }).click();
-    await practice.getByLabel("Shares").fill("100");
-    await practice.getByLabel("Stop price (optional)").fill("95");
-    await practice.getByRole("button", { name: "Long (B)" }).click();
+    await practice.getByLabel("Quantity").fill("100");
+    await practice.getByRole("button", { name: "Buy" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();
     await expect(strip.getByRole("button", { name: /^S01, practice hold/ })).toContainText("Long 100");
     await shot(page, "swing-workspace", false);
@@ -175,15 +174,15 @@ test.describe("Swing practice", () => {
     await expect(strip.getByRole("button", { name: /^S04, focus name/ })).toHaveAttribute("aria-current", "true");
     await expect(strip.getByRole("button", { name: /^S01, practice hold/ })).toBeVisible();
     const practice4 = await replayRail(page, "Practice");
-    await practice4.getByLabel("Shares").fill("100");
-    await practice4.getByLabel("Stop price (optional)").fill("85");
-    await practice4.getByRole("button", { name: "Short (S)" }).click();
+    await practice4.getByRole("radio", { name: "Sell" }).click();
+    await practice4.getByLabel("Quantity").fill("100");
+    await practice4.getByRole("button", { name: "Sell" }).click();
     await expect(practice4.getByRole("definition").filter({ hasText: "Short 100" })).toBeVisible();
     await expect(strip.getByRole("button", { name: /^S04, practice hold/ })).toContainText("Short 100");
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText("Free cash $");
     await expect(page.getByText("Open holds").locator("xpath=following-sibling::*").first()).toContainText("2 of 5");
 
-    // The hold cap: three more holds by API fill the five a thread may carry; a sixth is refused in words.
+    // No cap on how many names are held: three more holds by API make five, and a sixth is accepted (the cash is the only size rule).
     const dayListId = Number(new URL(page.url()).searchParams.get("id") && (await get(context, `/threads/${threadId}`)).today.day_list_id);
     await send(context, "PATCH", `/day-lists/${dayListId}`, { watch: ["S01", "S04", "S05", "S06", "S07"] });
     for (const symbol of ["S05", "S06", "S07"]) await markByApi(context, dayListId, symbol, { kind: "long_entry", shares: 100 });
@@ -193,15 +192,14 @@ test.describe("Swing practice", () => {
     await strip.getByRole("button", { name: /^S08, focus name/ }).click();
     await expect(page.getByRole("heading", { name: "S08", level: 1 })).toBeVisible();
     const practice8 = await replayRail(page, "Practice");
-    await practice8.getByRole("button", { name: "Long (B)" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Five practice holds is the most at once" })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
-    await expect(strip.getByRole("button", { name: /practice hold/ })).toHaveCount(5);
+    await practice8.getByRole("button", { name: "Buy" }).click();
+    await expect(strip.getByRole("button", { name: /practice hold/ })).toHaveCount(6);
+    await expect(page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) })).toHaveCount(0);
 
     // End day: it asks first and says the holds stay open.
     await page.getByRole("button", { name: "End day…" }).click();
     const confirm = page.getByRole("group", { name: "Confirm ending the day" });
-    await expect(confirm).toContainText("Your 5 holds stay open through the close, unwatched.");
+    await expect(confirm).toContainText("Your 6 holds stay open through the close, unwatched.");
     await shot(page, "swing-end-prompt", false);
     await confirm.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.waitForURL(BOARD_URL);
@@ -209,9 +207,9 @@ test.describe("Swing practice", () => {
     await expectNoDates(page);
     await shot(page, "swing-day-ended");
     const summary = page.getByRole("region", { name: "Day summary" });
-    await expect(summary).toContainText("5 · 0"); // five entries, no exit: nothing is credited yet
+    await expect(summary).toContainText("6 · 0"); // six entries, no exit: nothing is credited yet
     await expect(summary).toContainText("Starred after the open: S05, S06, S08");
-    await expect(page.getByRole("table", { name: "Practice holds" }).getByRole("row")).toHaveCount(6);
+    await expect(page.getByRole("table", { name: "Practice holds" }).getByRole("row")).toHaveCount(7);
     expect((await get(context, `/threads/${threadId}`)).thread.stats.balance).toBe(50_000);
   });
   test("Days 2 and 3: Pass with its confirm, a watched day with an exit, and the ledger rule for balance and equity", async ({ page, context }) => {
@@ -260,7 +258,7 @@ test.describe("Swing practice", () => {
     const money = page.getByRole("group", { name: "Practice thread" });
     await expect(money).toContainText("Balance $50,000.00 · Equity $50,184");
     const practice = await replayRail(page, "Practice");
-    await practice.getByRole("button", { name: "Exit (X)" }).click();
+    await practice.getByRole("button", { name: "Close position" }).click();
     await expect(practice.getByText("No open practice hold")).toBeVisible();
     // The ledger rule: an exit credits the balance only when its day ends. Free cash is back at once; the strip drops the exited name.
     await expect(strip.getByRole("button")).toHaveCount(1);
@@ -709,8 +707,8 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
     await expect(playhead(page)).toContainText("11:00");
     const practice = await replayRail(page, "Practice");
-    await practice.getByLabel("Shares").fill("100");
-    await practice.getByRole("button", { name: "Long (B)" }).click();
+    await practice.getByLabel("Quantity").fill("100");
+    await practice.getByRole("button", { name: "Buy" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();
     await expect(page.getByRole("alert").filter({ hasText: "behind the day clock" })).toHaveCount(0);
 
@@ -726,7 +724,7 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
     await expect(playhead(page)).toContainText("12:00");
     const practiceAgain = await replayRail(page, "Practice");
-    await practiceAgain.getByRole("button", { name: "Exit (X)" }).click();
+    await practiceAgain.getByRole("button", { name: "Close position" }).click();
     await expect(practiceAgain.getByText("No open practice hold")).toBeVisible();
     await expect(page.getByRole("alert").filter({ hasText: "behind the day clock" })).toHaveCount(0);
     const closed = (await get(context, `/threads/${threadId}/holds?status=closed`)).holds as Json[];

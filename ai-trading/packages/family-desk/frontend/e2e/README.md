@@ -12,7 +12,7 @@ the public Desk.
 
 Every `desk/` spec imports `test` from `desk/helpers.ts`, whose automatic fixture fails a spec that ends on a screen
 showing the 02l §c3 banned wording (`BANNED_TERMS`, the same list `lib/desk/freshness.ts` tests) or any order control
-or order request.
+or order request. The one exception is the Practice replay workspace (`/practice/replay`), whose broker-style ticket places simulated orders on a replayed day (ADR-0016): its screen skips the order-control scan, and its two `…/replay/sessions/{id}/orders` requests are allowed.
 
 ## Run
 

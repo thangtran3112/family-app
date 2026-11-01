@@ -62,6 +62,25 @@ export const MarkSchema = z.object({
   source: z.enum(["her", "auto"]),
 }) satisfies z.ZodType<components["schemas"]["MarkOut"]>;
 
+/** A limit, stop or stop-limit entry that was not filled at once, and what became of it. A fill is also an entry mark (`mark_id`). */
+export const OrderSchema = z.object({
+  id: finite.int(),
+  side: z.enum(["buy", "sell"]),
+  type: z.enum(["limit", "stop", "stop_limit"]),
+  shares: finite.int(),
+  limit_price: finite.nullable(),
+  /** The stop leg's trigger. */
+  stop_price: finite.nullable(),
+  status: z.enum(["working", "filled", "cancelled"]),
+  placed_at: timestamp,
+  triggered_at: timestamp.nullable(),
+  closed_at: timestamp.nullable(),
+  fill_price: finite.nullable(),
+  mark_id: finite.int().nullable(),
+  /** Why the server cancelled it, when it did. */
+  reason: z.string().nullable(),
+}) satisfies z.ZodType<components["schemas"]["OrderOut"]>;
+
 export const PriceBasisSchema = z.enum(["prior_close", "last"]);
 
 /** In a swing session the open trade is the name's practice hold (`trade_no` is the hold id). The four swing fields are
@@ -261,6 +280,8 @@ export const ReplaySessionSchema = z.object({
   armed: z.array(ArmedSchema),
   marks: z.array(MarkSchema),
   open_trade: OpenTradeSchema.nullable(),
+  /** Orders that were not filled at once, newest last; absent from an older answer. */
+  orders: z.array(OrderSchema).default([]),
   journal: JournalSchema,
   notes: z.string().nullable(),
   rating: finite.int().nullable(),
@@ -364,7 +385,10 @@ export const ReplayDeltaSchema = z.object({
   /** Seconds with no eligible print, once that passes a minute (the tape marker); null otherwise. */
   quiet_s: finite.int().nullable(),
   open_trade: OpenTradeSchema.nullable(),
+  orders: z.array(OrderSchema).default([]),
   stamp: ReplayStampSchema,
+  /** Working orders the tape filled inside this advance, as the entry marks they became; absent when none. */
+  fills: z.array(MarkSchema).nullish(),
   /** Swing only: play stopped at a crossed stop (the clock is at that minute's close). */
   paused: PausedSchema.nullish(),
   /** Swing only: the day strip at the day clock. */
@@ -393,6 +417,23 @@ export const MarkResultSchema = z.object({
   /** Swing only: the hold the mark opened, moved or closed (the symbol's open hold for a note). */
   hold: HoldSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["MarkResultOut"]>;
+
+/** Placing an order answers the order, the session's list, and the entry mark when it filled at once (a limit through the market). */
+export const OrderResultSchema = z.object({
+  order: OrderSchema,
+  orders: z.array(OrderSchema),
+  mark: MarkSchema.nullable(),
+  open_trade: OpenTradeSchema.nullable(),
+  journal: JournalSchema,
+  warning: z.string().nullable(),
+  thread: ThreadBriefSchema.nullable(),
+  hold: HoldSchema.nullish(),
+}) satisfies z.ZodType<components["schemas"]["OrderResultOut"]>;
+
+export const OrderCancelSchema = z.object({
+  order: OrderSchema,
+  orders: z.array(OrderSchema),
+}) satisfies z.ZodType<components["schemas"]["OrderCancelOut"]>;
 
 /** Undo answers the new book: the removed mark, the open trade and the journal. */
 export const MarkUndoSchema = z.object({
@@ -427,6 +468,8 @@ export type ReplayLevels = z.infer<typeof ReplayDeltaSchema>["levels"];
 export type ReplayDelta = z.infer<typeof ReplayDeltaSchema>;
 export type ReplayFeed = z.infer<typeof ReplayFeedSchema>;
 export type MarkResult = z.infer<typeof MarkResultSchema>;
+export type PracticeOrder = z.infer<typeof OrderSchema>;
+export type OrderResult = z.infer<typeof OrderResultSchema>;
 export type PriceBasis = z.infer<typeof PriceBasisSchema>;
 export type EarningsChip = z.infer<typeof EarningsChipSchema>;
 export type Hold = z.infer<typeof HoldSchema>;

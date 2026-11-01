@@ -7,7 +7,7 @@
   "symbol": "TSLA",
   "day": "2026-10-23",
   "side": "long",
-  "shares": 10001,
+  "shares": 2147483648,
   "entryPrice": 245.5,
   "exitPrice": 251.25,
   "pnlUsd": 575,

@@ -195,7 +195,7 @@ test.describe("Practice", () => {
 
     // T opens the stop note; Enter saves it.
     await page.keyboard.press("t");
-    const stop = page.getByRole("form", { name: "Stop note" });
+    const stop = page.getByRole("form", { name: "Stop" });
     await expect(stop).toBeVisible();
     await stop.getByRole("textbox").fill("180");
     await stop.getByRole("button", { name: "Save" }).click();
@@ -348,17 +348,23 @@ test.describe("Practice", () => {
     await expect(side).toContainText("Plan note: Trade only clean pullbacks.");
     await expect(side.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
     // A practice trade: the exit mark books one ledger row, so the thread balance moves with it.
-    // D-060: the plan asks for a stop on every entry, so B without a stop price is refused in plain words and nothing is placed.
-    await page.keyboard.press("b");
-    await expect(page.getByRole("alert").filter({ hasText: PRACTICE_COPY.stopFirst })).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss message" }).click();
+    // The one size rule is the account's cash: a quantity the balance cannot cover (here far past 10,000 shares) is refused with the free cash, and nothing else limits a size.
     const practice = await replayRail(page, "Practice");
-    await expect(practice.getByRole("button", { name: "Long (B)" })).toBeDisabled(); // the buttons wait for the stop price too
-    await practice.getByLabel("Stop price (required)").fill("100");
-    await practice.getByRole("button", { name: "Long (B)" }).click();
-    // D-060: Stop (T) places the stop typed in the field; no second form to save.
-    await practice.getByLabel("Stop price").fill("150");
-    await practice.getByRole("button", { name: "Stop (T)" }).click();
+    await practice.getByRole("textbox", { name: "Quantity" }).fill("100000");
+    await practice.getByRole("button", { name: "Buy" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
+    await page.getByRole("button", { name: "Dismiss message" }).click();
+    await practice.getByRole("textbox", { name: "Quantity" }).fill("100");
+    // A stop is optional even when the thread plan asks for one: Buy places the entry, with no refusal and no warning.
+    await practice.getByRole("button", { name: "Buy" }).click();
+    await expect(page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) })).toHaveCount(0);
+    await expect(practice.getByRole("button", { name: "Buy" })).toBeEnabled();
+    await expect(practice.getByRole("button", { name: "Buy" }), "no hint ties the buttons to a stop").not.toHaveAccessibleDescription(/stop/i);
+    // Set stop (T) on the open position afterwards; it is the same optional stop, typed in the stop form.
+    await practice.getByRole("button", { name: "Set stop" }).click();
+    const stopForm = practice.getByRole("form", { name: "Stop" });
+    await stopForm.getByRole("textbox").fill("150");
+    await stopForm.getByRole("button", { name: "Save" }).click();
     await marksTab(page).click();
     await expect(page.getByRole("tabpanel")).toContainText("Practice stop");
     await expect(page.getByRole("tabpanel")).toContainText("Practice long");
@@ -813,7 +819,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await row.getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Long/ }).first()).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
     // The same from the keyboard: focus the row on the list, then Enter.
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(/\/practice\/day\?id=\d+/);

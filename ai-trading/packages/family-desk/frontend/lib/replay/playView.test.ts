@@ -4,13 +4,10 @@ import { containsPracticeBannedTerm } from "../desk/freshness.ts";
 import type { CrosshairPoint } from "../chart-data.ts";
 import {
   CHART_MODES,
-  DEFAULT_SWING_SHARES,
   SWING_PLAY_COPY,
   chartModeLabel,
   dailyChartModel,
   dailyLegend,
-  defaultSharesText,
-  entrySizing,
   exitKindFor,
   initialChartMode,
   intradayOf,
@@ -97,23 +94,6 @@ test("the Daily legend names the bar under the crosshair by offset while dates a
   const shown = dailyLegend("NVDA", dailyChartModel(dailyBlock, false), null);
   assert.equal(shown.title, "NVDA · Daily · O 190.30 H 191.90 L 189.80 C 191.40");
   assert.deepEqual(shown.items, []);
-});
-
-test("the sizing hint needs a stop and a price; the shares field follows the hint until she types", () => {
-  assert.equal(entrySizing({ riskUsd: 500, last: 184.2, stopText: undefined, freeCash: 24720 }), null);
-  assert.equal(entrySizing({ riskUsd: 500, last: 184.2, stopText: "  ", freeCash: 24720 }), null);
-  assert.equal(entrySizing({ riskUsd: 500, last: 184.2, stopText: "abc", freeCash: 24720 }), null);
-  assert.equal(entrySizing({ riskUsd: undefined, last: 184.2, stopText: "178.5", freeCash: 24720 }), null);
-  const hint = entrySizing({ riskUsd: 500, last: 184.2, stopText: "178.5", freeCash: 24720 });
-  assert.equal(hint?.shares, 87);
-  assert.equal(hint?.limitedBy, "risk");
-  assert.equal(defaultSharesText(hint), "87");
-  const capped = entrySizing({ riskUsd: 5000, last: 184.2, stopText: "178.5", freeCash: 8240 });
-  assert.equal(capped?.shares, 44);
-  assert.equal(capped?.limitedBy, "cash");
-  assert.equal(defaultSharesText(capped), "44");
-  assert.equal(defaultSharesText(null), String(DEFAULT_SWING_SHARES));
-  assert.equal(defaultSharesText(entrySizing({ riskUsd: 500, last: 184.2, stopText: "178.5", freeCash: 100 })), "100");
 });
 
 test("the stop pause's Exit targets the paused name, on the chart or through another name's strip row", () => {

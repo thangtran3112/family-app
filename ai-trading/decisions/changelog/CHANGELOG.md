@@ -2,6 +2,7 @@
 
 One line per shipped phase. Session-level detail lives in the matching handoff (`../plans/handoffs/`); design detail in the ADR it proved.
 
+- **Practice broker ticket (2026-11-01):** Buy/Sell, quantity and order type (Market, Limit, Stop, Stop-limit; Bracket named, not simulated), optional stop, cash as the only size rule, honest limit/stop fills from `advance`, migration `0016`, Back/End day row aligned. Branch `feature/practice-neutral-broker`. [ADR-0016](../adr/ADR-0016-practice-broker-ticket.md)
 - **5R (2026-10-31):** Tradier + marketdata.app adapters behind the registry, in no default chain. PR #206 → `dev`, release #207 → `main`, deploy 41166875184. [ADR-0004](../adr/ADR-0004-adapter-pattern.md)
 - **5S/B0 (2026-10-31):** 02t plan, Hermes 12-ruling review, Go gRPC/Connect bridge deployed dark. Same PR/release/deploy as 5R. [ADR-0003](../adr/ADR-0003-bridge-architecture.md)
 - **5T (2026-10-31):** data-refresh fix (chunked upserts, honest empty passes, job logging). PR #208 → `dev`, release #209 → `main`, deploy 41184467041. [ADR-0010](../adr/ADR-0010-data-honesty.md)

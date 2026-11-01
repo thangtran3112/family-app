@@ -242,7 +242,7 @@ class PracticeLedgerEntryV1(SpecModel):
     ]
     schemaVersion: Literal[1]
     sessionId: Annotated[int | None, Field(ge=1, le=9007199254740991)] = None
-    shares: Annotated[int, Field(ge=1, le=10000)]
+    shares: Annotated[int, Field(ge=1, le=2147483647)]
     side: Literal["long", "short"]
     symbol: Annotated[str, Field(pattern="^[A-Z][A-Z0-9.]{0,9}$")]
     threadId: Annotated[int, Field(ge=1, le=9007199254740991)]
@@ -257,7 +257,7 @@ class PracticeMarkV11(SpecModel):
         str | None, Field(max_length=280, min_length=1, pattern="^[\\u0020-\\u007E\\u00A0-\\uD7FF\\uE000-\\uFFFF]+$")
     ] = None
     schemaVersion: Literal[1]
-    shares: Annotated[int | None, Field(ge=1, le=10000)] = None
+    shares: Annotated[int | None, Field(ge=1, le=2147483647)] = None
     stopPrice: Annotated[float | None, Field(gt=0.0, le=1000000.0)] = None
 
 
@@ -413,7 +413,7 @@ class ReplaySessionV1(SpecModel):
     plan: Plan
     schemaVersion: Literal[1]
     session: Literal["regular", "extended"]
-    shares: Annotated[int, Field(ge=1, le=10000)]
+    shares: Annotated[int, Field(ge=1, le=2147483647)]
     symbol: Annotated[str, Field(pattern="^[A-Z][A-Z0-9.]{0,9}$")]
     window: Window
 

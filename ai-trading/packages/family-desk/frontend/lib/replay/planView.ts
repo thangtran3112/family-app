@@ -2,7 +2,7 @@ import { formatClock, formatNumber } from "../desk/format.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade, ReplayJournal, ReplaySession, TapeFeed } from "./schemas.ts";
 
-// Live read of the plan against the session so far (02o §a3 plan checklist): ticks, never blocks.
+// Live read of the plan against the session so far (02o §a3 plan checklist): ticks, never blocks, never asks for a stop.
 
 type Plan = ReplaySession["spec"]["plan"];
 
@@ -13,7 +13,7 @@ export function practicePnl(journal: Pick<ReplayJournal, "trades">, openTrade: P
 
 export const tradeCount = (journal: Pick<ReplayJournal, "trades">, openTrade: unknown): number => journal.trades.length + (openTrade ? 1 : 0);
 
-/** The plan says stop for the day: max loss set and the practice P/L at or below it. A warning, not a block. */
+/** The plan's max loss is set and the practice P/L is at or below it. A tick on the checklist, nothing more. */
 export function maxLossReached(pnl: number, plan: Pick<Plan, "maxLossUsd">): boolean {
   return plan.maxLossUsd !== undefined && pnl <= -plan.maxLossUsd;
 }
@@ -24,13 +24,7 @@ export type PlanItem = {
   /** `off`: the plan sets no such rule (its detail says "Off" or "None"), so there is nothing to tick. */
   state: "ok" | "warn" | "pending" | "off";
   detail: string;
-  /** The way to fix a warning in one click (D-022). */
-  action?: "add_stop";
 };
-
-/** The plan asks for a stop on every entry and the open trade has none: the one case a stop note can still fix. */
-export const stopMissing = (plan: Pick<Plan, "stopRequired">, openTrade: Pick<OpenTrade, "stop_price"> | null): boolean =>
-  plan.stopRequired === "yes" && openTrade !== null && openTrade.stop_price == null;
 
 /** The plan's note, if she wrote one. */
 export const planNote = (plan: Pick<Plan, "note">): string | null => plan.note ?? null;
@@ -48,7 +42,6 @@ export function planChecklist(plan: Plan, journal: Pick<ReplayJournal, "trades">
           label: "Stop note on every entry",
           state: total === 0 ? "pending" : missing > 0 ? "warn" : "ok",
           detail: total === 0 ? "No trades yet" : `${total - missing} of ${total}`,
-          ...(stopMissing(plan, openTrade) ? { action: "add_stop" as const } : {}),
         }
       : { id: "stop", label: "Stop note on every entry", state: "off", detail: "Off" };
 

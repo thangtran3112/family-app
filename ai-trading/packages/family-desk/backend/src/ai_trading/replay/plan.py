@@ -917,8 +917,8 @@ def day_list_out(
         "candidates": row.candidates,
         "watch": row.watch,
         "clock": row.revealed_through,
-        # ponytail: `positions` loads one context per open position, at most `holds.HARD_CAP`; batch the bar loads if
-        # the cap is raised
+        # ponytail: `positions` loads one context per open position; batch the bar loads if
+        # a day ever holds dozens
         "sessions": [
             _session_brief(s, row, holding, books[s.id], held[s.id].price if s.id in held else None) for s in sessions
         ],
@@ -1108,7 +1108,7 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
 def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc: Services) -> ReplaySession:
     """The day's practice session on a name from the list, built from the plan's setup: a new name opens at the shared
     day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds any number of names
-    and one open trade per name (at most five at once, refused on the entry mark), so a switch never needs a trade
+    and one open trade per name (refused on the entry mark), so a switch never needs a trade
     closed first. A name resumed behind the clock is lifted to it, the span she was away is recorded, and she can mark
     at once."""
     row = get_day_list(db, user_id, day_list_id, lock=True)

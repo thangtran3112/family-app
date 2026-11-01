@@ -21,8 +21,6 @@ import {
   practiseNames,
   priceBasisLabel,
   sideLabel,
-  sizingHint,
-  sizingRiskUsd,
   stopDistanceText,
   stopHitText,
   stripRowView,
@@ -126,25 +124,6 @@ test("free cash and the holds-open count", () => {
   assert.equal(freeCashText(24720), "Free cash $24,720.00");
   assert.equal(freeCashText(null), "—");
   assert.deepEqual([0, 1, 2].map(holdsOpenText), ["No holds open", "1 hold open", "2 holds open"]);
-});
-
-test("the sizing hint is risk over the stop distance, capped by free cash, and only a hint", () => {
-  const base = { riskUsd: 100, last: 190, stop: 185 };
-  assert.deepEqual(sizingHint(base), { shares: 20, limitedBy: "risk", text: "Sizing hint · risking $100.00 to your stop means 20 shares" });
-  assert.deepEqual(sizingHint({ ...base, freeCash: 1900 }), { shares: 10, limitedBy: "cash", text: "Sizing hint · your free cash buys 10 shares" });
-  assert.equal(sizingHint({ ...base, freeCash: 50_000 })?.limitedBy, "risk");
-  assert.equal(sizingHint({ riskUsd: 5, last: 190, stop: 185 })?.text, "Sizing hint · risking $5.00 to your stop means 1 share");
-  assert.equal(sizingHint({ ...base, freeCash: 150 })?.shares, 0);
-  assert.equal(sizingHint({ ...base, freeCash: 150 })?.text, "Sizing hint · your free cash does not cover one share");
-  assert.equal(sizingHint({ riskUsd: 3, last: 190, stop: 185 })?.text, "Sizing hint · one share already risks more than $3.00");
-  assert.equal(sizingHint({ riskUsd: 1_000_000, last: 100, stop: 99.5 })?.shares, 10_000, "a mark carries at most 10,000 shares");
-  assert.equal(sizingHint({ ...base, stop: null }), null);
-  assert.equal(sizingHint({ ...base, riskUsd: undefined }), null);
-  assert.equal(sizingHint({ ...base, stop: 190 }), null, "no distance to the stop, nothing to size from");
-  assert.equal(sizingHint({ ...base, last: null }), null);
-  assert.equal(sizingRiskUsd({ riskPerHoldUsd: 100 }, { maxLossUsd: 600 }), 100);
-  assert.equal(sizingRiskUsd({}, { maxLossUsd: 600 }), 600);
-  assert.equal(sizingRiskUsd(null, null), undefined);
 });
 
 test("the stop pause names the hold, the stop and the minute; a gap open says where it opened; the others are listed", () => {
@@ -298,10 +277,6 @@ test("every string the helpers build avoids the Practice banned words", () => {
     ...[2, 1, 0].flatMap((n) => [endDayPrompt({ dayNo: 7, clock: "2026-07-14T15:40:00Z", holdsOpen: n }), endDayHint(n), passDayPrompt({ dayNo: 7, holdsOpen: n })]),
     ...daySummaryTiles(swingDaySummary).flatMap((tile) => [tile.label, tile.value, tile.sub]),
     stopHitText({ symbol: "AMD", at: "14:05", watched: "no" }),
-    sizingHint({ riskUsd: 100, last: 190, stop: 185 })?.text,
-    sizingHint({ riskUsd: 100, last: 190, stop: 185, freeCash: 1900 })?.text,
-    sizingHint({ riskUsd: 100, last: 190, stop: 185, freeCash: 100 })?.text,
-    sizingHint({ riskUsd: 3, last: 190, stop: 185 })?.text,
     stopDistanceText(1.5),
     stopDistanceText(-1.5),
     priceBasisLabel("last", 1, "off"),
