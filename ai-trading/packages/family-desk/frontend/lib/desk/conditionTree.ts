@@ -1,4 +1,4 @@
-import type { Condition } from "@ai-trading/contracts";
+import { PATTERN_IDS, type Condition } from "@ai-trading/contracts";
 import type { CompareOperator } from "../spec/labels.ts";
 import { operandFor } from "./operands.ts";
 
@@ -57,6 +57,9 @@ export function withOperator(condition: Condition, op: CompareOperator | "patter
   if (op === "within_pct") return { op, left, right, pct: "pct" in condition ? condition.pct : 1 };
   return { op, left, right };
 }
+
+/** The candlestick patterns a pattern node offers, worded once: "Inverted hammer". */
+export const PATTERN_OPTIONS = PATTERN_IDS.map((id) => ({ id, label: id.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase()) }));
 
 /** The dotted path the contract's issues use: `nodePath("when", "all", 1)` is `when.all.1`, `nodePath("when.all.1", "not")` is `when.all.1.not`. */
 export function nodePath(parent: string, key?: "all" | "any" | "not", index?: number): string {
