@@ -1,6 +1,6 @@
 # Tailscale (tailnet policy)
 
-Terraform for the family-app tailnet policy file. Tailscale is for **admin and CI SSH only**: public traffic stays on the Cloudflare tunnels and never touches the tailnet. The policy is therefore default-deny and holds exactly two flows, both to the host's sshd (plain sshd on TCP `ssh_port`, default `2222`; no Tailscale SSH, so no `ssh` section):
+Terraform for the family-app tailnet policy file. The tailnet is for **CI/CD deployment only**: the GitHub deploy runners join as `tag:ci`. Public traffic stays on the Cloudflare tunnels and never touches the tailnet, and operator SSH goes through the Cloudflare tunnel behind Access (skill `manage-cloudflare-tunnel`), not over this tailnet. The `autogroup:admin` grant below is break-glass for a device that is already a member. The policy is default-deny and holds exactly two flows, both to the host's sshd (plain sshd on TCP `ssh_port`, default `2222`; no Tailscale SSH, so no `ssh` section):
 
 | Source | Destination | Port |
 |---|---|---|

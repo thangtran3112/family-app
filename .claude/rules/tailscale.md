@@ -9,10 +9,11 @@ Paths are relative to the repository root.
 
 ## Traffic model
 
+- The tailnet's production consumer is CI/CD deployment: the GitHub deploy runners join as `tag:ci` and reach `tag:family-host` on port 2222. It is also the break-glass path for a device that is already a member. Nothing else may depend on it.
 - Public traffic goes through the Cloudflare tunnel. It never uses the tailnet.
-- The tailnet carries admin and CI SSH only: port 2222 on `tag:family-host`.
-- The policy is default-deny: `autogroup:admin` and `tag:ci` may reach `tag:family-host:2222`, nothing else.
-- The owner's own machine is not a member: remote SSH to the host is the Cloudflare Access path the skill describes, never a device enrolment.
+- Operator and break-glass SSH goes through the Cloudflare tunnel behind Cloudflare Access (`cloudflared access ssh`), described in the skill `manage-cloudflare-tunnel`. It does not use the tailnet.
+- The policy is default-deny: `tag:ci` and `autogroup:admin` may reach `tag:family-host:2222`, nothing else. The `autogroup:admin` grant is break-glass for a device that is already a member of this tailnet. It is not how the owner reaches the host.
+- The owner's own machine is in a different tailnet and is not a member of this one. It must not be enrolled for operator access. Break-glass from it means *switching* it, which is machine-wide and takes the other tailnet away for as long as it lasts: the procedure and its cost are in the skill `manage-family-tailscale`.
 
 ## Configuration
 
@@ -30,5 +31,6 @@ Paths are relative to the repository root.
 
 ## See also
 
-- Skill `manage-family-tailscale`: the commands, the read-only checks, and the failure modes.
+- Skill `manage-family-tailscale`: the commands, the read-only checks, and the failure modes of the tailnet.
+- Skill `manage-cloudflare-tunnel`: tunnel status, turning it on and off, and the operator's SSH path to the host.
 - `infrastructure/tailscale/README.md`: how to apply the policy and mint a host auth key.
