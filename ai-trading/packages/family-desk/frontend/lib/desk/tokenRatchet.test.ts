@@ -26,6 +26,9 @@ function selectorRules(text: string, className: string): number {
   return [...text.matchAll(/([^{}]+)\{/g)].filter(([, prelude]) => !prelude.trim().startsWith("@") && named.test(prelude)).length;
 }
 
+/** The class names a local modal or confirm was built from, before components/ui/Dialog, ConfirmDialog and InlineConfirm (DS-5). */
+const DIALOG_CLASSES = ["dialog", "dialogForm", "dialogHead", "dialogBody", "dialogFoot", "dialogFooter", "dialogTitle", "confirmDialog", "backdrop", "confirm", "endConfirm", "confirmActions"];
+
 const METRICS = {
   "raw hex colours": (text: string) => count(text, /#[0-9a-fA-F]{3,8}\b/g),
   "raw font-size: Npx": (text: string) => count(text, /font-size:\s*\d+(\.\d+)?px/g),
@@ -34,17 +37,19 @@ const METRICS = {
   "local .button rules (use components/ui Button)": (text: string) => selectorRules(text, "button"),
   "local .chip rules (use components/ui Badge)": (text: string) => selectorRules(text, "chip"),
   "local .srOnly / .visuallyHidden rules (use .sr-only)": (text: string) => selectorRules(text, "srOnly") + selectorRules(text, "visuallyHidden"),
+  "local modal / confirm rules (use components/ui Dialog, ConfirmDialog, InlineConfirm)": (text: string) => DIALOG_CLASSES.reduce((sum, name) => sum + selectorRules(text, name), 0),
 } as const;
 
 /** Checked in 2026-11-01 at the start of DS-0. Lower a number in the commit that removes the debt; never raise one. */
 const BASELINE: Record<keyof typeof METRICS, number> = {
   "raw hex colours": 70,
-  "raw font-size: Npx": 86,
+  "raw font-size: Npx": 85,
   "raw border-radius: Npx": 31,
   "outline: 2px solid restatements (use var(--focus-ring))": 45,
   "local .button rules (use components/ui Button)": 48,
   "local .chip rules (use components/ui Badge)": 14,
   "local .srOnly / .visuallyHidden rules (use .sr-only)": 10,
+  "local modal / confirm rules (use components/ui Dialog, ConfirmDialog, InlineConfirm)": 0,
 };
 
 const files = stylesheets();

@@ -16,6 +16,11 @@ Applies to `components/**`, `app/globals.css` and `lib/desk/**`. Paths are relat
 - Run-on ids and labels (`RUN_ONS`, `runOnLabel`) and comparison operators (`COMPARE_OPERATORS`, `operatorLabel`) live in `lib/spec/labels.ts` only. `lib/desk/singleSource.test.ts` fails if a component spells a run-on id.
 - `components/conditions/` is the shared condition kit (`ConditionRows`, `OperandPicker`, `JsonPanel`); the builder's recursive editor is not part of it.
 
+## Dialogs and confirms
+
+- A modal is `ui/Dialog`: render it to open it, stop rendering it to close it. It is a native `<dialog>` (top layer, no portal) and owns the scrim, `--z-modal`, Tab held inside, Escape, the scrim press, scroll lock and focus back to the opener. Never write a local `.dialog`, `.backdrop` or a `showModal()` effect.
+- A question with two answers is `ui/ConfirmDialog` (`tone="danger"` when it destroys something; the body names the consequence). A two-step action in place, with no dialog, is `ui/InlineConfirm` (cancels on Escape and on blur). Never call `window.confirm`; `beforeunload` stays native (`useUnsavedGuard`).
+
 ## Tokens
 
 - Tokens only. Colour, type, space, radius, height, z-index, shadow and the focus ring come from `app/globals.css` (`var(--…)`). No raw hex, no `font-size: Npx`, no `border-radius: Npx` in a module.

@@ -56,11 +56,9 @@
 .skelStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .skelStat { height: 32px; }
 
-/* Delete: muted until the pointer is on it, then the down colour; the confirm dialog is a small one. */
+/* Delete: muted until the pointer is on it, then the down colour. */
 button.deleteButton { color: var(--color-muted); }
 button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); color: var(--color-down); }
-/* The dialog sits in the row's action cell, which is nowrap: its text must wrap again, or the warning clips (D-079). */
-.confirmDialog { width: min(420px, calc(100vw - 32px)); white-space: normal; }
 /* No threads yet: one centred card, one sentence, one primary button (D-115). */
 .emptyCard { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); margin: var(--space-8) auto 0; max-width: 420px; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); padding: var(--space-6); text-align: center; }
 .emptyTitle { margin: 0; font-size: var(--text-body); line-height: var(--line-body); }

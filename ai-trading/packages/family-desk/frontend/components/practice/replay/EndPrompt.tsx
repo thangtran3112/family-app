@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { sessionOverText } from "@/lib/replay/journalView";
 import { endDayHint, endDayPrompt } from "@/lib/replay/swing";
@@ -28,6 +29,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
   const warning = swing ? endDayPrompt({ dayNo: swing.dayNo, clock: swing.clock, holdsOpen: swing.holdsOpen }) : day ? PRACTICE_COPY.dayEndWarning : PRACTICE_COPY.endEarlyWarning;
   const hint = swing ? endDayHint(swing.holdsOpen) : null;
   const [confirming, setConfirming] = useState(false);
+  const endRef = useRef<HTMLButtonElement>(null);
 
   if (atEnd && swing) {
     // At the close: just the day, the holds note and the button.
@@ -63,7 +65,7 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
   if (!confirming) {
     return (
       <div className={styles.endBlock}>
-        <button type="button" className={styles.button} disabled={busy} onClick={() => setConfirming(true)}>
+        <button ref={endRef} type="button" className={styles.button} disabled={busy} onClick={() => setConfirming(true)}>
           {asDay ? "End day…" : "End session…"}
         </button>
         {hint && <span className={styles.muted}>{hint}</span>}
@@ -73,18 +75,24 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
 
   return (
     <div className={styles.endSlot}>
-      <div role="group" aria-label={asDay ? "Confirm ending the day" : "Confirm ending the session"} className={styles.confirm}>
-        <p className={styles.endText}>{warning}</p>
-        {exits && <p className={styles.endText}>{exits}</p>}
-        <div className={styles.confirmActions}>
-          <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
-            {endLabel}
-          </button>
-          <button type="button" className={styles.button} onClick={() => setConfirming(false)}>
-            Keep practicing
-          </button>
-        </div>
-      </div>
+      <InlineConfirm
+        label={asDay ? "Confirm ending the day" : "Confirm ending the session"}
+        layout="floating"
+        size="md"
+        className={styles.endAnchor}
+        prompt={
+          <>
+            <span>{warning}</span>
+            {exits && <span>{exits}</span>}
+          </>
+        }
+        confirmLabel={endLabel}
+        cancelLabel="Keep practicing"
+        busy={busy}
+        returnFocus={endRef}
+        onConfirm={onEnd}
+        onCancel={() => setConfirming(false)}
+      />
     </div>
   );
 }

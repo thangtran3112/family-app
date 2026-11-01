@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { FormActionBar } from "@/components/ui/FormActionBar";
 import { RightRail } from "@/components/shell/desktop/RightRail";
@@ -52,6 +53,7 @@ export function FeedbackForm() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<FeedbackDetail | null>(null);
   const inFlight = useRef(false);
+  const [discarding, setDiscarding] = useState(false);
 
   const draft: FormDraft = { ...fields, uploads: shots.uploads };
   const reason = sendReason(draft);
@@ -88,11 +90,11 @@ export function FeedbackForm() {
     }
   }
 
-  function cancel() {
-    if (touched && !window.confirm("Discard this report?")) return;
+  function leave() {
     setDirty(false);
     window.location.assign(captured.route);
   }
+  const cancel = () => (touched ? setDiscarding(true) : leave());
 
   // Enter in a one-line field moves on instead of sending a half-finished report.
   const holdEnter = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -170,6 +172,17 @@ export function FeedbackForm() {
         primary={<Button type="submit" variant="primary" disabled={reason !== null} loading={sending}>{sending ? "Sending…" : "Send report"}</Button>}
       />
       {rail}
+      {discarding && (
+        <ConfirmDialog
+          title="Discard this report?"
+          body="What you wrote and any screenshots you added are lost."
+          confirmLabel="Discard report"
+          cancelLabel="Keep editing"
+          tone="danger"
+          onCancel={() => setDiscarding(false)}
+          onConfirm={leave}
+        />
+      )}
     </form>
   );
 }

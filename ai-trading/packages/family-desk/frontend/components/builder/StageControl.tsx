@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { nextStage, stageConfirmCopy, stageOptions, type StrategyStage } from "@/lib/strategy/stage";
 import styles from "./builder.module.css";
 
@@ -20,10 +22,11 @@ export function StageControl({
   const validStage = options.some((option) => "stage" in option && option.stage === stage);
   const next = validStage ? nextStage(stage as StrategyStage) : null;
 
-  function choose(target: StrategyStage) {
-    if (!window.confirm(stageConfirmCopy(target))) return;
-    onChange(target);
-  }
+  // The stage the person picked, until she answers the question about it.
+  const [asking, setAsking] = useState<StrategyStage | null>(null);
+  // The copy is a question, a blank line, then what it does.
+  const [question = "", ...consequence] = asking ? stageConfirmCopy(asking).split("\n\n") : [];
+  const askedLabel = options.find((option) => "stage" in option && option.stage === asking)?.label ?? "";
 
   return (
     <section className={styles.stageControl} aria-label="Strategy stage">
@@ -40,7 +43,7 @@ export function StageControl({
               className={current ? styles.currentStage : styles.stageButton}
               disabled={!canMove || current}
               key={option.stage}
-              onClick={() => choose(option.stage)}
+              onClick={() => setAsking(option.stage)}
               title={!hasVersion && !current ? "Save an initial version first" : option.reason}
               type="button"
             >
@@ -53,6 +56,19 @@ export function StageControl({
       </div>
       {!hasVersion && <p className={styles.help}>Save an initial version before changing stage.</p>}
       {error && <p className={styles.error} role="alert">{error}</p>}
+      {asking && (
+        <ConfirmDialog
+          title={question}
+          body={consequence.join(" ")}
+          confirmLabel={`Move to ${askedLabel.toLowerCase()}`}
+          cancelLabel="Keep current stage"
+          onCancel={() => setAsking(null)}
+          onConfirm={() => {
+            setAsking(null);
+            onChange(asking);
+          }}
+        />
+      )}
     </section>
   );
 }
