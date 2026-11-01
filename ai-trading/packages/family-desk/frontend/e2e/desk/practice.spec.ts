@@ -903,6 +903,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await page.keyboard.press("b");
     await expect(flat.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
     await expect(flat.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(flat.getByTestId("portfolio-count")).toHaveText("1 open position");
     const held = ((await flat.locator('[data-symbol="TSLA"]').textContent()) ?? "").match(/Long \d+ @ \$[\d,.]+/)![0];
     // Back to the day list: it shows the list of names only, no portfolio section and no Portfolio tab in the right rail.
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
@@ -915,6 +916,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     const onTab = page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
     await expect(onTab.locator('[data-symbol="TSLA"]')).toContainText(held);
     await expect(onTab.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(onTab.getByTestId("portfolio-count")).toHaveText("1 open position");
   });
 
   test("no star or names cap anywhere on the day page", async ({ page, context }) => {

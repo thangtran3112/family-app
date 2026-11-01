@@ -303,6 +303,20 @@ test.describe("Practice: switching names", () => {
     await expect(total).toContainText("2 open");
     await expect(total).toContainText("as of");
     await expect(portfolio.getByTestId("portfolio-row-total")).toHaveCount(2);
+    // The head counts the open positions, and each row's arrow follows the sign of its P/L (up green, down red, none at zero).
+    await expect(portfolio.getByTestId("portfolio-count")).toHaveText("2 open positions");
+    for (const row of [tsla, lrcx]) {
+      const [pnl] = amounts(await row.getByTestId("portfolio-row-total").textContent());
+      await expect(row.getByTestId("portfolio-row-arrow")).toHaveText(pnl! > 0 ? "▲" : pnl! < 0 ? "▼" : "");
+      await expect(row.getByTestId("portfolio-row-change")).toHaveText(/^[+−]?\$[\d,]+\.\d{2}$/); // the stock's move since entry, per share
+    }
+    // The switch flips the price change and the P/L together: dollars to percent and back.
+    await portfolio.getByRole("radio", { name: "%" }).click();
+    await expect(portfolio.getByTestId("portfolio-row-total")).toHaveText([/^[+−]?\d+\.\d{2}%$/, /^[+−]?\d+\.\d{2}%$/]);
+    await expect(portfolio.getByTestId("portfolio-row-change")).toHaveText([/^[+−]?\d+\.\d{2}%$/, /^[+−]?\d+\.\d{2}%$/]);
+    await portfolio.getByRole("radio", { name: "$" }).click();
+    await expect(portfolio.getByTestId("portfolio-row-total")).toHaveText([/^[+−]?\$[\d,]+\.\d{2}$/, /^[+−]?\$[\d,]+\.\d{2}$/]);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // a focused segment owns the arrow keys
     // The footer is read from the server after the clock settles, so it can trail the rows by one read: wait for it to agree.
     await expect
       .poll(async () => {
@@ -332,6 +346,7 @@ test.describe("Practice: switching names", () => {
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("1 trade");
     await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
+    await expect(portfolio.getByTestId("portfolio-count")).toHaveText("1 open position");
     await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
 
     // The day page asks before it exits what is still open, and names it.
