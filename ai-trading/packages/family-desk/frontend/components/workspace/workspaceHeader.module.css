@@ -295,6 +295,12 @@
   background: linear-gradient(90deg, var(--swatch) 0 4px, transparent 4px 6px, var(--swatch) 6px 10px);
 }
 
+/* A dotted line's swatch: dots in the line's colour. */
+.swatchDotted {
+  height: 3px;
+  background: radial-gradient(circle at 1.5px 1.5px, var(--swatch) 0 1.5px, transparent 1.6px) 0 0 / 4px 3px repeat-x;
+}
+
 /* The replay legend's toggle. */
 .legendButton {
   min-height: 24px;

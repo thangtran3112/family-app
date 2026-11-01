@@ -368,12 +368,18 @@ def test_the_recorded_universe_route_reads_coverage_the_default_and_one_morning(
     assert client.get(f"{BASE}/universe-days", params={"day": "not-a-day"}, headers=auth_headers()).status_code == 422
 
 
-def test_the_rescan_route_scans_at_the_day_clock_and_leaves_the_frozen_list_alone(daily, db_session) -> None:
+def test_the_rescan_route_answers_at_once_with_a_running_job_then_repopulates_the_list(
+    daily, db_session, monkeypatch
+) -> None:
     client, services, _ = daily
+    # Hold the background task back (an earlier test's app may carry a session factory that would run it at once): the
+    # test runs the job itself, as the task would.
+    monkeypatch.setattr(replay_api, "_rescan_in_background", lambda *args: None)
     plan_id = _start_plan(daily, db_session)["plan"]["id"]
     plan_mod.run_prep(db_session, services, plan_id)
     list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
-    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["rescan"] is None
+    morning = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
+    assert morning["rescan"] is None and morning["rescan_job"] is None
     early = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
     assert early.status_code == 409
     assert early.json()["detail"]["problems"][0]["message"].startswith("Practice a name first")
@@ -381,19 +387,41 @@ def test_the_rescan_route_scans_at_the_day_clock_and_leaves_the_frozen_list_alon
     session = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers())
     to = et(DAYS[0], "10:00").tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
     client.post(f"{BASE}/sessions/{session.json()['id']}/advance", json={"to": to}, headers=auth_headers())
-    frozen = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
-    scanned = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
-    assert scanned.status_code == 200, scanned.text
-    body = scanned.json()
-    assert body["rescan"]["seq"] == 1 and body["rescan"]["as_of"] == to
-    assert body["rescan"]["data_through"] == "2026-09-28T13:45:00Z" and body["rescan"]["new_count"] == 0
-    assert [(c["symbol"], c["new_since_list"]) for c in body["rescan"]["candidates"]] == [("GAPPER", False)]
-    assert body["rescan"]["universe"]["footnote"] == body["universe"]["footnote"]
-    for key in ("candidates", "universe", "columns", "watch", "data_through", "list_at"):
-        assert body[key] == frozen[key]  # the frozen list is exactly what it was
+    started = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
+    assert started.status_code == 200, started.text
+    body = started.json()
+    # The answer does not wait for the scan: it says the scan is running, and the list is still the morning's.
+    assert body["rescan_job"] == {"state": "running", "as_of": to, "done": 0, "total": 0, "message": None}
+    assert body["rescan"] is None and body["candidates"] == morning["candidates"]
+    # A second click while it runs joins it: still one job, no second scan.
+    joined = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers()).json()
+    assert joined["rescan_job"]["state"] == "running"
+    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["rescan_job"]["state"] == "running"
+
+    run = db_session.get(ReplayDayList, list_id).rescan_job["run"]
+    plan_mod.run_rescan(db_session, services, list_id, run)
+    done = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
+    assert done["rescan_job"] == {"state": "done", "as_of": to, "done": 3, "total": 3, "message": None}
+    assert done["rescan"]["seq"] == 1 and done["rescan"]["as_of"] == to and done["rescan"]["new_count"] == 0
+    assert (
+        done["rescan"]["data_through"] == "2026-09-28T13:45:00Z"
+        and done["data_through"] == done["rescan"]["data_through"]
+    )
+    assert set(done["rescan"]) == {
+        "seq",
+        "as_of",
+        "data_through",
+        "new_count",
+        "created_at",
+    }  # a label, not a second list
+    assert [(c["symbol"], c["new_since_list"], c["held_over"]) for c in done["candidates"]] == [
+        ("GAPPER", False, False)
+    ]
+    assert done["universe"]["footnote"] == morning["universe"]["footnote"]
     again = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
-    assert again.json()["rescan"]["seq"] == 1  # the clock has not moved: the same scan
-    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["rescan"]["seq"] == 1
+    assert (
+        again.json()["rescan"]["seq"] == 1 and again.json()["rescan_job"]["state"] == "done"
+    )  # the clock has not moved
 
     other = auth_headers(OTHER_EMAIL)
     assert client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=other).status_code == 404

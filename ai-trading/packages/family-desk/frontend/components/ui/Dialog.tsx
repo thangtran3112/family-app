@@ -11,8 +11,8 @@ export type DialogProps = {
    * open until its owner stops rendering it.
    */
   onClose: () => void;
-  /** sm 420 px (a confirm), md 520 px (default), lg 720 px (a form). */
-  size?: "sm" | "md" | "lg";
+  /** sm 420 px (a confirm), md 520 px (default), lg 720 px (a form), drawer 760 px wide and full height at the right edge (a chart to read). */
+  size?: "sm" | "md" | "lg" | "drawer";
   /** Controls at the right of the heading (a Close button). */
   headerActions?: ReactNode;
   /** The bottom bar, right-aligned: put the neutral action first and the main one last. */

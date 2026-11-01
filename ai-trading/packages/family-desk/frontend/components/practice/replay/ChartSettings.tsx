@@ -103,7 +103,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
             {OVERLAY_ROWS.map((row) => (
               <label key={row.id} className={styles.toggle}>
                 <input type="checkbox" checked={prefs.on[row.id]} onChange={() => onChange(togglePref(prefs, row.id))} />
-                <Swatch color={row.color} dashed={row.dashed} />
+                <Swatch color={row.color} style={row.dashed ? "dashed" : "solid"} />
                 <span>{row.label}</span>
               </label>
             ))}

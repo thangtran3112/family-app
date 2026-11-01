@@ -14,6 +14,7 @@ import {
   keyLevelRows,
   noMarketData,
   legendModel,
+  levelsLegend,
   priceSummary,
   signalKindLabel,
   toggleIndicator,
@@ -95,6 +96,22 @@ test("legend shows the last bar until the cursor moves, then the cursor values",
   assert.equal(hover.title, "NVDA · 15m · O 1.00 H 3.00 L 0.50 C 2.00");
   assert.equal(hover.items[0]!.value, "1.25");
   assert.equal(hover.items[1]!.value, "—");
+});
+
+test("the levels legend lists priced levels highest first, with a dotted or dashed swatch, and leaves out the unpriced", () => {
+  const legend = levelsLegend("Key levels", [
+    { label: "List price", price: 10.5, color: "#FFB020", style: "dashed" },
+    { label: "Prior low", price: 9.25, style: "dotted" },
+    { label: "Premarket high", price: 11, style: "dotted" },
+    { label: "Prior high", price: null, style: "dotted" },
+  ]);
+  assert.equal(legend.title, "Key levels");
+  assert.deepEqual(legend.items.map((item) => [item.label, item.value, item.style]), [
+    ["Premarket high", "11.00", "dotted"],
+    ["List price", "10.50", "dashed"],
+    ["Prior low", "9.25", "dotted"],
+  ]);
+  assert.equal(legend.items[1]!.color, "#FFB020");
 });
 
 test("price summary: live quote wins, change is against the prior close, unknown stays a dash", () => {

@@ -1,58 +1,21 @@
 "use client";
 
-import { PortfolioPanel } from "@/components/practice/replay/Portfolio";
-import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
-import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { useShellBand } from "@/lib/desk/useViewportBand";
-import type { DeskQueryResult } from "@/lib/desk/useDeskQuery";
+import { practiceText } from "@/lib/desk/freshness";
 import type { DayList } from "@/lib/replay/daily";
-import { blockLadder, blockOpenByDefault, riskPlanText } from "@/lib/replay/dayView";
-import { formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
-import type { Thread } from "@/lib/replay/threads";
+import { blockLadder, blockOpenByDefault } from "@/lib/replay/dayView";
 import styles from "./day.module.css";
-import { FactList } from "@/components/ui/FactList";
-import { signTone } from "@/lib/desk/format";
 
 export type DayLeftPanelProps = {
   list: DayList;
-  /** The thread's full payload (its risk plan); null while it loads or when the day has no thread. */
-  thread: Thread | null;
-  /** The day list as the Portfolio reads it (the day page owns the read, so End day names the same open trades). */
-  portfolio: DeskQueryResult<DayList>;
 };
 
-/** The day list's left rail (P7): the day's portfolio, the thread box with its risk plan, and the block's days. At 1180 the
- *  portfolio is the right rail's tab instead. */
-export function DayLeftPanel({ list, thread, portfolio }: DayLeftPanelProps) {
-  const brief = list.thread;
-  const band = useShellBand();
+/** The day list's left rail (P7): the block's days. The day list is only the list of names: the portfolio is the Portfolio tab's,
+ *  and the thread's balance and risk plan are the thread strip's and the right rail's Plan tab. */
+export function DayLeftPanel({ list }: DayLeftPanelProps) {
   return (
     <LeftRailPortal>
-      <div className={styles.side} role="region" aria-label="Day lists and thread" tabIndex={0}>
-        {band === "1440" && (
-          <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayPortfolio}>
-            <h2 className={styles.sideTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
-            <PortfolioPanel dayListId={list.id} query={portfolio} />
-          </section>
-        )}
-
-        {brief && (
-          <section className={styles.sideSection} aria-label="Practice thread">
-            <div className={styles.sideHead}>
-              <h2 className={styles.sideTitle}>{thread ? threadName(thread.thread) : "Practice thread"}</h2>
-              <SimulatedBadge />
-            </div>
-            <FactList
-              facts={[
-                { id: "balance", label: PRACTICE_COPY.threadBalance, value: formatBalance(brief.balance) },
-                ...(brief.today_pnl_usd === null ? [] : [{ id: "today", label: PRACTICE_COPY.threadToday, value: formatDayResult(brief.today_pnl_usd), tone: signTone(brief.today_pnl_usd) }]),
-              ]}
-            />
-            {thread && <p className={styles.muted}>{riskPlanText(thread.thread.plan)}</p>}
-          </section>
-        )}
-
+      <div className={styles.side} role="region" aria-label="Block days" tabIndex={0}>
         <details className={styles.sideSection} open={blockOpenByDefault(list.of) ? true : undefined}>
           <summary className={styles.sideSummary}><h2 className={styles.sideTitle}>{practiceText("dayBlockTitle", { of: list.of })}</h2></summary>
           <ul className={styles.ladder}>

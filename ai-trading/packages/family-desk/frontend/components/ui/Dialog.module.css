@@ -3,6 +3,8 @@
 .root[open] { display: flex; }
 .root[data-size="sm"] { width: min(420px, calc(100vw - 32px)); }
 .root[data-size="lg"] { width: min(720px, calc(100vw - 32px)); }
+/* A drawer: the same modal, docked to the right edge at full height (Practice Peek). It is a wide sheet, so a chart and its legend have room. */
+.root[data-size="drawer"] { width: min(760px, calc(100vw - 32px)); height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; border-width: 0 0 0 1px; border-radius: 0; }
 .root::backdrop { background: var(--color-scrim); }
 /* Head and foot stay; the body scrolls. */
 .frame { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
