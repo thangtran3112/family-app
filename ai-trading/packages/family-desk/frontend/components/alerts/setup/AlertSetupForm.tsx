@@ -7,7 +7,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import editorStyles from "@/components/screener/editor/editor.module.css";
+import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
+import { FieldError, FieldRow } from "@/components/ui/Field";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import type { Problem, SettingsChannel } from "@/lib/api/schemas";
@@ -191,13 +193,13 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
       {saved && (
         <div className={styles.saved} role="status">
           <p>{saved}</p>
-          <div className={editorStyles.controls}>
+          <FieldRow>
             <Link href="/alerts" className={styles.link}>View alerts</Link>
             <Link href="/alerts/new" className={styles.link}>Set up another</Link>
-          </div>
+          </FieldRow>
         </div>
       )}
-      {saveNote && <p role="alert" className={editorStyles.problem}>{saveNote}</p>}
+      {saveNote && <FieldError>{saveNote}</FieldError>}
       {(listsFailed || filtersFailed) && (
         <ErrorBlock
           message="Couldn't load your watchlists or filters · Try again"
@@ -222,18 +224,18 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
         {dirty && <p>You have unsaved changes</p>}
         <div className={editorStyles.actions}>
           {editId !== null ? (
-            <button type="button" className={`${editorStyles.button} ${editorStyles.primary}`} disabled={saving !== null} onClick={() => void save("edit")}>
+            <Button variant="primary" disabled={saving !== null} onClick={() => void save("edit")}>
               {saving ? "Saving…" : "Save changes"}
-            </button>
+            </Button>
           ) : (
             <>
-              <button type="button" className={`${editorStyles.button} ${editorStyles.primary}`} disabled={saving !== null} onClick={() => void save("draft")}>
+              <Button variant="primary" disabled={saving !== null} onClick={() => void save("draft")}>
                 {saving === "draft" ? "Saving…" : createdId !== null ? "Save changes" : "Save draft"}
-              </button>
+              </Button>
               <div className={styles.turn}>
-                <button type="button" className={editorStyles.button} disabled={saving !== null || !turn.enabled} onClick={() => void save("on")}>
+                <Button disabled={saving !== null || !turn.enabled} onClick={() => void save("on")}>
                   {saving === "on" ? "Saving…" : "Turn on"}
-                </button>
+                </Button>
                 {turn.reason && <p className={editorStyles.note}>{turn.reason}</p>}
               </div>
             </>

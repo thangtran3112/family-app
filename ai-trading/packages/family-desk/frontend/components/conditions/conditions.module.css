@@ -1,20 +1,9 @@
-/* The shared condition kit's own styles (ConditionRows, OperandPicker, JsonPanel). Tokens only. */
-.group { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); margin: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
-.group legend { padding: 0 var(--space-1); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.field { display: flex; min-width: 0; flex-direction: column; gap: var(--space-1); color: var(--color-muted); font-size: var(--text-label); }
-.controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
-.option { display: flex; min-height: var(--size-sm); align-items: center; gap: var(--space-2); color: var(--color-text); font-size: var(--text-label); }
+/* The condition kit's own layout (ConditionRows, JsonPanel). The controls come from components/ui/Field. Tokens only. */
 .condition { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding-top: var(--space-2); }
-.static { margin: 0; color: var(--color-text); font-size: var(--text-label); line-height: 18px; }
-.problem { display: block; margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: 18px; }
-
-.field select, .field input[type="text"], .field input[type="number"] { height: var(--size-lg); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); }
-.field select:hover, .field input[type="number"]:hover { border-color: var(--color-muted); }
-.field input[type="number"] { width: 112px; }
-.option input[type="radio"] { width: 16px; height: 16px; margin: 0; accent-color: var(--color-amber); }
-.group :is(select, input, summary):focus-visible, .panel :is(summary):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.controls { align-items: flex-end; }
 
 .panel { display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-label); }
 .summary { color: var(--color-text); font-weight: var(--weight-semibold); cursor: pointer; }
+.summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .jsonBody { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin-top: var(--space-2); }
 .pre { max-height: 360px; overflow: auto; margin: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3); color: var(--color-text); font-size: var(--text-meta); line-height: var(--line-meta); white-space: pre-wrap; word-break: break-word; }

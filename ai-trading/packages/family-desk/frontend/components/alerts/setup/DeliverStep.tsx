@@ -5,6 +5,7 @@ import type { Problem, SettingsChannel } from "@/lib/api/schemas";
 import { channelRows, hasExternalChannel, NO_CHANNEL_NOTE } from "@/lib/desk/channelView";
 import { type AlertForm } from "@/lib/desk/alertForm";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
+import { Checkbox, Field, FieldError, FieldGroup, Input, Select } from "@/components/ui/Field";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import styles from "./setup.module.css";
 import { problemLine } from "@/lib/desk/problems";
@@ -31,51 +32,33 @@ export function DeliverStep({ form, onChange, problems, channels, channelsFailed
   return (
     <section className={styles.card} aria-labelledby="alert-step-deliver">
       <h2 id="alert-step-deliver" className={styles.stepTitle}>Deliver</h2>
-      <fieldset className={editorStyles.group}>
-        <legend>Send to</legend>
-        <label className={editorStyles.option}>
-          <input type="checkbox" checked readOnly disabled />
-          Desk inbox
-          <span className={editorStyles.note}>Always first</span>
-        </label>
-        <label className={editorStyles.option}>
-          <input type="checkbox" checked={form.telegram} disabled={telegram.disabled && !form.telegram} onChange={(event) => onChange({ ...form, telegram: event.target.checked })} />
-          Telegram
-          <span className={editorStyles.note}>{telegram.text}</span>
-        </label>
-        <label className={editorStyles.option}>
-          <input type="checkbox" checked={form.slack} disabled={slack.disabled && !form.slack} onChange={(event) => onChange({ ...form, slack: event.target.checked })} />
-          Slack
-          <span className={editorStyles.note}>{slack.text}</span>
-        </label>
-      </fieldset>
+      <FieldGroup legend="Send to">
+        <Checkbox label="Desk inbox" hint="Always first" checked readOnly disabled />
+        <Checkbox label="Telegram" hint={telegram.text} checked={form.telegram} disabled={telegram.disabled && !form.telegram} onChange={(event) => onChange({ ...form, telegram: event.target.checked })} />
+        <Checkbox label="Slack" hint={slack.text} checked={form.slack} disabled={slack.disabled && !form.slack} onChange={(event) => onChange({ ...form, slack: event.target.checked })} />
+      </FieldGroup>
       {channelsFailed && <ErrorBlock message="Couldn't check channels · Try again" onRetry={onRetryChannels} />}
       {channels !== null && !hasExternalChannel(channels) && (
         <p role="status" className={editorStyles.note}>
           {NO_CHANNEL_NOTE} <Link href="/settings" className={styles.link}>Open Settings</Link>
         </p>
       )}
-      <label className={editorStyles.field}>
-        <span>Severity</span>
-        <select value={form.severity} onChange={(event) => onChange({ ...form, severity: event.target.value as AlertForm["severity"] })}>
+      <Field id="alert-severity" label="Severity">
+        <Select value={form.severity} onChange={(event) => onChange({ ...form, severity: event.target.value as AlertForm["severity"] })}>
           <option value="info">Info</option>
           <option value="opportunity">Opportunity</option>
           <option value="risk">Risk</option>
-        </select>
-      </label>
-      <label className={editorStyles.field}>
-        <span>Message <span className={editorStyles.note}>(optional)</span></span>
-        <input type="text" maxLength={140} value={form.message} onChange={(event) => onChange({ ...form, message: event.target.value })} />
-      </label>
-      <p className={editorStyles.note}>{"Type {symbol} for the ticker, {close} for the price and {time} for the time. They fill in when the alert fires."}</p>
+        </Select>
+      </Field>
+      <Field id="alert-message" label="Message" optional note={"Type {symbol} for the ticker, {close} for the price and {time} for the time. They fill in when the alert fires."}>
+        <Input maxLength={140} value={form.message} onChange={(event) => onChange({ ...form, message: event.target.value })} />
+      </Field>
       {message !== "" && (
         <p className={editorStyles.note}>
           Example only, with a sample price: {message.replaceAll("{symbol}", "NVDA").replaceAll("{close}", "211.50").replaceAll("{time}", "3:45 PM")}
         </p>
       )}
-      {problems.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
-      ))}
+      {problems.map((problem, index) => <FieldError key={index}>{problemLine(problem)}</FieldError>)}
     </section>
   );
 }

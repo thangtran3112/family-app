@@ -24,8 +24,11 @@ import { SessionRunOnFields } from "./SessionRunOnFields";
 import { UniverseFields } from "./UniverseFields";
 import { UnsavedBar } from "./UnsavedBar";
 import styles from "./editor.module.css";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
-import { formProblems, problemText } from "@/lib/desk/problems";
+import { Field, FieldError, FieldRow, Input, NumberInput } from "@/components/ui/Field";
+import { fieldError, formProblems } from "@/lib/desk/problems";
 
 export function FilterEditor() {
   const param = useSearchParams().get("id");
@@ -167,51 +170,41 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   return (
     <>
       {readOnly && (
-        <div className={styles.banner}>
-          <div className={styles.row}>
-            <span>Default filters are read-only</span>
-            <button type="button" className={`${styles.button} ${styles.primary}`} onClick={copy} disabled={copying}>
-              {copying ? "Copying…" : "Copy to edit"}
-            </button>
-          </div>
-          {copyFailed && <span className={styles.problem}>Couldn&apos;t copy · Try again</span>}
-        </div>
+        <>
+          <Banner
+            tone="neutral"
+            action={<Button variant="primary" onClick={copy} loading={copying}>{copying ? "Copying…" : "Copy to edit"}</Button>}
+          >
+            Default filters are read-only
+          </Banner>
+          {copyFailed && <FieldError>Couldn&apos;t copy · Try again</FieldError>}
+        </>
       )}
       <ErrorSummary problems={formProblems(problems)} />
-      {saveNote && <p role="alert" className={styles.problem}>{saveNote}</p>}
+      {saveNote && <FieldError>{saveNote}</FieldError>}
       {!readOnly && defaultForm && (
-        <div className={styles.row}>
-          <button type="button" className={styles.button} onClick={() => change({ ...defaultForm, name: form.name })}>Reset to default</button>
-        </div>
+        <FieldRow>
+          <Button onClick={() => change({ ...defaultForm, name: form.name })}>Reset to default</Button>
+        </FieldRow>
       )}
       <fieldset className={styles.fields} disabled={readOnly}>
-        <label className={styles.field}>
-          <span>Name</span>
-          <input type="text" maxLength={80} value={form.name} onChange={(event) => change({ ...form, name: event.target.value })} />
-        </label>
-        {problemsFor(problems, "name").map((problem, index) => (
-          <span key={index} className={styles.problem}>{problemText(problem)}</span>
-        ))}
+        <Field id="filter-name" label="Name" error={fieldError(problemsFor(problems, "name"))}>
+          <Input maxLength={80} value={form.name} onChange={(event) => change({ ...form, name: event.target.value })} />
+        </Field>
         <UniverseFields form={form} onChange={change} problems={problems} />
         <LiquidityFields form={form} onChange={change} problems={problems} />
         <SessionRunOnFields form={form} onChange={change} problems={problems} />
         <ConditionRows form={form} onChange={change} problems={problems} />
         <RankFields form={form} onChange={change} problems={problems} />
-        <label className={styles.field}>
-          <span>Max results (1 to 100)</span>
-          <input type="number" min={1} max={100} value={form.maxResults} onChange={(event) => change({ ...form, maxResults: event.target.value })} />
-        </label>
-        {problemsFor(problems, "maxResults").map((problem, index) => (
-          <span key={index} className={styles.problem}>{problemText(problem)}</span>
-        ))}
+        <Field id="filter-max-results" label="Max results (1 to 100)" error={fieldError(problemsFor(problems, "maxResults"))}>
+          <NumberInput min={1} max={100} value={form.maxResults} onChange={(event) => change({ ...form, maxResults: event.target.value })} />
+        </Field>
       </fieldset>
       {filter === null && (
-        <div className={styles.row}>
-          <button type="button" className={`${styles.button} ${styles.primary}`} onClick={save} disabled={saving}>
-            {saving ? "Creating…" : "Create filter"}
-          </button>
-          <Link href="/screener" className={styles.button}>Cancel</Link>
-        </div>
+        <FieldRow>
+          <Button variant="primary" onClick={save} loading={saving}>{saving ? "Creating…" : "Create filter"}</Button>
+          <Button href="/screener" client>Cancel</Button>
+        </FieldRow>
       )}
       {dirty && filter !== null && <UnsavedBar onSave={save} onDiscard={() => change(original)} saving={saving} canSave={!saving} />}
       <RightRail

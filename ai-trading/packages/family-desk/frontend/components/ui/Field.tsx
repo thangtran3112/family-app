@@ -76,6 +76,11 @@ export function Field({
   );
 }
 
+/** A problem line for a set of controls rather than one field (a condition row, a step): announced, in the error tone. */
+export function FieldError({ children, className }: Layout & { children: ReactNode }) {
+  return <p role="alert" data-error="true" className={join(styles.message, className)}>{children}</p>;
+}
+
 /** A row of fields (or a field and its buttons) that wraps instead of clipping. */
 export function FieldRow({ children, className }: Layout & { children: ReactNode }) {
   return <div className={join(styles.row, className)}>{children}</div>;
@@ -87,7 +92,7 @@ export function FieldGroup({ legend, error, bare = false, children, className, .
     <fieldset className={join(styles.group, className)} data-bare={bare ? "true" : undefined} {...rest}>
       <legend>{legend}</legend>
       {children}
-      {error && <p role="alert" data-error="true" className={styles.message}>{error}</p>}
+      {error && <FieldError>{error}</FieldError>}
     </fieldset>
   );
 }

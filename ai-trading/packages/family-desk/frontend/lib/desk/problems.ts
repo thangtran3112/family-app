@@ -88,6 +88,10 @@ export function formProblems(problems: readonly { path: string; message: string 
 /** The sentence that goes under its own field (no field name, the field is right above it). */
 export const problemText = (problem: { path: string; message: string }): string => formProblems([problem])[0]!.text;
 
+/** The one line under a field for its problems: each plain sentence once, joined; null with none. */
+export const fieldError = (problems: readonly { path: string; message: string }[]): string | null =>
+  problems.length === 0 ? null : [...new Set(problems.map(problemText))].join(" ");
+
 /** "1 problem to fix" / "3 problems to fix"; null with none. */
 export const problemsTitle = (count: number): string | null => (count === 0 ? null : count === 1 ? "1 problem to fix" : `${count} problems to fix`);
 
