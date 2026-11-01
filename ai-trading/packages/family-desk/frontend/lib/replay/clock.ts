@@ -10,12 +10,6 @@ export const TICK_MS = 1000;
 
 export const isSpeed = (value: number): value is Speed => (SPEEDS as readonly number[]).includes(value);
 
-/** Keys 1 to 4 pick the speed chips in order. */
-export const speedForDigit = (digit: string): Speed | null => {
-  const index = Number(digit) - 1;
-  return Number.isInteger(index) && index >= 0 && index < SPEEDS.length ? SPEEDS[index]! : null;
-};
-
 /**
  * The thread's one time (the day-trade thread keeps a single clock for every name on its list): the day list's shared clock,
  * or this session's own playhead when it stands alone or is already past the clock. A name left behind the clock shows the

@@ -72,7 +72,7 @@ test.describe("Practice thread tabs", () => {
     await expectSelected(page, "Order");
 
     // The chart takes the whole window: the strip goes with the rest of the chrome, and comes back.
-    await page.keyboard.press("f");
+    await page.getByRole("button", { name: "Full screen" }).click();
     await expect(strip(page)).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(strip(page)).toBeVisible();

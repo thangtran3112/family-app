@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { practiceText } from "../../lib/desk/freshness.ts";
 import { expect, openDesk, prepareDesk, test } from "./helpers";
 import { createStubSession } from "./hub-helpers";
-import { replayRail } from "./swing-helpers";
+import { placeOrder, replayRail } from "./swing-helpers";
 
 // Keyboard and screen-reader behaviour of the Practice workspace (the five-reviewer pass): the Jump panel and the stop form hand focus
 // back, the bottom panel is one tablist whose tabs name their panel, and the Marks and levels toggle keeps one name. The stub day is TSLA
@@ -32,7 +32,7 @@ test.describe("Practice workspace: keyboard and names", () => {
     await expect(panel.getByRole("button", { name: "+5 min" })).toBeFocused();
     await expect(panel.getByRole("menuitem"), "a form may not sit inside a menu").toHaveCount(0);
     await expect(panel.getByLabel("To a time (ET)")).toBeVisible();
-    await expect(panel.getByText("Shift →")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "To the next signal" }), "no key hint on the item: Practice has no shortcuts").toHaveAccessibleName("To the next signal");
     await page.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
     await expect(jump).toBeFocused();
@@ -99,12 +99,14 @@ test.describe("Practice workspace: keyboard and names", () => {
     await expect(page.getByRole("tabpanel")).toHaveCount(0);
   });
 
-  test("a key that cannot mark says why, and the message is announced from a region that was already on the page", async ({ page, context }) => {
+  test("a refused order says why, and the message is announced from a region that was already on the page", async ({ page, context }) => {
     await openStub(page, context);
     await expect(page.locator('div[role="status"][aria-live="polite"]:not(:has(*))'), "the polite region is on the page, empty, before any message").toHaveCount(1);
-    await page.keyboard.press("x");
-    const note = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Dismiss message" }) });
-    await expect(note).toContainText("No open practice trade to exit");
+    await expect(page.locator('div[role="status"][aria-live="polite"]:not(:has(*)) + div[role="alert"]:not(:has(*))'), "the assertive region (the polite one's sibling) is on the page, empty, before any message").toHaveCount(1);
+    await page.route("**/api/desk/replay/sessions/*/{marks,orders}", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+    await placeOrder(page, "Buy");
+    const note = page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) });
+    await expect(note).toContainText("Couldn't place that mark");
     await note.getByRole("button", { name: "Dismiss message" }).click();
     await expect(note).toHaveCount(0);
   });

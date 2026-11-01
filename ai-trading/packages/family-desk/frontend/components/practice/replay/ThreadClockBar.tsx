@@ -56,10 +56,10 @@ export function ThreadClockBar(props: ThreadClockBarProps) {
         <p className={styles.status} role="status" aria-live="polite">{statusLine(status, speed, clock, windowStart)}</p>
       </div>
       <div className={styles.toolbarRow}>
-        <Button size="touch" variant="primary" disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} title="Space" onClick={props.onToggle}>
+        <Button size="touch" variant="primary" disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} onClick={props.onToggle}>
           {status === "playing" ? "Pause" : "Play"}
         </Button>
-        <Button size="touch" disabled={locked || props.busy} title="Step one bar (→)" aria-keyshortcuts="ArrowRight" onClick={props.onStep}>Step</Button>
+        <Button size="touch" disabled={locked || props.busy} onClick={props.onStep}>Step</Button>
         <SpeedChips speed={speed} onSpeed={props.onSpeed} />
         <JumpMenu
           revealedThrough={clock}
