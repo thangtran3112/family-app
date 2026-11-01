@@ -21,7 +21,7 @@
 .rowLink:hover { text-decoration: underline; }
 .rowLink::after { content: ""; position: absolute; inset: 0; }
 .rowLink:focus-visible { outline: none; }
-.rowLink:focus-visible::after { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.rowLink:focus-visible::after { outline: var(--focus-ring); outline-offset: -2px; }
 .up { color: var(--color-up); }
 .down { color: var(--color-down); }
 .flat { color: var(--color-muted); }

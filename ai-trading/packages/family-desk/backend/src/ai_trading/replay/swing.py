@@ -929,7 +929,8 @@ def _freeze_week(db: Session, svc: Services | None, thread: PracticeThread, week
 
 def _max_open(rows: list[PracticeHold], day: date) -> int:
     """The most holds open at once on `day`: those carried in, plus entries, minus exits, in time order (an exit first
-    on a tie)."""
+    on a tie). A slice a partial exit closed (`part_exit`) is not a hold of its own: its position is the other row."""
+    rows = [r for r in rows if not r.part_exit]
     running = sum(1 for r in rows if r.entry_day < day and (r.status == "open" or r.exit_day >= day))
     events = [(r.entry_at, 1) for r in rows if r.entry_day == day]
     events += [(r.exit_at, -1) for r in rows if r.status == "closed" and r.exit_day == day]
@@ -989,7 +990,7 @@ def _day_summary(
         ],
         "stop_hits": sorted(stop_hits, key=lambda hit: (hit["at"], hit["symbol"])),
         "late_stars": [w["symbol"] for w in row.watch if plan_mod._utc(w["starred_clock"]) > found.regular_open],
-        "entries": sum(1 for r in all_rows if r.entry_day == day),
+        "entries": sum(1 for r in all_rows if r.entry_day == day and not r.part_exit),
         "exits": len(exits),
         "max_open_seen": _max_open(all_rows, day),
     }

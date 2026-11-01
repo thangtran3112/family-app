@@ -570,28 +570,31 @@ def _advance_day(db_session, user_id, svc, session_id, day, hhmm):
     )
 
 
-def test_a_day_entry_without_a_stop_is_refused_when_the_plan_asks_for_one(db_session, user_id, svc) -> None:
-    """D-060: "Stop on every entry" is enforced, not just scored. The refusal says what to do; a stop typed with the
-    entry goes through, and the adherence check passes for it."""
+def test_a_day_entry_without_a_stop_is_accepted_and_scored_not_refused(db_session, user_id, svc) -> None:
+    """"Stop on every entry" is a score, never a refusal: an entry without a stop is placed, the stop_set check
+    fails for it, and a stop typed later (the Stop key) still moves the line."""
     make_thread(db_session, user_id, stopNoteOnEntry="yes")
     _, session, _ = _day_one(db_session, user_id, svc)
     _advance(db_session, user_id, svc, session.id, "09:30")
-    with pytest.raises(ReplayProblem) as caught:
-        _mark(db_session, user_id, svc, session.id, "long_entry", shares=10)
-    assert (caught.value.message, caught.value.path, caught.value.status) == (
-        session_mod.STOP_REQUIRED,
-        "stopPrice",
-        422,
-    )
-    assert session_mod._load_marks(db_session, session.id) == []  # nothing was written
-    placed = _mark(db_session, user_id, svc, session.id, "long_entry", shares=10, stopPrice=104.0)
-    assert placed["open_trade"]["stop_price"] == 104.0
-    placed = _mark(db_session, user_id, svc, session.id, "stop", stopPrice=105.0)  # the Stop key moves the line
+    placed = _mark(db_session, user_id, svc, session.id, "long_entry", shares=10)
+    assert placed["open_trade"]["stop_price"] is None
+    placed = _mark(db_session, user_id, svc, session.id, "stop", stopPrice=105.0)  # the Stop key adds a stop later
     assert placed["open_trade"]["stop_price"] == 105.0
     _advance(db_session, user_id, svc, session.id, "10:00")
     done = _mark(db_session, user_id, svc, session.id, "long_exit")
     (check,) = [c for c in done["journal"]["adherence"]["checks"] if c["id"] == "stop_set"]
-    assert (check["applicable"], check["passed"], check["detail"]) == (True, True, "1 of 1")
+    assert (check["applicable"], check["passed"]) == (True, True)  # the stop was set during the trade
+
+
+def test_a_day_entry_with_no_stop_at_all_fails_the_stop_check_without_blocking(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id, stopNoteOnEntry="yes")
+    _, session, _ = _day_one(db_session, user_id, svc)
+    _advance(db_session, user_id, svc, session.id, "09:30")
+    _mark(db_session, user_id, svc, session.id, "long_entry", shares=10)
+    _advance(db_session, user_id, svc, session.id, "10:00")
+    done = _mark(db_session, user_id, svc, session.id, "long_exit")
+    (check,) = [c for c in done["journal"]["adherence"]["checks"] if c["id"] == "stop_set"]
+    assert (check["applicable"], check["passed"], check["detail"]) == (True, False, "0 of 1")
 
 
 def test_adherence_endpoints_are_the_first_and_latest_scored_day(db_session, user_id, svc) -> None:

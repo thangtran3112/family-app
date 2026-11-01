@@ -1,5 +1,9 @@
 """Practice holds (02p §b): the rules of a trade that stays open overnight. Pure: no database, no clock, no network.
 
+A name has one open hold at a time and it is the name's average-cost position (ADR-0016): its `entry_price` is the
+average cost of every fill that built it, and `shares` what is left of them. Adding shares re-averages the cost
+(`journal.average_cost`); selling part closes a slice of it at that cost and leaves the cost alone.
+
 Money rules are the journal's (02o decision 6): P/L is `sign * (price - entry) * shares` rounded to the cent, `sign` +1
 for a long and -1 for a short, with no fees. R is P/L per share over `|entry - stop at entry|`; a stop set later moves
 the line, never the R. A `Hold` is frozen: "changing" one returns a new hold (`dataclasses.replace`), so a caller can
@@ -18,7 +22,6 @@ from typing import Any, Literal
 
 import pandas as pd
 
-HARD_CAP = 5  # open holds at once (409)
 SPLIT_TOLERANCE = 0.001  # |k - 1| below this is "no split": dividends are not in the split-adjusted series
 MINUTE = pd.Timedelta(minutes=1)
 
@@ -160,16 +163,13 @@ def restate(hold: Hold, k: float, day: date) -> Hold:
 # -- the entry and stop rules -------------------------------------------------------------------------------
 
 
-def check_entry(*, open_holds: Sequence[Hold], symbol: str, shares: int, price: float, free_cash_usd: float) -> None:
-    """Raises `HoldProblem` for the first broken rule: shares, a second hold on the symbol, the cap, then cash. Long and
-    short count the same (cash-secured, no margin)."""
+def check_buying_power(*, shares: int, price: float, free_cash_usd: float) -> None:
+    """The one size rule of a practice entry, like a broker's margin check: at least one share, and the notional fits
+    the free cash. Long and short count the same (cash-secured, no margin). Nothing else limits how many names, lots or
+    shares she may hold: a name takes any number of fills, each of which is checked here for the shares that OPEN or add
+    to the position (the shares that close it need no cash)."""
     if shares < 1:
         raise HoldProblem("Shares must be at least 1", path="shares")
-    holds = _open(open_holds)
-    if any(h.symbol == symbol for h in holds):
-        raise HoldProblem(f"Close your open {symbol} practice hold first")
-    if len(holds) >= HARD_CAP:
-        raise HoldProblem("Five practice holds is the most at once", status=409)
     if shares * price > free_cash_usd:
         raise HoldProblem(f"Not enough practice cash · ${free_cash_usd:,.0f} free", path="shares")
 

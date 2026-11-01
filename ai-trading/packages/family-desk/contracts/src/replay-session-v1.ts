@@ -16,7 +16,9 @@ const StockTickerSchema = z.string().regex(/^[A-Z][A-Z0-9.]{0,9}$/);
 const IsoDaySchema = z.string().regex(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/);
 // A positive price, bounded.
 const PriceSchema = z.number().positive().max(1_000_000);
-const SharesSchema = z.int().min(1).max(10_000);
+// No share-count cap: what limits a size is the account's cash (the server's buying-power check). The bound is only
+// the width of the `shares` column (a 32-bit integer).
+const SharesSchema = z.int().min(1).max(2_147_483_647);
 
 // Plain text of min..max BMP characters (no C0/C1 controls or DEL, no surrogates, so Zod's UTF-16
 // length and Python's code-point length agree).
@@ -67,6 +69,8 @@ export const ReplaySessionV1Schema = z
   })
   .meta({ id: "ReplaySessionV1" });
 
+// A Buy is `long_entry` and a Sell is `short_entry`: each is a fill the server nets against the name's one position
+// (it adds to it, closes part of it, or flips it). `long_exit` / `short_exit` close the whole position.
 export const PracticeMarkV1Schema = z
   .discriminatedUnion("kind", [
     z.strictObject({

@@ -15,7 +15,7 @@ const parse = (mark: unknown, fieldMessages: Record<string, string>): MarkBuild 
 };
 
 const MESSAGES = {
-  shares: "Shares: a whole number from 1 to 10,000",
+  shares: "Quantity: a whole number of 1 or more",
   stopPrice: "Stop price: a number above 0",
   note: "Note: 1 to 280 plain characters",
 };

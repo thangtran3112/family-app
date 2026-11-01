@@ -4,7 +4,6 @@
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
 .heading { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .legend { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .up { color: var(--color-up); }
 .down { color: var(--color-down); }
 .same { color: var(--color-muted); }
@@ -16,18 +15,6 @@
 .between { justify-content: space-between; }
 .label { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
 .detail { flex: 0 0 auto; margin-left: auto; color: var(--color-muted); text-align: right; white-space: nowrap; }
-.chip { display: inline-flex; min-height: 20px; flex: 0 0 auto; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
-.chip[data-tone="up"] { border-color: var(--color-up); color: var(--color-up); }
-.chip[data-tone="down"] { border-color: var(--color-down); color: var(--color-down); }
-
-/* Buttons and chips */
-.button { display: inline-flex; min-height: 28px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
-.button:hover:not(:disabled) { background: var(--color-raised); }
-.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
-.primary { border-color: var(--color-amber); color: var(--color-amber); }
-.quiet { border-color: transparent; color: var(--color-muted); }
-.quiet:hover:not(:disabled) { color: var(--color-text); }
-.button:focus-visible,
 
 /* Tape */
 .tape { display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: var(--space-2); }
@@ -52,7 +39,6 @@
 .mark[data-state="warn"] { color: var(--color-amber); }
 .mark[data-state="pending"], .mark[data-state="off"] { color: var(--color-muted); }
 .row[data-state="off"] .label { color: var(--color-muted); }
-.nudge { min-height: 24px; flex: 1 0 100%; justify-content: flex-start; margin-block: 2px; border-color: var(--color-amber); padding-inline: var(--space-2); color: var(--color-amber); font-size: var(--text-micro); }
 .planNote { margin: var(--space-2) 0 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
 .planNoteLabel { color: var(--color-text); font-weight: var(--weight-semibold); }
 
@@ -64,7 +50,7 @@
 .signal { display: flex; width: 100%; min-height: 24px; align-items: center; border: 0; border-bottom: 1px solid var(--color-hairline); background: transparent; padding: 2px var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
 .signal:hover { background: var(--color-raised); }
 .signal[aria-current="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
-.signal:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.signal:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .signalText { min-width: 0; overflow-wrap: anywhere; line-height: 16px; padding: 3px 0; }
 
 /* Marks and levels */
@@ -76,13 +62,6 @@
 .group { display: flex; flex-direction: column; gap: 2px; }
 .keys { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .kbd { display: inline-flex; min-width: 24px; min-height: 22px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--color-raised); padding: 0 var(--space-1); color: var(--color-text); font: inherit; font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
-
-/* End prompt */
-.endBlock { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-/* The End confirm opens over the chart above its button instead of in the column, so the plot is not squeezed when it shows (D-146). */
-.endSlot { position: relative; min-height: 28px; }
-.endAnchor { position: absolute; bottom: calc(100% + var(--space-1)); left: var(--space-4); width: min(520px, calc(100% - 2 * var(--space-4))); }
-.endText { margin: 0; font-size: var(--text-label); line-height: var(--line-label); }
 
 @media (prefers-reduced-motion: reduce) {
   .meterFill,

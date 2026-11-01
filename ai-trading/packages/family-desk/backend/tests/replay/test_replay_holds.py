@@ -11,11 +11,10 @@ import pandas as pd
 import pytest
 
 from ai_trading.replay.holds import (
-    HARD_CAP,
     Crossing,
     Hold,
     HoldProblem,
-    check_entry,
+    check_buying_power,
     check_stop,
     closed_pnl,
     day_attribution,
@@ -245,54 +244,40 @@ def test_free_cash_with_an_open_long_and_an_open_short():
     assert free_cash(50_000.0, 0.0, [done, short]) == 40_000.0  # a closed hold holds no cash
 
 
-def test_check_entry_passes_when_the_notional_equals_free_cash():
-    check_entry(open_holds=[], symbol="AAA", shares=100, price=50.0, free_cash_usd=5_000.0)  # 100 * 50 == 5,000
+def test_a_buy_passes_when_the_notional_equals_free_cash():
+    check_buying_power(shares=100, price=50.0, free_cash_usd=5_000.0)  # 100 * 50 == 5,000
 
 
-def test_check_entry_refuses_a_cash_shortfall_for_a_long_or_a_short_the_same_way():
+def test_a_cash_shortfall_is_refused_for_a_long_or_a_short_the_same_way():
     with pytest.raises(HoldProblem) as err:
-        check_entry(open_holds=[], symbol="AAA", shares=100, price=50.0, free_cash_usd=4_999.4)
+        check_buying_power(shares=100, price=50.0, free_cash_usd=4_999.4)
     assert err.value.message == "Not enough practice cash · $4,999 free"
     assert (err.value.path, err.value.status) == ("shares", 422)
     with pytest.raises(HoldProblem) as err:
-        check_entry(open_holds=[], symbol="AAA", shares=200, price=50.0, free_cash_usd=8_240.4)
+        check_buying_power(shares=200, price=50.0, free_cash_usd=8_240.4)
     assert err.value.message == "Not enough practice cash · $8,240 free"  # 200 * 50 = 10,000 > 8,240.40
 
 
-def test_check_entry_needs_at_least_one_share():
+def test_a_fill_needs_at_least_one_share():
     with pytest.raises(HoldProblem) as err:
-        check_entry(open_holds=[], symbol="AAA", shares=0, price=50.0, free_cash_usd=1_000.0)
+        check_buying_power(shares=0, price=50.0, free_cash_usd=1_000.0)
     assert (err.value.path, err.value.status) == ("shares", 422)
 
 
-def test_check_entry_refuses_a_second_hold_on_a_symbol():
+def test_there_is_no_cap_on_how_many_names_are_held_and_no_rule_about_a_name_already_held():
+    # buying power is pure: it looks at no hold at all, so neither a thirteenth name nor a second fill in one is refused
+    check_buying_power(shares=1, price=1.0, free_cash_usd=100.0)
+
+
+def test_buying_power_is_shares_and_cash_and_nothing_else():
+    check_buying_power(shares=10_000, price=1.0, free_cash_usd=10_000.0)  # exactly affordable: fine
+    check_buying_power(shares=25_000, price=1.0, free_cash_usd=25_000.0)  # no share-count ceiling
     with pytest.raises(HoldProblem) as err:
-        check_entry(open_holds=[hold(symbol="AAA")], symbol="AAA", shares=1, price=1.0, free_cash_usd=1_000.0)
-    assert err.value.message == "Close your open AAA practice hold first" and err.value.status == 422
-    check_entry(open_holds=[hold(symbol="AAA")], symbol="BBB", shares=1, price=1.0, free_cash_usd=1_000.0)
-
-
-def test_the_cap_of_five_is_a_409_and_a_sixth_name_is_refused():
-    five = [hold(symbol=name, id=i) for i, name in enumerate("ABCDE", start=1)]
-    assert HARD_CAP == 5
-    check_entry(open_holds=five[:4], symbol="F", shares=1, price=1.0, free_cash_usd=100.0)
+        check_buying_power(shares=10_001, price=1.0, free_cash_usd=10_000.0)
+    assert (err.value.message, err.value.path) == ("Not enough practice cash · $10,000 free", "shares")
     with pytest.raises(HoldProblem) as err:
-        check_entry(open_holds=five, symbol="F", shares=1, price=1.0, free_cash_usd=100.0)
-    assert err.value.message == "Five practice holds is the most at once" and err.value.status == 409
-
-
-def test_check_entry_order_is_shares_then_duplicate_then_cap_then_cash():
-    five = [hold(symbol=name, id=i) for i, name in enumerate("ABCDE", start=1)]
-    broke = {"price": 100.0, "free_cash_usd": 1.0}
-    with pytest.raises(HoldProblem) as err:  # duplicate beats the cap and the cash
-        check_entry(open_holds=five, symbol="A", shares=10, **broke)
-    assert err.value.message.startswith("Close your open A")
-    with pytest.raises(HoldProblem) as err:  # the cap beats the cash
-        check_entry(open_holds=five, symbol="F", shares=10, **broke)
-    assert err.value.status == 409
-    with pytest.raises(HoldProblem) as err:  # shares beat the duplicate
-        check_entry(open_holds=five, symbol="A", shares=0, **broke)
-    assert err.value.path == "shares" and not err.value.message.startswith("Close your")
+        check_buying_power(shares=0, price=1.0, free_cash_usd=10_000.0)
+    assert err.value.message == "Shares must be at least 1"
 
 
 @pytest.mark.parametrize(

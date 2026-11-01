@@ -59,6 +59,7 @@ HOLD_COLUMNS = {
     "last_close",
     "last_close_day",
     "splits",
+    "part_exit",  # 0017
     "created_at",
     "updated_at",
 }

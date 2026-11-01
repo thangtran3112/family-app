@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   MarkResultSchema,
   MarkUndoSchema,
+  OrderCancelSchema,
+  OrderResultSchema,
   ReplayDaysSchema,
   ReplayDeltaSchema,
   ReplayFeedSchema,
@@ -58,6 +60,15 @@ export const loadReplayFeed = (id: number, tape: TapeParams = {}, options?: Requ
 
 export const placeMark = (id: number, mark: PracticeMarkV1, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/sessions/${id}/marks`), MarkResultSchema, jsonInit("POST", mark, options));
+
+/** A limit, stop or stop-limit entry (`orderType`); a market entry is a mark. Prices are dollars. */
+export type OrderBody = { side: "buy" | "sell"; orderType: "limit" | "stop" | "stop_limit"; shares?: number; limitPrice?: number; stopPrice?: number };
+
+export const placeOrder = (id: number, order: OrderBody, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/sessions/${id}/orders`), OrderResultSchema, jsonInit("POST", order, options));
+
+export const cancelOrder = (id: number, orderId: number, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/sessions/${id}/orders/${orderId}`), OrderCancelSchema, { method: "DELETE", signal: options?.signal });
 
 export const undoMark = (id: number, markId: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/sessions/${id}/marks/${markId}`), MarkUndoSchema, { method: "DELETE", signal: options?.signal });

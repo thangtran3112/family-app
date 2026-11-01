@@ -171,7 +171,7 @@
   justify-items: start;
   gap: 10px;
   border-left: 3px solid var(--color-amber);
-  background: #ffb02012;
+  background: color-mix(in srgb, var(--color-amber) 7%, transparent);
 }
 
 .error {
@@ -179,7 +179,7 @@
   justify-items: start;
   gap: 10px;
   border-left: 3px solid var(--color-down);
-  background: #ff453a12;
+  background: color-mix(in srgb, var(--color-down) 7%, transparent);
 }
 
 .saved { color: var(--color-up); }

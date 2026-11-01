@@ -18,10 +18,10 @@ import type { PracticeThread } from "@/lib/replay/threads";
 import { formatWhole, threadName } from "@/lib/replay/threadView";
 import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-v1";
 import { DayPlanFields } from "./DayPlanFields";
+import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input } from "@/components/ui/Field";
 import { Segmented } from "@/components/ui/Segmented";
-import styles from "./hub.module.css";
 import landing from "./landing.module.css";
 import modal from "./newplan.module.css";
 
@@ -192,7 +192,7 @@ export function NewPlanModal({
       size="lg"
       // Escape on the question keeps the form; anywhere else it asks first once the form has been edited.
       onClose={() => (confirmingDiscard ? setConfirmingDiscard(false) : requestClose())}
-      headerActions={<button ref={closeRef} type="button" className={styles.button} disabled={submitting} onClick={requestClose}>{PRACTICE_COPY.newPlanClose}</button>}
+      headerActions={<Button ref={closeRef} disabled={submitting} onClick={requestClose}>{PRACTICE_COPY.newPlanClose}</Button>}
       onSubmit={(event) => {
         event.preventDefault();
         if (held === null && !submitting && !confirmingDiscard) void submit();
@@ -202,9 +202,7 @@ export function NewPlanModal({
           <p id="new-plan-note" role="status" className={modal.status}>{status}</p>
           {confirmingDiscard ? (
             <div className={modal.discard}>
-              <button
-                type="button"
-                className={styles.button}
+              <Button
                 autoFocus
                 onClick={() => {
                   setConfirmingDiscard(false);
@@ -212,20 +210,21 @@ export function NewPlanModal({
                 }}
               >
                 {PRACTICE_COPY.newPlanDiscardKeep}
-              </button>
-              <button type="button" className={styles.button} onClick={onClose}>{PRACTICE_COPY.newPlanDiscard}</button>
+              </Button>
+              <Button onClick={onClose}>{PRACTICE_COPY.newPlanDiscard}</Button>
             </div>
           ) : (
-            <button
+            <Button
               type="submit"
-              className={`${styles.primary} ${modal.submit}`}
+              variant="primary"
+              className={modal.submit}
+              loading={submitting}
               aria-disabled={held !== null || submitting || undefined}
-              aria-busy={submitting || undefined}
               aria-describedby="new-plan-note"
             >
               {submitting && <span className={landing.spinner} aria-hidden="true" />}
               {submitting ? PRACTICE_COPY.newPlanSubmitting : startLabel(swing ? swingNow.sessions : plan.sessions, swing)}
-            </button>
+            </Button>
           )}
         </>
       }

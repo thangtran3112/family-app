@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
 import { BackLink } from "@/components/practice/hub/BackLink";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -200,26 +202,25 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       <header className={dayStyles.header}>
         <div className={dayStyles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={dayStyles.title}>{swingBoardTitle(list, hidden)}</h1>
-          <span className={dayStyles.chip}>{practiceText("swingWeek", { n: list.week_no })}</span>
-          <span className={dayStyles.chip}>{ended ? PRACTICE_COPY.swingDayOver : PRACTICE_COPY.swingAsOfPriorClose}</span>
+          <Badge tone="neutral">{practiceText("swingWeek", { n: list.week_no })}</Badge>
+          <Badge tone="neutral">{ended ? PRACTICE_COPY.swingDayOver : PRACTICE_COPY.swingAsOfPriorClose}</Badge>
         </div>
         <div className={dayStyles.actions}>
           {!ended && (
-            <button
-              type="button"
-              className={`${dayStyles.button} ${dayStyles.primary}`}
+            <Button
+              variant="primary"
               disabled={busy || start.kind === "none"}
               aria-describedby={start.kind === "none" ? "swing-star-hint" : undefined}
               onClick={() => void startNow()}
             >
               {start.kind === "resume" ? resumeDayLabel(list.day_no) : practiceText("swingStartDay", { n: list.day_no })}
-            </button>
+            </Button>
           )}
           {!ended && canPass(list) && !confirmPass && (
-            <button ref={passButton} type="button" className={dayStyles.button} disabled={busy} onClick={() => setConfirmPass(true)}>{PRACTICE_COPY.swingPassDay}</button>
+            <Button ref={passButton} disabled={busy} onClick={() => setConfirmPass(true)}>{PRACTICE_COPY.swingPassDay}</Button>
           )}
           {after?.next?.kind === "continue" && (
-            <button type="button" className={`${dayStyles.button} ${dayStyles.primary}`} disabled={busy || prep !== null} onClick={() => void proceed()}>{after.next.label}</button>
+            <Button variant="primary" disabled={busy || prep !== null} onClick={() => void proceed()}>{after.next.label}</Button>
           )}
         </div>
       </header>
@@ -265,17 +266,17 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
           <div className={styles.after}>
             {after.notice && <p className={styles.notice} role="status">{after.notice}</p>}
             {threadId !== null && after.waiting && (
-              <Link href={`/practice/week?thread=${threadId}&week=${after.waiting.weekNo}`} className={`${dayStyles.button} ${dayStyles.primary}`}>
+              <Button client href={`/practice/week?thread=${threadId}&week=${after.waiting.weekNo}`} variant="primary">
                 {after.waiting.label}
-              </Link>
+              </Button>
             )}
             {threadId !== null && (
-              <Link
+              <Button
                 href={`/practice/week?thread=${threadId}&week=${after.reviewWeekNo}`}
-                className={after.notice && !after.waiting ? `${dayStyles.button} ${dayStyles.primary}` : dayStyles.button}
+                variant={after.notice && !after.waiting ? "primary" : "secondary"}
               >
                 {after.reviewLabel}
-              </Link>
+              </Button>
             )}
             {after.next?.kind === "finished" && <p className={dayStyles.muted}>{after.next.text}</p>}
           </div>
@@ -322,7 +323,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
                       <li key={entry.symbol} className={dayStyles.watchRow}>
                         <span className={dayStyles.symbol}>{entry.symbol}</span>
                         {!ended && (
-                          <button type="button" className={dayStyles.small} aria-label={practiceText("dayRemove", { symbol: entry.symbol })} onClick={() => star(entry.symbol)}>Unstar</button>
+                          <Button size="sm" variant="primary" aria-label={practiceText("dayRemove", { symbol: entry.symbol })} onClick={() => star(entry.symbol)}>Unstar</Button>
                         )}
                       </li>
                     ))}
@@ -381,7 +382,7 @@ function boardColumnsOf(
       render: (row) => (
         <span>
           <span className={dayStyles.symbol}>{row.symbol}</span>
-          {options.held[row.symbol] && <span className={`${styles.chip} ${styles.tag}`}>{options.held[row.symbol]} hold</span>}
+          {options.held[row.symbol] && <Badge tone="neutral" className={styles.tag}>{options.held[row.symbol]} hold</Badge>}
         </span>
       ),
     },
@@ -395,7 +396,7 @@ function boardColumnsOf(
       render: (row) => {
         if (column.key === "earnings") {
           const chip = earningsText(row.earnings);
-          return chip ? <span className={`${styles.chip} ${styles.chipAmber}`}>{chip}</span> : "—";
+          return chip ? <Badge tone="warn">{chip}</Badge> : "—";
         }
         const tone = boardCellTone(column, row);
         return <span className={tone ? dayStyles[tone] : undefined}>{boardCellText(column, row)}</span>;

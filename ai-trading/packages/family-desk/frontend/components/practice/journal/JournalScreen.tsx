@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { createReplaySession, loadReplayFeed, loadReplaySession, patchReplaySession } from "@/lib/desk/replay";
 import { formatEtDay } from "@/lib/desk/format";
@@ -95,7 +96,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
       <header className={styles.header}>
         <h1 className={styles.title}>{spec.symbol} · {dayLabel} · attempt {session.attempt} · Practice journal</h1>
         <div className={styles.actions}>
-          {!ended && <Link href={sessionResumeHref(session)} className={`${styles.button} ${styles.primary}`}>Resume</Link>}
+          {!ended && <Button client href={sessionResumeHref(session)} variant="primary">Resume</Button>}
         </div>
       </header>
       {session.thread && <ThreadStrip thread={session.thread} />}
@@ -137,11 +138,11 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
                 <NotesAndRating notes={session.notes} rating={session.rating} saving={saving} saved={saved} onSave={save} />
                 <div className={styles.actions}>
                   {session.day_list_id === null ? (
-                    <button type="button" className={`${styles.button} ${styles.primary}`} disabled={again.busy} onClick={replayAgain}>Replay this day again</button>
+                    <Button variant="primary" disabled={again.busy} onClick={replayAgain}>Replay this day again</Button>
                   ) : (
-                    <Link href={`/practice/day?id=${session.day_list_id}`} className={`${styles.button} ${styles.primary}`}>{PRACTICE_COPY.backToList}</Link>
+                    <Button client href={`/practice/day?id=${session.day_list_id}`} variant="primary">{PRACTICE_COPY.backToList}</Button>
                   )}
-                  <Link href="/practice" className={styles.button}>New session</Link>
+                  <Button client href="/practice">New session</Button>
                 </div>
                 {again.message && <p className={styles.muted} role="alert">{again.message}</p>}
               </div>

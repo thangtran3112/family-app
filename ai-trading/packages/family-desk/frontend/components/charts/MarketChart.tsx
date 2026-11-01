@@ -16,6 +16,7 @@ import { formatPrice } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
 import type { ChartType } from "@/lib/replay/chartPrefs";
 import {
+  attachPinchZoom,
   candlestickData,
   chartTime,
   crosshairPoint,
@@ -254,6 +255,7 @@ export function MarketChart({
     const paneMap = paneSeries.current;
     const paneLinesMap = panePriceLines.current;
     let resizeWatch: ResizeObserver | null = null;
+    let detachPinch: (() => void) | null = null;
     void import("lightweight-charts").then((module) => {
       if (cancelled || !container.current) return;
       library.current = module;
@@ -287,6 +289,8 @@ export function MarketChart({
         localization: { locale: "en-US", timeFormatter: formatChartTime },
       });
       chart.current = currentChart;
+      // A trackpad pinch (ctrl+wheel) zooms about the cursor at the fingers' pace; the library's own handler is a tenth as fast.
+      detachPinch = attachPinchZoom(container.current, currentChart);
       resizeWatch = new ResizeObserver(() => {
         const tops = layoutPanes(currentChart, paneLayout.current);
         setPaneTops((current) => (sameTops(current, tops) ? current : tops));
@@ -317,6 +321,7 @@ export function MarketChart({
     return () => {
       cancelled = true;
       resizeWatch?.disconnect();
+      detachPinch?.();
       chart.current?.remove();
       chart.current = null;
       main.current = null;

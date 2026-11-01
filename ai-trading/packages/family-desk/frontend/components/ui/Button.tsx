@@ -4,10 +4,10 @@ import { buttonState } from "@/lib/desk/primitivesView";
 import styles from "./Button.module.css";
 
 type Look = {
-  /** primary = the screen's one main action (amber outline), secondary = the default, ghost = no outline, danger = destructive. */
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  /** sm 24 px (a dense table row), md 28 px, lg 32 px (page actions and form controls). */
-  size?: "sm" | "md" | "lg";
+  /** primary = the screen's one main action (amber outline), secondary = the default, ghost = no outline, danger = destructive; up and down are the green and red of a buy and a sell. */
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "up" | "down";
+  /** sm 24 px (a dense table row), md 28 px, lg 32 px (page actions and form controls), touch 44 px (the order ticket's main controls). */
+  size?: "sm" | "md" | "lg" | "touch";
   /** Disables the button and marks it busy; keep the visible label saying what is happening ("Working…"). */
   loading?: boolean;
   /** Layout only (grid-area, margin, width); never colour, size or type. */

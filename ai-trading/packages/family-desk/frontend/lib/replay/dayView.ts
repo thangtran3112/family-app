@@ -275,9 +275,6 @@ export function toggledStars(watch: readonly { symbol: string }[], symbol: strin
   return symbols.includes(symbol) ? symbols.filter((item) => item !== symbol) : [...symbols, symbol];
 }
 
-/** Open practice trades at once: the server's cap (`holds.HARD_CAP`). A sixth name opens but cannot be entered. */
-export const MAX_OPEN_PRACTICE_TRADES = 5;
-
 export type PortfolioRow = {
   symbol: string;
   sessionId: number;
@@ -350,12 +347,12 @@ export function portfolioTotal(rows: readonly PortfolioRow[]): { realized: numbe
   return { realized, open, total: realized + open };
 }
 
-/** The footer, driven by `DayListOut.day_pnl`: "Day P/L +$154.00" with "realized −$46.00 · open +$200.00", "2 open of 5", "as of 10:30 AM ET". */
+/** The footer, driven by `DayListOut.day_pnl`: "Day P/L +$154.00" with "realized −$46.00 · open +$200.00", "2 open", "as of 10:30 AM ET". */
 export function portfolioFooter(pnl: DayPnl): { total: number; split: string; openOf: string; asOf: string } {
   return {
     total: pnl.total_usd,
     split: practiceText("dayPortfolioSplit", { realized: formatSignedUsd(pnl.realized_usd, { cents: true }), open: formatSignedUsd(pnl.open_usd, { cents: true }) }),
-    openOf: practiceText("dayPortfolioOpenOf", { open: pnl.open_count, cap: MAX_OPEN_PRACTICE_TRADES }),
+    openOf: practiceText("dayPortfolioOpenOf", { open: pnl.open_count }),
     asOf: practiceText("dayPortfolioAsOf", { time: formatEtTimeZone(pnl.as_of) }),
   };
 }

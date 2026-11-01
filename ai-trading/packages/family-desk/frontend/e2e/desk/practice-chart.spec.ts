@@ -1,4 +1,5 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
+import { chartPalette } from "../../lib/desk/chartPalette.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
@@ -65,6 +66,100 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(legendButton(page, "VWAP")).toHaveAttribute("aria-pressed", "false");
     await expect(headerVwap(page)).toHaveText(/^\d/);
     await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  // The OHLC / VWAP / EMA legend was laid over the top-left of the plot and covered the candles. It is now a values bar above
+  // the chart, in flow: it takes its own height, so no width can put it over a candle, a line, a level or the price scale.
+  test("the legend is a values bar above the chart and overlaps no plot pixel, at the normal width and in a narrow chart", async ({ page }) => {
+    await stepBars(page, 3);
+    const chart = page.locator("section[aria-label='TSLA 1m market chart']");
+    const area = chart.locator("xpath=..");
+    const plot = chart.locator("canvas").first();
+    const bar = legendButton(page, "VWAP").locator("xpath=..");
+    const entries = [page.getByText(/^TSLA · 1m · O /), legendButton(page, "VWAP"), legendButton(page, "EMA 9"), legendButton(page, "EMA 21")];
+    const inside = (inner: { x: number; y: number; width: number; height: number }, outer: { x: number; y: number; width: number; height: number }) =>
+      inner.x >= outer.x - 0.5 && inner.y >= outer.y - 0.5 && inner.x + inner.width <= outer.x + outer.width + 0.5 && inner.y + inner.height <= outer.y + outer.height + 0.5;
+
+    async function expectBarAbovePlot(label: string) {
+      const barBox = (await bar.boundingBox())!;
+      const plotBox = (await plot.boundingBox())!;
+      const areaBox = (await area.boundingBox())!;
+      expect(barBox.y + barBox.height, `${label}: the bar ends where the plot begins`).toBeLessThanOrEqual(plotBox.y + 0.5);
+      expect(inside(barBox, areaBox), `${label}: the bar is inside the chart column`).toBe(true);
+      for (const entry of entries) expect(inside((await entry.boundingBox())!, barBox), `${label}: every entry is inside the bar`).toBe(true);
+      expect(inside((await chart.boundingBox())!, areaBox), `${label}: the chart stays inside its column (no clipped pane)`).toBe(true);
+      // Painted, not only measured: the top-left of the plot is the chart's own canvas, and the bar's middle is the bar.
+      const hit = await page.evaluate(({ plotX, plotY, barX, barY }) => ({
+        plot: document.elementFromPoint(plotX, plotY)?.tagName,
+        bar: document.elementFromPoint(barX, barY)?.closest("button, div")?.textContent ?? "",
+      }), { plotX: plotBox.x + 4, plotY: plotBox.y + 4, barX: barBox.x + 2, barY: barBox.y + barBox.height / 2 });
+      expect(hit.plot, `${label}: the plot's top-left corner is the canvas, not the legend`).toBe("CANVAS");
+      expect(hit.bar).toContain("TSLA");
+      const scroll = await area.evaluate((el) => ({ over: el.scrollHeight - el.clientHeight, overX: el.scrollWidth - el.clientWidth }));
+      expect(scroll.over, `${label}: no vertical scrollbar in the chart column`).toBeLessThanOrEqual(1);
+      expect(scroll.overX, `${label}: no horizontal scrollbar in the chart column`).toBeLessThanOrEqual(1);
+      return { barBox, plotBox };
+    }
+
+    const wide = await expectBarAbovePlot("normal width");
+    // Moving the cursor over the plot rewrites the readout; the bar must not change height, or the plot would jump under it.
+    await page.mouse.move(wide.plotBox.x + wide.plotBox.width / 2, wide.plotBox.y + wide.plotBox.height / 2);
+    await page.mouse.move(wide.plotBox.x + wide.plotBox.width / 2 + 40, wide.plotBox.y + wide.plotBox.height / 2 + 10);
+    const hovered = await expectBarAbovePlot("cursor on the plot");
+    expect(hovered.barBox.height, "the bar keeps its height while the readout changes").toBeCloseTo(wide.barBox.height, 0);
+    expect(hovered.plotBox.y, "the plot does not move").toBeCloseTo(wide.plotBox.y, 0);
+
+    // A narrow chart: the entries wrap onto more rows, the bar grows, the plot still starts below it.
+    await area.evaluate((el) => { (el as HTMLElement).style.width = "300px"; });
+    await expect.poll(async () => (await plot.boundingBox())!.width).toBeLessThanOrEqual(300);
+    const narrow = await expectBarAbovePlot("a 300 px chart");
+    expect(narrow.barBox.height, "the entries wrapped").toBeGreaterThan(wide.barBox.height);
+
+    // A hidden overlay stays listed, still a button, with its text at full contrast (it used to be dimmed to about 2.8:1).
+    await area.evaluate((el) => { (el as HTMLElement).style.width = ""; });
+    await legendButton(page, "EMA 21").click();
+    await expect(legendButton(page, "EMA 21")).toHaveAttribute("aria-pressed", "false");
+    const ratio = await legendButton(page, "EMA 21").evaluate((button) => {
+      const channel = (value: number) => { const v = value / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      const luminance = (css: string) => { const [r, g, b] = css.match(/[\d.]+/g)!.map(Number); return 0.2126 * channel(r!) + 0.7152 * channel(g!) + 0.0722 * channel(b!); };
+      const text = getComputedStyle(button.querySelector("span:last-child")!);
+      const ground = getComputedStyle(button.parentElement!).backgroundColor;
+      const [hi, lo] = [luminance(text.color), luminance(ground)].sort((a, b) => b - a);
+      return { ratio: (hi! + 0.05) / (lo! + 0.05), opacity: Number(getComputedStyle(button).opacity) };
+    });
+    expect(ratio.opacity, "the whole button is not dimmed").toBe(1);
+    expect(ratio.ratio, "the hidden entry's value against the bar").toBeGreaterThanOrEqual(4.5);
+  });
+
+  // A trackpad pinch reaches the page as ctrl+wheel events of a few px each. lightweight-charts' own handler turned 30 of them
+  // (2 px) into a 1.06x zoom; the chart now takes them at the fingers' pace (about 1.8x), anchored under the cursor.
+  test("a trackpad pinch (ctrl+wheel, 2 px an event) zooms the chart at the fingers' pace, not a tenth of it", async ({ page }) => {
+    await stepBars(page, 3);
+    const plot = page.locator("section[aria-label='TSLA 1m market chart'] canvas").first();
+    const box = (await plot.boundingBox())!;
+    // Candle pixels (up and down colours) grow with the bar width, so they tell a 1.8x zoom from a 1.06x one.
+    const candlePixels = () => plot.evaluate((canvas: HTMLCanvasElement, colours: string[]) => {
+      const rgb = colours.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
+      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i + 3]! > 0 && rgb.some(([r, g, b]) => Math.abs(data[i]! - r!) < 12 && Math.abs(data[i + 1]! - g!) < 12 && Math.abs(data[i + 2]! - b!) < 12)) count++;
+      return count;
+    }, [chartPalette.up, chartPalette.down]);
+    const before = await candlePixels();
+    expect(before).toBeGreaterThan(200);
+    const pinch = await page.evaluate(async ({ x, y }) => {
+      const target = document.elementFromPoint(x, y)!;
+      let prevented = 0;
+      for (let i = 0; i < 30; i++) {
+        const event = new WheelEvent("wheel", { deltaY: -2, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        if (event.defaultPrevented) prevented++;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return { tag: target.tagName, prevented };
+    }, { x: box.x + box.width * 0.75, y: box.y + box.height / 2 });
+    expect(pinch).toEqual({ tag: "CANVAS", prevented: 30 });
+    await expect.poll(candlePixels, { message: "30 pinch events of 2 px zoom the candles in by well over the library's 1.06x" }).toBeGreaterThan(before * 1.3);
   });
 
   test("the type switch redraws the same bars and the legend still shows O H L C in Line and Area", async ({ page }) => {
@@ -261,35 +356,54 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     await expect(page.locator("h1").locator("xpath=..")).toContainText(/2026-09-25/);
   });
 
-  // D-101: the Shares and Stop price inputs had no explicit label link, and the reason Long and Short wait was only an amber line.
-  test("Shares and Stop price are named by a label link, and the amber hint describes the stop field (R-05)", async ({ page, context }) => {
+  // D-101, reworked: the ticket's fields are named by a real label link, and a plan that asks for a stop never disables or warns on Buy or Sell.
+  test("the ticket's fields are named by a label link, and a plan that asks for a stop never disables Buy or Sell (R-05)", async ({ page, context }) => {
     const id = await createStopRequiredSession(context);
     await openReplay(page, id);
     const practice = await replayRail(page, "Practice");
-    const shares = practice.getByRole("textbox", { name: "Shares" });
-    const stop = practice.getByRole("textbox", { name: "Stop price (required)" });
-    const sharesId = await shares.getAttribute("id");
-    expect(sharesId, "the Shares input has an id").toBeTruthy();
-    await expect(page.locator(`label[for="${sharesId}"]`)).toContainText("Shares");
-    const stopId = await stop.getAttribute("id");
-    expect(stopId, "the Stop price input has an id").toBeTruthy();
-    await expect(page.locator(`label[for="${stopId}"]`)).toContainText("Stop price (required)");
+    const quantity = practice.getByRole("textbox", { name: "Quantity" });
+    const quantityId = await quantity.getAttribute("id");
+    expect(quantityId, "the Quantity input has an id").toBeTruthy();
+    await expect(page.locator(`label[for="${quantityId}"]`)).toContainText("Quantity");
+    const orderType = practice.getByRole("combobox", { name: "Order type" });
+    const typeId = await orderType.getAttribute("id");
+    expect(typeId, "the Order type select has an id").toBeTruthy();
+    await expect(page.locator(`label[for="${typeId}"]`)).toContainText("Order type");
 
-    await expect(stop).toHaveAccessibleDescription(PRACTICE_COPY.stopFirst);
-    for (const name of ["Long (B)", "Short (S)"]) {
-      await expect(practice.getByRole("button", { name })).toBeDisabled();
-      await expect(practice.getByRole("button", { name })).toHaveAccessibleDescription(PRACTICE_COPY.stopFirst);
-    }
-    await stop.fill("100");
-    await expect(practice.getByRole("button", { name: "Long (B)" })).toBeEnabled();
-    await expect(stop).toHaveAccessibleDescription("");
-    await expect(practice.getByText(PRACTICE_COPY.stopFirst)).toHaveCount(0);
+    // A market ticket asks for nothing but a side and a quantity: no stop field, no hint, nothing waiting on one.
+    await expect(practice.getByRole("textbox", { name: /stop/i })).toHaveCount(0);
+    await expect(practice.getByRole("textbox", { name: /limit/i })).toHaveCount(0);
+    const buy = practice.getByRole("button", { name: "Buy" });
+    await expect(buy).toBeEnabled();
+    await expect(buy).toHaveAccessibleDescription("Buy 100 TSLA · Market");
+    await practice.getByRole("radio", { name: "Sell" }).click();
+    await expect(practice.getByRole("button", { name: "Sell" })).toBeEnabled();
+    await expect(practice.getByRole("radio", { name: "Sell" })).toBeChecked();
   });
 
-  test("the Practice panel says what an entry resets (R-06)", async ({ page, context }) => {
+  // The broker ticket (owner directive): each order type shows exactly the price fields it needs, and Bracket is named but not offered.
+  test("the order type picks the price fields: Market none, Limit a limit, Stop a stop, Stop-limit both, Bracket is not simulated", async ({ page, context }) => {
     await openReplay(page, await createStubSession(context));
     const practice = await replayRail(page, "Practice");
-    await expect(practice.getByText(PRACTICE_COPY.entryResets)).toBeVisible();
+    const orderType = practice.getByRole("combobox", { name: "Order type" });
+    const fields = async () => ({
+      limit: await practice.getByRole("textbox", { name: "Limit price" }).count(),
+      stop: await practice.getByRole("textbox", { name: "Stop price" }).count(),
+    });
+    expect(await fields()).toEqual({ limit: 0, stop: 0 });
+    for (const [type, expected] of [["limit", { limit: 1, stop: 0 }], ["stop", { limit: 0, stop: 1 }], ["stop_limit", { limit: 1, stop: 1 }], ["market", { limit: 0, stop: 0 }]] as const) {
+      await orderType.selectOption(type);
+      expect(await fields(), type).toEqual(expected);
+    }
+    await expect(orderType.locator("option", { hasText: "Bracket" })).toBeDisabled();
+    await expect(orderType.locator("option", { hasText: "Bracket" })).toHaveText("Bracket · not simulated yet");
+    await expect(practice.getByRole("textbox", { name: /target/i })).toHaveCount(0);
+  });
+
+  test("the Practice panel carries one honest footnote about replayed prices (R-06)", async ({ page, context }) => {
+    await openReplay(page, await createStubSession(context));
+    const practice = await replayRail(page, "Practice");
+    await expect(practice.getByText(PRACTICE_COPY.priceFootnote)).toBeVisible();
   });
 
   // D-146: the header wrapped when P/L widened, and the End confirm shrank the plot.

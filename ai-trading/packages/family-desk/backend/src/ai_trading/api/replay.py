@@ -10,9 +10,11 @@ thread's responses are exactly what they were and a swing thread's carry the ext
 `schemas/swing.py`. The two day-list responses and open-next are a union of the day model and the swing one (`kind` is
 `"swing"` on the swing model).
 
-There is no order, position, or broker anywhere in these paths: practice marks are journal annotations on a
-finished past day, a resource of their own under `/replay/sessions/{id}/marks` (the no-orders route test passes
-unchanged). The server owns the playhead (`replay/session.py`): nothing past `revealed_through` leaves it.
+Nothing in these paths reaches a broker or an account: a practice mark is a record on a finished past day
+(`/replay/sessions/{id}/marks`), and a practice order (`/replay/sessions/{id}/orders`: a limit, stop or stop-limit
+entry that waits on the replayed tape) is the one simulated order the Desk has. The route guard in
+`tests/api/test_mvp_routes.py` names exactly those two paths. The server owns the playhead (`replay/session.py`):
+nothing past `revealed_through` leaves it.
 
 Request bodies are the contracts (`ReplaySessionV1`, `PracticeMarkV1`, `PracticeBlockV1`, `PracticeThreadCreateV1`,
 `PracticeThreadPatchV1`), validated by hand so a
@@ -46,6 +48,9 @@ from ai_trading.api.schemas.replay import (
     MarkResultOut,
     MarkUndoOut,
     OpenNextOut,
+    OrderCancelOut,
+    OrderIn,
+    OrderResultOut,
     ReplayDaysOut,
     ReplaySessionOut,
     ReplaySessionPatch,
@@ -337,6 +342,34 @@ def undo_mark(
     return _with_thread(db, out, row.thread_id, row.day_list_id)
 
 
+@router.post("/sessions/{session_id}/orders", response_model=OrderResultOut)
+def place_order(
+    session_id: int,
+    raw: Any = Depends(_json_body),
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Place a limit, stop or stop-limit practice entry. It fills only on a later one-minute bar of the replayed tape
+    (or at once at the last print when a limit already accepts it); a market entry is a mark."""
+    body = _validated(OrderIn, raw, rule_path="orderType").model_dump(exclude_none=True)
+    out = _call(svc_mod.place_order, db, user.id, session_id, services, body)
+    row = svc_mod.get_row(db, user.id, session_id)
+    return _with_thread(db, out, row.thread_id, row.day_list_id)
+
+
+@router.delete("/sessions/{session_id}/orders/{order_id}", response_model=OrderCancelOut)
+def cancel_order(
+    session_id: int,
+    order_id: int,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Cancel a working practice order (409 once it has filled or been cancelled)."""
+    return _call(svc_mod.cancel_order, db, user.id, session_id, order_id, services)
+
+
 @router.post("/sessions/{session_id}/end", response_model=ReplaySessionOut)
 def end_session(
     session_id: int,
@@ -538,7 +571,7 @@ def start_day_session(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list
-    name opens, one open trade at a time: a switch with a trade open is a 409 until it is closed."""
+    name opens, and a position open on another name never blocks the switch."""
     row = _call(plan_mod.start_session, db, user.id, day_list_id, body.symbol, services)
     return _with_thread(
         db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id

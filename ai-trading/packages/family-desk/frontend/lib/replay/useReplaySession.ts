@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DeskApiError } from "../api/client.ts";
-import { advanceReplay, endReplay, loadReplayFeed, loadReplaySession, placeMark, undoMark, type AdvanceTarget, type TapeParams } from "../desk/replay.ts";
-import { PRACTICE_COPY } from "../desk/freshness.ts";
+import { advanceReplay, cancelOrder, endReplay, loadReplayFeed, loadReplaySession, placeMark, placeOrder, undoMark, type AdvanceTarget, type OrderBody, type TapeParams } from "../desk/replay.ts";
+import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { delayUntilNextTick, isSpeed, jumpMinutes, nextTo, type Speed } from "./clock.ts";
 import { applyAdvance, applyFeedSwing, dismissPause as withoutPause, viewFromFeed, withHoldMarker, type ReplayView } from "./feedState.ts";
 import { markForAction, noteMark, stopMark, type MarkBuild, type MarkDraft } from "./markInput.ts";
@@ -12,6 +12,7 @@ import { canUndoLast, lastMark } from "./marks.ts";
 import { canRequest, initialPlayer, playerReducer } from "./player.ts";
 import { createRequestQueue } from "./requestQueue.ts";
 import type { Paused, ReplayInterval, ReplaySession } from "./schemas.ts";
+import type { TicketAction } from "./ticket.ts";
 import { problemMessage } from "./setup.ts";
 import { filterById, tapeQuery, type SizeFilterId } from "./tape.ts";
 import { etWallToUtcIso, ms } from "./time.ts";
@@ -50,6 +51,10 @@ export type ReplaySessionApi = {
   catchUp: () => void;
   /** Resolves true when the server accepted the mark. */
   mark: (kind: EntryOrExit, draft: MarkDraft) => Promise<boolean>;
+  /** Sends what the order ticket built: a market entry mark, or a limit, stop or stop-limit order. Resolves true when accepted. */
+  ticket: (action: TicketAction) => Promise<boolean>;
+  /** Cancels a working order. */
+  cancelOrder: (id: number) => void;
   stopNote: (price: string) => void;
   note: (text: string) => void;
   undo: () => void;
@@ -168,6 +173,21 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     [queue],
   );
 
+  /** After the tape filled an order: the journal, the thread's balance and (swing) the day strip and holds are read again. */
+  const refreshBook = useCallback(async () => {
+    if (id === null) return;
+    try {
+      const fresh = await loadReplaySession(id);
+      if (alive.current) setSession((current) => (current ? { ...current, journal: fresh.journal, thread: fresh.thread ?? current.thread, marks: fresh.marks, orders: fresh.orders } : current));
+      if (sessionRef.current?.thread?.mode === "swing") {
+        const feed = await loadReplayFeed(id, tape());
+        if (alive.current) setView((current) => (current ? applyFeedSwing(current, feed) : current));
+      }
+    } catch {
+      // The next advance carries the orders again; a failed read here is not worth a message.
+    }
+  }, [id, tape]);
+
   /** Moves the playhead. Failures: a 422 (for example no more signals) is a message; anything else stops playback. */
   const advance = useCallback(
     async (target: AdvanceTarget): Promise<boolean> => {
@@ -176,6 +196,15 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         const delta = await advanceReplay(id, target, tape());
         if (!alive.current) return false;
         setView((current) => (current ? applyAdvance(current, delta) : current));
+        if (delta.fills?.length) {
+          // The tape filled working orders inside this advance: the entry marks, the orders' new state and the book behind them.
+          const filled = delta.fills.map((fill) => fill.price).filter((price): price is number => price !== null);
+          say("info", practiceText("orderFilled", { price: filled.map((price) => price.toFixed(2)).join(" · ") }));
+          setSession((current) => (current ? { ...current, marks: [...current.marks, ...delta.fills!.filter((fill) => !current.marks.some((mark) => mark.id === fill.id))], orders: delta.orders, open_trade: delta.open_trade } : current));
+          await refreshBook();
+        } else if (delta.orders.length > 0) {
+          setSession((current) => (current ? { ...current, orders: delta.orders } : current));
+        }
         // A stop pause (swing) stops playback; no timer starts another request until she plays again, and no press queued behind this one runs.
         if (delta.paused != null) queue.notePause();
         dispatch({ type: "settled", atEnd: delta.at_end, paused: delta.paused != null });
@@ -191,7 +220,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         return false;
       }
     },
-    [id, say, tape, queue],
+    [id, say, tape, queue, refreshBook],
   );
 
   // Play: one request per wall-clock second, started only when none is in flight, so a slow answer stutters the
@@ -298,6 +327,60 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     [id, exec, say, refreshSwing],
   );
   const mark = useCallback((kind: EntryOrExit, draft: MarkDraft) => send(markForAction(kind, draft)), [send]);
+
+  /** Places a limit, stop or stop-limit order; the server answers the order, the list, and the entry mark when it filled at once. */
+  const submitOrder = useCallback(
+    async (body: OrderBody): Promise<boolean> => {
+      if (id === null) return false;
+      if (sessionRef.current?.thread?.mode === "swing" && viewRef.current?.last === null) {
+        say("error", PRACTICE_COPY.swingMarketNotOpen);
+        return false;
+      }
+      const accepted = await exec(async () => {
+        try {
+          const result = await placeOrder(id, body);
+          if (!alive.current) return false;
+          setSession((current) =>
+            current
+              ? { ...current, marks: result.mark ? [...current.marks, result.mark] : current.marks, orders: result.orders, open_trade: result.open_trade, journal: result.journal, thread: result.thread ?? current.thread }
+              : current,
+          );
+          setView((current) => (current ? withHoldMarker({ ...current, openTrade: result.open_trade }, result.hold ?? null, sessionRef.current?.spec.day ?? "") : current));
+          await refreshSwing();
+          dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
+          if (result.warning) say("info", result.warning);
+          return true;
+        } catch (error) {
+          if (!alive.current) return false;
+          dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
+          say("error", problemMessage(error, PRACTICE_COPY.markError));
+          return false;
+        }
+      });
+      return accepted === true;
+    },
+    [id, exec, say, refreshSwing],
+  );
+  const ticket = useCallback((action: TicketAction) => (action.kind === "mark" ? send({ ok: true, mark: action.mark }) : submitOrder(action.order)), [send, submitOrder]);
+
+  const cancel = useCallback(
+    (orderId: number) => {
+      if (id === null) return;
+      void exec(async () => {
+        try {
+          const result = await cancelOrder(id, orderId);
+          if (!alive.current) return;
+          setSession((current) => (current ? { ...current, orders: result.orders } : current));
+          dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
+        } catch (error) {
+          if (!alive.current) return;
+          dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
+          say("error", problemMessage(error, PRACTICE_COPY.markError));
+        }
+      });
+    },
+    [id, exec, say],
+  );
   const stopNote = useCallback((price: string) => void send(stopMark(price)), [send]);
   const note = useCallback((text: string) => void send(noteMark(text)), [send]);
 
@@ -392,8 +475,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     () => ({
       session, view, loading: id !== null && !loadError && (session === null || view === null), loadError, player, toast, filterId, interval,
       paused: view?.paused ?? null, dismissPause,
-      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, stopNote, note, undo, end, setFilter, setInterval,
+      reload, dismissToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancelOrder: cancel, stopNote, note, undo, end, setFilter, setInterval,
     }),
-    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, stopNote, note, undo, end, setFilter, setInterval],
+    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
   );
 }

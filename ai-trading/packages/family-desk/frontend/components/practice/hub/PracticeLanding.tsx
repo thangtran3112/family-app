@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThreads } from "@/lib/desk/replay";
@@ -37,13 +38,13 @@ export function PracticeLanding() {
           <h1 className={hub.title}>Practice</h1>
           <p className={hub.hint}>{PRACTICE_COPY.threadsHint}</p>
         </div>
-        <button type="button" className={hub.primary} disabled={threads.loading} onClick={() => {
+        <Button variant="primary" disabled={threads.loading} onClick={() => {
             setDeleted(null);
             setModal({ thread: null });
           }}
         >
           {PRACTICE_COPY.planNew}
-        </button>
+        </Button>
       </header>
       <div className={hub.body}>
         <p role="status" className={styles.notice}>{deleted === null ? "" : practiceText("threadDeleted", { name: deleted })}</p>
@@ -52,16 +53,15 @@ export function PracticeLanding() {
         ) : !threads.loading && rows.length === 0 ? (
           <div className={styles.emptyCard}>
             <p className={styles.emptyTitle}>{PRACTICE_COPY.threadNone}</p>
-            <button
-              type="button"
-              className={hub.primary}
+            <Button
+              variant="primary"
               onClick={() => {
                 setDeleted(null);
                 setModal({ thread: null });
               }}
             >
               {PRACTICE_COPY.landingStartFirst}
-            </button>
+            </Button>
           </div>
         ) : (
           <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} onNewPlan={(thread) => setModal({ thread })} />

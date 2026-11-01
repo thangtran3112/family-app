@@ -281,3 +281,19 @@ test("the right rail is open inline at 1440 and a drawer behind a 40 px strip at
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 });
+
+// The OHLC legend was laid over the top-left of the plot and covered the candles. It is a values bar above the chart now.
+test("the OHLC legend is a bar above the chart and does not overlap the plot", async ({ page }) => {
+  await openDesk(page, "/technicals?symbol=NVDA#chart");
+  const chart = page.getByRole("region", { name: "NVDA 15m market chart" });
+  const plot = chart.locator("canvas").first();
+  await expect(plot).toBeVisible();
+  const title = page.locator("#main-content").getByText(/^NVDA · 15m · O /);
+  await expect(title).toBeVisible();
+  const bar = (await title.locator("xpath=..").boundingBox())!;
+  const plotBox = (await plot.boundingBox())!;
+  expect(bar.y + bar.height, "the bar ends where the plot begins").toBeLessThanOrEqual(plotBox.y + 0.5);
+  expect((await title.boundingBox())!.y).toBeGreaterThanOrEqual(bar.y - 0.5);
+  const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, { x: plotBox.x + 4, y: plotBox.y + 4 });
+  expect(top, "the plot's top-left corner is the canvas, not the legend").toBe("CANVAS");
+});

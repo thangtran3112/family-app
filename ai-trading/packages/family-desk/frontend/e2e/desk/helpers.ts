@@ -131,15 +131,23 @@ export async function orderControlsOnScreen(page: Page): Promise<string[]> {
   );
 }
 
-/** The screen shows none of the banned wording and no order control. */
+// The Practice replay workspace is the one screen with an order ticket (owner decision, 2026-11-01): a broker-style ticket whose
+// market, limit, stop and stop-limit entries are simulated against a replayed past day and reach no broker or account. Every other
+// screen, the Practice lists and journals included, is still checked for order controls.
+const PRACTICE_TICKET_SCREEN = /^\/practice\/replay\/?$/;
+
+/** The screen shows none of the banned wording and no order control (the Practice replay workspace's own ticket aside). */
 export async function expectCleanScreen(page: Page) {
   expect(await bannedWordingOnScreen(page), "banned wording on screen (02l §c3)").toEqual([]);
+  if (PRACTICE_TICKET_SCREEN.test(new URL(page.url()).pathname)) return;
   expect(await orderControlsOnScreen(page), "order control on screen").toEqual([]);
 }
 
 const ORDER_REQUEST = /\/api\/desk\/[^?\s]*(order|position|broker|trade)/i;
 // Reordering the symbols of a watchlist (02m endpoint 25) is the one route whose path says "order".
 const REORDER_REQUEST = /^PUT \/api\/desk\/watchlists\/\d+\/order$/;
+// The Practice ticket places and cancels its simulated orders here, and nowhere else (the backend route guard names the same two paths).
+const PRACTICE_ORDER_REQUEST = /^(POST|DELETE) \/api\/desk\/replay\/sessions\/\d+\/orders(\/\d+)?$/;
 
 export const test = base.extend<{ cleanDesk: void }>({
   cleanDesk: [
@@ -147,7 +155,10 @@ export const test = base.extend<{ cleanDesk: void }>({
       const api = watchApi(page);
       await use();
       await expectCleanScreen(page);
-      expect(api.paths().filter((path) => ORDER_REQUEST.test(path) && !REORDER_REQUEST.test(path)), "order request").toEqual([]);
+      expect(
+        api.paths().filter((path) => ORDER_REQUEST.test(path) && !REORDER_REQUEST.test(path) && !PRACTICE_ORDER_REQUEST.test(path)),
+        "order request",
+      ).toEqual([]);
     },
     { auto: true },
   ],
