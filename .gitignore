@@ -273,3 +273,6 @@ public/swe-worker-*.js
 
 # Local agent worktrees
 .worktrees/
+
+# omp (oh-my-pi) local project state — never committed
+.omp/
