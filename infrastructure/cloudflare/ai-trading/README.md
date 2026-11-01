@@ -70,6 +70,7 @@ Operator access to the host goes through this tunnel behind Cloudflare Access, n
 | `laptop_ssh_enabled` | `false` | `TF_VAR_laptop_ssh_enabled` |
 | `laptop_ssh_hostname` | empty; a hostname inside `zone_name` | `TF_VAR_laptop_ssh_hostname` |
 | `laptop_ssh_owner_email` | empty; the one identity the policy requires | `TF_VAR_laptop_ssh_owner_email` |
+| `laptop_ssh_ci_service_token_id` | empty; the Access service token's internal id. Non-empty adds the CI Service Auth policy | `TF_VAR_laptop_ssh_ci_service_token_id` |
 | `laptop_ssh_origin` | `host.docker.internal:2222`; `host:port` as seen from inside the `cloudflared` container | `TF_VAR_laptop_ssh_origin` (only to override) |
 
 `family_config.py run ai-trading/cloudflare` turns these keys into `TF_VAR_*` like the others. Set them from stdin so no value touches a command line (`printf '%s' "$VALUE" | common/config/family_config.py set ai-trading/cloudflare TF_VAR_laptop_ssh_hostname`). Never write a hostname or an email into this repository.
@@ -82,6 +83,14 @@ Apply order (the operator's; an agent runs `plan` only):
 2. **The connector can reach sshd.** The `cloudflared` service is a container on bridge networks, so `localhost` is the container. `infrastructure/apps/ai-trading/docker-compose.yml` needs `extra_hosts: ["host.docker.internal:host-gateway"]` on it (it has none today), sshd must listen on the origin port, and the host firewall must admit the connector's bridge subnet to that port (today `2222` is allowed on `tailscale0` only). That is a separate ai-trading release, not part of this root.
 3. Persist the three keys above, then `terraform plan` through `family_config.py run`. Review the whole plan: it should add one DNS record, one policy, one application, and change the tunnel config by one ingress rule.
 4. Apply. Verify with the skill's status section, then from the client with `cloudflared access ssh`.
+
+### CI deploys through Access (no browser)
+
+The deploy workflows (`ai-trading-deploy.yml`, `expense-tax-deploy.yml`) reach the laptop's sshd through this endpoint with the CI service token instead of the tailnet. The runner installs a pinned `cloudflared` and runs `ssh -o ProxyCommand="cloudflared access ssh --hostname %h"` with `TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` in the environment (never in argv). `cloudflared` sends them as `CF-Access-Client-Id` / `CF-Access-Client-Secret` on the websocket handshake, so nothing opens a browser. Only the client side runs: no listener on the laptop.
+
+The service token must be admitted by a **Service Auth** policy (`decision = "non_identity"`, `laptop_ssh_ci` in `laptop-ssh.tf`). Under an `allow` policy the edge recognises the token but answers `403`, the SSH websocket never opens and the connector sees no traffic (`websocket: bad handshake`).
+
+Credentials: the token's client id and secret are Firestore `shared/laptop` `CLOUDFLARE_ACCESS_CI_CLIENT_ID` / `CLOUDFLARE_ACCESS_CI_CLIENT_SECRET` (copied to the GitHub `production` secrets `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` for `expense-tax-deploy.yml`, which has no GCP auth). `ai-trading-deploy.yml` reads them from Firestore. The expense workflow also needs the GitHub variable `LAPTOP_SSH_HOSTNAME` (the SSH hostname). The pinned host keys keep their key material; the workflows only relabel them to the Access hostname.
 
 Rollback: persist `TF_VAR_laptop_ssh_enabled=false`, review and apply. That removes the ingress rule, the CNAME, the Access application and the policy in one apply. No console edits and no targeted applies.
 

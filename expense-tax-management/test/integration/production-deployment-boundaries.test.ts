@@ -1290,25 +1290,31 @@ describe("0001b-2 deploy workflow: target, dark, image_tag", () => {
     expect(raw).toContain("DEPLOY_DARK='$DEPLOY_DARK' FAMILY_CONFIG_CREDENTIALS=");
   });
 
-  it("joins the tailnet as tag:ci only for target=laptop, with a pinned action and no OIDC", () => {
+  it("reaches the laptop through Cloudflare Access only for target=laptop, with a pinned cloudflared and no OIDC", () => {
     const steps = workflow.jobs.deploy.steps ?? [];
-    const join = steps.find((step) => step.name === "Join the tailnet") as
-      | { if: string; uses: string; with: Record<string, string> }
+    const install = steps.find((step) => step.name === "Install cloudflared") as { if: string; run: string } | undefined;
+    const route = steps.find((step) => step.name === "Route SSH through Cloudflare Access") as
+      | { if: string; env: Record<string, string>; run: string }
       | undefined;
-    expect(join).toBeDefined();
-    expect(join?.if).toContain("env.TARGET == 'laptop'");
-    expect(join?.uses).toMatch(/^tailscale\/github-action@[0-9a-f]{40}( #.*)?$/);
-    expect(join?.with).toEqual({
-      "oauth-client-id": "${{ secrets.TS_CI_OAUTH_CLIENT_ID }}",
-      "oauth-secret": "${{ secrets.TS_CI_OAUTH_CLIENT_SECRET }}",
-      tags: "tag:ci",
+    expect(install?.if).toContain("env.TARGET == 'laptop'");
+    expect(install?.run).toMatch(/sha256=[0-9a-f]{64}/);
+    expect(install?.run).toContain("sha256sum -c -");
+    expect(route?.if).toContain("env.TARGET == 'laptop'");
+    expect(route?.env).toEqual({
+      CF_ACCESS_CLIENT_ID: "${{ secrets.CF_ACCESS_CLIENT_ID }}",
+      CF_ACCESS_CLIENT_SECRET: "${{ secrets.CF_ACCESS_CLIENT_SECRET }}",
     });
+    // The service token reaches cloudflared through its environment, never argv.
+    expect(route?.run).toContain("TUNNEL_SERVICE_TOKEN_ID=$CF_ACCESS_CLIENT_ID");
+    expect(route?.run).toContain("TUNNEL_SERVICE_TOKEN_SECRET=$CF_ACCESS_CLIENT_SECRET");
+    expect(route?.run).not.toContain("--service-token");
+    expect(raw).not.toContain("tailscale/github-action");
     expect(workflow.jobs.deploy.permissions?.["id-token"]).toBeUndefined();
     expect(raw).not.toContain("id-token: write");
   });
 
   it("selects the laptop host variables and secrets, keeping the VPS copies, and fails closed when one is unset", () => {
-    for (const name of ["LAPTOP_HOST", "LAPTOP_PORT", "LAPTOP_USER"]) {
+    for (const name of ["LAPTOP_SSH_HOSTNAME", "LAPTOP_PORT", "LAPTOP_USER"]) {
       expect(raw).toContain(`vars.${name}`);
     }
     for (const name of ["LAPTOP_DEPLOY_SSH_KEY", "LAPTOP_DEPLOY_KNOWN_HOSTS"]) {

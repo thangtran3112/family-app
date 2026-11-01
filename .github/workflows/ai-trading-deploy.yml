@@ -79,8 +79,8 @@ on:
           A push to main deploys to laptop (prod serves from the laptop since
           the 2026-11-01 cutover); vps is an explicit opt-in only (stopped
           rollback reference). Only takes effect when deploy_app is also true.
-          laptop joins the tailnet as tag:ci first (Join the tailnet step) and
-          reaches the host's tailnet address on port 2222.
+          laptop reaches the host's sshd through Cloudflare Access (the
+          cloudflared ProxyCommand with the CI service token), not the tailnet.
         type: choice
         options: [laptop, vps]
         default: laptop
@@ -262,33 +262,46 @@ jobs:
       - name: Render production env files
         run: infrastructure/apps/ai-trading/render-env.sh "$RUNNER_TEMP/ai-trading-env"
 
-      # target=laptop only: the laptop is reachable over the tailnet, not the
-      # public internet. This job has GCP auth, so the CI OAuth client (scope
-      # auth_keys, tag:ci) is read from Firestore shared/tailscale and masked;
-      # the ai-trading-production environment holds no copies of it. No OIDC
-      # join: the action uses the OAuth client, id-token is only for WIF above.
-      - name: Read tailnet join credentials
-        id: ts_creds
+      # target=laptop only: the laptop's sshd is reached through the ai-trading
+      # tunnel behind a Cloudflare Access application, not the tailnet. The CI
+      # service token (Service Auth policy) opens the SSH websocket headlessly:
+      # `cloudflared access ssh` sends it as CF-Access-Client-Id/Secret, so no
+      # browser login happens. This job has GCP auth, so the token and the SSH
+      # hostname are read from Firestore (shared/laptop, ai-trading/cloudflare),
+      # masked, and handed to later steps through the environment; the
+      # ai-trading-production environment holds no copies of them. The token
+      # travels in TUNNEL_SERVICE_TOKEN_* env vars, never in a command line.
+      - name: Install cloudflared
         if: ${{ env.TARGET == 'laptop' }}
         run: |
           set -euo pipefail
-          get_val() { common/config/family_config.py get shared/tailscale "$1" | awk '/^::add-mask::/ { print > "/dev/stderr"; next } { print }'; }
-          client_id="$(get_val TAILSCALE_CI_OAUTH_CLIENT_ID)"
-          client_secret="$(get_val TAILSCALE_CI_OAUTH_CLIENT_SECRET)"
-          for value in "$client_id" "$client_secret"; do
-            [[ -n "$value" ]] || { echo "shared/tailscale is missing a TAILSCALE_CI_OAUTH_* value" >&2; exit 1; }
+          # Pinned release; the digest is the one GitHub publishes for the asset.
+          version=2026.10.7
+          sha256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872
+          curl -fsSL -o "$RUNNER_TEMP/cloudflared" "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64"
+          echo "$sha256  $RUNNER_TEMP/cloudflared" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/cloudflared" /usr/local/bin/cloudflared
+          rm -f "$RUNNER_TEMP/cloudflared"
+          cloudflared --version
+
+      - name: Read Cloudflare Access SSH credentials
+        if: ${{ env.TARGET == 'laptop' }}
+        run: |
+          set -euo pipefail
+          get_val() { common/config/family_config.py get "$1" "$2" | awk '/^::add-mask::/ { print > "/dev/stderr"; next } { print }'; }
+          ssh_host="$(get_val ai-trading/cloudflare TF_VAR_laptop_ssh_hostname)"
+          token_id="$(get_val shared/laptop CLOUDFLARE_ACCESS_CI_CLIENT_ID)"
+          token_secret="$(get_val shared/laptop CLOUDFLARE_ACCESS_CI_CLIENT_SECRET)"
+          for value in "$ssh_host" "$token_id" "$token_secret"; do
+            [[ -n "$value" ]] || { echo "laptop SSH needs TF_VAR_laptop_ssh_hostname (ai-trading/cloudflare) and CLOUDFLARE_ACCESS_CI_CLIENT_ID/SECRET (shared/laptop)" >&2; exit 1; }
             echo "::add-mask::$value"
           done
-          echo "client-id=$client_id" >>"$GITHUB_OUTPUT"
-          echo "client-secret=$client_secret" >>"$GITHUB_OUTPUT"
-
-      - name: Join the tailnet
-        if: ${{ env.TARGET == 'laptop' }}
-        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
-        with:
-          oauth-client-id: ${{ steps.ts_creds.outputs.client-id }}
-          oauth-secret: ${{ steps.ts_creds.outputs.client-secret }}
-          tags: tag:ci
+          {
+            echo "CF_SSH_HOST=$ssh_host"
+            echo "TUNNEL_SERVICE_TOKEN_ID=$token_id"
+            echo "TUNNEL_SERVICE_TOKEN_SECRET=$token_secret"
+            echo "SSH_PROXY_COMMAND=cloudflared access ssh --hostname %h"
+          } >>"$GITHUB_ENV"
 
       - name: Fetch VPS deploy SSH key and known hosts
         run: |
@@ -326,8 +339,10 @@ jobs:
           cat >"$DEPLOY_SCRIPT" <<'SCRIPT_EOF'
           set -Eeuo pipefail
           umask 077
-          ssh_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT")
-          scp_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT")
+          proxy_opts=()
+          [[ -z "${SSH_PROXY_COMMAND:-}" ]] || proxy_opts=(-o "ProxyCommand=$SSH_PROXY_COMMAND")
+          ssh_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT" "${proxy_opts[@]}")
+          scp_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT" "${proxy_opts[@]}")
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "install -d -m 0700 /tmp/ai-trading-deploy /tmp/ai-trading-deploy/env /tmp/ai-trading-deploy/config /tmp/ai-trading-deploy/config/control /tmp/ai-trading-deploy/config/deploy/production /tmp/ai-trading-deploy/bootstrap/ai-trading/control"
           # Only the controller (deploy.sh) and its config CLI (family_config.py)
@@ -391,6 +406,15 @@ jobs:
           VPS_PORT="$(get_val VPS_PORT)"
           VPS_USER="$(get_val VPS_USER)"
           for value in "$VPS_HOST" "$VPS_PORT" "$VPS_USER"; do echo "::add-mask::$value"; done
+          # target=laptop: ssh to the Cloudflare Access hostname (the ProxyCommand
+          # ignores the port) and re-key the pinned host keys from the stored
+          # address to that hostname. The key material stays pinned and
+          # StrictHostKeyChecking stays yes; only the label changes.
+          if [[ -n "${CF_SSH_HOST:-}" ]]; then
+            awk -v h="[$CF_SSH_HOST]:$VPS_PORT" '!/^#/ && NF >= 3 { print h, $2, $3 }' "$KNOWN_HOSTS_FILE" >"$KNOWN_HOSTS_FILE.cf"
+            mv "$KNOWN_HOSTS_FILE.cf" "$KNOWN_HOSTS_FILE"
+            VPS_HOST="$CF_SSH_HOST"
+          fi
           export VPS_HOST VPS_PORT VPS_USER
           bash "$DEPLOY_SCRIPT"
 
