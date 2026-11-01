@@ -337,15 +337,25 @@ test.describe("New plan modal redesign", () => {
     }
   });
 
-  // D-152: the swing settings sit on the same grid, so its segmented controls are as wide as the First day box.
+  // D-152: the swing settings sit on the same two-column grid, so each segmented control is as wide as its column and starts at
+  // that column's edge. The grid fills row by row (First day | Sessions, Hide dates | Interval, Risk per hold | Tape), so the first
+  // column's edge is the First day box and the second's is the Sessions box.
   test("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    const column = (await dialog.getByLabel("First day").boundingBox())!;
-    for (const name of [PRACTICE_COPY.swingHideDates, PRACTICE_COPY.swingInterval, PRACTICE_COPY.swingTape]) {
+    const left = (await dialog.getByLabel(PRACTICE_COPY.swingFirstDay, { exact: true }).boundingBox())!;
+    const right = (await dialog.getByLabel(PRACTICE_COPY.swingSessions, { exact: true }).boundingBox())!;
+    expect(right.width, "two equal columns").toBeCloseTo(left.width, 0);
+    expect(right.x, "the Sessions box is in the second column").toBeGreaterThan(left.x + left.width);
+    const columns = [
+      { name: PRACTICE_COPY.swingHideDates, column: left, side: "first" },
+      { name: PRACTICE_COPY.swingInterval, column: right, side: "second" },
+      { name: PRACTICE_COPY.swingTape, column: right, side: "second" },
+    ];
+    for (const { name, column, side } of columns) {
       const box = (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
       expect(box.width, `${name}: one column wide`).toBeCloseTo(column.width, 0);
-      expect(box.x, `${name}: in the left column`).toBeCloseTo(column.x, 0);
+      expect(box.x, `${name}: in the ${side} column`).toBeCloseTo(column.x, 0);
     }
   });
 
