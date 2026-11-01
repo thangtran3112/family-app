@@ -19,6 +19,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
@@ -212,7 +213,9 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const opened = new Set(list.sessions.map((session) => session.symbol));
   const columns = columnsOf(list);
   // The End-day confirm names the open trades from this read, which re-reads whenever the day page's own data moves (a name opened, the day ended).
-  const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
+  // The thread clock runs on the server (ADR-0018), so while the day is open it is read again whenever the clock moves: "the price you see now".
+  const liveClock = useThreadClock(!ended && list.thread?.mode === "day" ? threadId : null);
+  const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0) + liveClock.revision;
   const portfolio = useDayPortfolio(list.id, portfolioRevision);
   const exits = endDayExitText(portfolioRows(portfolio.data ?? list), list.clock);
 

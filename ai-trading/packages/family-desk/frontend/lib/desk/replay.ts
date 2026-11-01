@@ -37,7 +37,8 @@ export const patchReplaySession = (id: number, body: { notes?: string | null; ra
   clientOf(options)(deskPath(`/replay/sessions/${id}`), ReplaySessionSchema, jsonInit("PATCH", body, options));
 
 export type TapeParams = { interval?: ReplayInterval; minSize?: number; minNotional?: number; maxPrints?: number };
-export type AdvanceTarget = { to: string } | { step: "bar" | "next_signal" };
+/** `sync`: follow the day thread's server-side clock (ADR-0018) - bring it to now, then reveal this name through it. */
+export type AdvanceTarget = { to: string } | { step: "bar" | "next_signal" } | { sync: true };
 
 const tapeBody = ({ interval, minSize, minNotional, maxPrints }: TapeParams) => ({
   interval,
