@@ -1,7 +1,7 @@
 import { PracticeThreadCreateV1Schema } from "@ai-trading/contracts/practice-thread-v1";
 import { formatEtDay } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import { lastWeekday, latestReplayDay, MAX_ARMED, type ArmedRef } from "./setup.ts";
+import { lastWeekday, latestReplayDay } from "./setup.ts";
 import type { SwingPreviewRequest, UniverseRow } from "./swingApi.ts";
 import { threadDraftToSpec, threadFieldOfPath, validateThreadDraft, type ThreadDraft, type ThreadField } from "./threadSetup.ts";
 import { MAX_FILTERS, MAX_UNIVERSE, MIN_UNIVERSE, MAX_WATCHLISTS, noEdits, parseTarget, toggleId, universeEntries, type UniverseEdits } from "./universeView.ts";
@@ -37,7 +37,6 @@ export type SwingDraft = {
   maxOpenHolds: string;
   /** Whole dollars as typed; empty means no per-hold risk. */
   riskPerHoldUsd: string;
-  armed: ArmedRef[];
   // The universe builder's inputs (they feed the preview, not the contract).
   watchlistIds: number[];
   filterIds: number[];
@@ -88,7 +87,6 @@ export const defaultSwingDraft = (now: Date): SwingDraft => ({
   tape: "off",
   maxOpenHolds: String(DEFAULT_MAX_OPEN_HOLDS),
   riskPerHoldUsd: "",
-  armed: [],
   watchlistIds: [],
   filterIds: [],
   fill: "liquidity",
@@ -100,12 +98,6 @@ const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN :
 
 export const toggleWatchlist = (ids: readonly number[], id: number): number[] => toggleId(ids, id, MAX_WATCHLISTS);
 export const toggleFillFilter = (ids: readonly number[], id: number): number[] => toggleId(ids, id, MAX_FILTERS);
-
-/** Arms or disarms a strategy, up to five. */
-export function toggleArmedRef(armed: readonly ArmedRef[], ref: ArmedRef): ArmedRef[] {
-  if (armed.some((item) => item.source === ref.source && item.id === ref.id)) return armed.filter((item) => !(item.source === ref.source && item.id === ref.id));
-  return armed.length >= MAX_ARMED ? [...armed] : [...armed, ref];
-}
 
 // -- the calendar line -------------------------------------------------------------------------------------------
 
@@ -234,7 +226,7 @@ export function swingBlock(draft: SwingDraft, rows: readonly Pick<UniverseRow, "
     universe: universeEntries(rows),
     interval: draft.interval,
     tape: draft.tape,
-    armed: draft.armed.map(({ source, id }) => ({ source, id })),
+    armed: [], // a new swing thread starts with nothing armed (D-153): the contract wants the field, the form no longer offers it
     maxOpenHolds: numberOrNaN(draft.maxOpenHolds),
   };
   if (draft.riskPerHoldUsd.trim() !== "") block.riskPerHoldUsd = numberOrNaN(draft.riskPerHoldUsd);
