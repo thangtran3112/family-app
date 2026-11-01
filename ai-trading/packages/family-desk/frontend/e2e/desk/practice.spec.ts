@@ -309,10 +309,22 @@ test.describe("Practice", () => {
     await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
     const table = page.getByRole("table", { name: "Candidates" });
     await expect(table.getByRole("row", { name: /TSLA/ })).toBeVisible();
-    // D-013, D-014, D-018: the P7 layout (the portfolio, the thread and the block on the left), the chips read as on, the P7 columns.
+    // D-013, D-014, D-018: the P7 layout, the chips read as on, the P7 columns. The left rail holds only the block's days (#317):
+    // today is open and the rest wait; the portfolio and the thread box are not on the day list.
     const left = page.getByRole("complementary", { name: "Practice side panel" });
     await expect(left).toContainText("This block · 5 days");
-    await expect(left).toContainText("Risk plan comes from the thread: ");
+    await expect(left.getByRole("listitem").filter({ hasText: "Day 1 · Fri" })).toContainText("Open now");
+    await expect(left.getByRole("listitem").filter({ hasText: "Day 2" })).toContainText("Opens after day 1");
+    await expect(left).not.toContainText("Risk plan comes from the thread");
+    // The risk plan is the right rail's Thread plan section (a drawer tab at 1180): the plan set above, and where it comes from.
+    if (test.info().project.name === "desktop-1180") await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.threadPlanTitle }).click();
+    const planRail =
+      test.info().project.name === "desktop-1180" ? page.getByRole("dialog", { name: PRACTICE_COPY.threadPlanTitle }) : page.getByRole("complementary", { name: "Day context" });
+    await expect(planRail).toContainText(PRACTICE_COPY.threadPlanFrom);
+    await expect(planRail).toContainText(/Stop on every entry\s*Yes/);
+    await expect(planRail).toContainText(/Max loss, pretend dollars a day\s*\$600/);
+    await expect(planRail).toContainText(/Max trades a day\s*3/);
+    if (test.info().project.name === "desktop-1180") await page.keyboard.press("Escape");
     await expect(page.getByRole("list", { name: "Filters" }).getByRole("listitem").first()).toHaveAttribute("data-active", "true");
     await expect(page.getByText("Chosen at setup")).toBeVisible();
     for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
