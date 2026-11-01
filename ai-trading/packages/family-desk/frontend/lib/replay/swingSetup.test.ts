@@ -17,7 +17,6 @@ import {
   swingFieldOfPath,
   swingProblems,
   targetProblem,
-  toggleArmedRef,
   toggleFillFilter,
   toggleWatchlist,
   validateSwingDraft,
@@ -59,7 +58,6 @@ test("the form starts as 02p c1 says", () => {
     tape: "off",
     maxOpenHolds: "3",
     riskPerHoldUsd: "",
-    armed: [],
     watchlistIds: [],
     filterIds: [],
     fill: "liquidity",
@@ -95,8 +93,9 @@ test("the swing block and the create body carry the contract's names and no empt
   assert.deepEqual(Object.keys(block), ["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed", "maxOpenHolds"]);
   assert.deepEqual([block.firstDay, block.sessions, block.hideDates, block.interval, block.tape, block.maxOpenHolds], ["2026-07-20", 20, "yes", "15m", "off", 3]);
   assert.equal((block.universe as unknown[]).length, 50);
-  const withRisk = swingBlock(draft({ riskPerHoldUsd: "1,500", hideDates: false, tape: "on", armed: [{ source: "filter", id: 4 }] }), rows);
-  assert.deepEqual([withRisk.riskPerHoldUsd, withRisk.hideDates, withRisk.tape, withRisk.armed], [1500, "no", "on", [{ source: "filter", id: 4 }]]);
+  assert.deepEqual(block.armed, [], "D-153: a new swing thread is created with nothing armed");
+  const withRisk = swingBlock(draft({ riskPerHoldUsd: "1,500", hideDates: false, tape: "on" }), rows);
+  assert.deepEqual([withRisk.riskPerHoldUsd, withRisk.hideDates, withRisk.tape, withRisk.armed], [1500, "no", "on", []]);
 
   const body = swingCreateBody(defaultThreadDraft(), draft(), rows) as Record<string, unknown>;
   assert.deepEqual([body.schemaVersion, body.mode, body.startingBalance], [1, "swing", 50000]);
@@ -105,7 +104,7 @@ test("the swing block and the create body carry the contract's names and no empt
 });
 
 test("a good draft validates to the contract's own parse", () => {
-  const result = validateSwingDraft(defaultThreadDraft(), draft({ riskPerHoldUsd: "100", armed: [{ source: "filter", id: 4 }] }), rows, NOW);
+  const result = validateSwingDraft(defaultThreadDraft(), draft({ riskPerHoldUsd: "100" }), rows, NOW);
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.spec.mode, "swing");
@@ -127,8 +126,6 @@ test("each field has its own plain message", () => {
   assert.equal(check({ maxOpenHolds: "0" }).maxOpenHolds, "Open holds: a whole number from 1 to 5");
   assert.equal(check({ riskPerHoldUsd: "0" }).riskPerHoldUsd, "Risk per hold: whole dollars from 1 to 100,000");
   assert.equal(check({ riskPerHoldUsd: "2.5" }).riskPerHoldUsd, "Risk per hold: whole dollars from 1 to 100,000");
-  const six = Array.from({ length: 6 }, (_, id) => ({ source: "filter" as const, id: id + 1 }));
-  assert.equal(check({ armed: six }).armed, "Arm up to 5 strategies");
   assert.equal(check({}, rows.slice(0, 5)).universe, "Universe: 10 to 50 symbols, each once");
   assert.equal(check({}, [...rows.slice(0, 11), rows[0]!]).universe, "universe symbols must be unique");
   assert.equal(check({ firstDay: "2016-12-30" }).firstDay, "First day: pick a weekday from Jan 3, 2017");
@@ -198,16 +195,12 @@ test("server problems land on the field that shows them, in the server's own wor
   );
 });
 
-test("lists, filters and armed strategies toggle up to their limit", () => {
+test("lists and filters toggle up to their limit", () => {
   assert.deepEqual(toggleWatchlist([1], 2), [1, 2]);
   assert.deepEqual(toggleWatchlist([1, 2], 2), [1]);
   assert.equal(toggleWatchlist(Array.from({ length: 20 }, (_, id) => id), 99).length, 20);
   assert.deepEqual(toggleFillFilter([1, 2, 3], 4), [1, 2, 3]);
   assert.deepEqual(toggleFillFilter([1, 2], 3), [1, 2, 3]);
-  const five = Array.from({ length: 5 }, (_, id) => ({ source: "filter" as const, id: id + 1 }));
-  assert.deepEqual(toggleArmedRef(five, { source: "filter", id: 9 }), five);
-  assert.deepEqual(toggleArmedRef(five, { source: "filter", id: 2 }).map((ref) => ref.id), [1, 3, 4, 5]);
-  assert.deepEqual(toggleArmedRef([], { source: "alert_strategy", id: 7 }), [{ source: "alert_strategy", id: 7 }]);
   assert.equal(isDailyRunOn("daily_close"), true);
   assert.equal(isDailyRunOn("weekly"), true);
   assert.equal(isDailyRunOn("bar_close_15m"), false);

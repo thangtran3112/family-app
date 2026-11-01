@@ -43,6 +43,7 @@ export function SwingSetupSection({
           </Field>
           <Field id="swing-hide" label={PRACTICE_COPY.swingHideDates} group note={PRACTICE_COPY.planHideDatesHint} error={problems.hideDates}>
             <Segmented
+              fill
               value={draft.hideDates ? "yes" : "no"}
               options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
               onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
@@ -53,6 +54,7 @@ export function SwingSetupSection({
           </Field>
           <Field id="swing-interval" label={PRACTICE_COPY.swingInterval} group error={problems.interval}>
             <Segmented
+              fill
               value={draft.interval}
               options={SWING_INTERVALS.map((value) => ({ value, label: value }))}
               onChange={(interval) => onDraft({ ...draft, interval })}
@@ -63,6 +65,7 @@ export function SwingSetupSection({
           </Field>
           <Field id="swing-tape" label={PRACTICE_COPY.swingTape} group error={problems.tape}>
             <Segmented
+              fill
               value={draft.tape}
               options={SWING_TAPES.map((value) => ({ value, label: TAPE_LABEL[value] }))}
               onChange={(tape) => onDraft({ ...draft, tape })}

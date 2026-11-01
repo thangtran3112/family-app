@@ -5,6 +5,7 @@ import { universeNeedLine } from "../../lib/replay/universeView.ts";
 import { origin } from "../helpers";
 import type { Locator } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { railSection } from "./swing-helpers";
 import { ANY_CLOSE, DAY_URL, START_BUTTON, THREAD_URL, clickNewPlan, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread, threadIdOf } from "./hub-helpers";
 
 // The Practice landing, its New plan modal and the thread page (02r2, Paper mocks LEW-0 and X9Y-0).
@@ -324,6 +325,38 @@ test.describe("New plan modal redesign", () => {
     const listSize = (await dialog.getByLabel(PRACTICE_COPY.planListSize).boundingBox())!;
     expect(firstDay.width, "the date and the list size are one column wide").toBeCloseTo(listSize.width, 0);
     expect(firstDay.x).toBeCloseTo(listSize.x, 0);
+    // D-152: a segmented control is as wide as its column, so its edges meet the text controls' above and below it.
+    const group = async (name: string) => (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
+    const to = (await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).boundingBox())!;
+    for (const name of [PRACTICE_COPY.planDays, PRACTICE_COPY.planInterval]) {
+      expect((await group(name)).width, `${name}: as wide as the Window to box in its column`).toBeCloseTo(to.width, 0);
+      expect((await group(name)).x, `${name}: starts at the right column`).toBeCloseTo(to.x, 0);
+    }
+  });
+
+  // D-152: the swing settings sit on the same grid, so its segmented controls are as wide as the First day box.
+  test("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
+    const dialog = await openNewPlan(page);
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    const column = (await dialog.getByLabel("First day").boundingBox())!;
+    for (const name of [PRACTICE_COPY.swingHideDates, PRACTICE_COPY.swingInterval, PRACTICE_COPY.swingTape]) {
+      const box = (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
+      expect(box.width, `${name}: one column wide`).toBeCloseTo(column.width, 0);
+      expect(box.x, `${name}: in the left column`).toBeCloseTo(column.x, 0);
+    }
+  });
+
+  // D-153 (owner ruling 2026-10-31): practice does not arm strategies or ask for a risk plan, so a new plan is sent with an empty list.
+  test("a new plan asks for no strategies or risk plan and is sent with nothing armed", async ({ page, context }) => {
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    for (const gone of [/arm .*strateg/i, /risk plan/i, /alert strateg/i]) await expect(dialog.getByText(gone)).toHaveCount(0);
+    await fillNewPlan(dialog);
+    const sent = page.waitForRequest((request) => request.url().includes("/replay/daily/next") && request.method() === "POST");
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
+    const body = (await sent).postDataJSON() as { plan: { setup: { armed: unknown } } };
+    expect(body.plan.setup.armed, "the contract's field, always empty").toEqual([]);
+    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
   });
 
   // M-02: the disabled list time explains itself in view, the footer is a live region, a blocked button still takes focus.
@@ -396,6 +429,29 @@ test.describe("New plan modal redesign", () => {
     await universe.getByRole("button", { name: "Remove NEWCO" }).click();
     await asked; // the name leaves the list she sends
     await expect(universe.getByText("NEWCO")).toHaveCount(0);
+    await page.unrouteAll({ behavior: "wait" }); // let the last preview answer finish before the test ends
+  });
+
+  // D-103, D-104: a name in the universe table can always be removed (its button is inside the table's visible box), and a table that no
+  // setting can refresh says so instead of looking current.
+  test("the swing universe's Remove buttons sit inside the table, and a wrong Sessions says the list is not refreshed", async ({ page }) => {
+    const dialog = await openNewPlan(page);
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    await dialog.getByRole("checkbox", { name: /Day movers/ }).check();
+    const remove = dialog.getByRole("table", { name: "Swing universe" }).getByRole("button", { name: /^Remove / }).first();
+    await expect(remove).toBeVisible({ timeout: 30_000 });
+    const gap = await remove.evaluate((node) => {
+      let scroller = node.parentElement;
+      while (scroller && getComputedStyle(scroller).overflowX === "visible") scroller = scroller.parentElement;
+      return scroller!.getBoundingClientRect().right - node.getBoundingClientRect().right;
+    });
+    expect(gap, "the Remove button ends inside the table's visible edge").toBeGreaterThanOrEqual(-0.5);
+
+    await dialog.getByLabel("Sessions").fill("999");
+    await expect(dialog.getByText(PRACTICE_COPY.swingListOld, { exact: false })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: START_BUTTON })).toHaveAccessibleName("Start swing practice"); // not "Start 999-day swing practice"
+    await dialog.getByLabel("Sessions").fill("20");
+    await expect(dialog.getByText(PRACTICE_COPY.swingListOld, { exact: false })).toHaveCount(0);
     await page.unrouteAll({ behavior: "wait" }); // let the last preview answer finish before the test ends
   });
 
@@ -478,5 +534,30 @@ test.describe("Practice landing · fix wave 5S", () => {
     await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
     expect((await table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance }).boundingBox())!.x).toBe(before);
+  });
+});
+
+// D-133: the journal's Edit plan form is on the same field kit as the New plan modal: one control height, one radius, sentence-case labels.
+test.describe("Edit plan form", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("its segmented controls, inputs and buttons share one height and radius, and no label is upper-cased", async ({ page, context }) => {
+    const id = await createThreadByApi(context, { maxLoss: 600 });
+    await openDesk(page, `/practice/journal?thread=${id}`);
+    const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle); // a tab and drawer at 1180
+    await plan.getByRole("button", { name: PRACTICE_COPY.threadEditPlan }).click();
+    const form = plan.getByRole("form", { name: PRACTICE_COPY.threadEditPlan });
+    await expect(form.getByLabel("Max loss ($)")).toBeVisible();
+    const look = await form.evaluate((node) => {
+      const measure = (selector: string) => [...node.querySelectorAll(selector)].map((el) => `${Math.round(el.getBoundingClientRect().height)}px ${getComputedStyle(el).borderRadius}`);
+      return {
+        controls: [...new Set([...measure('[role="radiogroup"]'), ...measure("input"), ...measure("button:not([role=radio])")])],
+        caps: [...node.querySelectorAll("label, legend")].filter((el) => getComputedStyle(el).textTransform !== "none").map((el) => el.textContent),
+      };
+    });
+    expect(look.controls, "one height and one radius for every control").toHaveLength(1);
+    expect(look.caps, "no label is upper-cased").toEqual([]);
   });
 });
