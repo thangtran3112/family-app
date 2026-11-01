@@ -547,9 +547,10 @@ def test_a_swing_session_carries_the_strip_the_daily_block_and_its_hold(world, d
         client.delete(f"{BASE}/sessions/{sid}/marks/{closed.mark.id}", headers=auth_headers()).json()
     )
     assert undo.hold is not None and undo.hold.status == "open" and undo.open_trade is not None
-    nothing = _mark(client, sid, "long_entry", shares=100)
-    assert nothing.status_code == 422  # one open hold per name
-    assert "Close your open S04 practice hold first" in _problems(nothing)[0]["message"]
+    added = _mark(client, sid, "long_entry", shares=100)  # the name is held: a second buy adds to the one hold
+    assert added.status_code == 200
+    grown = MarkResultOut.model_validate(added.json())
+    assert grown.hold is not None and grown.hold.shares == 200 and grown.open_trade is not None
 
 
 def test_a_stop_gapped_through_pauses_the_walk_and_the_hold_exits_on_her_mark(world, db_session) -> None:

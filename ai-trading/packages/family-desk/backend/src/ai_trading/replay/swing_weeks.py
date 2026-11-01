@@ -238,7 +238,7 @@ def _holds(w: _Week, labels: dict[int, str]) -> list[week_mod.HoldFact]:
 def _entries(w: _Week, flags: dict[date, list[str]], interval: int) -> list[week_mod.EntryFact]:
     """One fact per hold opened in the week: the plan checks of 02p e3 that are about an entry."""
     first = w.span.days[0]
-    mine = [r for r in w.rows if first <= r.entry_day <= w.through]
+    mine = [r for r in w.rows if first <= r.entry_day <= w.through and not r.part_exit]  # a slice is no entry
     ids = [r.entry_session_id for r in mine if r.entry_session_id is not None]
     fires = {
         sid: signals.load_fires(rows)

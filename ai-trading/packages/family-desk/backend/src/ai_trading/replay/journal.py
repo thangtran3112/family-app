@@ -1,10 +1,18 @@
 """The practice journal (02o §c5): marks plus the 1-minute price path to trades, P/L, R, totals, adherence,
 signals versus trades and the P/L series. Pure: no database, no clock, no network.
 
+**One average-cost position per name (ADR-0016, "One position per name, many fills").** A Buy (`long_entry`) or a Sell
+(`short_entry`) mark is a fill against the name's position: the side it agrees with adds to the position at the
+weighted average cost, the side it opposes closes shares first and opens the other way with what is left (a flip).
+`assemble` walks the marks and returns the realized trades and the open position. **A trade is one realized exit**:
+a mark that closes shares (a sale of part of the position, the cover half of a flip, or Close position) realizes
+`shares closed` at the average cost then, so a ledger row, a journal trade and a cent of P/L correspond one to one.
+The average cost is carried to six decimals (the price column's scale) and is the price the P/L runs on.
+
 Money rules (02o decision 6): P/L per trade is `(exit - entry) * shares` for a long and `(entry - exit) * shares`
 for a short, in dollars to the cent; no fees, spread or slippage. R is P/L per share divided by
-`|entry - stop|`, using the first stop set during the trade (a later stop note moves the line, never the R).
-Unrealized P/L is marked at the playhead's last price.
+`|average cost - stop|`, using the first stop set on the position (a later stop note moves the line, never the R;
+the stop belongs to the position, not to one fill). Unrealized P/L is marked at the playhead's last price.
 
 Cent-exact (D-033): a practice fill is a print rounded to the cent (`fill_price`), so the price on screen is the price
 the P/L used, and P/L is computed in `Decimal`, never in float. Every dollar figure here goes through `pnl_usd`/
@@ -63,7 +71,11 @@ NOT_ON_NAME = "you were on another name"
 
 @dataclass
 class Trade:
-    no: int
+    """One realized exit of a position, or the open position itself (`exit_at` None). `entry_price` is the position's
+    average cost, `entry_at` its first fill, `stop_price` the first stop set on it. Several trades can share a `no`:
+    the position they were closed out of."""
+
+    no: int  # the position's number within the name's day
     side: str  # "long" | "short"
     entry_at: pd.Timestamp
     entry_price: float
@@ -74,7 +86,9 @@ class Trade:
     exit_price: float | None = None
     exit_source: str = "her"
     exit_mark_id: int | None = None  # the mark that realized it: the ledger's key
-    day_pnl_usd: float | None = None  # the day's P/L (realized + open at the clock) when it was entered; null: unknown
+    # Every fill that opened or added to the position since its previous exit, as (when, the day's P/L at the clock
+    # then; null: unknown). The max-loss rule scores each one: an add after the loss line is an entry too.
+    entries: list[tuple[pd.Timestamp, float | None]] = field(default_factory=list)
 
     @property
     def sign(self) -> int:
@@ -89,34 +103,87 @@ class Trade:
         return self.sign * (price - self.entry_price) / abs(self.entry_price - self.stop_price)
 
 
+SIX = Decimal("0.000001")
+
+
+def average_cost(held: int, cost: float, added: int, price: float) -> float:
+    """The average cost after `added` shares bought (or sold short) at `price` join `held` shares held at `cost`: the
+    weighted mean, to six decimals (the price column's scale), halves up. The figure shown is the one P/L runs on."""
+    total = _dec(cost) * held + _dec(price) * added
+    return float((total / (held + added)).quantize(SIX, rounding=ROUND_HALF_UP))
+
+
+def fill_split(held_side: str | None, held_shares: int, side: str, shares: int) -> tuple[int, int]:
+    """`(closed, opened)`: how many shares of a fill of `shares` on `side` close the position held (`held_side`,
+    `held_shares`; no position: `None`, 0) and how many open or add to one. A fill against the position closes up to its
+    size and opens the other way with the rest (a flip); a fill with it, or against nothing, only opens."""
+    closed = min(shares, held_shares) if held_side is not None and held_side != side else 0
+    return closed, shares - closed
+
+
 def assemble(marks: list[Mark]) -> tuple[list[Trade], Trade | None]:
-    """`(closed trades, the open trade)` from marks in `seq` order. A stop note outside a trade is ignored."""
+    """`(realized trades, the open position)` from marks in `seq` order. A Buy or Sell mark is a fill (see the module
+    docstring); an exit mark closes the whole position. A stop note outside a position is ignored."""
     closed: list[Trade] = []
-    current: Trade | None = None
+    pos: Trade | None = None
+    entries: list[tuple[pd.Timestamp, float | None]] = []
+    opened = 0
     for mark in sorted(marks, key=lambda m: m.seq):
-        if mark.kind in ENTRY_KINDS and current is None:
+        if mark.kind in ENTRY_KINDS:
             assert mark.price is not None and mark.shares is not None
-            current = Trade(
-                no=mark.trade_no or len(closed) + 1,
-                side="long" if mark.kind == "long_entry" else "short",
-                entry_at=mark.at,
-                entry_price=mark.price,
-                shares=mark.shares,
-                stop_price=mark.stop_price,
-                stops=[] if mark.stop_price is None else [(mark.at, mark.stop_price)],
-                day_pnl_usd=mark.day_pnl_usd,
+            side = "long" if mark.kind == "long_entry" else "short"
+            take, rest = fill_split(
+                None if pos is None else pos.side, 0 if pos is None else pos.shares, side, mark.shares
             )
-        elif mark.kind == "stop" and current is not None and mark.stop_price is not None:
-            current.stops.append((mark.at, mark.stop_price))
-            if current.stop_price is None:
-                current.stop_price = mark.stop_price
-        elif mark.kind in EXIT_KINDS and current is not None:
-            assert mark.price is not None
-            current.exit_at, current.exit_price, current.exit_source = mark.at, mark.price, mark.source
-            current.exit_mark_id = mark.id
-            closed.append(current)
-            current = None
-    return closed, current
+            if pos is not None and take:
+                closed.append(_realize(pos, take, mark, entries))
+                entries = []
+                pos.shares -= take
+                if pos.shares == 0:
+                    pos = None
+            if rest:
+                entries.append((mark.at, mark.day_pnl_usd))
+                if pos is None:
+                    opened += 1
+                    pos = Trade(opened, side, mark.at, mark.price, rest, None)
+                else:
+                    pos.entry_price = average_cost(pos.shares, pos.entry_price, rest, mark.price)
+                    pos.shares += rest
+            if pos is not None and mark.stop_price is not None:
+                _set_stop(pos, mark.at, mark.stop_price)
+        elif mark.kind == "stop" and pos is not None and mark.stop_price is not None:
+            _set_stop(pos, mark.at, mark.stop_price)
+        elif mark.kind in EXIT_KINDS and pos is not None:
+            closed.append(_realize(pos, pos.shares, mark, entries))
+            entries, pos = [], None
+    if pos is not None:
+        pos.entries = entries
+    return closed, pos
+
+
+def _set_stop(pos: Trade, at: pd.Timestamp, price: float) -> None:
+    pos.stops.append((at, price))
+    if pos.stop_price is None:
+        pos.stop_price = price
+
+
+def _realize(pos: Trade, shares: int, mark: Mark, entries: list[tuple[pd.Timestamp, float | None]]) -> Trade:
+    """The trade `mark` realizes by closing `shares` of `pos` at the mark's price: the average cost as it stood."""
+    assert mark.price is not None
+    return Trade(
+        no=pos.no,
+        side=pos.side,
+        entry_at=pos.entry_at,
+        entry_price=pos.entry_price,
+        shares=shares,
+        stop_price=pos.stop_price,
+        stops=list(pos.stops),
+        exit_at=mark.at,
+        exit_price=mark.price,
+        exit_source=mark.source,
+        exit_mark_id=mark.id,
+        entries=entries,
+    )
 
 
 def open_trade_out(trade: Trade | None, last_price: float | None) -> dict[str, Any] | None:
@@ -158,19 +225,20 @@ def _stop_honored(trade: Trade, bars: pd.DataFrame) -> bool:
 
 
 def _breaches(book: list[Trade], max_loss_usd: int | None) -> int:
-    """Entries taken after the day's loss had already reached the max loss. The day's loss at an entry is the snapshot
-    the entry carried: realized plus every open trade marked at the day clock. An entry without one (a mark from before
-    several positions could be open, or a standalone session's) falls back to the realized loss alone, where a trade
-    counts as realized once its exit is at or before the entry."""
+    """Entries taken after the day's loss had already reached the max loss: every fill that opened or added to a
+    position, not only the first. The day's loss at an entry is the snapshot the entry carried: realized plus every open
+    trade marked at the day clock. An entry without one (a mark from before several positions could be open, or a
+    standalone session's) falls back to the realized loss alone, where a trade counts as realized once its exit is at or
+    before the entry."""
     if max_loss_usd is None:
         return 0
 
-    def day_pnl(trade: Trade) -> float:
-        if trade.day_pnl_usd is not None:
-            return trade.day_pnl_usd
-        return usd_sum([trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= trade.entry_at])
+    def day_pnl(at: pd.Timestamp, snapshot: float | None) -> float:
+        if snapshot is not None:
+            return snapshot
+        return usd_sum([trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= at])
 
-    return sum(1 for trade in book if day_pnl(trade) <= -max_loss_usd)
+    return sum(1 for trade in book for at, snapshot in trade.entries if day_pnl(at, snapshot) <= -max_loss_usd)
 
 
 def _checks(
@@ -185,7 +253,8 @@ def _checks(
     limit are day rules (02o-b2), so they count every name practised that day. The rest score this session alone."""
     n = len(trades)
     book = sorted([*trades, *day_trades], key=lambda t: t.entry_at)
-    n_day = len(book)
+    n_day = len(book)  # trades are exits: a position closed in two parts is two
+    n_entries = sum(len(t.entries) for t in book)
     across = " · across the day" if day_trades else ""
     window = pd.Timedelta(minutes=ON_SIGNAL_BARS * display_minutes)
     has_trades = n > 0
@@ -221,9 +290,9 @@ def _checks(
         {
             "id": "max_loss",
             "label": f"No entry after the max loss was reached{across}",
-            "applicable": plan.max_loss_usd is not None and n_day > 0,
+            "applicable": plan.max_loss_usd is not None and n_entries > 0,
             "passed": breaches == 0,
-            "detail": f"{n_day - breaches} of {n_day}",
+            "detail": f"{n_entries - breaches} of {n_entries}",
         },
         {
             "id": "max_trades",
@@ -289,19 +358,24 @@ def _signals_vs_trades(
 
 
 def _pnl_series(
-    trades: list[Trade], open_now: Trade | None, bars: pd.DataFrame, start: pd.Timestamp, as_of: pd.Timestamp
+    marks: list[Mark], include_open: bool, bars: pd.DataFrame, start: pd.Timestamp, as_of: pd.Timestamp
 ) -> list[dict[str, Any]]:
-    """Realized plus the open trade marked at each closed minute, on the 1-minute grid from the window start."""
-    book = [*trades, *([open_now] if open_now is not None else [])]
+    """Realized plus the open position marked at each closed minute, on the 1-minute grid from the window start. The
+    position is the one the marks had built by that minute (a later fill or sale never rewrites an earlier minute)."""
+    ordered = sorted(marks, key=lambda m: m.seq)
+    states = [(mark.at, *assemble(ordered[: i + 1])) for i, mark in enumerate(ordered)]
     series = [{"t": start, "pnl_usd": 0.0}]
+    known = 0  # the states up to here were placed at or before the minute being read
     for bar_start, row in bars[(bars.index >= start) & (bars.index + MINUTE <= as_of)].iterrows():
         t_close = bar_start + MINUTE
-        parts = []
-        for trade in book:
-            if trade.exit_at is not None and t_close >= trade.exit_at:
-                parts.append(trade_pnl(trade))
-            elif t_close >= trade.entry_at:
-                parts.append(trade.unrealized(float(row["close"])))
+        while known < len(states) and states[known][0] <= t_close:
+            known += 1
+        parts: list[float] = []
+        if known:
+            closed, open_ = states[known - 1][1:]
+            parts = [trade_pnl(t) for t in closed]
+            if include_open and open_ is not None:
+                parts.append(open_.unrealized(float(row["close"])))
         series.append({"t": t_close, "pnl_usd": usd_sum(parts)})
     return series
 
@@ -326,7 +400,7 @@ def compute_journal(
     looks past the playhead; an open trade at `as_of` is marked at `last_price` and counted in the P/L series
     but not in the totals. `away`: the spans she was on another name; a signal that fired inside one was never in front
     of her, so it does not count as "a signal" for the on-signal check (02o-b2)."""
-    trades, open_now = assemble(marks)
+    trades, _ = assemble(marks)
     visible = bars[bars.index + MINUTE <= as_of]
     watched = [f for f in fires if not unseen(list(away), f.bar_close)]
     checks = _checks(trades, plan, watched, visible, display_minutes, day_trades or [])
@@ -357,5 +431,5 @@ def compute_journal(
         ],
         "adherence": {"score_pct": score, "hint": hint, "checks": checks},
         "signals_vs_trades": _signals_vs_trades(fires, trades, bars, window_end, away) if final else [],
-        "pnl_series": _pnl_series(trades, open_now if last_price is not None else None, visible, window_start, as_of),
+        "pnl_series": _pnl_series(marks, last_price is not None, visible, window_start, as_of),
     }

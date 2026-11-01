@@ -191,7 +191,7 @@ test.describe("Practice", () => {
     await page.keyboard.press("b");
     await marksTab(page).click();
     const marks = page.getByRole("tabpanel");
-    await expect(marks).toContainText("Practice long");
+    await expect(marks).toContainText("Practice buy");
 
     // T opens the stop note; Enter saves it.
     await page.keyboard.press("t");
@@ -207,8 +207,8 @@ test.describe("Practice", () => {
     await page.keyboard.press("ControlOrMeta+z");
     await expect(page.getByText(PRACTICE_COPY.undone)).toBeVisible();
     await expect(marks).not.toContainText("Practice exit");
-    await page.keyboard.press("s"); // the opposite key exits an open long
-    await expect(marks).toContainText("Practice exit");
+    await page.keyboard.press("s"); // Sell with the ticket's quantity: every share of the long, so it closes
+    await expect(marks).toContainText("Practice sell");
     await expectCleanScreen(page);
 
     // Ending early asks first, then scores and opens the journal.
@@ -367,7 +367,7 @@ test.describe("Practice", () => {
     await stopForm.getByRole("button", { name: "Save" }).click();
     await marksTab(page).click();
     await expect(page.getByRole("tabpanel")).toContainText("Practice stop");
-    await expect(page.getByRole("tabpanel")).toContainText("Practice long");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
     await expect(strip).toContainText("today");
@@ -599,7 +599,7 @@ test.describe("Practice", () => {
     await expect(playhead(page)).not.toContainText("9:30:00");
     await page.keyboard.press("b");
     await marksTab(page).click();
-    await expect(page.getByRole("tabpanel")).toContainText("Practice long");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     for (let step = 0; step < 6; step += 1) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
@@ -886,6 +886,8 @@ test.describe("Practice day list · fix wave 5S", () => {
       return { overflow: wrap.scrollWidth > wrap.clientWidth, inside: b.left >= w.left - 1 && b.right <= w.right + 1 };
     });
     expect(fits.inside, "the Open action is inside the visible part of the table").toBe(true);
+    const peek = await page.getByRole("table", { name: "Candidates" }).getByRole("button", { name: "Peek at TSLA" }).boundingBox();
+    expect(Math.abs(peek!.y - (await button.boundingBox())!.y), "Open and Peek share one line in the pinned cell").toBeLessThan(2);
     await button.click();
     await page.waitForURL(SESSION_URL);
   });
@@ -936,6 +938,9 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle)).toBeVisible();
     await expect(page.getByText(/\bof \d+ matched\b/), "one count model: the third count is gone").toHaveCount(0);
     await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan }), "the dead Re-scan is not offered").toHaveCount(0);
+    const hint = (await page.getByText(PRACTICE_COPY.dayNoMatchHint).boundingBox())!;
+    const skip = (await page.getByRole("button", { name: PRACTICE_COPY.daySkip }).boundingBox())!;
+    expect(skip.y - (hint.y + hint.height), "the hint does not touch the buttons under it").toBeGreaterThanOrEqual(8);
     await expect(page.getByRole("link", { name: /widen a filter/ }), "the Screener cannot edit this thread's plan").toHaveCount(0);
     await page.getByRole("button", { name: PRACTICE_COPY.dayChangePlan }).click();
     await expect(page.getByRole("dialog", { name: /^New plan for / })).toBeVisible();

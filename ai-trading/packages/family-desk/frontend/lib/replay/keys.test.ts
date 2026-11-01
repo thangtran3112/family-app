@@ -18,16 +18,14 @@ test("Space, arrows and digits drive playback in every trade state", () => {
   assert.equal(press("5"), null);
 });
 
-test("B, S and X depend on the open trade", () => {
-  assert.deepEqual(press("b", "flat"), { type: "mark", kind: "long_entry" });
-  assert.deepEqual(press("S", "flat"), { type: "mark", kind: "short_entry" });
+test("B and S are a Buy or a Sell fill whatever is held; X closes the position or says there is none", () => {
+  for (const side of ["flat", "long", "short"] as const) {
+    assert.deepEqual(press("b", side), { type: "mark", kind: "long_entry" }, `Buy with ${side}`);
+    assert.deepEqual(press("S", side), { type: "mark", kind: "short_entry" }, `Sell with ${side}`);
+  }
   assert.equal(press("x", "flat")?.type, "blocked");
-  assert.deepEqual(press("s", "long"), { type: "mark", kind: "long_exit" });
   assert.deepEqual(press("x", "long"), { type: "mark", kind: "long_exit" });
-  assert.equal(press("b", "long")?.type, "blocked");
-  assert.deepEqual(press("b", "short"), { type: "mark", kind: "short_exit" });
   assert.deepEqual(press("x", "short"), { type: "mark", kind: "short_exit" });
-  assert.equal(press("s", "short")?.type, "blocked");
 });
 
 test("T needs an open trade", () => {

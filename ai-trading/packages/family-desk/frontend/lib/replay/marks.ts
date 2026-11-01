@@ -23,8 +23,8 @@ export function barStartFor(bars: readonly Pick<ReplayBar, "t">[], instantMs: nu
 
 export function markLabel(mark: Pick<ReplayMark, "kind" | "shares" | "stop_price">): string {
   switch (mark.kind) {
-    case "long_entry": return `Practice long ${mark.shares ?? ""}`.trim();
-    case "short_entry": return `Practice short ${mark.shares ?? ""}`.trim();
+    case "long_entry": return `Practice buy ${mark.shares ?? ""}`.trim();
+    case "short_entry": return `Practice sell ${mark.shares ?? ""}`.trim();
     case "long_exit":
     case "short_exit": return "Practice exit";
     case "stop": return `Practice stop ${formatPrice(mark.stop_price)}`;
@@ -114,10 +114,10 @@ export function markRows(marks: readonly ReplayMark[]): MarkRow[] {
     }));
 }
 
-/** When the open trade was entered: the time of its entry mark. Null when no mark carries its trade number. */
+/** When the open position was opened: the time of its first fill (every fill that adds to it carries its trade number). Null when no mark carries it. */
 export function entrySince(marks: readonly ReplayMark[], trade: Pick<OpenTrade, "trade_no"> | null): string | null {
   if (trade === null) return null;
-  const entry = [...marks].reverse().find((mark) => (mark.kind === "long_entry" || mark.kind === "short_entry") && mark.trade_no === trade.trade_no);
+  const entry = marks.find((mark) => (mark.kind === "long_entry" || mark.kind === "short_entry") && mark.trade_no === trade.trade_no);
   return entry?.at ?? null;
 }
 
