@@ -16,6 +16,7 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "../fundamental.module.css";
 import local from "./stocks.module.css";
 import { VerdictCard } from "./VerdictCard";
+import { FactList } from "@/components/ui/FactList";
 
 /** FD8 Stock overview (02n §b3): the Desk AI verdict, consensus EPS and revisions, analyst targets as context, and a price chart with no indicators. */
 export function StockOverview({ symbol, research, price }: { symbol: string; research: Research; price: number | null }) {
@@ -114,12 +115,14 @@ function Targets({ targets }: { targets: Research["targets"] }) {
         {view === null ? (
           <p className={styles.muted}>No analyst targets for this symbol yet</p>
         ) : (
-          <dl className={local.kvList}>
-            <div className={local.kv}><dt>Low</dt><dd>{view.low}</dd></div>
-            <div className={local.kv}><dt>Mean</dt><dd>{view.mean}</dd></div>
-            <div className={local.kv}><dt>High</dt><dd>{view.high}</dd></div>
-            <div className={local.kv}><dt>Ratings</dt><dd>{view.counts}</dd></div>
-          </dl>
+          <FactList
+            facts={[
+              { id: "low", label: "Low", value: view.low },
+              { id: "mean", label: "Mean", value: view.mean },
+              { id: "high", label: "High", value: view.high },
+              { id: "ratings", label: "Ratings", value: view.counts },
+            ]}
+          />
         )}
       </Panel>
     </div>

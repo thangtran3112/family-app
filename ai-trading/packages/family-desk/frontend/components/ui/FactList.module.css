@@ -1,0 +1,7 @@
+/* Label and value pairs (design-component-system §4.3): the label muted, the value right-aligned and never clipped. One or two columns. */
+.list { display: grid; margin: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-1) var(--space-6); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.list[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fact { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.list[data-divided="true"] .fact { border-bottom: 1px solid var(--color-hairline); padding-bottom: var(--space-1); }
+.label { min-width: 0; color: var(--color-muted); }
+.value { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: flex-end; gap: var(--space-1); margin: 0; color: var(--tone, var(--color-text)); font-weight: var(--weight-semibold); text-align: right; }

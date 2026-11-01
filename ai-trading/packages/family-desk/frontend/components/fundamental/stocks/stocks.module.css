@@ -29,9 +29,6 @@
 
 /* Consensus */
 .revisions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.kv { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-label); }
-.kv dt { color: var(--color-muted); }
-.kv dd { margin: 0; }
 
 /* Valuation */
 .method { display: grid; grid-template-columns: minmax(150px, 1fr) 110px minmax(0, 2fr); gap: var(--space-3); align-items: start; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-hairline); font-size: var(--text-label); }
@@ -62,4 +59,3 @@
 .table tbody th { font-weight: var(--weight-semibold); }
 
 .quiet { font-size: var(--text-label); font-weight: var(--weight-regular); color: var(--color-muted); }
-.kvList { display: grid; gap: var(--space-1); margin: 0; }

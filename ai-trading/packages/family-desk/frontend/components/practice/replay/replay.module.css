@@ -99,10 +99,6 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .railHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
 .railHead .railTitle { margin: 0; }
 .railHint { color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
-.sessionFacts { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
-.sessionFacts div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
-.sessionFacts dt { color: var(--color-muted); }
-.sessionFacts dd { margin: 0; text-align: right; font-weight: var(--weight-semibold); }
 .threadBalance { margin: 0 0 var(--space-2); font-size: var(--text-label); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
 .railTitle { margin: 0 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 

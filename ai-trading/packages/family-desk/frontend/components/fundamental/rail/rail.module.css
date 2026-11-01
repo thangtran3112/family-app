@@ -5,9 +5,6 @@
 
 /* Right rail sections */
 .block { display: grid; gap: var(--space-2); font-variant-numeric: tabular-nums; }
-.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px var(--space-3); margin: 0; font-size: var(--text-label); }
-.kv dt { color: var(--color-muted); }
-.kv dd { margin: 0; text-align: right; }
 .line { margin: 0; font-size: var(--text-label); }
 .big { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
 .prompt { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
