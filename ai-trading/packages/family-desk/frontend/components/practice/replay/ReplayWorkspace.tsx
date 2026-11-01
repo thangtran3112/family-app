@@ -341,16 +341,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const bottomShown = bottomOpen ?? band === "1440";
   const realized = practicePnl(session.journal, null);
 
-  // A mark just placed shows in the Marks list without a click on Expand, unless she collapsed the panel herself (D-028).
-  const markCount = session.marks.length;
-  const seenMarks = useRef(markCount);
-  useEffect(() => {
-    if (markCount > seenMarks.current) {
-      setBottomTab("marks");
-      setBottomOpen((open) => open ?? true);
-    }
-    seenMarks.current = markCount;
-  }, [markCount]);
+  // The panel opens and closes only when she asks, so a mark never moves the chart (D-146). A panel left closed still names the
+  // newest mark in its tab row, so a mark she just placed is visible without Expand (D-028).
+  const newestMark = markRows(session.marks)[0] ?? null;
 
   const controls = (
     <PracticeControls
@@ -442,7 +435,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   return (
     <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined} data-full={full ? "true" : undefined}>
-      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active="trade" mode={swing ? "swing" : "day"} />}
+      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active="trade" mode={swing ? "swing" : "day"} back={dayListId === null} />}
       {/* The thread's clock sits above every name's header and chart: one time for all the tickers of the day, never under one chart. */}
       <ThreadClockBar
         label={dayListId !== null ? PRACTICE_COPY.threadTime : PRACTICE_COPY.replayTime}
@@ -544,6 +537,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
               setBottomOpen(true);
             }}
           />
+          {!bottomShown && newestMark && (
+            <span className={styles.newestMark}>{[newestMark.time, newestMark.label, newestMark.price].filter((part) => part !== "").join(" · ")}</span>
+          )}
           {/* One name, one state: the button is "Marks and levels panel" and `aria-expanded` says open or closed (the text no longer flips too). */}
           <Button className={styles.bottomToggle} variant="ghost" size="md" iconOnly aria-label="Marks and levels panel" aria-expanded={bottomShown} onClick={() => setBottomOpen(!bottomShown)}>
             <span aria-hidden="true">{bottomShown ? "▾" : "▴"}</span>

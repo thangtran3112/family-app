@@ -8,7 +8,7 @@ import { RailList } from "@/components/ui/RailList";
 import { Segmented } from "@/components/ui/Segmented";
 import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
-import { formatEtClock, formatPrice, signTone } from "@/lib/desk/format";
+import { formatEtClock, formatPrice, signToneAt } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { OpenSide } from "@/lib/replay/keys";
 import { formatSignedUsd } from "@/lib/desk/mask";
@@ -81,7 +81,7 @@ function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null
           { id: "avg", label: "Avg price", value: formatPrice(trade.entry_price) },
           { id: "stop", label: "Stop", value: trade.stop_price == null ? "None" : formatPrice(trade.stop_price) },
           { id: "last", label: "Last", value: formatPrice(trade.last_price) },
-          { id: "unrealized", label: "Unrealized", value: `${formatSignedUsd(trade.unrealized_usd, { cents: true })}${trade.r != null ? ` · ${formatR(trade.r)}` : ""}`, tone: signTone(trade.unrealized_usd) },
+          { id: "unrealized", label: "Unrealized", value: `${formatSignedUsd(trade.unrealized_usd, { cents: true })}${trade.r != null ? ` · ${formatR(trade.r)}` : ""}`, tone: signToneAt(trade.unrealized_usd, 2) },
         ]}
       />
       <p className={styles.muted}>{`Realized so far ${formatSignedUsd(realized, { cents: true })} · P/L ${formatSignedUsd(pnl, { cents: true })}`}</p>

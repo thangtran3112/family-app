@@ -1,7 +1,7 @@
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import play from "@/components/practice/swing/play.module.css";
 import { Badge } from "@/components/ui/Badge";
-import { changeTone, formatPrice } from "@/lib/desk/format";
+import { changeToneAt, formatPrice } from "@/lib/desk/format";
 import { formatSignedUsd } from "@/lib/desk/mask";
 import styles from "./replay.module.css";
 
@@ -46,7 +46,7 @@ export function ReplayHeader({ symbol, dayLabel, attempt, lastPrice, vwap, prior
           <div><dt>Prior close</dt><dd>{formatPrice(priorClose)}</dd></div>
           <div title="Closed practice trades plus the open trade at the last price">
             <dt>Practice P/L</dt>
-            <dd className={styles.pnl} data-tone={changeTone(pnl)}>
+            <dd className={styles.pnl} data-tone={changeToneAt(pnl, 2)}>
               <span>{formatSignedUsd(pnl, { cents: true })}</span>
               <SimulatedBadge />
             </dd>
