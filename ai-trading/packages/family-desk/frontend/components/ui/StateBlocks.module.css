@@ -4,7 +4,7 @@
 .loading > span:last-child { position: relative; }
 .error { flex-direction: row; flex-wrap: wrap; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); color: var(--color-text); }
 .emptyTitle { margin: 0; color: var(--color-text); font-size: var(--text-body); font-weight: var(--weight-semibold); }
-.emptyBody { color: var(--color-muted); }
+.emptyBody { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); color: var(--color-muted); }
 .skeleton { display: block; border-radius: var(--radius-sm); background: var(--color-raised); animation: pulse 1.4s ease-in-out infinite; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes pulse { 50% { opacity: 0.45; } }

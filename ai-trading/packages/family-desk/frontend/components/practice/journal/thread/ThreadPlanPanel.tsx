@@ -9,7 +9,7 @@ import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { closeThread, patchThread } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
-import { HUB_SWING_COPY, weeklyPlanRows } from "@/lib/replay/hubSwing";
+import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
 import { planRows } from "@/lib/replay/threadView";
 import { planToDraft, threadProblems, validatePlanEdit, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
 import type { Thread } from "@/lib/replay/threads";
@@ -92,7 +92,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
         <>
           <FactList
             divided
-            facts={(swing ? weeklyPlanRows(planRows(plan)) : planRows(plan)).map((row) => ({
+            facts={planRows(plan, mode).map((row) => ({
               id: row.id,
               label: row.label,
               value: (
