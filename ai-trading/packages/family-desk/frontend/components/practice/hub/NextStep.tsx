@@ -23,7 +23,7 @@ import styles from "./landing.module.css";
  * Replace plan beside it. A swing thread: Continue or Start Day n, or while its week review is owed (the gate) the review first
  * and, beneath it, what unlocks after it. A closed thread has none. The last day's result sits under the button.
  */
-export function NextStep({ summary, plan, stalled = false, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; stalled?: boolean; onChanged: () => void; onNewPlan: () => void }) {
+export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void }) {
   const { thread, today, last_day: lastDay } = summary;
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
@@ -81,7 +81,7 @@ export function NextStep({ summary, plan, stalled = false, onChanged, onNewPlan 
             ) : (
               !finished && (
                 <div className={styles.resumeAction}>
-                  <ThreadAction summary={summary} plan={plan} stalled={stalled} onChanged={onChanged} onNewPlan={onNewPlan} />
+                  <ThreadAction summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
                 </div>
               )
             )}

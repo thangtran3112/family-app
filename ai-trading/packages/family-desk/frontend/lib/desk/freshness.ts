@@ -391,8 +391,6 @@ export const PRACTICE_COPY = {
   planDone: "All {of} days done",
   planPreparing: "Preparing data · {done} of {total} names",
   planPreparingHint: "The first list opens when the data is ready. You can leave this page.",
-  planPreparingStalled: "Preparing has not moved for a while · ask the Desk to pick it up again",
-  planPrepareAgain: "Try preparing again",
   planFailedSome: "{failed} symbols could not be loaded and read as no data",
   planNew: "New plan",
   planReplace: "Start day saves this plan, replaces your current one and opens its first list. Your finished days stay in Recent sessions. A new plan starts over at its own first day, so it can replay a day you have already practised.",

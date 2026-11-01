@@ -35,14 +35,11 @@ export function ThreadAction({
   plan,
   busy = false,
   onBusy,
-  stalled = false,
   onChanged,
   onNewPlan,
 }: {
   summary: ThreadSummary;
   plan: PracticePlan | null;
-  /** The data preparation has not moved for minutes: say so and offer the retry instead of waiting for ever (F-01). */
-  stalled?: boolean;
   busy?: boolean;
   onBusy?: (busy: boolean) => void;
   onChanged: () => void;
@@ -71,15 +68,7 @@ export function ThreadAction({
   // The plan's data is still being prepared: the first list opens when it is ready.
   const card = planCard(plan);
   const label = dayActionLabel(null, plan);
-  if (card.action === "none" || label === null) {
-    if (!stalled) return <p role="status" className={styles.muted}>{card.headline}</p>;
-    return (
-      <>
-        <p role="status" className={styles.muted}>{`${card.headline} · ${PRACTICE_COPY.planPreparingStalled}`}</p>
-        <OpenNextDay threadId={thread.id} label={PRACTICE_COPY.planPrepareAgain} locked={busy} onBusy={onBusy} onChanged={onChanged} />
-      </>
-    );
-  }
+  if (card.action === "none" || label === null) return <p role="status" className={styles.muted}>{card.headline}</p>;
   return <OpenNextDay threadId={thread.id} label={label} locked={busy} onBusy={onBusy} onChanged={onChanged} />;
 }
 
