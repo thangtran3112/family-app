@@ -26,6 +26,7 @@ export function Segmented<T extends string>({
   label,
   labelledBy,
   size = "lg",
+  disabled = false,
   className,
 }: {
   value: T;
@@ -36,6 +37,8 @@ export function Segmented<T extends string>({
   labelledBy?: string;
   /** md 28 px (a toolbar), lg 32 px (a form). */
   size?: "md" | "lg";
+  /** The whole group is off (nothing to choose yet): every segment is natively disabled, not just `aria-disabled`. */
+  disabled?: boolean;
   /** Layout only (grid-area, margin, width); never colour, size or type. */
   className?: string;
 }) {
@@ -73,6 +76,7 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={option.value === value}
             aria-disabled={option.disabledReason === undefined ? undefined : true}
+            disabled={disabled || undefined}
             aria-describedby={option.disabledReason === undefined ? undefined : reasonId}
             title={option.disabledReason}
             tabIndex={index === stop ? 0 : -1}
