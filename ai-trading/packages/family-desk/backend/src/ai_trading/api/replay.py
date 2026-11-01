@@ -1,9 +1,9 @@
 """`/api/desk/replay/*` (02o §b): the Practice lane. Ten routes (02o), the recorded universe (02o-b2), seven for
 daily-list practice (02o-b v1: the hub plan read, open or advance the next day list, read, star, start the day's
-session, end the day; 02o-b2: the re-scan at the day clock; plus the D-012 relist route), six for practice threads
-(02r: create, list, read with stats and curve, edit the plan, close, the ledger) and five for swing practice (02p:
-the universe preview, the holds, the weeks and one week's review and notes), all behind the gateway identity, all
-scoped to the signed-in user (a non-owner gets 404), all `Cache-Control: no-store`.
+session, end the day; 02o-b2: the re-scan at the day clock, a background job; plus the relist route), six for
+practice threads (02r: create, list, read with stats and curve, edit the plan, close, the ledger) and five for
+swing practice (02p: the universe preview, the holds, the weeks and one week's review and notes), all behind the
+gateway identity, all scoped to the signed-in user (a non-owner gets 404), all `Cache-Control: no-store`.
 
 The day-list, open-next, thread and session routes serve a swing thread too: they dispatch on the plan's mode, so a day
 thread's responses are exactly what they were and a swing thread's carry the extra (additive) shapes of
@@ -587,17 +587,37 @@ def start_day_session(
     )
 
 
+def _rescan_in_background(app: Any, services: Services, day_list_id: int, run: str) -> None:
+    """Run the re-scan on its own session after the response, reporting progress on the day list's job. A process
+    without a session factory (a test) skips it: the tests call `plan.run_rescan` directly. `run_rescan` closes its
+    job as failed on any error, so a dead worker is only ever a dead process (the job then goes stale)."""
+    factory = getattr(app.state, "session_factory", None)
+    if factory is None:
+        return
+    with session_scope(factory) as db:
+        plan_mod.run_rescan(db, services, day_list_id, run)
+
+
 @router.post("/day-lists/{day_list_id}/rescan", response_model=DayListOut)
 def rescan_day(
     day_list_id: int,
+    request: Request,
+    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,
-    labelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is
-    practised (no clock yet) and after the day ends. A second scan at the same clock returns the first."""
-    _call(plan_mod.rescan, db, user.id, day_list_id, services)
+    """Start a re-scan of the day's filters at the day clock (02o-b2) and answer at once: the day list with
+    `rescan_job` `running` and its `done` of `total` symbols read. Poll `GET /day-lists/{id}` while it runs. When
+    `state` is `done` the scan has REPOPULATED the list (its names, columns and counts are the scan's) and `rescan`
+    labels it with the clock it ran at. Stars, the day's sessions and the review stay; a name she opened or starred
+    that the scan no longer matches stays on the list as `held_over`. A scan already running is joined, not doubled;
+    a second scan at the same clock starts nothing. A 409 before the first name is practised (no clock yet) and
+    after the day ends."""
+    run = _call(plan_mod.start_rescan, db, user.id, day_list_id, services)
+    if run is not None:
+        db.commit()  # see `open_next`: the task runs on its own session
+        background.add_task(_rescan_in_background, request.app, services, day_list_id, run)
     return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
 
 

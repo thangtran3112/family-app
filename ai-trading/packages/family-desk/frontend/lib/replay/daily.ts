@@ -119,24 +119,30 @@ export const CandidateSchema = z.object({
   prior_close: metric,
   reported_before_open: z.boolean(),
   metrics: z.record(z.string(), metric),
+  /** A re-scan added it: the list before the scan did not hold it. False on a list no re-scan has touched. */
+  new_since_list: z.boolean(),
+  /** The scan no longer matches it, and it stays because she opened or starred it. */
+  held_over: z.boolean(),
 }) satisfies z.ZodType<components["schemas"]["CandidateOut"]>;
 
-/** A name a re-scan shows; `new_since_list` means the day list did not hold it (02o-b2). */
-const RescanCandidateSchema = CandidateSchema.extend({ new_since_list: z.boolean() }) satisfies z.ZodType<
-  components["schemas"]["RescanCandidateOut"]
->;
-
-/** The latest re-scan of the day's filters, run at the day clock `as_of` on data through `data_through` (02o-b2). */
+/** The latest re-scan, run at the day clock `as_of` on data through `data_through` (02o-b2). Its names ARE the day list:
+ *  the scan repopulated it, so this is only the label (which scan, when, what it added). */
 const RescanSchema = z.object({
   seq: finite.int(),
   as_of: timestamp,
   data_through: timestamp,
-  universe: ListUniverseSchema,
-  columns: z.array(ListColumnSchema),
-  candidates: z.array(RescanCandidateSchema),
   new_count: finite.int(),
   created_at: timestamp,
 }) satisfies z.ZodType<components["schemas"]["RescanOut"]>;
+
+/** A re-scan in flight or last run: the screen polls the day list while `state` is `running`, `done` of `total` symbols read. */
+const RescanJobSchema = z.object({
+  state: z.enum(["running", "done", "failed"]),
+  as_of: timestamp,
+  done: finite.int(),
+  total: finite.int(),
+  message: z.string().nullable(),
+}) satisfies z.ZodType<components["schemas"]["RescanJobOut"]>;
 
 export const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
 
@@ -302,6 +308,7 @@ export const DayListSchema = z.object({
   warnings: z.array(z.string()),
   relist: RelistOfferSchema.nullable(),
   rescan: RescanSchema.nullable(),
+  rescan_job: RescanJobSchema.nullable(),
   peek: PeekSchema.nullable(),
   journal: DayJournalSchema.nullable(),
   review: ReviewSchema.nullable(),
@@ -340,6 +347,7 @@ export type DayPnl = z.infer<typeof DayPnlSchema>;
 export type ListColumn = z.infer<typeof ListColumnSchema>;
 export type Candidate = z.infer<typeof CandidateSchema>;
 export type Rescan = NonNullable<DayList["rescan"]>;
+export type RescanJob = NonNullable<DayList["rescan_job"]>;
 export type Peek = z.infer<typeof PeekSchema>;
 export type DayReview = NonNullable<DayList["review"]>;
 export type ReviewRow = z.infer<typeof ReviewRowSchema>;

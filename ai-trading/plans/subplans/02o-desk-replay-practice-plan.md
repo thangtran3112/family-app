@@ -645,6 +645,15 @@ before now run on the frozen E2E clock (the first-day spec records Fri 2026-09-1
   and a name the list did not hold is `new_since_list`: it is for reading, never starred or practised (the list is the day's
   universe). Web: "Re-scan at the day clock" section under the table, "Scan 2 · run at 10:00 AM ET · data through 9:45 AM",
   a stale note once the clock moves past the scan, and the scan stays readable after End day.
+  **Changed 2026-11-01 (owner: the re-scan must show progress, and a new re-scan repopulates the list rather than appending a
+  second one).** The re-scan is now a background job: `POST .../rescan` marks `replay_day_lists.rescan_job` (migration `0018`;
+  `state`, the clock it runs at, symbols read `done` of `total`, a run token) and answers at once; the screen polls the day list
+  while the job is `running` and shows "read 37 of 134 names". A scan already running is joined, a second scan at the same
+  clock starts nothing, a job that stops reporting for two minutes reads as `failed` and the next request takes it over, and a
+  day that ends mid-scan is not repopulated. When it finishes the scan REPLACES the day list's names, columns, counts and data
+  cut (the page has one table); a name she opened or starred that the scan no longer matches stays, marked `held_over`; a name
+  the list before did not hold is `new_since_list`, and both can be starred and practised. `replay_day_scans` stays as the
+  history, one row per clock; `DayListOut.rescan` is now only its label. This supersedes "the frozen list is never touched".
 - **`universe_days` read path.** `GET /replay/universe-days[?day=]` returns the recording's coverage, the plan form's
   `first_day_default` (the first recorded day once 20 finished days since it exist, else null with the reason in
   `first_day_note`), and with `day` that morning's names. A day with a recorded morning scans those names (cut to the plan's
