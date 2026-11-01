@@ -43,11 +43,15 @@ resource "cloudflare_zero_trust_access_policy" "laptop_ssh_ci" {
 
   account_id = var.cloudflare_account_id
   name       = "laptop-ssh: CI service token"
-  decision   = "allow"
 
+  # Service Auth, not allow. A service token is only honoured by a policy whose
+  # action is Service Auth (API decision `non_identity`); under `allow` the edge
+  # recognises the token headers but still answers 403 and the SSH websocket
+  # never opens. Service Auth policies are evaluated before allow policies.
   # The CI service token authenticates headlessly (no browser/PIN), so the
   # GitHub deploy runner can ssh to the host through Cloudflare Access.
-  include = [{ service_token = { token_id = var.laptop_ssh_ci_service_token_id } }]
+  decision = "non_identity"
+  include  = [{ service_token = { token_id = var.laptop_ssh_ci_service_token_id } }]
 }
 
 resource "cloudflare_zero_trust_access_application" "laptop_ssh" {
@@ -55,7 +59,7 @@ resource "cloudflare_zero_trust_access_application" "laptop_ssh" {
 
   account_id = var.cloudflare_account_id
   name       = "laptop-ssh"
-  type       = "self_hosted"
+  type       = "ssh"
   domain     = var.laptop_ssh_hostname
 
   # How long `cloudflared access ssh` keeps its token before the browser login

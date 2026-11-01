@@ -18,9 +18,10 @@ on:
           Host the deploy job targets. A push to main deploys to laptop (prod
           serves from the laptop since the 2026-11-01 cutover); vps is an
           explicit workflow_dispatch opt-in only (stopped rollback reference).
-          laptop joins the tailnet as tag:ci first and uses the LAPTOP_* host
-          variables and secrets (copies of Firestore shared/laptop). It fails
-          closed until those and TS_CI_OAUTH_* are set.
+          laptop reaches the host's sshd through Cloudflare Access (the
+          cloudflared ProxyCommand with the CI service token) and uses the
+          LAPTOP_* variables and secrets (copies of Firestore shared/laptop).
+          It fails closed until those and CF_ACCESS_CLIENT_* are set.
         type: choice
         options: [laptop, vps]
         default: laptop
@@ -129,28 +130,28 @@ jobs:
       IMAGE_TAG_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || '' }}
       # '1' only on a dispatch with dark=true; every push is '0'.
       DEPLOY_DARK: ${{ (github.event_name == 'workflow_dispatch' && inputs.dark == true) && '1' || '0' }}
-      VPS_HOST: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_HOST || vars.LAPTOP_HOST }}
+      VPS_HOST: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_HOST || vars.LAPTOP_SSH_HOSTNAME }}
       VPS_PORT: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_PORT || vars.LAPTOP_PORT }}
       VPS_USER: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'vps') && vars.VPS_USER || vars.LAPTOP_USER }}
     steps:
       - name: Validate dispatch inputs
         env:
-          LAPTOP_HOST: ${{ vars.LAPTOP_HOST }}
+          LAPTOP_SSH_HOSTNAME: ${{ vars.LAPTOP_SSH_HOSTNAME }}
           LAPTOP_PORT: ${{ vars.LAPTOP_PORT }}
           LAPTOP_USER: ${{ vars.LAPTOP_USER }}
           LAPTOP_DEPLOY_SSH_KEY: ${{ secrets.LAPTOP_DEPLOY_SSH_KEY }}
           LAPTOP_DEPLOY_KNOWN_HOSTS: ${{ secrets.LAPTOP_DEPLOY_KNOWN_HOSTS }}
-          TS_CI_OAUTH_CLIENT_ID: ${{ secrets.TS_CI_OAUTH_CLIENT_ID }}
-          TS_CI_OAUTH_CLIENT_SECRET: ${{ secrets.TS_CI_OAUTH_CLIENT_SECRET }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           case "$TARGET" in vps | laptop) ;; *) echo "target must be vps or laptop" >&2; exit 1 ;; esac
           # Fail closed: an unset laptop value stops the deploy. The VPS is stopped,
           # so never fall back to it.
           if [[ "$TARGET" == "laptop" ]]; then
-            for name in LAPTOP_HOST LAPTOP_PORT LAPTOP_USER LAPTOP_DEPLOY_SSH_KEY LAPTOP_DEPLOY_KNOWN_HOSTS TS_CI_OAUTH_CLIENT_ID TS_CI_OAUTH_CLIENT_SECRET; do
+            for name in LAPTOP_SSH_HOSTNAME LAPTOP_PORT LAPTOP_USER LAPTOP_DEPLOY_SSH_KEY LAPTOP_DEPLOY_KNOWN_HOSTS CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
               if [[ -z "${!name}" ]]; then
-                echo "target=laptop needs $name (GitHub copy of Firestore shared/laptop or shared/tailscale)" >&2
+                echo "target=laptop needs $name (GitHub copy of Firestore shared/laptop or ai-trading/cloudflare)" >&2
                 exit 1
               fi
             done
@@ -166,19 +167,39 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      # target=laptop only: the laptop is reachable over the tailnet, not the
-      # public internet. The OAuth client (scope auth_keys, tag:ci) is a GitHub
-      # environment secret copy of the CI OAuth client kept in Firestore
-      # shared/tailscale (infrastructure/tailscale/README.md). The runner joins
-      # as an ephemeral tag:ci node. No id-token: the join uses the OAuth
-      # client, not GitHub OIDC.
-      - name: Join the tailnet
+      # target=laptop only: the laptop's sshd is reached through the ai-trading
+      # tunnel behind a Cloudflare Access application, not the tailnet. The CI
+      # service token (a Service Auth policy) opens the SSH websocket headlessly:
+      # `cloudflared access ssh` sends it as CF-Access-Client-Id/Secret, so no
+      # browser login happens. CF_ACCESS_CLIENT_* are GitHub environment secret
+      # copies of Firestore shared/laptop CLOUDFLARE_ACCESS_CI_CLIENT_*. The token
+      # travels in TUNNEL_SERVICE_TOKEN_* env vars, never in a command line. No
+      # id-token: nothing here uses GitHub OIDC.
+      - name: Install cloudflared
         if: ${{ env.TARGET == 'laptop' }}
-        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
-        with:
-          oauth-client-id: ${{ secrets.TS_CI_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_CI_OAUTH_CLIENT_SECRET }}
-          tags: tag:ci
+        run: |
+          set -euo pipefail
+          # Pinned release; the digest is the one GitHub publishes for the asset.
+          version=2026.10.7
+          sha256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872
+          curl -fsSL -o "$RUNNER_TEMP/cloudflared" "https://github.com/cloudflare/cloudflared/releases/download/$version/cloudflared-linux-amd64"
+          echo "$sha256  $RUNNER_TEMP/cloudflared" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/cloudflared" /usr/local/bin/cloudflared
+          rm -f "$RUNNER_TEMP/cloudflared"
+          cloudflared --version
+
+      - name: Route SSH through Cloudflare Access
+        if: ${{ env.TARGET == 'laptop' }}
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          {
+            echo "TUNNEL_SERVICE_TOKEN_ID=$CF_ACCESS_CLIENT_ID"
+            echo "TUNNEL_SERVICE_TOKEN_SECRET=$CF_ACCESS_CLIENT_SECRET"
+            echo "SSH_PROXY_COMMAND=cloudflared access ssh --hostname %h"
+          } >>"$GITHUB_ENV"
 
       # Production env is not read here: the VPS loads it from Firestore
       # family-config at deploy time (common/config/family_config.py).
@@ -195,6 +216,14 @@ jobs:
           umask 077
           printf '%s\n' "$VPS_DEPLOY_SSH_KEY" > "$SSH_KEY_FILE"
           printf '%s\n' "$VPS_DEPLOY_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          # target=laptop: the pinned host keys were stored under the host's
+          # address; ssh now looks them up under the Cloudflare Access hostname.
+          # The key material stays pinned and StrictHostKeyChecking stays yes;
+          # only the label changes.
+          if [[ -n "${SSH_PROXY_COMMAND:-}" ]]; then
+            awk -v h="[$VPS_HOST]:$VPS_PORT" '!/^#/ && NF >= 3 { print h, $2, $3 }' "$KNOWN_HOSTS_FILE" >"$KNOWN_HOSTS_FILE.cf"
+            mv "$KNOWN_HOSTS_FILE.cf" "$KNOWN_HOSTS_FILE"
+          fi
           chmod 600 "$SSH_KEY_FILE" "$KNOWN_HOSTS_FILE"
 
       - name: Transfer production runtime
@@ -203,8 +232,8 @@ jobs:
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
         run: |
           set -euo pipefail
-          SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT")
-          SCP_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT")
+          SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT" ${SSH_PROXY_COMMAND:+-o "ProxyCommand=$SSH_PROXY_COMMAND"})
+          SCP_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT" ${SSH_PROXY_COMMAND:+-o "ProxyCommand=$SSH_PROXY_COMMAND"})
           ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" "install -d -m 0700 /tmp/expense-tax-deploy"
           scp "${SCP_OPTIONS[@]}" \
             infrastructure/apps/expense-tax/docker-compose.yml \
@@ -223,7 +252,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "::add-mask::$GITHUB_TOKEN"
-          SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT")
+          SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT" ${SSH_PROXY_COMMAND:+-o "ProxyCommand=$SSH_PROXY_COMMAND"})
           printf '%s\n' "$GITHUB_TOKEN" | ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" \
             "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/expense-tax-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/expense-tax-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '${{ github.actor }}' --password-stdin; sudo install -d -m 0755 /opt/expense-tax-management/app; sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.yml /opt/expense-tax-management/app/docker-compose.yml; sudo install -o root -g root -m 0644 /tmp/expense-tax-deploy/docker-compose.mailbox.yml /opt/expense-tax-management/app/docker-compose.mailbox.yml; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/deploy.sh /opt/expense-tax-management/app/deploy.sh; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/health-check.sh /opt/expense-tax-management/app/health-check.sh; sudo install -o root -g root -m 0755 /tmp/expense-tax-deploy/family_config.py /opt/expense-tax-management/app/family_config.py; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' DEPLOY_DARK='$DEPLOY_DARK' FAMILY_CONFIG_CREDENTIALS=/etc/family-app/config-reader.json /opt/expense-tax-management/app/family_config.py run expense-tax-management/production --env-file-var DEPLOY_ENV_FILE -- /opt/expense-tax-management/app/deploy.sh"
 
@@ -234,7 +263,7 @@ jobs:
           KNOWN_HOSTS_FILE: ${{ runner.temp }}/expense-tax-known-hosts
         run: |
           set +e
-          SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT")
+          SSH_OPTIONS=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT" ${SSH_PROXY_COMMAND:+-o "ProxyCommand=$SSH_PROXY_COMMAND"})
           ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" \
             'for config in /dev/shm/expense-tax-docker-config-*; do [ -d "$config" ] || continue; sudo env DOCKER_CONFIG="$config" docker logout ghcr.io >/dev/null 2>&1 || true; done; sudo rm -rf /dev/shm/expense-tax-docker-config-* /tmp/expense-tax-deploy' || true
           exit 0

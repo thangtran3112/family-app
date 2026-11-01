@@ -154,6 +154,10 @@ Host family-laptop
 
 First use: `ssh family-laptop` opens a browser on the Cloudflare Access login for the hostname. Sign in as the owner identity; with no identity provider configured, the default is a one-time PIN sent to that email. On a machine with no browser, `cloudflared access login` prints a URL instead. `cloudflared` stores a token locally and reuses it until the Access `session_duration` (24h) runs out, then the browser step repeats. Host key: the first connection asks to trust the key under that hostname; compare it with the laptop's own before answering yes.
 
+### CI deploys (headless)
+
+CI does not use a browser or the tailnet. The runner sets `TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` (Firestore `shared/laptop` `CLOUDFLARE_ACCESS_CI_CLIENT_ID` / `_SECRET`) and runs `ssh -o ProxyCommand="cloudflared access ssh --hostname %h" <user>@<ssh-hostname>`. The same works from any shell. The service token passes only a **Service Auth** (`non_identity`) policy: under `allow` the edge answers `403` and `cloudflared` prints `websocket: bad handshake`. Details: `infrastructure/cloudflare/ai-trading/README.md`, "CI deploys through Access".
+
 One function for `~/.zshrc`. It logs in only when the token is missing or expired, and `-q` keeps the token off the screen:
 
 ```zsh
