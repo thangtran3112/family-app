@@ -16,6 +16,16 @@ async function threadOfSession(page: Page): Promise<number> {
   return (await response.json()).thread_id;
 }
 
+/** A standalone replay has its own clock bar: Step reveals `times` bars, one click each, and waits for the clock to show each. */
+export async function stepSession(page: Page, times = 1) {
+  const readout = page.getByTestId("thread-clock-time");
+  for (let bar = 0; bar < times; bar += 1) {
+    const before = (await readout.textContent()) ?? "";
+    await page.getByRole("button", { name: "Step", exact: true }).click();
+    await expect(readout).not.toHaveText(before, { timeout: 10_000 });
+  }
+}
+
 /** Moves the thread's clock `times` bars on (the plan's interval, 1 minute in the stub) and waits for the chart on screen to show each. */
 export async function stepBar(page: Page, times = 1) {
   const thread = await threadOfSession(page);

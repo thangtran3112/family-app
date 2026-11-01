@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { ChipToggleGroup } from "@/components/ui/ChipToggleGroup";
-import { KEY_LEGEND } from "@/lib/replay/keys";
 import type { ReplayInterval } from "@/lib/replay/schemas";
 import { INTERVALS } from "@/lib/replay/setup";
 import styles from "./replay.module.css";
@@ -31,11 +30,6 @@ export function ChartToolbar({ symbol, interval, onInterval, quick, chartToggle,
         {chartToggle ?? <ChipToggleGroup label="Chart interval" size="md" options={INTERVAL_CHIPS} pressed={[interval]} onToggle={onInterval} />}
         {quick}
         {view}
-      </div>
-      <div className={styles.keyLegend} role="group" aria-label="Keyboard legend">
-        {KEY_LEGEND.map((item) => (
-          <span key={item.keys}><kbd>{item.keys}</kbd>{item.label}</span>
-        ))}
       </div>
     </div>
   );
