@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Banner } from "@/components/ui/Banner";
 import { Freshness, useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY, emptyScanText } from "@/lib/desk/freshness";
@@ -103,7 +104,7 @@ export function ScreenerScreen() {
     body = (
       <>
         <FilterChips filters={filters.data} activeId={filter.id} />
-        {missing && <p role="status" className={styles.notice}>{missing}</p>}
+        {missing && <Banner>{missing}</Banner>}
         <FilterHeader key={filter.id} filter={filter} detail={detail.data} delayed={delayed} />
         <div className={styles.meta}>
           <UniverseLine run={data && !waiting ? data : null} />
