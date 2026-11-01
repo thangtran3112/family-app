@@ -98,3 +98,22 @@ export const tabDomIds = (base: string, id: string): { tab: string; panel: strin
 
 /** A control that opens a mode (Manage, Edit) says "Done" while the mode is open, instead of looking pressed: nothing is switched on, the screen changed. */
 export const modeLabel = (label: string, open: boolean): string => (open ? "Done" : label);
+
+/** What a RailList row is: a link when it has an `href`, a button when it has `onSelect`, else plain text. A row that looks clickable is never plain text. */
+export function railRowKind(row: { href?: string; onSelect?: () => void }): "link" | "button" | "text" {
+  if (row.href !== undefined) return "link";
+  return row.onSelect === undefined ? "text" : "button";
+}
+
+/** The selected row of a list is marked the way its element allows: `aria-current` on a link, `aria-pressed` on a button, nothing on text. */
+export function railRowSelection(kind: "link" | "button" | "text", selected: boolean): { "aria-current"?: "page"; "aria-pressed"?: boolean } {
+  if (kind === "link") return { "aria-current": selected ? "page" : undefined };
+  if (kind === "button") return { "aria-pressed": selected };
+  return {};
+}
+
+/** How many columns a FactList lays out: one is the default, two only when asked (a wide panel); anything else is one. */
+export const factColumns = (columns: number | undefined): 1 | 2 => (columns === 2 ? 2 : 1);
+
+/** The label shown while a QueryBoundary retry is in flight: it says what is happening instead of staying "Try again". */
+export const retryLabel = (retrying: boolean): string => (retrying ? "Trying again" : "Try again");

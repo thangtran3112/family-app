@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { RailList, RailValue } from "@/components/ui/RailList";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { AlertStrategy } from "@/lib/api/schemas";
 import { formatEtStamp } from "@/lib/desk/format";
@@ -33,15 +34,19 @@ export function AlertsOnStock({
   } else {
     body = (
       <>
-        <ul className={styles.list}>
-          {strategies.slice(0, SHOWN).map((row) => (
-            <li key={row.id} className={`${styles.listRow} ${styles.alertRow}`}>
-              <span className={styles.ellipsis} title={row.name}>{row.name}</span>
-              <span className={styles.muted}>{row.status}</span>
-              <span className={styles.muted}>{row.last_fired_at === null ? "Never fired" : formatEtStamp(row.last_fired_at)}</span>
-            </li>
-          ))}
-        </ul>
+        <RailList
+          size="md"
+          divided
+          rows={strategies.slice(0, SHOWN).map((row) => ({
+            id: String(row.id),
+            label: row.name,
+            value: (
+              <RailValue>
+                <span>{row.status}</span> <span>{row.last_fired_at === null ? "Never fired" : formatEtStamp(row.last_fired_at)}</span>
+              </RailValue>
+            ),
+          }))}
+        />
         {strategies.length > SHOWN && <a href={`/alerts?symbol=${encoded}`} className={styles.link}>View all</a>}
       </>
     );

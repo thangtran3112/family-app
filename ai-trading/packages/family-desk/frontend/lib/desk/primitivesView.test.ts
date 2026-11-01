@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { TONES } from "../../components/ui/tone.ts";
 import { signTone } from "./format.ts";
-import { bannerRole, buttonState, countText, deltaView, fieldWiring, formBarStatus, iconA11y, modeLabel, panelHeadingTag, requirementText, rovingStop, rovingTarget, statTileTag, tabDomIds, UNSAVED_TEXT } from "./primitivesView.ts";
+import { bannerRole, buttonState, countText, deltaView, factColumns, fieldWiring, formBarStatus, iconA11y, modeLabel, panelHeadingTag, railRowKind, railRowSelection, requirementText, retryLabel, rovingStop, rovingTarget, statTileTag, tabDomIds, UNSAVED_TEXT } from "./primitivesView.ts";
 import { warnBeforeUnload } from "./unsavedGuard.ts";
 
 test("tone: every tone has a colour in globals.css, and a sign maps onto the model", () => {
@@ -114,4 +114,28 @@ test("Tabs: a tab names its panel and the panel names its tab", () => {
 test("a control that opens a mode says Done while the mode is open, instead of looking pressed", () => {
   assert.equal(modeLabel("Manage", false), "Manage");
   assert.equal(modeLabel("Manage", true), "Done");
+});
+
+test("RailList: a row with an href is a link, with onSelect a button, with neither plain text; the selection is marked the way the element allows", () => {
+  assert.equal(railRowKind({ href: "/a" }), "link");
+  assert.equal(railRowKind({ onSelect: () => {} }), "button");
+  assert.equal(railRowKind({}), "text", "no hover, no pointer: it does not look clickable");
+  assert.equal(railRowKind({ href: "/a", onSelect: () => {} }), "link", "an href wins");
+  assert.deepEqual(railRowSelection("link", true), { "aria-current": "page" });
+  assert.deepEqual(railRowSelection("link", false), { "aria-current": undefined });
+  assert.deepEqual(railRowSelection("button", true), { "aria-pressed": true });
+  assert.deepEqual(railRowSelection("button", false), { "aria-pressed": false });
+  assert.deepEqual(railRowSelection("text", true), {}, "a plain row is never marked");
+});
+
+test("FactList: one column unless two are asked for", () => {
+  assert.equal(factColumns(undefined), 1);
+  assert.equal(factColumns(1), 1);
+  assert.equal(factColumns(2), 2);
+  assert.equal(factColumns(3), 1, "anything else is one");
+});
+
+test("QueryBoundary: the retry says Trying again only while a retry runs", () => {
+  assert.equal(retryLabel(false), "Try again");
+  assert.equal(retryLabel(true), "Trying again");
 });

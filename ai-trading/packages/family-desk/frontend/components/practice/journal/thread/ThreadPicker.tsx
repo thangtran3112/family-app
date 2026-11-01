@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { formatBalance, threadModeLabel, threadName } from "@/lib/replay/threadView";
+import { ThreadList } from "./ThreadList";
 import styles from "./threadJournal.module.css";
 
 /** `/practice/journal` with no thread (D-037): says so in plain words and lists her threads, the active one first, each a link to its journal. */
@@ -26,24 +25,7 @@ export function ThreadPicker() {
       <EmptyBlock title={rows.length === 0 ? PRACTICE_COPY.threadPickNone : PRACTICE_COPY.threadPickTitle}>
         <div className={styles.stack}>
           {rows.length > 0 && <p className={styles.muted}>{PRACTICE_COPY.threadPickHint}</p>}
-          {rows.length > 0 && (
-            <ul role="list" className={styles.list} aria-label="Your threads">
-              {rows.map((row) => (
-                <li key={row.thread.id}>
-                  <Link href={`/practice/journal?thread=${row.thread.id}`} className={styles.threadRow}>
-                    <span className={styles.rowMain}>
-                      <span className={styles.rowTitle}>{threadName(row.thread)}</span>
-                      <span className={styles.rowMeta}>{`${row.thread.status === "active" ? PRACTICE_COPY.threadActive : PRACTICE_COPY.threadClosedBadge} · ${threadModeLabel(row.thread.mode)}`}</span>
-                    </span>
-                    <span className={styles.rowEnd}>
-                      <span>{formatBalance(row.thread.stats.balance)}</span>
-                      <SimulatedBadge />
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          {rows.length > 0 && <ThreadList rows={rows} label="Your threads" />}
           <Link href="/practice" className={styles.link}>Open Practice</Link>
         </div>
       </EmptyBlock>
