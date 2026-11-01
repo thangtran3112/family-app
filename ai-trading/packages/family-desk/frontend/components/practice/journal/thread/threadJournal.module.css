@@ -62,13 +62,9 @@
 .swatchSkipped { border: 1px dashed var(--color-muted); }
 
 /* Balance curve and day bars (SVG) */
-.chart { display: block; width: 100%; height: auto; overflow: visible; }
-.grid { stroke: var(--color-hairline); stroke-width: 1; }
 .zeroLine { stroke: var(--color-muted); stroke-width: 1; }
 .hairline { stroke: var(--color-hairline); stroke-width: 1; }
 .axis { fill: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
-.note { fill: var(--color-muted); font-size: var(--text-micro); }
-.startLine { stroke: var(--color-muted); stroke-width: 1; stroke-dasharray: 4 4; }
 .below { fill: var(--color-down); fill-opacity: 0.18; }
 .line { fill: none; stroke: var(--color-text); stroke-width: 2; stroke-linejoin: round; }
 .dot { fill: var(--color-text); }

@@ -43,7 +43,7 @@ const METRICS = {
 /** Checked in 2026-11-01 at the start of DS-0. Lower a number in the commit that removes the debt; never raise one. */
 const BASELINE: Record<keyof typeof METRICS, number> = {
   "raw hex colours": 70,
-  "raw font-size: Npx": 82,
+  "raw font-size: Npx": 81,
   "raw border-radius: Npx": 30,
   "outline: 2px solid restatements (use var(--focus-ring))": 42,
   "local .button rules (use components/ui Button)": 45,

@@ -38,10 +38,6 @@
 .compareRow { display: grid; grid-template-columns: 90px minmax(0, 1fr) 90px; align-items: center; gap: var(--space-3); font-size: var(--text-label); }
 .compareBar { height: 10px; border-radius: 3px; background: var(--color-amber); }
 .compareBar[data-kind="price"] { background: var(--color-muted); }
-.chart { width: 100%; height: auto; font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
-.axisLine { stroke: var(--color-hairline); stroke-width: 1; }
-.zeroLine { stroke: var(--color-muted); stroke-width: 1; }
-.axisText { fill: var(--color-muted); }
 .bar { fill: var(--tone); }
 
 /* Timeline */

@@ -1,5 +1,6 @@
 "use client";
 
+import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { barsLayout, type Box } from "@/lib/replay/threadChart";
 import { dayResultTone, formatAxisDollars, formatDayResult, weeksOf } from "@/lib/replay/threadView";
@@ -20,13 +21,12 @@ export function DayBars({ thread }: { thread: Thread }) {
   const summary = `${PRACTICE_COPY.barsTitle}: ${won} won, ${lost} lost, ${skipped} passed.`;
 
   return (
-    <svg viewBox={`0 0 ${BOX.width} ${BOX.height}`} role="img" aria-label={summary} className={styles.chart}>
-      {layout.ticks.map((tick) => (
-        <g key={tick.value}>
-          <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value, true)}</text>
-        </g>
-      ))}
+    <MiniChartFrame
+      box={BOX}
+      label={summary}
+      yTicks={layout.ticks.map((tick) => ({ key: tick.value, y: tick.y, label: formatAxisDollars(tick.value, true) }))}
+      xLabels={slots.map((slot) => ({ x: slot.center, label: slot.label }))}
+    >
       <line x1={plot.x} x2={plot.x + plot.width} y1={zeroY} y2={zeroY} className={styles.zeroLine} />
       {slots.map((slot) => {
         if (slot.kind === "skipped") {
@@ -52,15 +52,12 @@ export function DayBars({ thread }: { thread: Thread }) {
           </g>
         );
       })}
-      {slots.map((slot) => (
-        <text key={slot.n} x={slot.center} y={bottom + 14} textAnchor="middle" className={styles.axis}>{slot.label}</text>
-      ))}
       {weeks.map((week) => (
         <g key={week.n}>
           <line x1={week.x1} x2={week.x2} y1={bottom + 24} y2={bottom + 24} className={styles.hairline} />
           <text x={(week.x1 + week.x2) / 2} y={bottom + 38} textAnchor="middle" className={styles.axis}>{week.label}</text>
         </g>
       ))}
-    </svg>
+    </MiniChartFrame>
   );
 }
