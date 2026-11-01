@@ -12,7 +12,7 @@ const DAY = "2026-09-25";
 const FIRST_RECORDED = "2026-09-18"; // 20 finished sessions before the E2E clock
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 
-const playhead = (page: Page) => page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd");
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 
 /** The marks she has placed on the name on screen (the bottom panel is collapsed at 1180 until its tab opens). */
 async function marks(page: Page) {
@@ -167,6 +167,98 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  test("the clock is the thread's: one bar above every name, never under a chart, and a chart's own controls stay with the chart", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await startEveryNamePlan(page, context);
+    await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+
+    const bar = page.getByTestId("thread-clock");
+    const slot = page.getByTestId("chart-slot");
+    const toolbar = page.getByTestId("chart-toolbar");
+    await expect(bar).toBeVisible();
+    await expect(bar.getByText(PRACTICE_COPY.threadTime, { exact: true })).toBeVisible();
+    // Play, Step, speed and Jump are the thread's...
+    await expect(bar.getByRole("button", { name: "Play" })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Step", exact: true })).toBeVisible();
+    await expect(bar.getByRole("group", { name: "Replay speed" })).toBeVisible();
+    await expect(bar.getByRole("button", { name: /^Jump/ })).toBeVisible();
+    await expect(bar.getByText(/^Paused at /)).toBeVisible();
+    await expect(bar, "the bar names the thread, not one ticker").not.toContainText("TSLA");
+    for (const name of ["Play", "Step", "Jump"]) {
+      await expect(toolbar.getByRole("button", { name: new RegExp(`^${name}`) }), `${name} is not a chart control`).toHaveCount(0);
+      await expect(slot.getByRole("button", { name: new RegExp(`^${name}`) })).toHaveCount(0);
+    }
+    await expect(toolbar.getByRole("group", { name: "Replay speed" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 }).locator("xpath=ancestor::div[1]")).not.toContainText(/Paused|Playing/);
+    // ...and the interval, Chart settings and Full screen are the chart's.
+    await expect(toolbar.getByRole("group", { name: "Chart interval" })).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: /^Chart/ })).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "Full screen" })).toBeVisible();
+    await expect(bar.getByRole("group", { name: "Chart interval" })).toHaveCount(0);
+    await expect(bar.getByRole("button", { name: /^Chart/ })).toHaveCount(0);
+    await expect(bar.getByRole("button", { name: "Full screen" })).toHaveCount(0);
+
+    // Placement: the clock is above the name's header and chart; the chart's controls are under the chart.
+    const box = async (locator: typeof bar) => (await locator.boundingBox())!;
+    const [barBox, titleBox, slotBox, toolbarBox] = [await box(bar), await box(page.getByRole("heading", { name: "TSLA", level: 1 })), await box(slot), await box(toolbar)];
+    expect(barBox.y + barBox.height, "the thread bar ends above the ticker header").toBeLessThanOrEqual(titleBox.y);
+    expect(slotBox.y + slotBox.height, "the chart toolbar sits under the chart").toBeLessThanOrEqual(toolbarBox.y + 1);
+    expect(barBox.y, "the thread bar is above the chart").toBeLessThan(slotBox.y);
+
+    // The Jump menu opens downward from the top bar's button and stays inside the window.
+    const jump = bar.getByRole("button", { name: /^Jump/ });
+    const jumpBox = await box(jump);
+    await jump.click();
+    const menu = page.getByRole("menu", { name: "Jump forward" });
+    await expect(menu).toBeVisible();
+    const menuBox = await box(menu);
+    expect(menuBox.y, "the menu hangs below the Jump button").toBeGreaterThanOrEqual(jumpBox.y + jumpBox.height - 1);
+    expect(menuBox.y + menuBox.height, "the menu stays inside the window").toBeLessThanOrEqual(page.viewportSize()!.height);
+    await page.keyboard.press("Escape");
+    await expectCleanScreen(page);
+  });
+
+  test("Step moves the thread's one clock: a name left behind shows the thread's time and steps from it", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await startEveryNamePlan(page, context);
+    const dayUrl = page.url();
+    await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    const tslaUrl = page.url();
+    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:33");
+
+    // LRCX opens at the thread's time and moves it on two bars; TSLA stays where it was.
+    await openName(page, dayUrl, "LRCX");
+    await expect(playhead(page)).toContainText("9:33");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:35");
+
+    // TSLA, opened again from its own address, is behind: the bar still shows the thread's time, 9:35, not TSLA's 9:33.
+    await page.goto(tslaUrl);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await expect(page.getByTestId("behind-clock")).toBeVisible();
+    await expect(playhead(page)).toContainText("9:35");
+    await expect(page.getByTestId("thread-clock").getByText(/^Paused at 9:35 AM/)).toBeVisible();
+    await expect(page.locator(".dk-status"), "the status bar reads the thread's clock too").toContainText("Replay clock 9:35");
+    await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeDisabled();
+
+    // One Step is one bar of the thread's clock (9:36), not the catch-up to 9:35 that leaves the time where it was.
+    await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:36");
+    await expect(page.getByTestId("behind-clock")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
+
+    // The other name opens at that one time.
+    await openName(page, dayUrl, "LRCX");
+    await expect(playhead(page)).toContainText("9:36");
     await expectCleanScreen(page);
   });
 

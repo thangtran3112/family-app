@@ -899,6 +899,9 @@ def advance(
     ctx = context(db, svc, row)
     width = INTERVAL_MINUTES[interval or ctx.interval]
     previous = ctx.through
+    # A step is a step of the day's one clock, not of this name's playhead: from a name behind the shared clock it goes
+    # one bar (or one signal) past the clock, so the thread's time moves the same whichever name is on screen.
+    base = previous if ctx.day_clock is None or row.status == "ended" else max(previous, ctx.day_clock)
     if row.status == "ended":
         target = ctx.window_end
     elif to is not None:
@@ -906,9 +909,9 @@ def advance(
             raise ReplayProblem("Send the time with its UTC offset", path="to")
         target = _ts(to)
     elif step == "bar":
-        target = _next_bar_boundary(ctx, previous, width)
+        target = _next_bar_boundary(ctx, base, width)
     else:
-        upcoming = signals_mod.next_after(ctx.fires, previous)
+        upcoming = signals_mod.next_after(ctx.fires, base)
         if upcoming is None:
             raise ReplayProblem("No more signals in this session", path="step")
         target = upcoming.bar_close

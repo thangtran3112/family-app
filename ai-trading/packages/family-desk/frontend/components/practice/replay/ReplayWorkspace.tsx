@@ -18,6 +18,7 @@ import { RightRail, type RailSection } from "@/components/shell/desktop/RightRai
 import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { currentValue } from "@/lib/chart-data";
+import { threadClock } from "@/lib/replay/clock";
 import { formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { openRailTab } from "@/lib/desk/rail";
@@ -56,6 +57,7 @@ import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplayS
 import { chartBars, type ReplayView } from "@/lib/replay/feedState";
 import { ArmedStrategiesList } from "./ArmedStrategiesList";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
+import { ChartToolbar } from "./ChartToolbar";
 import { PortfolioPanel, useDayPortfolio } from "./Portfolio";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
@@ -67,7 +69,7 @@ import { ReplayHeader } from "./ReplayHeader";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { SignalsRail, signalKey } from "./SignalsRail";
 import { TapePanel } from "./TapePanel";
-import { TransportBar } from "./TransportBar";
+import { ThreadClockBar } from "./ThreadClockBar";
 import styles from "./replay.module.css";
 import { FactList } from "@/components/ui/FactList";
 
@@ -156,6 +158,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const trades = tradeCount(session.journal, view.openTrade);
   const atEnd = api.player.status === "at_end" || ended;
   const behind = view.behindClock && !ended;
+  // The thread's one time: the day clock for a name on a day list (a name left behind it shows the thread's time, not its own old playhead).
+  const clock = threadClock(view.revealedThrough, view.dayClock);
   // A day's portfolio: every name she holds, read once here so the rail, the stop-pause toast and End day agree on it.
   // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
   // jump, a stop pause), not on every bar of a running replay: each read prices up to five names.
@@ -169,7 +173,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
   const masked = hidden && !dateShown && !(ended && !swing);
-  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: view.revealedThrough, status: replayStatusLine(session.tape_feed, view.revealedThrough), onShowDate: masked ? () => setDateShown(true) : null });
+  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: clock, status: replayStatusLine(session.tape_feed, clock), onShowDate: masked ? () => setDateShown(true) : null });
 
   // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series.
   const bars = useMemo(() => chartBars(view), [view]);
@@ -421,17 +425,36 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   return (
     <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined} data-full={full ? "true" : undefined}>
       {!full && <BackLink threadId={session.thread_id ?? session.thread?.id ?? null} />}
+      {/* The thread's clock sits above every name's header and chart: one time for all the tickers of the day, never under one chart. */}
+      <ThreadClockBar
+        label={dayListId !== null ? PRACTICE_COPY.threadTime : PRACTICE_COPY.replayTime}
+        hint={dayListId !== null ? PRACTICE_COPY.threadTimeHint : PRACTICE_COPY.replayTimeHint}
+        status={api.player.status}
+        busy={api.player.busy}
+        speed={api.player.speed}
+        error={api.player.error}
+        windowStart={session.window_start}
+        windowEnd={session.window_end}
+        clock={clock}
+        marks={session.marks}
+        signals={view.signals}
+        onToggle={toggle}
+        onStep={api.step}
+        onSpeed={api.setSpeed}
+        onJumpBy={api.jumpBy}
+        onJumpToTime={api.jumpToTime}
+        onNextSignal={api.nextSignal}
+        onJumpEnd={api.jumpToEnd}
+        swing={swing}
+      />
       <ReplayHeader
         symbol={spec.symbol}
         dayLabel={swingDay ?? dayLabel}
         attempt={session.attempt}
-        playhead={view.revealedThrough}
         lastPrice={view.last?.price ?? null}
         vwap={vwap}
         priorClose={view.levels.prior_close ?? null}
         pnl={pnl}
-        status={api.player.status}
-        speed={api.player.speed}
         swing={swing && session.thread ? { money: swingMoneyLine(session.thread), tapeNote: tapeNote(session.tape_feed) } : undefined}
       />
       {session.thread && !swing && !full && <ThreadStrip thread={session.thread} />}
@@ -450,30 +473,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           <button type="button" className={styles.linkButton} disabled={api.player.busy} onClick={api.catchUp}>{PRACTICE_COPY.replayCatchUp}</button>
         </p>
       )}
-      <div className={styles.chartSlot}>
+      <div className={styles.chartSlot} data-testid="chart-slot">
         <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} marks={session.marks} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
-      <TransportBar
-        status={api.player.status}
-        busy={api.player.busy}
-        speed={api.player.speed}
-        error={api.player.error}
-        windowStart={session.window_start}
-        windowEnd={session.window_end}
-        revealedThrough={view.revealedThrough}
-        marks={session.marks}
-        signals={view.signals}
+      <ChartToolbar
+        symbol={spec.symbol}
         interval={view.interval}
         onInterval={api.setInterval}
-        onToggle={toggle}
-        onStep={api.step}
-        onSpeed={api.setSpeed}
-        onJumpBy={api.jumpBy}
-        onJumpToTime={api.jumpToTime}
-        onNextSignal={api.nextSignal}
-        onJumpEnd={api.jumpToEnd}
         quick={quick}
-        swing={swing}
         chartToggle={swing ? <ChartIntervalToggle mode={chartMode} onMode={pickMode} /> : undefined}
         view={
           <>
@@ -488,7 +495,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         busy={api.player.busy || dayBusy}
         day={dayListId !== null}
         exits={dayListId !== null && !swing ? endDayExitText(dayRows) : null}
-        swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock: view.revealedThrough, holdsOpen } : undefined}
+        swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock, holdsOpen } : undefined}
         backHref={dayListId !== null && !full ? `/practice/day?id=${dayListId}` : null}
         ended={ended ? { swing, journalHref: `/practice/journal?id=${session.id}` } : null}
         onEnd={() => {

@@ -19,7 +19,7 @@ const fullScreen = (page: Page) => page.getByRole("button", { name: "Full screen
 const shell = (page: Page) => page.locator(".dk-shell");
 const leftRail = (page: Page) => page.getByRole("complementary", { name: "Practice side panel" });
 const headerVwap = (page: Page) => page.locator("dt", { hasText: /^VWAP$/ }).locator("xpath=following-sibling::dd");
-const playhead = (page: Page) => page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd");
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 const chartWidth = async (page: Page) => (await page.locator("section[aria-label='TSLA 1m market chart']").boundingBox())!.width;
 
 async function openReplay(page: Page, id: number) {
@@ -210,7 +210,7 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(popover(page).getByRole("radio", { name: "Candles" })).toBeChecked();
   });
 
-  test("F hides the left rail and the shell bars but keeps the tape, the transport and the amber band; Escape returns", async ({ page }) => {
+  test("F hides the left rail and the shell bars but keeps the tape, the thread clock and the amber band; Escape returns", async ({ page }) => {
     const url = page.url();
     const inlineWidth = await chartWidth(page);
     await expect(leftRail(page)).toBeVisible();
@@ -299,7 +299,7 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(popover(page)).toHaveCount(0);
   });
 
-  test("the popover sits inside the window, above the transport row, and its controls are named", async ({ page }) => {
+  test("the popover sits inside the window, above the chart toolbar, and its controls are named", async ({ page }) => {
     await chartSettings(page).click();
     const box = (await popover(page).boundingBox())!;
     const view = page.viewportSize()!;
@@ -411,18 +411,19 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     await openReplay(page, await createStubSession(context));
     const chart = page.locator("section[aria-label='TSLA 1m market chart']");
     const before = (await chart.boundingBox())!;
+    // The player's state is the thread's, not the name's: its pill is in the thread bar, never in the ticker header.
     const heading = page.getByRole("heading", { name: "TSLA", level: 1 });
-    const pill = page.locator("div[class*='header']").filter({ has: heading }).locator("[data-state]");
-    await expect(pill).toBeVisible();
-    const title = (await heading.boundingBox())!;
-    const pillBox = (await pill.boundingBox())!;
-    expect(Math.abs(pillBox.y + pillBox.height / 2 - (title.y + title.height / 2)), "the state pill sits on the title row").toBeLessThan(title.height);
+    const bar = page.getByTestId("thread-clock");
+    await expect(bar.locator("[data-state]")).toBeVisible();
+    await expect(page.locator("div[class*='header']").filter({ has: heading }).locator("[data-state]")).toHaveCount(0);
+    const barBefore = (await bar.boundingBox())!;
 
     await stepBars(page, 2);
     await page.keyboard.press("b");
     await stepBars(page, 3);
     const widened = (await chart.boundingBox())!;
     expect(widened.y, "the chart top does not move when P/L changes").toBeCloseTo(before.y, 0);
+    expect((await bar.boundingBox())!.height, "the thread bar keeps its height as the clock and the state change").toBeCloseTo(barBefore.height, 0);
     // (The Marks panel opens by itself on the first mark and changes the chart's height: returned to the owner, not part of this check.)
 
     await page.getByRole("button", { name: "End session…" }).click();

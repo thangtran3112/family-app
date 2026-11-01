@@ -16,6 +16,15 @@ export const speedForDigit = (digit: string): Speed | null => {
   return Number.isInteger(index) && index >= 0 && index < SPEEDS.length ? SPEEDS[index]! : null;
 };
 
+/**
+ * The thread's one time (the day-trade thread keeps a single clock for every name on its list): the day list's shared clock,
+ * or this session's own playhead when it stands alone or is already past the clock. A name left behind the clock shows the
+ * thread's time, not its own old playhead, and every Play tick, Step and Jump starts from it.
+ */
+export function threadClock(revealedThrough: string, dayClock: string | null): string {
+  return dayClock !== null && ms(dayClock) > ms(revealedThrough) ? dayClock : revealedThrough;
+}
+
 /** The `to` of the next play tick: the playhead plus `speed` market seconds, never past the window end. */
 export function nextTo(revealedThrough: string, speed: Speed, windowEnd: string): string {
   const target = ms(revealedThrough) + speed * TICK_MS;

@@ -7,7 +7,7 @@ import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, createSwingThread, enterByApi, exp
 
 const BOARD_URL = /\/practice\/day\?id=\d+/;
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
-const playhead = (page: Page) => page.locator("dt", { hasText: "Playhead" }).locator("xpath=following-sibling::dd");
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 
 test.describe("Swing practice", () => {
   test.beforeEach(async ({ context }) => {

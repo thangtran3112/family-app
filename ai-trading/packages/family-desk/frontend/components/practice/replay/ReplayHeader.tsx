@@ -1,10 +1,8 @@
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import play from "@/components/practice/swing/play.module.css";
 import { Badge } from "@/components/ui/Badge";
-import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
-import type { Speed } from "@/lib/replay/clock";
+import { changeTone, formatPrice } from "@/lib/desk/format";
 import { formatSignedUsd } from "@/lib/desk/mask";
-import { playerPillText, type PlayerStatus } from "@/lib/replay/player";
 import styles from "./replay.module.css";
 
 /** The swing thread's money line under the symbol row (02p h): balance, equity and free cash, and the tape note. No journal link (a swing session is scored weekly). */
@@ -20,7 +18,6 @@ export type ReplayHeaderProps = {
   /** "Fri 2026-10-23", "Hidden day", or for a swing day "Day 7 of 20 · Week 2 · Tue". */
   dayLabel: string;
   attempt: number;
-  playhead: string;
   lastPrice: number | null;
   /** Session VWAP at the playhead, from the chart's own series; null before there is one. */
   vwap: number | null;
@@ -28,14 +25,12 @@ export type ReplayHeaderProps = {
   priorClose: number | null;
   /** Closed trades plus the open trade marked at the last price. */
   pnl: number;
-  status: PlayerStatus;
-  speed: Speed;
   /** Swing session only. */
   swing?: SwingHeaderBar;
 };
 
-/** Symbol, day, the playhead clock, last replayed price, VWAP, prior close and Practice P/L (02o §a3). The P/L is simulated: realized trades plus the open trade at the last price. A swing session adds its money bar. */
-export function ReplayHeader({ symbol, dayLabel, attempt, playhead, lastPrice, vwap, priorClose, pnl, status, speed, swing }: ReplayHeaderProps) {
+/** One name: its symbol, day, last replayed price, VWAP, prior close and Practice P/L (02o §a3). The P/L is simulated: realized trades plus the open trade at the last price. It carries no clock and no player state: the time is the thread's (`ThreadClockBar`). A swing session adds its money bar. */
+export function ReplayHeader({ symbol, dayLabel, attempt, lastPrice, vwap, priorClose, pnl, swing }: ReplayHeaderProps) {
   return (
     <>
       <div className={styles.header}>
@@ -46,7 +41,6 @@ export function ReplayHeader({ symbol, dayLabel, attempt, playhead, lastPrice, v
           <Badge tone="warn">Practice</Badge>
         </div>
         <dl className={styles.readout}>
-          <div><dt>Playhead</dt><dd className={styles.clock}>{formatEtClock(playhead)}</dd></div>
           <div><dt>Last price</dt><dd>{formatPrice(lastPrice)}</dd></div>
           <div><dt>VWAP</dt><dd>{formatPrice(vwap)}</dd></div>
           <div><dt>Prior close</dt><dd>{formatPrice(priorClose)}</dd></div>
@@ -58,7 +52,6 @@ export function ReplayHeader({ symbol, dayLabel, attempt, playhead, lastPrice, v
             </dd>
           </div>
         </dl>
-        <span className={styles.statePill} data-state={status}>{playerPillText(status, speed)}</span>
       </div>
       {swing && (
         <div className={play.bar} role="group" aria-label="Practice thread">
