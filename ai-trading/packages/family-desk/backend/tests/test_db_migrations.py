@@ -200,7 +200,9 @@ def test_0018_adds_the_nullable_rescan_job_column_and_downgrade_drops_it(db_engi
     assert lists["rescan_job"]["nullable"] and lists["rescan_job"]["default"] is None
     try:
         command.downgrade(_alembic_config(url), "0017")
-        assert set(lists) - set(_columns(db_engine, "replay_day_lists")) == {"rescan_job"}
+        # 0019's thread clock columns come off on the way down, too
+        thread_clock = {"clock_running", "clock_speed", "clock_anchor_at", "clock_pause"}
+        assert set(lists) - set(_columns(db_engine, "replay_day_lists")) == {"rescan_job"} | thread_clock
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "replay_day_lists")) == set(lists)
     finally:
