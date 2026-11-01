@@ -24,8 +24,6 @@ import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
   canRescan,
-  cellText,
-  cellTone,
   datesHidden,
   dayCellText,
   dayCellTone,
@@ -168,8 +166,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const [retry, setRetry] = useState<(() => void) | null>(null);
   // The re-scan click is on its way to the server; from its answer on, the day list's `rescan_job` says how far it is.
   const [scanning, setScanning] = useState(false);
-  // A scan this screen watched run has finished: say so until the next one starts.
-  const [scanDone, setScanDone] = useState(false);
+  // This screen saw a scan run, so when the job reads "done" it can tell her it finished, not just show a new label.
+  const [scanSeen, setScanSeen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   // "Skip this day" (an empty list) ends the day like End day does, so it asks first too (F-11).
   const [confirmSkip, setConfirmSkip] = useState(false);
@@ -275,7 +273,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     run(
       async () => {
         setScanning(true);
-        setScanDone(false);
+        setScanSeen(false);
         try {
           await rescanDay(list.id);
         } finally {
@@ -287,17 +285,15 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       () => void rescan(),
     );
   const scanRunning = rescanRunning(list);
+  // Latch while rendering (React's "adjust state when a value changes" pattern), not in an effect: a scan seen running is one this
+  // screen can announce when it ends. The click clears it, so the previous scan's "done" never shows for the new one.
+  if (scanRunning && !scanSeen) setScanSeen(true);
   useEffect(() => {
     if (!scanRunning) return;
-    // Remember that this screen saw it run, so its end can be told ("Re-scan finished"), not just shown as a new label.
-    setScanDone(false);
     const timer = setInterval(() => {
       if (!document.hidden) onChanged();
     }, RESCAN_POLL_MS);
-    return () => {
-      clearInterval(timer);
-      setScanDone(true);
-    };
+    return () => clearInterval(timer);
   }, [scanRunning, onChanged]);
 
   // The server builds the next list before it answers, so the button says it is opening and stays disabled until the new
@@ -512,7 +508,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             {list.rescan_job?.state === "failed" && !ended && (
               <p className={styles.banner} role="alert" data-testid="rescan-failed">{list.rescan_job.message ?? PRACTICE_COPY.dayRescanError}</p>
             )}
-            {scanDone && list.rescan_job?.state === "done" && list.rescan && (
+            {scanSeen && list.rescan_job?.state === "done" && list.rescan && (
               <p className={styles.muted} role="status" data-testid="rescan-done">{practiceText("dayRescanDone", { seq: list.rescan.seq })}</p>
             )}
             {list.rescan && (
