@@ -47,7 +47,7 @@ Owner decision, 2026-10-10 (Desk plan: `plans/subplans/02a-desk-v1-strategies-de
   | Path | What |
   |---|---|
   | `infrastructure/gcp/ai-trading/` | Terraform: workload identity pools, service accounts, static-hosting buckets (operator-applied); still declares the retired `ai-trading-env-bundle` Secret Manager resource and its IAM bindings, kept until an operator approves cleanup |
-  | `infrastructure/cloudflare/zero-trust/` | Terraform: account-wide Zero Trust organization and one-time PIN login (retained, not applied for Release 1) |
+  | `infrastructure/cloudflare/zero-trust/` | Terraform: account-wide Zero Trust organization and the dormant one-time-PIN login IdP (retained as fallback; operator SSH uses the API-managed Passkeys IdP) |
   | `infrastructure/cloudflare/ai-trading/` | Terraform: tunnel, DNS, staging Workers; no Access dependency in Release 1 |
   | `common/config/family_config.py` | Shared Firestore `family-config` CLI (all apps; not ai-trading-specific) |
   | `infrastructure/gcp/family-config/` | Firestore bootstrap and VPS reader-key install/rotation (operator-applied) |
