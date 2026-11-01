@@ -13,10 +13,12 @@ trade, with the day's P/L.
   until then. A day opens any number of list names (a saved plan's `maxSymbols` is accepted and ignored), with one open
   trade at a time: she closes the trade on one name before she moves to another. What a name did while she was
   elsewhere is on the chart as history and is not scored (`replay_sessions.away`).
-- **Re-scan at the playhead (02o-b2).** `rescan` runs the day's filters again at the day clock, with the filter versions
-  the list used and every input cut 15 minutes before the clock. Each scan is its own row (`replay_day_scans`) labelled
-  with the clock it ran at; the frozen list, its stars and its review are never touched, and a name the scan shows that
-  the list did not hold is marked `new_since_list` (it cannot be starred or practised: the list is the day's universe).
+- **Re-scan at the playhead (02o-b2, repopulating since 2026-11-01).** `start_rescan` marks a job on the day list; the
+  API runs `run_rescan` in the background: the day's filters run again at the day clock, with the filter versions the
+  list used and every input cut 15 minutes before the clock. The job reports symbols read (`rescan_job`), the screen
+  polls it, and when it finishes the scan REPLACES the day list's names, columns, counts and data cut: one list, never a
+  second one beside it. A name she opened or starred that the scan no longer matches stays on the list (`held_over`); a
+  name the list did not hold is `new_since_list`. Each scan is also a row (`replay_day_scans`) labelled with the clock.
 - **Nothing past the cut before the day ends.** The list, the stars and Peek carry nothing after `data_through` or
   the day clock; the review (moves from the list price) is stored on `end_day` and served only once the day ended.
 - **Prep** runs once at plan creation in the background (`run_prep`): bars for every day of the plan; a day's
@@ -24,7 +26,9 @@ trade, with the day's P/L.
 """
 
 import logging
+import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -32,7 +36,7 @@ from typing import Any
 import pandas as pd
 from ai_trading_common.errors import ProviderError
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -73,6 +77,9 @@ log = logging.getLogger(__name__)
 
 MAX_UNIVERSE = 250
 PREP_STALE = timedelta(minutes=5)  # a prep that has not reported for this long died with its process
+RESCAN_STALE = timedelta(minutes=2)  # a re-scan that has not reported for this long died with its process
+RESCAN_TICK_S = 0.4  # a running re-scan writes its progress at most this often
+RESCAN_DIED = "The re-scan stopped before it finished · run it again"
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
 DAY_SESSION_SHARES = 100  # a day session's default entry size; she sizes each entry herself (`PracticeMarkV1.shares`)
@@ -812,18 +819,21 @@ def _relist_offer(db: Session, plan: PracticePlan, row: ReplayDayList) -> dict[s
     }
 
 
-def _few_names_reason(db: Session, row: ReplayDayList) -> str:
+def _few_names_reason(db: Session, row: ReplayDayList, scan: ReplayDayScan | None = None) -> str:
     """Why a list is short, from what the list stored: no symbol could be scanned, a filter that could only read
     the previous session at this list time (a plan saved before the server refused that), no bars to read, or
-    thresholds nothing met. Said once, with the one thing she can change."""
+    thresholds nothing met. Said once, with the one thing she can change. A list a re-scan repopulated speaks of the
+    clock that scan ran at, not the list time."""
     universe, count = row.universe, len(row.candidates)
     list_at, filters = row.screen["listAt"], row.screen["filters"]
+    if scan is not None:  # the names she kept are not the scan's matches
+        count, list_at = universe["shown"], _utc(scan.as_of).tz_convert("America/New_York").strftime("%H:%M")
     if universe["scanned"] == 0:
         return (
             f"No symbol could be scanned · {universe['no_data']} had no price data and {universe['below_floor']} fell "
             "below the $5 and 500,000-share floor"
         )
-    early = _early_filters(db, row)
+    early = [] if scan is not None else _early_filters(db, row)
     if early:
         verb = "reads" if len(early) == 1 else "read"
         return (
@@ -900,8 +910,8 @@ def day_list_out(
     # every open trade priced at the one day clock, a name behind it included (nothing here is later than the clock)
     held = {} if clock is None else {p.row.id: p for p in session_mod.positions(db, svc, row.id, clock, books)}
     universe = row.universe
-    warnings = [_few_names_reason(db, row)] if len(row.candidates) < FEW_NAMES else []
     scan = _latest_scan(db, row.id)
+    warnings = [_few_names_reason(db, row, scan)] if len(row.candidates) < FEW_NAMES else []
     return {
         "id": row.id,
         "plan": plan_out(db, plan),
@@ -935,6 +945,7 @@ def day_list_out(
         "warnings": warnings,
         "relist": _relist_offer(db, plan, row),
         "rescan": None if scan is None else _scan_out(scan),
+        "rescan_job": _job_out(row.rescan_job, svc.now()),
         "peek": None if peek is None else _peek(db, svc, row, peek),
         "journal": _ended_journal(db, plan, row, sessions) if ended else None,
         "review": _ended_review(plan, row) if ended else None,
@@ -997,12 +1008,22 @@ def _latest_scan(db: Session, day_list_id: int) -> ReplayDayScan | None:
     ).scalar_one_or_none()
 
 
-def rescan(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayScan:
-    """Run the day's filters again at the day clock (02o-b2). The scan sees what the Desk would have shown at that time:
-    the filter versions the list used, the list's universe, every input cut `LIST_DATA_LAG` before the clock. It is a
-    row of its own and labelled with the clock it ran at; the frozen list never changes. A second scan at the same
-    clock returns the first. Names the list did not hold are marked `new_since_list`."""
+def _rescan_stale(job: dict[str, Any], now: datetime) -> bool:
+    """A running job that has not reported for `RESCAN_STALE` died with its process (a restart, a crash)."""
+    return job["state"] == "running" and pd.Timestamp(now) - pd.Timestamp(job["updated_at"]) > RESCAN_STALE
+
+
+def start_rescan(db: Session, user_id: int, day_list_id: int, svc: Services) -> str | None:
+    """Mark a re-scan at the day clock as running and return its run token; the caller starts `run_rescan` with it on
+    its own session once this one has committed. None: nothing to start. A scan already in flight is joined, never
+    doubled (a job that stopped reporting is taken over, and the old worker finds its token gone), and a list that
+    already holds a scan at this clock is current. A 409 before the first name is practised (no clock yet), before
+    the list time, and after the day ends."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None
+    if _is_swing(plan):
+        raise ReplayProblem("A swing day has no re-scan", path="rescan", status=409)
     if row.status == "ended":
         raise ReplayProblem("The day is over · scans are closed", path="rescan", status=409)
     if row.revealed_through is None:
@@ -1018,11 +1039,115 @@ def rescan(db: Session, user_id: int, day_list_id: int, svc: Services) -> Replay
             path="rescan",
             status=409,
         )
+    now = svc.now()
+    job = row.rescan_job
+    if job is not None and job["state"] == "running" and not _rescan_stale(job, now):
+        return None
     last = _latest_scan(db, row.id)
     if last is not None and _utc(last.as_of) == clock:
-        return last
+        return None
+    run = secrets.token_hex(8)
+    row.rescan_job = {
+        "run": run,
+        "state": "running",
+        "as_of": clock.isoformat(),
+        "done": 0,
+        "total": 0,
+        "message": None,
+        "started_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    row.updated_at = now
+    db.flush()
+    return run
+
+
+class _Superseded(Exception):
+    """The job on the row carries another run token: a newer scan took this one over."""
+
+
+class _Progress:
+    """Writes a running re-scan's progress onto its job, at most every `RESCAN_TICK_S`, each write its own commit so the
+    screen's poll sees it. A write that finds another token on the row raises `_Superseded`."""
+
+    def __init__(self, db: Session, svc: Services, day_list_id: int, job: dict[str, Any], total: int) -> None:
+        self.db, self.svc, self.day_list_id, self.job = db, svc, day_list_id, job
+        self.total, self.done, self.written = total, 0, 0.0
+        self.write(force=True)
+
+    def write(self, *, force: bool = False) -> None:
+        if not force and time.monotonic() - self.written < RESCAN_TICK_S:
+            return
+        self.written = time.monotonic()
+        self.job = {**self.job, "done": self.done, "total": self.total, "updated_at": self.svc.now().isoformat()}
+        moved = self.db.execute(
+            update(ReplayDayList)
+            .where(ReplayDayList.id == self.day_list_id, ReplayDayList.rescan_job["run"].as_string() == self.job["run"])
+            .values(rescan_job=self.job)
+        )
+        self.db.commit()
+        if moved.rowcount == 0:  # type: ignore[attr-defined]
+            raise _Superseded
+
+    def counting(self, load: Callable[[str], pd.DataFrame | None]) -> Callable[[str], pd.DataFrame | None]:
+        """`load` that counts the symbol it was asked for: the list's first pass reads every symbol's daily bars."""
+
+        def counted(symbol: str) -> pd.DataFrame | None:
+            frame = load(symbol)
+            self.done += 1
+            self.write(force=self.done >= self.total)
+            return frame
+
+        return counted
+
+    def beating(self, load: Callable[[str], pd.DataFrame | None]) -> Callable[[str], pd.DataFrame | None]:
+        """`load` that only reports it is alive: the filters read minute bars after the count is complete."""
+
+        def beat(symbol: str) -> pd.DataFrame | None:
+            frame = load(symbol)
+            self.write()
+            return frame
+
+        return beat
+
+
+def _finish_job(db: Session, day_list_id: int, run: str, state: str, message: str | None) -> None:
+    """Close the job this worker owns (committed here: the worker may be about to give up). Another token: untouched."""
+    row = db.execute(
+        select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()
+    ).scalar_one_or_none()
+    if row is None or row.rescan_job is None or row.rescan_job["run"] != run:
+        db.rollback()
+        return
+    row.rescan_job = {**row.rescan_job, "state": state, "message": message}
+    db.commit()
+
+
+def run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> ReplayDayScan | None:
+    """The background half of a re-scan (see `start_rescan`): run the day's filters at the day clock the job was started
+    at, as the Desk would have shown them then (the filter versions the list used, the list's universe, every input cut
+    `LIST_DATA_LAG` before the clock), report progress while it reads, then REPOPULATE the day list and keep the scan as
+    a row labelled with that clock. Never raises: a failure closes the job as `failed`, so the screen says so and
+    offers the scan again."""
+    try:
+        return _run_rescan(db, svc, day_list_id, run)
+    except _Superseded:
+        db.rollback()
+        return None
+    except Exception:  # noqa: BLE001 -- the job says "failed"; the log says why
+        log.exception("re-scan %s of day list %s failed", run, day_list_id)
+        db.rollback()
+        _finish_job(db, day_list_id, run, "failed", "Couldn't finish the re-scan · try again")
+        return None
+
+
+def _run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> ReplayDayScan | None:
+    row = db.get(ReplayDayList, day_list_id)
+    if row is None or row.rescan_job is None or row.rescan_job["run"] != run:
+        return None
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
+    clock = pd.Timestamp(row.rescan_job["as_of"])
     store = svc.store_factory(db)
     filters = _filter_inputs(
         db,
@@ -1030,59 +1155,104 @@ def rescan(db: Session, user_id: int, day_list_id: int, svc: Services) -> Replay
         row.universe.get("symbols") or list(plan.universe["symbols"]),
         {item["id"]: item["version_id"] for item in row.screen["filters"]},
     )
+    progress = _Progress(db, svc, row.id, row.rescan_job, len({s for item in filters for s in item.symbols}))
+    day, max_list, prior = row.day, row.screen["maxList"], {c["symbol"]: c for c in row.candidates}
     built = build_list(
         filters=filters,
-        daily_of=screen.asof_loader(svc.history, store, row.day),
-        minutes_of=screen.minutes_loader(svc.history, store, row.day),
-        day=row.day,
+        daily_of=progress.counting(screen.asof_loader(svc.history, store, day)),
+        minutes_of=progress.beating(screen.minutes_loader(svc.history, store, day)),
+        day=day,
         list_at=clock,
-        max_list=row.screen["maxList"],
+        max_list=max_list,
     )
-    listed = {c["symbol"]: c for c in row.candidates}
-    fresh = [c["symbol"] for c in built.candidates if c["symbol"] not in listed]
-    flagged = earnings_flags(svc.sources, fresh, row.day, svc.now())
+    fresh = [c["symbol"] for c in built.candidates if c["symbol"] not in prior]
+    flagged = earnings_flags(svc.sources, fresh, day, svc.now())
     for candidate in built.candidates:
-        seen = listed.get(candidate["symbol"])
+        seen = prior.get(candidate["symbol"])
         candidate["new_since_list"] = seen is None
+        candidate["held_over"] = False
         candidate["reported_before_open"] = (
             candidate["symbol"] in flagged if seen is None else bool(seen.get("reported_before_open"))
         )
+
+    # From here the day list changes: under its lock, on what the day holds now (a star or a name opened while the scan
+    # read counts), and only if this scan still owns the job and the day is still running.
+    db.commit()  # keeps the bars the read cached, and expires `row` so the locked read below is fresh
+    row = db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
+    if row.rescan_job is None or row.rescan_job["run"] != run:
+        raise _Superseded
+    if row.status == "ended":
+        _finish_job(db, day_list_id, run, "failed", "The day ended before the re-scan finished")
+        return None
     now = svc.now()
+    matched = {c["symbol"] for c in built.candidates}
+    holding = {s.symbol for s in _sessions_of(db, row.id)} | {w["symbol"] for w in row.watch}
+    held = [
+        {**c, "new_since_list": False, "held_over": True}
+        for c in row.candidates
+        if c["symbol"] in holding and c["symbol"] not in matched
+    ]
+    last = _latest_scan(db, row.id)
+    universe = jsonable(
+        {
+            **row.universe,
+            **built.universe,
+            "matches_total": built.matches_total,
+            "shown": len(built.candidates),
+            "prev_basis": built.prev_basis,
+            "filters": built.filters,
+        }
+    )
     scan = ReplayDayScan(
         day_list_id=row.id,
         seq=1 if last is None else last.seq + 1,
         as_of=clock.to_pydatetime(),
         data_through=built.data_through.to_pydatetime(),
-        universe=jsonable(
-            {
-                **row.universe,
-                **built.universe,
-                "matches_total": built.matches_total,
-                "shown": len(built.candidates),
-                "prev_basis": built.prev_basis,
-                "filters": built.filters,
-            }
-        ),
+        universe=universe,
         columns=built.columns,
         candidates=jsonable(built.candidates),
         created_at=now,
     )
     db.add(scan)
+    row.candidates = jsonable(
+        [*built.candidates, *({**c, "rank": len(built.candidates) + i} for i, c in enumerate(held, 1))]
+    )
+    row.columns, row.universe, row.data_through = built.columns, universe, built.data_through.to_pydatetime()
+    row.rescan_job = {
+        **row.rescan_job,
+        "state": "done",
+        "done": progress.total,
+        "total": progress.total,
+        "message": None,
+        "updated_at": now.isoformat(),
+    }
     row.updated_at = now
-    db.flush()
+    db.commit()
     return scan
 
 
 def _scan_out(scan: ReplayDayScan) -> dict[str, Any]:
+    """Which scan the list now shows: its number, the clock it ran at, the time its data stops, and what it added."""
     return {
         "seq": scan.seq,
         "as_of": scan.as_of,
         "data_through": scan.data_through,
-        "universe": scan.universe,
-        "columns": scan.columns,
-        "candidates": scan.candidates,
         "new_count": sum(1 for c in scan.candidates if c["new_since_list"]),
         "created_at": scan.created_at,
+    }
+
+
+def _job_out(job: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None:
+    """The re-scan's progress for the screen's poll. A running job that stopped reporting reads as failed."""
+    if job is None:
+        return None
+    died = _rescan_stale(job, now)
+    return {
+        "state": "failed" if died else job["state"],
+        "as_of": job["as_of"],
+        "done": job["done"],
+        "total": job["total"],
+        "message": RESCAN_DIED if died else job["message"],
     }
 
 
@@ -1289,8 +1459,9 @@ __all__ = (
     "plan_out",
     "practice_universe",
     "relist",
-    "rescan",
     "restart_stale_prep",
     "run_prep",
+    "run_rescan",
+    "start_rescan",
     "start_session",
 )

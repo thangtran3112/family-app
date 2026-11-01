@@ -89,12 +89,14 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0017() -> None:
+def test_migration_chain_has_a_single_head_at_0018() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0017"]
+    assert script.get_heads() == ["0018"]
+    assert script.get_revision("0018").down_revision == "0017"
     assert script.get_revision("0017").down_revision == "0016"
+    assert script.get_revision("0016").down_revision == "0015"
     assert script.get_revision("0015").down_revision == "0014"
     assert script.get_revision("0014").down_revision == "0013"
     assert script.get_revision("0013").down_revision == "0012"
@@ -186,6 +188,20 @@ def test_0016_adds_the_orders_column_with_an_empty_list_default_and_downgrade_dr
         assert set(sessions) - set(_columns(db_engine, "replay_sessions")) == {"orders"}
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "replay_sessions")) == set(sessions)
+    finally:
+        command.upgrade(_alembic_config(url), "head")
+
+
+def test_0018_adds_the_nullable_rescan_job_column_and_downgrade_drops_it(db_engine: Engine) -> None:
+    """Re-scan progress (0018): `replay_day_lists.rescan_job`, JSONB, nullable, null for every existing day."""
+    url = db_engine.url.render_as_string(hide_password=False)
+    lists = _columns(db_engine, "replay_day_lists")
+    assert lists["rescan_job"]["nullable"] and lists["rescan_job"]["default"] is None
+    try:
+        command.downgrade(_alembic_config(url), "0017")
+        assert set(lists) - set(_columns(db_engine, "replay_day_lists")) == {"rescan_job"}
+        command.upgrade(_alembic_config(url), "head")
+        assert set(_columns(db_engine, "replay_day_lists")) == set(lists)
     finally:
         command.upgrade(_alembic_config(url), "head")
 

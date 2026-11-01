@@ -10,8 +10,8 @@ import {
   type MetricFormat,
   type Tone,
 } from "../desk/format.ts";
-import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { Candidate, DayJournal, DayList, DayPnl, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
+import { PRACTICE_COPY, practiceText, prepPercent } from "../desk/freshness.ts";
+import type { Candidate, DayJournal, DayList, DayPnl, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, RescanJob, ReviewRow } from "./daily.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade } from "./schemas.ts";
 import { etHhMm, ms } from "./time.ts";
@@ -293,6 +293,14 @@ export type PortfolioRow = {
   unrealized: number | null;
   /** Realized plus unrealized: the name's P/L for the day. */
   dayPnl: number;
+  /** The open trade's cost, entry price × shares; null when flat. */
+  basis: number | null;
+  /** `dayPnl` as a percent of `basis`; null when flat (a closed trade keeps no cost on this read). */
+  dayPct: number | null;
+  /** The stock's move since entry, per share: last − entry. The market's direction, whichever side she is on; null when flat. */
+  priceChange: number | null;
+  /** `priceChange` as a percent of the entry price; null when flat. */
+  priceChangePct: number | null;
   behind: boolean;
   /** The name she is on in the replay. */
   current: boolean;
@@ -317,6 +325,8 @@ export function portfolioRows(
         : current && from.openTrade === null
           ? null
           : session.position;
+    const basis = position === null || position.entry_price * position.shares <= 0 ? null : position.entry_price * position.shares;
+    const dayPnl = session.realized_usd + (position?.unrealized_usd ?? 0);
     return {
       symbol: session.symbol,
       sessionId: session.id,
@@ -328,7 +338,11 @@ export function portfolioRows(
       trades: session.trades,
       realized: session.realized_usd,
       unrealized: position?.unrealized_usd ?? null,
-      dayPnl: session.realized_usd + (position?.unrealized_usd ?? 0),
+      dayPnl,
+      basis,
+      dayPct: basis === null ? null : (100 * dayPnl) / basis,
+      priceChange: position === null ? null : position.last_price - position.entry_price,
+      priceChangePct: position === null || position.entry_price <= 0 ? null : (100 * (position.last_price - position.entry_price)) / position.entry_price,
       behind:
         session.behind_clock ||
         (from !== undefined && !current && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
@@ -355,6 +369,45 @@ export function portfolioFooter(pnl: DayPnl): { total: number; split: string; op
     openOf: practiceText("dayPortfolioOpenOf", { open: pnl.open_count }),
     asOf: practiceText("dayPortfolioAsOf", { time: formatEtTimeZone(pnl.as_of) }),
   };
+}
+
+/** The Portfolio's unit switch: dollars or percent. It flips the price change and the P/L of every row together. */
+export type PortfolioUnit = "usd" | "pct";
+
+export type PortfolioCells = {
+  /** "$814.54"; null when flat. */
+  last: string | null;
+  /** The stock's move since entry in the unit: "+$2.14" or "+0.26%"; null when flat. */
+  change: string | null;
+  changeTone: Tone;
+  /** The name's day P/L in the unit; a dash for a percent with no cost to divide by (a flat name). */
+  pnl: string;
+  pnlTone: Tone;
+  /** The P/L's direction, the Robinhood arrow; null at zero or a dash. */
+  arrow: "up" | "down" | null;
+};
+
+/** A row's figures in dollars or percent. The signs and the arrow carry the direction; the tone is the second cue. */
+export function portfolioCells(row: PortfolioRow, unit: PortfolioUnit): PortfolioCells {
+  const usd = unit === "usd";
+  const pnl = usd ? row.dayPnl : row.dayPct;
+  const change = usd ? row.priceChange : row.priceChangePct;
+  const text = (value: number) => (usd ? formatSignedUsd(value, { cents: true }) : formatSignedPct(value));
+  const pnlTone = pnl === null ? "flat" : changeToneAt(pnl, 2);
+  return {
+    last: row.position === null ? null : `$${formatPrice(row.position.last_price)}`,
+    change: change === null ? null : text(change),
+    changeTone: change === null ? "flat" : changeToneAt(change, 2),
+    pnl: pnl === null ? EMPTY_VALUE : text(pnl),
+    pnlTone,
+    arrow: pnlTone === "flat" ? null : pnlTone,
+  };
+}
+
+/** "2 open positions" / "1 open position" / "No open positions": the Portfolio's head, counted from the rows she sees. */
+export function openPositionsText(rows: readonly Pick<PortfolioRow, "holding">[]): string {
+  const count = rows.filter((row) => row.holding).length;
+  return count === 0 ? PRACTICE_COPY.dayPortfolioPositionsNone : count === 1 ? PRACTICE_COPY.dayPortfolioPositionsOne : practiceText("dayPortfolioPositions", { count });
 }
 
 /** "Stop crossed 10:21": the row of a trade whose stop paused play. */
@@ -403,9 +456,33 @@ export const canRescan = (list: Pick<DayList, "status" | "clock" | "list_at">): 
 export const rescanLabel = (scan: Pick<Rescan, "seq" | "as_of" | "data_through">): string =>
   practiceText("dayRescanLabel", { seq: scan.seq, clock: formatEtTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
 
-/** "2 of 2 matched · 1 new since your list". */
-export const rescanCounts = (scan: Pick<Rescan, "universe" | "new_count">): string =>
-  practiceText("dayRescanCounts", { shown: scan.universe.shown, matched: scan.universe.matches_total, fresh: scan.new_count });
+/** The names the repopulated list kept because she opened or starred them and the scan no longer matches them. */
+export const heldOverCount = (list: Pick<DayList, "candidates">): number => list.candidates.filter((candidate) => candidate.held_over).length;
+
+/** "2 of 2 matched · 1 new in this scan", then "· 1 kept because you opened or starred them" when the list kept names. */
+export function rescanCounts(list: Pick<DayList, "universe" | "rescan" | "candidates">): string {
+  const base = practiceText("dayRescanCounts", { shown: list.universe.shown, matched: list.universe.matches_total, fresh: list.rescan?.new_count ?? 0 });
+  const held = heldOverCount(list);
+  return held > 0 ? `${base} · ${practiceText("dayRescanKept", { held })}` : base;
+}
+
+/** A re-scan is reading right now: the screen polls the day list until it is not. */
+export const rescanRunning = (list: Pick<DayList, "rescan_job">): boolean => list.rescan_job?.state === "running";
+
+/** The list already shows a scan run at the day clock (or later): another scan now would read the same thing. */
+export const rescanCurrent = (list: Pick<DayList, "clock" | "rescan">): boolean =>
+  list.rescan !== null && list.clock !== null && Date.parse(list.clock) <= Date.parse(list.rescan.as_of);
+
+/** Whole percent of the symbols read (0 until the job has counted them). */
+export const rescanPercent = (job: Pick<RescanJob, "done" | "total">): number => prepPercent(job.done, job.total);
+
+/** The running scan in words that move: counting the names, "read 37 of 134 names (27%)", then applying the filters once all are read. */
+export function rescanProgressText(job: Pick<RescanJob, "as_of" | "done" | "total">): string {
+  const clock = formatEtTimeZone(job.as_of);
+  if (job.total === 0) return practiceText("dayRescanCounting", { clock });
+  if (job.done >= job.total) return practiceText("dayRescanFiltering", { clock, total: job.total });
+  return practiceText("dayRescanProgress", { clock, done: job.done, total: job.total, pct: rescanPercent(job) });
+}
 
 /** The day clock has moved since the scan ran: the scan is older than the screen's clock. */
 export function rescanStaleText(list: Pick<DayList, "clock" | "rescan">): string | null {

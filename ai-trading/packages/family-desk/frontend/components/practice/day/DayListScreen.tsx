@@ -8,6 +8,7 @@ import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChro
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
@@ -17,10 +18,9 @@ import { formatClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
-import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
-import type { Candidate, DayList, Rescan } from "@/lib/replay/daily";
+import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
   canRescan,
   cellText,
@@ -39,7 +39,10 @@ import {
   nameActionLabel,
   practiceWindow,
   rescanCounts,
+  rescanCurrent,
   rescanLabel,
+  rescanProgressText,
+  rescanRunning,
   rescanStaleText,
   sourceNote,
   threadDayNo,
@@ -52,7 +55,7 @@ import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
-import { PortfolioPanel, useDayPortfolio } from "@/components/practice/replay/Portfolio";
+import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
@@ -64,6 +67,9 @@ import { ReviewPanel } from "./ReviewPanel";
 import { UniverseFootnote } from "./UniverseFootnote";
 import styles from "./day.module.css";
 import { Skeleton } from "@/components/ui/StateBlocks";
+
+/** The day list is read again this often while a re-scan is running, so its count of names read moves. */
+const RESCAN_POLL_MS = 1000;
 
 /** `/practice/day?id=`: the day's candidate list before the open, then the review after it (02o-b v1). Reads the URL, so the page wraps it in Suspense. */
 export function DayListScreen() {
@@ -156,10 +162,13 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The name a click is opening.
   const [opening, setOpening] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  // The gateway cut a slow open or re-scan short and the screen is asking again; the server is still finishing (D-058, D-059).
-  const [still, setStill] = useState<"open" | "rescan" | "end" | null>(null);
+  // The gateway cut a slow open or end short and the screen is asking again; the server is still finishing (D-058, D-059).
+  const [still, setStill] = useState<"open" | "end" | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  // The re-scan click is on its way to the server; from its answer on, the day list's `rescan_job` says how far it is.
   const [scanning, setScanning] = useState(false);
+  // A scan this screen watched run has finished: say so until the next one starts.
+  const [scanDone, setScanDone] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   // "Skip this day" (an empty list) ends the day like End day does, so it asks first too (F-11).
   const [confirmSkip, setConfirmSkip] = useState(false);
@@ -172,9 +181,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const endRef = useRef<HTMLButtonElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const endedHere = useRef(false);
-  // At the 1180 band the right rail is a tab strip: a row click opens the Peek drawer and the others stay as they are (D-020).
+  // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
+  // Peek is its own wide drawer on both bands, so the chart and its level legend have room; the rail keeps the portfolio and the plan.
+  const [peeking, setPeeking] = useState(false);
 
   // The risk plan is the thread's (D-007): read it from the thread, not from the day's plan.
   const threadId = list.thread?.id ?? null;
@@ -200,9 +211,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const practicing = list.sessions.at(-1) ?? null;
   const opened = new Set(list.sessions.map((session) => session.symbol));
   const columns = columnsOf(list);
-  // The portfolio re-reads whenever the day page's own data moves (a name opened, the day ended).
+  // The End-day confirm names the open trades from this read, which re-reads whenever the day page's own data moves (a name opened, the day ended).
   const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0);
-  // One read of the day list serves the rail's Portfolio and the End-day confirm, so both name the same open trades.
   const portfolio = useDayPortfolio(list.id, portfolioRevision);
   const exits = endDayExitText(portfolioRows(portfolio.data ?? list), list.clock);
 
@@ -232,7 +242,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   };
   const peekAt = (symbol: string) => {
     setSelected(symbol);
-    if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
+    setPeeking(true);
   };
 
   // Ending is safe to ask twice (the server answers an ended day the same), so a gateway cut waits and asks again, as the replay does (F-08).
@@ -256,12 +266,15 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       onChanged();
     }, PRACTICE_COPY.dayRelistError);
 
+  // A re-scan runs on the server in the background: the click only starts it, and the day list (polled while the job says
+  // "running") carries how far it has read. Asking twice is safe: a scan already running is joined, never doubled.
   const rescan = (): Promise<void> =>
     run(
       async () => {
         setScanning(true);
+        setScanDone(false);
         try {
-          await whenReady(() => rescanDay(list.id), { onWaiting: () => setStill("rescan") });
+          await rescanDay(list.id);
         } finally {
           setScanning(false);
         }
@@ -270,6 +283,19 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       PRACTICE_COPY.dayRescanError,
       () => void rescan(),
     );
+  const scanRunning = rescanRunning(list);
+  useEffect(() => {
+    if (!scanRunning) return;
+    // Remember that this screen saw it run, so its end can be told ("Re-scan finished"), not just shown as a new label.
+    setScanDone(false);
+    const timer = setInterval(() => {
+      if (!document.hidden) onChanged();
+    }, RESCAN_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      setScanDone(true);
+    };
+  }, [scanRunning, onChanged]);
 
   // The server builds the next list before it answers, so the button says it is opening and stays disabled until the new
   // day's screen replaces this one (D-046): no second click, and no look of nothing happening.
@@ -355,7 +381,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
       <div className={styles.body}>
         <p className={styles.line}>
           {listCountsText(list)}
-          <span className={styles.built}>{listBuiltText(list)}</span>
+          {list.rescan ? (
+            <span className={styles.built} data-testid="rescan-label">{rescanLabel(list.rescan)}</span>
+          ) : (
+            <span className={styles.built}>{listBuiltText(list)}</span>
+          )}
         </p>
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>{PRACTICE_COPY.planFilters}</span>
@@ -454,25 +484,38 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <h2 className={styles.sectionTitle}>{PRACTICE_COPY.dayRescanTitle}</h2>
             {!ended && (
               <div className={styles.actions}>
-                <Button disabled={busy || !canRescan(list)} onClick={() => void rescan()}>{scanning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}</Button>
-                <span className={styles.muted} role={still === "rescan" ? "status" : undefined}>{still === "rescan" ? PRACTICE_COPY.dayRescanStillWorking : canRescan(list) ? PRACTICE_COPY.dayRescanHint : PRACTICE_COPY.dayRescanNeedsClock}</span>
+                <Button disabled={busy || scanning || scanRunning || !canRescan(list) || rescanCurrent(list)} onClick={() => void rescan()}>
+                  {scanning || scanRunning ? PRACTICE_COPY.dayRescanning : PRACTICE_COPY.dayRescan}
+                </Button>
+                {!scanRunning && (
+                  <span className={styles.muted} data-testid="rescan-hint">
+                    {!canRescan(list) ? PRACTICE_COPY.dayRescanNeedsClock : rescanCurrent(list) ? PRACTICE_COPY.dayRescanCurrent : PRACTICE_COPY.dayRescanHint}
+                  </span>
+                )}
               </div>
+            )}
+            {list.rescan_job?.state === "running" && (
+              <div className={styles.scanProgress} data-testid="rescan-progress">
+                <progress
+                  className={styles.scanBar}
+                  max={Math.max(list.rescan_job.total, 1)}
+                  value={list.rescan_job.total === 0 ? undefined : list.rescan_job.done}
+                  aria-label={PRACTICE_COPY.dayRescanProgressLabel}
+                  aria-valuetext={rescanProgressText(list.rescan_job)}
+                />
+                <span className={styles.muted} data-testid="rescan-progress-text">{rescanProgressText(list.rescan_job)}</span>
+              </div>
+            )}
+            {list.rescan_job?.state === "failed" && !ended && (
+              <p className={styles.banner} role="alert" data-testid="rescan-failed">{list.rescan_job.message ?? PRACTICE_COPY.dayRescanError}</p>
+            )}
+            {scanDone && list.rescan_job?.state === "done" && list.rescan && (
+              <p className={styles.muted} role="status" data-testid="rescan-done">{practiceText("dayRescanDone", { seq: list.rescan.seq })}</p>
             )}
             {list.rescan && (
               <>
-                <p className={styles.line} data-testid="rescan-label">{rescanLabel(list.rescan)}</p>
-                <p className={styles.muted} data-testid="rescan-counts">{rescanCounts(list.rescan)}</p>
+                <p className={styles.muted} data-testid="rescan-counts">{rescanCounts(list)}</p>
                 {!ended && rescanStaleText(list) && <p className={styles.muted} role="status" data-testid="rescan-stale">{rescanStaleText(list)}</p>}
-                <DenseTable
-                  caption="Re-scan"
-                  columns={withPriorities(rescanColumnsOf(list.rescan), "practiceList")}
-                  rows={list.rescan.candidates}
-                  rowKey={(row) => row.symbol}
-                  scrollX
-                  empty={<EmptyBlock title={PRACTICE_COPY.dayNoNames} />}
-                />
-                <UniverseFootnote text={list.rescan.universe.footnote} />
-                {!ended && <p className={styles.muted}>{PRACTICE_COPY.dayRescanReadOnly}</p>}
               </>
             )}
           </section>
@@ -480,7 +523,25 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
-      <DayLeftPanel list={list} thread={thread.data} portfolio={portfolio} />
+      <DayLeftPanel list={list} />
+      {peeking && selected !== null && !ended && (
+        <Dialog
+          title={PRACTICE_COPY.dayPeek}
+          size="drawer"
+          onClose={() => setPeeking(false)}
+          headerActions={<Button onClick={() => setPeeking(false)}>{PRACTICE_COPY.dayPeekClose}</Button>}
+        >
+          <PeekPanel
+            symbol={selected}
+            row={list.candidates.find((candidate) => candidate.symbol === selected) ?? null}
+            peek={peek.data?.peek ?? null}
+            loading={peek.loading}
+            failed={peek.data === null && peek.error !== null}
+            onRetry={peek.refresh}
+            hideDates={datesHidden(list.plan.spec)}
+          />
+        </Dialog>
+      )}
       {changing && thread.data !== null && (
         <NewPlanModal thread={thread.data.thread} onClose={() => setChanging(false)} onSaved={(id) => router.push(`/practice/thread?id=${id}`)} />
       )}
@@ -490,27 +551,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         openIds={railOpen}
         onOpenIdsChange={setRailOpen}
         sections={[
-          ...(ended
-            ? []
-            : [
-                {
-                  id: "peek",
-                  label: PRACTICE_COPY.dayPeek,
-                  node: (
-                    <PeekPanel
-                      symbol={selected}
-                      row={list.candidates.find((candidate) => candidate.symbol === selected) ?? null}
-                      peek={peek.data?.peek ?? null}
-                      loading={peek.loading}
-                      failed={peek.data === null && peek.error !== null}
-                      onRetry={peek.refresh}
-                      hideDates={datesHidden(list.plan.spec)}
-                    />
-                  ),
-                },
-              ]),
-          // At 1440 the portfolio sits in the left rail; at 1180 that rail is a strip, so it opens from this drawer.
-          ...(band === "1180" ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: <PortfolioPanel dayListId={list.id} query={portfolio} /> }] : []),
           {
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",
@@ -542,8 +582,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   );
 }
 
-/** The re-scan's table: symbol (with the new-since-list tag), the filters that matched, and the scan's own columns. Read-only: no open. */
-function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]>[] {
+function columnsOf(list: DayList): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
@@ -552,26 +591,10 @@ function rescanColumnsOf(scan: Rescan): DenseColumn<Rescan["candidates"][number]
         <span>
           <span className={styles.symbol}>{row.symbol}</span>
           {row.new_since_list && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanNew}</Badge>}
-          {row.reported_before_open && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayReported}</Badge>}
+          {row.held_over && <Badge tone="neutral" style={{ marginLeft: 6 }}>{PRACTICE_COPY.dayRescanHeld}</Badge>}
         </span>
       ),
     },
-    { key: "filters", label: "Filters", render: (row) => filtersText(row) },
-    ...scan.columns.map((column): DenseColumn<Rescan["candidates"][number]> => ({
-      key: column.key,
-      label: column.label,
-      align: column.format === "time" ? "left" : "right",
-      render: (row) => {
-        const tone = cellTone(column, row);
-        return <span className={tone ? styles[tone] : undefined}>{cellText(column, row)}</span>;
-      },
-    })),
-  ];
-}
-
-function columnsOf(list: DayList): DenseColumn<Candidate>[] {
-  return [
-    { key: "symbol", label: "Symbol", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
     { key: "filters", label: "Filters", render: (row) => filtersText(row) },
     ...dayColumns(list).map((column): DenseColumn<Candidate> => ({
       key: column.key,

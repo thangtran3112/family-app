@@ -30,7 +30,9 @@ import {
   peekOffsets,
   planArmedText,
   endDayExitText,
+  openPositionsText,
   openTodayText,
+  portfolioCells,
   portfolioFooter,
   portfolioRows,
   portfolioTotal,
@@ -42,8 +44,13 @@ import {
   practiceWindow,
   tradeTotalRow,
   planCard,
+  heldOverCount,
   rescanCounts,
+  rescanCurrent,
   rescanLabel,
+  rescanPercent,
+  rescanProgressText,
+  rescanRunning,
   rescanStaleText,
   riskPlanText,
   selectionText,
@@ -461,6 +468,51 @@ test("a position reads Long or Short with its shares and entry price, a flat nam
   assert.equal(positionText({ position: { ...smciLong, entry_at: null } }), "Long 100 @ $812.40"); // an older payload has no entry time
 });
 
+test("a held row carries its cost, its move since entry and its P/L as a percent of cost; a flat row has none of them", () => {
+  const [long, short, flat] = portfolioRows({
+    sessions: [
+      opened("SMCI", 12, { has_open_trade: true, position: smciLong }), // 100 @ 812.40 = 81,240; last 814.54, +$214
+      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } }),
+      opened("ANET", 13, { trades: 1, realized_usd: -38 }),
+    ],
+  });
+  assert.equal(long!.basis, 81240);
+  assert.ok(Math.abs(long!.dayPct! - (100 * 214) / 81240) < 1e-9);
+  assert.ok(Math.abs(long!.priceChange! - 2.14) < 1e-9);
+  assert.ok(Math.abs(long!.priceChangePct! - (100 * 2.14) / 812.4) < 1e-9);
+  // A short wins when the stock falls: the price change is the market's (−$10, −5%), the P/L is hers (+$500, +5% of the $10,000 cost).
+  assert.deepEqual([short!.priceChange, short!.priceChangePct, short!.dayPnl, short!.dayPct], [-10, -5, 500, 5]);
+  assert.deepEqual([flat!.basis, flat!.dayPct, flat!.priceChange, flat!.priceChangePct], [null, null, null, null]);
+});
+
+test("a row's cells read in dollars or percent, with the arrow on the P/L's direction", () => {
+  const [long, short, flat, even] = portfolioRows({
+    sessions: [
+      opened("SMCI", 12, { has_open_trade: true, position: smciLong }),
+      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } }),
+      opened("ANET", 13, { trades: 1, realized_usd: -38 }),
+      opened("AMD", 15),
+    ],
+  });
+  assert.deepEqual(portfolioCells(long!, "usd"), { last: "$814.54", change: "+$2.14", changeTone: "up", pnl: "+$214.00", pnlTone: "up", arrow: "up" });
+  assert.deepEqual(portfolioCells(long!, "pct"), { last: "$814.54", change: "+0.26%", changeTone: "up", pnl: "+0.26%", pnlTone: "up", arrow: "up" });
+  // The short's stock fell (red) while her P/L rose (green, up arrow): the two columns do not share a tone.
+  assert.deepEqual(portfolioCells(short!, "usd"), { last: "$190.00", change: "−$10.00", changeTone: "down", pnl: "+$500.00", pnlTone: "up", arrow: "up" });
+  assert.deepEqual(portfolioCells(short!, "pct"), { last: "$190.00", change: "−5.00%", changeTone: "down", pnl: "+5.00%", pnlTone: "up", arrow: "up" });
+  // A flat name with a closed loss has dollars but no cost to take a percent of.
+  assert.deepEqual(portfolioCells(flat!, "usd"), { last: null, change: null, changeTone: "flat", pnl: "−$38.00", pnlTone: "down", arrow: "down" });
+  assert.deepEqual(portfolioCells(flat!, "pct"), { last: null, change: null, changeTone: "flat", pnl: "—", pnlTone: "flat", arrow: null });
+  assert.deepEqual(portfolioCells(even!, "usd"), { last: null, change: null, changeTone: "flat", pnl: "$0.00", pnlTone: "flat", arrow: null });
+});
+
+test("the Portfolio head counts the open positions from the rows", () => {
+  const sessions = [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13), opened("NVDA", 14, { has_open_trade: true, position: smciLong })];
+  assert.equal(openPositionsText(portfolioRows({ sessions })), "2 open positions");
+  assert.equal(openPositionsText(portfolioRows({ sessions: sessions.slice(0, 1) })), "1 open position");
+  assert.equal(openPositionsText(portfolioRows({ sessions: sessions.slice(1, 2) })), "No open positions");
+  assert.equal(openPositionsText([]), "No open positions");
+});
+
 test("the portfolio counts every name opened, with no cap to count against", () => {
   const many = { sessions: Array.from({ length: 25 }, (_, i) => opened(`N${i}`, 100 + i)) };
   assert.equal(portfolioRows(many).length, 25);
@@ -495,21 +547,35 @@ const scan = {
   seq: 2,
   as_of: "2026-03-10T14:00:00Z",
   data_through: "2026-03-10T13:45:00Z",
-  universe: { ...dayList.universe, shown: 2, matches_total: 3 },
-  columns: dayList.columns,
-  candidates: dayList.candidates.map((candidate, index) => ({ ...candidate, new_since_list: index === 1 })),
   new_count: 1,
   created_at: "2026-03-10T14:00:04Z",
 };
+const job = { state: "running" as const, as_of: "2026-03-10T14:00:00Z", done: 0, total: 0, message: null };
+// The scan repopulated the list: the second name is new in this scan, and the third was kept (opened) though it no longer matches.
+const repopulated = {
+  ...dayList,
+  status: "practicing" as const,
+  clock: "2026-03-10T14:00:00Z",
+  rescan: scan,
+  rescan_job: { ...job, state: "done" as const, done: 3, total: 3 },
+  universe: { ...dayList.universe, shown: 2, matches_total: 3 },
+  candidates: [
+    { ...dayList.candidates[0]!, new_since_list: false },
+    { ...dayList.candidates[1]!, new_since_list: true },
+    { ...dayList.candidates[1]!, symbol: "KEPT", held_over: true },
+  ],
+};
 const practising = { ...dayList, status: "practicing" as const, clock: "2026-03-10T13:30:00Z", rescan: scan };
 
-test("a list with a re-scan parses, and the scan must say which names are new since the list", () => {
-  const parsed = DayListSchema.parse(practising);
-  assert.deepEqual(parsed.rescan?.candidates.map((candidate) => candidate.new_since_list), [false, true]);
-  const bare: Record<string, unknown> = { ...scan.candidates[0]! };
-  delete bare.new_since_list;
-  assert.equal(DayListSchema.safeParse({ ...practising, rescan: { ...scan, candidates: [bare] } }).success, false);
-  assert.equal(DayListSchema.safeParse({ ...practising, rescan: undefined }).success, false); // null is the empty answer, not a missing key
+test("a list with a re-scan and its job parses, and every name must say whether it is new or kept", () => {
+  const parsed = DayListSchema.parse(repopulated);
+  assert.deepEqual(parsed.candidates.map((candidate) => [candidate.new_since_list, candidate.held_over]), [[false, false], [true, false], [false, true]]);
+  assert.equal(parsed.rescan_job?.state, "done");
+  const bare: Record<string, unknown> = { ...repopulated.candidates[0]! };
+  delete bare.held_over;
+  assert.equal(DayListSchema.safeParse({ ...repopulated, candidates: [bare] }).success, false);
+  assert.equal(DayListSchema.safeParse({ ...repopulated, rescan_job: undefined }).success, false); // null is the empty answer, not a missing key
+  assert.equal(DayListSchema.safeParse({ ...repopulated, rescan_job: { ...job, state: "paused" } }).success, false);
 });
 
 test("a re-scan is open once the day clock has started and is closed after the day ends", () => {
@@ -522,11 +588,37 @@ test("a re-scan is open once the day clock has started and is closed after the d
 test("the scan says the clock it ran at, where its data stops, and what is new, without naming the day", () => {
   const label = rescanLabel(scan);
   assert.match(label, /^Scan 2 · run at 10:00 AM ET · data through 9:45 AM$/);
-  assert.equal(rescanCounts(scan), "2 of 3 matched · 1 new since your list");
-  for (const text of [label, rescanCounts(scan)]) {
+  const counts = rescanCounts(repopulated);
+  assert.equal(counts, "2 of 3 matched · 1 new in this scan · 1 kept because you opened or starred them");
+  assert.equal(heldOverCount(repopulated), 1);
+  assert.equal(rescanCounts({ ...repopulated, candidates: repopulated.candidates.slice(0, 2) }), "2 of 3 matched · 1 new in this scan");
+  for (const text of [label, counts]) {
     assert.equal(containsPracticeBannedTerm(text), false, text);
     assert.doesNotMatch(text, /2026|Mar/);
   }
+});
+
+test("a running re-scan says it is counting, then how many names it has read, then that it is applying the filters", () => {
+  assert.equal(rescanRunning({ rescan_job: job }), true);
+  assert.equal(rescanRunning({ rescan_job: { ...job, state: "done" } }), false);
+  assert.equal(rescanRunning({ rescan_job: null }), false);
+  assert.equal(rescanProgressText(job), "Re-scanning at 10:00 AM ET · counting the names to read…");
+  const reading = { ...job, done: 37, total: 134 };
+  assert.equal(rescanProgressText(reading), "Re-scanning at 10:00 AM ET · read 37 of 134 names (27%)");
+  assert.equal(rescanPercent(reading), 27);
+  assert.equal(rescanPercent(job), 0);
+  assert.equal(rescanProgressText({ ...job, done: 134, total: 134 }), "Re-scanning at 10:00 AM ET · applying your filters to 134 names…");
+  for (const text of [rescanProgressText(job), rescanProgressText(reading), PRACTICE_COPY.dayRescanDone, PRACTICE_COPY.dayRescanCurrent]) {
+    assert.equal(containsPracticeBannedTerm(text), false, text);
+    assert.doesNotMatch(text, /2026|Mar/);
+  }
+});
+
+test("a scan at the day clock is current; the clock moving past it makes it older", () => {
+  assert.equal(rescanCurrent({ clock: "2026-03-10T14:00:00Z", rescan: scan }), true);
+  assert.equal(rescanCurrent({ clock: "2026-03-10T14:01:00Z", rescan: scan }), false);
+  assert.equal(rescanCurrent({ clock: "2026-03-10T14:00:00Z", rescan: null }), false);
+  assert.equal(rescanCurrent({ clock: null, rescan: scan }), false);
 });
 
 test("a scan older than the day clock says so, and a current one does not", () => {

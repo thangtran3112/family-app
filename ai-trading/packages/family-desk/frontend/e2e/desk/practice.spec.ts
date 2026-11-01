@@ -309,10 +309,22 @@ test.describe("Practice", () => {
     await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
     const table = page.getByRole("table", { name: "Candidates" });
     await expect(table.getByRole("row", { name: /TSLA/ })).toBeVisible();
-    // D-013, D-014, D-018: the P7 layout (the portfolio, the thread and the block on the left), the chips read as on, the P7 columns.
+    // D-013, D-014, D-018: the P7 layout, the chips read as on, the P7 columns. The left rail holds only the block's days (#317):
+    // today is open and the rest wait; the portfolio and the thread box are not on the day list.
     const left = page.getByRole("complementary", { name: "Practice side panel" });
     await expect(left).toContainText("This block · 5 days");
-    await expect(left).toContainText("Risk plan comes from the thread: ");
+    await expect(left.getByRole("listitem").filter({ hasText: "Day 1 · Fri" })).toContainText("Open now");
+    await expect(left.getByRole("listitem").filter({ hasText: "Day 2" })).toContainText("Opens after day 1");
+    await expect(left).not.toContainText("Risk plan comes from the thread");
+    // The risk plan is the right rail's Thread plan section (a drawer tab at 1180): the plan set above, and where it comes from.
+    if (test.info().project.name === "desktop-1180") await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.threadPlanTitle }).click();
+    const planRail =
+      test.info().project.name === "desktop-1180" ? page.getByRole("dialog", { name: PRACTICE_COPY.threadPlanTitle }) : page.getByRole("complementary", { name: "Day context" });
+    await expect(planRail).toContainText(PRACTICE_COPY.threadPlanFrom);
+    await expect(planRail).toContainText(/Stop on every entry\s*Yes/);
+    await expect(planRail).toContainText(/Max loss, pretend dollars a day\s*\$600/);
+    await expect(planRail).toContainText(/Max trades a day\s*3/);
+    if (test.info().project.name === "desktop-1180") await page.keyboard.press("Escape");
     await expect(page.getByRole("list", { name: "Filters" }).getByRole("listitem").first()).toHaveAttribute("data-active", "true");
     await expect(page.getByText("Chosen at setup")).toBeVisible();
     for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
@@ -324,13 +336,43 @@ test.describe("Practice", () => {
     await expect(page.locator("body")).not.toContainText(DAY);
     await expectCleanScreen(page);
 
-    // Peek: the chart before the open, from the row's own button. It adds nothing to the portfolio and starts no clock.
-    await table.getByRole("row", { name: /TSLA/ }).getByRole("button", { name: "Peek at TSLA" }).click();
-    await expect(page.getByRole("heading", { name: "TSLA", level: 3 })).toBeVisible();
-    await expect(page.getByRole("tab", { name: PRACTICE_COPY.dayPeekToday })).toBeVisible(); // D-019: no "Today so far" on a replay day
+    // Peek: the chart before the open, from the row's own button, in a wide drawer. It adds nothing to the portfolio and starts no clock.
+    const peekButton = table.getByRole("row", { name: /TSLA/ }).getByRole("button", { name: "Peek at TSLA" });
+    await peekButton.click();
+    const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPeek });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: "TSLA", level: 3 })).toBeVisible();
+    await expect(drawer.getByRole("tab", { name: PRACTICE_COPY.dayPeekToday })).toBeVisible(); // D-019: no "Today so far" on a replay day
     await expect(page.getByText("Today so far")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /star/i })).toHaveCount(0); // practice = portfolio: no star
     await expectCleanScreen(page);
+    // The drawer is wider than the 320 px rail it replaced, so the chart is readable; its levels are named in a legend in normal
+    // flow above the plot (never printed over the candles), and no two entries touch.
+    const chartBox = (await drawer.getByRole("region", { name: "TSLA 1m market chart" }).boundingBox())!;
+    expect(chartBox.width, "the Peek chart is wider than the old 320 px rail").toBeGreaterThan(500);
+    expect(chartBox.height, "the Peek chart is taller than the old 260 px").toBeGreaterThanOrEqual(380);
+    const legend = drawer.getByTestId("peek-levels");
+    await expect(legend).toContainText(PRACTICE_COPY.dayPeekLevels);
+    await expect(legend).toContainText("List price");
+    const entries = await legend.locator(":scope > div > span").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON() as { left: number; right: number; top: number; bottom: number }));
+    expect(entries.length, "List price and at least one more level").toBeGreaterThanOrEqual(2);
+    entries.forEach((a, i) => {
+      expect(a.right, `legend entry ${i} stays inside the drawer`).toBeLessThanOrEqual(chartBox.x + chartBox.width + 1);
+      expect(a.bottom, `legend entry ${i} sits above the plot, not over it`).toBeLessThanOrEqual(chartBox.y + 1);
+      entries.slice(i + 1).forEach((b, j) => {
+        const apart = a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5;
+        expect(apart, `legend entries ${i} and ${i + 1 + j} do not overlap`).toBe(true);
+      });
+    });
+    // Escape closes it and hands focus back to the row's Peek button; the Close button does the same.
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(peekButton).toBeFocused();
+    await peekButton.click();
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("button", { name: PRACTICE_COPY.dayPeekClose }).click();
+    await expect(drawer).toHaveCount(0);
+    await expect(peekButton).toBeFocused();
 
     // Click the row: the practice chart opens at the window start, with a way back to the list.
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
@@ -840,7 +882,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
   });
 
-  test("the portfolio reflects a new held position, in the replay and back on the day page", async ({ page, context }) => {
+  test("the portfolio reflects a new held position, in the replay and on the Portfolio tab, never on the day list", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     await openFirstDay(page);
@@ -861,19 +903,20 @@ test.describe("Practice day list · fix wave 5S", () => {
     await page.keyboard.press("b");
     await expect(flat.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
     await expect(flat.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(flat.getByTestId("portfolio-count")).toHaveText("1 open position");
     const held = ((await flat.locator('[data-symbol="TSLA"]').textContent()) ?? "").match(/Long \d+ @ \$[\d,.]+/)![0];
-    // Back to the day list: the same row, and a day total.
+    // Back to the day list: it shows the list of names only, no portfolio section and no Portfolio tab in the right rail.
     await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
     await page.waitForURL(dayUrl);
-    const onDay =
-      test.info().project.name === "desktop-1180"
-        ? await (async () => {
-            await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-            return page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
-          })()
-        : page.getByRole("complementary", { name: "Practice side panel" }).getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-    await expect(onDay.locator('[data-symbol="TSLA"]')).toContainText(held);
-    await expect(onDay.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    // The Portfolio subtab holds the same row and a day total.
+    await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: "Portfolio", exact: true }).click();
+    await page.waitForURL(/\/practice\/thread\?id=\d+&tab=portfolio/);
+    const onTab = page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
+    await expect(onTab.locator('[data-symbol="TSLA"]')).toContainText(held);
+    await expect(onTab.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(onTab.getByTestId("portfolio-count")).toHaveText("1 open position");
   });
 
   test("no star or names cap anywhere on the day page", async ({ page, context }) => {
@@ -1014,7 +1057,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(row.getByRole("button", { name: "Start a new plan" })).toBeVisible();
   });
 
-  test("the portfolio sits above the block's days in the left rail at 1440 and opens from the right rail at 1180, and the block's days stay open for a short block (D-097)", async ({ page, context }) => {
+  test("the day list's left rail carries only the block's days, with no portfolio at 1440 or at 1180, and the block's days stay open for a short block (D-097)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await saveFilter(context);
     const dialog = await openNewPlan(page);
@@ -1025,16 +1068,8 @@ test.describe("Practice day list · fix wave 5S", () => {
     const side = page.getByRole("complementary", { name: "Practice side panel" });
     const block = side.locator("details").filter({ hasText: "This block · 10 days" });
     await expect(block, "ten days or fewer start open").toHaveAttribute("open", "");
-    if (test.info().project.name === "desktop-1180") {
-      await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-      await expect(page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio })).toContainText(PRACTICE_COPY.dayPortfolioEmpty);
-      return;
-    }
-    const portfolio = side.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-    await expect(portfolio).toContainText(PRACTICE_COPY.dayPortfolioEmpty);
-    const [p, b] = [(await portfolio.boundingBox())!, (await block.boundingBox())!];
-    expect(p.y, "the portfolio comes first").toBeLessThan(b.y);
-    expect(p.y + p.height, "and it is on screen, above the footer").toBeLessThan(page.viewportSize()!.height - 40);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio }), "the portfolio is the Portfolio tab's").toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
   });
 
   test("a day that is not chosen and one that is not found say different things, and a journal with no thread says one thing (D-116, D-117)", async ({ page }) => {

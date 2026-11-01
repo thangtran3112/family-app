@@ -2101,6 +2101,11 @@
             "title": "Filters",
             "type": "array"
           },
+          "held_over": {
+            "default": false,
+            "title": "Held Over",
+            "type": "boolean"
+          },
           "list_price": {
             "title": "List Price",
             "type": "number"
@@ -2123,6 +2128,11 @@
             },
             "title": "Metrics",
             "type": "object"
+          },
+          "new_since_list": {
+            "default": false,
+            "title": "New Since List",
+            "type": "boolean"
           },
           "operands": {
             "additionalProperties": {
@@ -3603,6 +3613,16 @@
               }
             ]
           },
+          "rescan_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RescanJobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review": {
             "anyOf": [
               {
@@ -3700,6 +3720,7 @@
           "warnings",
           "relist",
           "rescan",
+          "rescan_job",
           "peek",
           "journal",
           "review",
@@ -10879,135 +10900,60 @@
         "title": "ReplaySignalOut",
         "type": "object"
       },
-      "RescanCandidateOut": {
-        "description": "A name a re-scan shows. `new_since_list`: the day list did not hold it (it cannot be starred or practised).",
-        "properties": {
-          "filters": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Filters",
-            "type": "array"
-          },
-          "list_price": {
-            "title": "List Price",
-            "type": "number"
-          },
-          "matched_since": {
-            "format": "date-time",
-            "title": "Matched Since",
-            "type": "string"
-          },
-          "metrics": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Metrics",
-            "type": "object"
-          },
-          "new_since_list": {
-            "title": "New Since List",
-            "type": "boolean"
-          },
-          "operands": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Operands",
-            "type": "object"
-          },
-          "price_at": {
-            "format": "date-time",
-            "title": "Price At",
-            "type": "string"
-          },
-          "prior_close": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prior Close"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "integer"
-          },
-          "rank_value": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank Value"
-          },
-          "reported_before_open": {
-            "title": "Reported Before Open",
-            "type": "boolean"
-          },
-          "symbol": {
-            "title": "Symbol",
-            "type": "string"
-          }
-        },
-        "required": [
-          "rank",
-          "symbol",
-          "filters",
-          "rank_value",
-          "matched_since",
-          "operands",
-          "list_price",
-          "price_at",
-          "prior_close",
-          "reported_before_open",
-          "metrics",
-          "new_since_list"
-        ],
-        "title": "RescanCandidateOut",
-        "type": "object"
-      },
-      "RescanOut": {
-        "description": "The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.\nIt is a view of its own: the frozen list above is unchanged. `seq` counts the day's scans.",
+      "RescanJobOut": {
+        "description": "A re-scan's progress, for the screen to poll while `state` is `running`: `done` of `total` symbols read\n(`total` is 0 until the job has counted them), at the day clock `as_of`. `failed` carries a plain `message`.",
         "properties": {
           "as_of": {
             "format": "date-time",
             "title": "As Of",
             "type": "string"
           },
-          "candidates": {
-            "items": {
-              "$ref": "#/components/schemas/RescanCandidateOut"
-            },
-            "title": "Candidates",
-            "type": "array"
+          "done": {
+            "title": "Done",
+            "type": "integer"
           },
-          "columns": {
-            "items": {
-              "$ref": "#/components/schemas/ListColumnOut"
-            },
-            "title": "Columns",
-            "type": "array"
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "as_of",
+          "done",
+          "total",
+          "message"
+        ],
+        "title": "RescanJobOut",
+        "type": "object"
+      },
+      "RescanOut": {
+        "description": "The latest re-scan of the day's filters (02o-b2), run at the day clock `as_of` on data through `data_through`.\nIts names ARE the day list above (the scan repopulated it); this is the label: which scan, the clock it ran at, the\ntime its data stops, and how many names it added. `seq` counts the day's scans.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
           },
           "created_at": {
             "format": "date-time",
@@ -11026,18 +10972,12 @@
           "seq": {
             "title": "Seq",
             "type": "integer"
-          },
-          "universe": {
-            "$ref": "#/components/schemas/ListUniverseOut"
           }
         },
         "required": [
           "seq",
           "as_of",
           "data_through",
-          "universe",
-          "columns",
-          "candidates",
           "new_count",
           "created_at"
         ],
@@ -19540,7 +19480,7 @@
     },
     "/api/desk/replay/day-lists/{day_list_id}/rescan": {
       "post": {
-        "description": "Re-run the day's filters at the day clock (02o-b2). The answer is the day list with `rescan` set to the new scan,\nlabelled with the clock it ran at; the frozen list, stars and review are untouched. A 409 before the first name is\npractised (no clock yet) and after the day ends. A second scan at the same clock returns the first.",
+        "description": "Start a re-scan of the day's filters at the day clock (02o-b2) and answer at once: the day list with\n`rescan_job` `running` and its `done` of `total` symbols read. Poll `GET /day-lists/{id}` while it runs. When\n`state` is `done` the scan has REPOPULATED the list (its names, columns and counts are the scan's) and `rescan`\nlabels it with the clock it ran at. Stars, the day's sessions and the review stay; a name she opened or starred\nthat the scan no longer matches stays on the list as `held_over`. A scan already running is joined, not doubled;\na second scan at the same clock starts nothing. A 409 before the first name is practised (no clock yet) and\nafter the day ends.",
         "operationId": "rescan_day_api_desk_replay_day_lists__day_list_id__rescan_post",
         "parameters": [
           {
