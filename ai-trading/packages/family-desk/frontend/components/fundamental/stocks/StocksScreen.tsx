@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { FundamentalRightRail } from "@/components/fundamental/rail/FundamentalRightRail";
 import { useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { parseSymbolParam, stockHref, stockViewFromHash } from "@/lib/desk/researchView";
 import { useHash } from "@/lib/desk/useHash";
 import styles from "../fundamental.module.css";
@@ -33,7 +35,7 @@ export function StocksScreen() {
         <HoldingPicks current={symbol} />
       </div>
       {raw !== null && symbol === null ? (
-        <p className={styles.banner} role="status">That doesn&apos;t look like a ticker · try a symbol such as AAPL</p>
+        <Banner>That doesn&apos;t look like a ticker · try a symbol such as AAPL</Banner>
       ) : symbol ? (
         <StockPage key={symbol} symbol={symbol} view={stockViewFromHash(hash)} />
       ) : (
@@ -50,7 +52,7 @@ function SymbolForm() {
     <form className={local.symbolForm} method="get" action="/stocks" role="search" aria-label="Open a stock">
       <label className={styles.caption} htmlFor="fund-stock-symbol">Symbol</label>
       <input id="fund-stock-symbol" className={local.symbolInput} name="symbol" type="text" autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={15} placeholder="AAPL" />
-      <button type="submit" className={styles.button}>Open</button>
+      <Button type="submit" size="md">Open</Button>
     </form>
   );
 }
@@ -63,7 +65,7 @@ function HoldingPicks({ current }: { current: string | null }) {
     <nav className={local.picks} aria-label="Your holdings">
       <span className={styles.caption}>Your holdings</span>
       {rows.map((row) => (
-        <a key={row.symbol} className={local.pick} href={stockHref(row.symbol)} aria-current={row.symbol === current ? "page" : undefined}>{row.symbol}</a>
+        <Button key={row.symbol} href={stockHref(row.symbol)} size="sm" aria-current={row.symbol === current ? "page" : undefined}>{row.symbol}</Button>
       ))}
     </nav>
   );

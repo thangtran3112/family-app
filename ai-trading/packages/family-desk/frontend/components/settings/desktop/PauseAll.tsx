@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui/Field";
 import styles from "./settingsDesktop.module.css";
 
 /** Stops every alert strategy while on (`pause_all`, 02m §a3.9). The parent saves it. */
@@ -10,11 +11,8 @@ export function PauseAll({ paused, disabled, onChange }: Readonly<{ paused: bool
       </div>
       <div className={styles.switchGroup}>
         <span className={styles.stateWord}>{paused ? "On" : "Off"}</span>
-        <input
+        <Switch
           id="pause-all"
-          type="checkbox"
-          role="switch"
-          className={styles.switch}
           checked={paused}
           disabled={disabled}
           aria-describedby="pause-all-note"

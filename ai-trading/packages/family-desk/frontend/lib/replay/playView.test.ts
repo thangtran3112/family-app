@@ -127,6 +127,10 @@ test("the stop pause's Exit targets the paused name, on the chart or through ano
   // a side that is not known leaves Exit off
   assert.equal(pauseExit({ symbol: "COIN" }, { sessionSymbol: "NVDA", openSide: "long", strip: stripRows }), null);
   assert.equal(pauseExit({ symbol: "AMD" }, { sessionSymbol: "NVDA", openSide: "long", strip: null }), null);
+  // A day has no strip: another name's side comes from the portfolio.
+  const held = [{ symbol: "ANET", side: "short" as const }, { symbol: "SMCI", side: null }];
+  assert.deepEqual(pauseExit({ symbol: "ANET" }, { sessionSymbol: "NVDA", openSide: "long", strip: null, held }), { symbol: "ANET", kind: "short_exit", here: false });
+  assert.equal(pauseExit({ symbol: "SMCI" }, { sessionSymbol: "NVDA", openSide: "long", strip: null, held }), null);
 });
 
 test("open holds are counted from the strip", () => {

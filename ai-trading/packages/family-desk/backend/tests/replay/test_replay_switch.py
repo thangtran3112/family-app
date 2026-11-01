@@ -1,6 +1,7 @@
-"""Switching names on the shared day clock and the plan's name cap (02o-b2): the reveal rules (nothing past the clock,
-what a name did while she was elsewhere is shown as history and not scored), the catch-up, the place_mark guards, one
-open trade a day, and `maxSymbols`. Real Postgres; the synthetic world of `tests/daily_world.py`.
+"""Switching names on the shared day clock (02o-b2): the reveal rules (nothing past the clock, what a name did while
+she was elsewhere is shown as history and not scored), the catch-up, the place_mark guards, one open trade a day, and
+no cap on the names a day opens (an old plan's `maxSymbols` is ignored). Real Postgres; the synthetic world of
+`tests/daily_world.py`.
 
 The world: GAPPER sits at 106 in the premarket and 110 from the open; FLAT sits at 50 all day. The day list holds GAPPER
 only, so the tests add FLAT and SPLITTER to its candidates the way the v1 tests do."""
@@ -207,30 +208,46 @@ def test_a_catch_up_past_the_ask_still_moves_the_clock_only_forward(db_session, 
     assert row.revealed_through == et(DAYS[0], "11:00")  # the clock never goes back
 
 
-# -- one open trade a day ------------------------------------------------------------------------------------
+# -- one open trade a name ---------------------------------------------------------------------------------
 
 
-def test_a_switch_with_a_trade_open_is_refused_until_the_trade_is_closed(db_session, user_id, svc) -> None:
+def test_a_switch_with_a_trade_open_keeps_it_open_and_opens_the_next_name(db_session, user_id, svc) -> None:
+    """Flipped from the one-open-trade-a-day rule: a day holds one open trade per NAME (up to five), so switching with a
+    trade open is no longer a 409 and the second name can be entered too. The one-per-name rule stays."""
     make_thread(db_session, user_id)
     row, gapper = _names(db_session, user_id, svc, "FLAT")
     _advance(db_session, user_id, svc, gapper.id, "09:35")
     _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)
     assert plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"][0]["has_open_trade"] is True
-    with pytest.raises(ReplayProblem) as caught:
-        plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    assert caught.value.status == 409 and caught.value.path == "symbol"
-    assert caught.value.message.startswith("Close your open GAPPER practice trade before you switch to FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)  # was a 409: "Close your open GAPPER ..."
     assert plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc).id == gapper.id  # resuming it is fine
-    _mark(db_session, user_id, svc, gapper.id, "long_exit")
-    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)
+    _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)  # was a 422: "... one open trade a day"
+    held = {
+        s["symbol"]: s["has_open_trade"] for s in plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"]
+    }
+    assert held == {"GAPPER": True, "FLAT": True}
     with pytest.raises(ReplayProblem) as entry:
-        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # not through the route either
-    assert entry.value.message == "Close your open FLAT practice trade first · one open trade a day"
+        _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=1)  # a second trade on the same name
+    assert entry.value.message == "Close the open practice trade first"
+    _mark(db_session, user_id, svc, gapper.id, "long_exit")
     _mark(db_session, user_id, svc, gapper.id, "note", note="watching")  # a note is not an entry
 
 
-# -- no cap on names a day ----------------------------------------------------------------------------------
+# -- no cap on names -----------------------------------------------------------------------------------------
+
+
+def test_a_day_opens_every_list_name_without_a_cap(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    # a plan saved before the cap went away still carries `maxSymbols`: it is accepted and ignored
+    row, _ = _names(db_session, user_id, svc, "FLAT", "SPLITTER", maxSymbols=1)
+    assert db_session.get(PracticePlan, row.plan_id).spec["maxSymbols"] == 1
+    for symbol in ("FLAT", "SPLITTER"):
+        assert plan_mod.start_session(db_session, user_id, row.id, symbol, svc).day_list_id == row.id
+    assert {s.symbol for s in db_session.query(ReplaySession).filter_by(day_list_id=row.id)} == {
+        "GAPPER",
+        "FLAT",
+        "SPLITTER",
+    }
 
 
 def test_a_plan_has_no_names_cap_and_a_second_name_opens(db_session, user_id, svc) -> None:
@@ -245,6 +262,28 @@ def test_a_plan_has_no_names_cap_and_a_second_name_opens(db_session, user_id, sv
         "FLAT",
         "SPLITTER",
     }
+
+
+def test_the_plan_no_longer_reports_a_name_cap(db_session, user_id, svc) -> None:
+    make_thread(db_session, user_id)
+    row, _ = _names(db_session, user_id, svc)
+    assert "max_symbols" not in plan_mod.plan_out(db_session, db_session.get(PracticePlan, row.plan_id))
+
+
+def test_stars_have_no_cap_whatever_an_old_plans_maxsymbols_says(db_session, user_id, svc) -> None:
+    """Stars still serve the swing focus names, with no cap: an old plan's `maxSymbols` of 2 limits nothing."""
+    make_thread(db_session, user_id)
+    extra = [f"N{i}" for i in range(20)]
+    row, _ = _names(db_session, user_id, svc, *extra, maxSymbols=2)
+    names = ["GAPPER", *extra]
+
+    def star(symbols):
+        return plan_mod.patch_day_list(
+            db_session, user_id, row.id, svc, watch=symbols, notes=None, rating=None, fields={"watch"}
+        )
+
+    assert len(star(names[:20]).watch) == 20
+    assert [w["symbol"] for w in star(names).watch] == names  # the 21st star is kept
 
 
 def test_an_old_plan_that_saved_maxsymbols_no_longer_limits_names_or_stars(db_session, user_id, svc) -> None:

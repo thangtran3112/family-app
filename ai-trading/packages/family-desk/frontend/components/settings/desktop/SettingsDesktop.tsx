@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError, type DeskApiProblem } from "@/lib/api/client";
 import { withMaskValues } from "@/lib/desk/mask";
@@ -136,7 +138,7 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
           {saveStatus === "error" && (
             <>
               <span className={styles.errorText}>Preferences were not saved. Try again.</span>
-              <button type="button" className={styles.button} onClick={retry} disabled={disabled}>Retry</button>
+              <Button onClick={retry} disabled={disabled}>Retry</Button>
             </>
           )}
         </div>
@@ -150,15 +152,13 @@ export function SettingsDesktop({ title }: { title: "Settings" | "More" }) {
 
       <div className={styles.stack} aria-busy={disabled}>
         {owned.warnings.length > 0 && (
-          <div className={styles.warning} role="status">
-            <p>
-              Stored preferences were invalid. {owned.warnings.includes("quiet_hours") && "Quiet hours display the safe 22:00–07:00 default. "}
-              External delivery is paused for invalid preferences. Change a preference to replace these values.
-            </p>
-            <button type="button" className={styles.button} onClick={() => saveOwned(owned.channels)} disabled={disabled}>
-              Repair preferences
-            </button>
-          </div>
+          <Banner
+            tone="warn"
+            action={<Button onClick={() => saveOwned(owned.channels)} disabled={disabled}>Repair preferences</Button>}
+          >
+            Stored preferences were invalid. {owned.warnings.includes("quiet_hours") && "Quiet hours display the safe 22:00–07:00 default. "}
+            External delivery is paused for invalid preferences. Change a preference to replace these values.
+          </Banner>
         )}
 
         <section className={styles.card} aria-labelledby="settings-default-view">

@@ -3,8 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Button } from "@/components/ui/Button";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
-import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
+import { Freshness, useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -75,7 +76,7 @@ export function WatchlistDesktop() {
   } else if (active === null) {
     body = (
       <EmptyBlock title="Add symbols to start watching">
-        <button type="button" className={`${styles.button} ${styles.primary}`} onClick={() => setManage(true)}>Create a list</button>
+        <Button variant="primary" onClick={() => setManage(true)}>Create a list</Button>
       </EmptyBlock>
     );
   } else if (table.data === null) {
@@ -104,10 +105,10 @@ export function WatchlistDesktop() {
       <header className={styles.header}>
         <div className={styles.titleGroup}>
           <h1 className={styles.title}>{active?.name ?? "Watchlists"}</h1>
-          {active && <FreshnessBadge stamp={table.data?.stamp ?? null} connection={table.connection} />}
+          {active && <Freshness stamp={table.data?.stamp ?? null} connection={table.connection} />}
         </div>
         <div className={styles.actions}>
-          <button type="button" className={styles.button} aria-pressed={manage} onClick={() => setManage(!manage)}>Manage</button>
+          <Button aria-pressed={manage} onClick={() => setManage(!manage)}>Manage</Button>
           <span className={styles.slots}>Quote slots: {slotsText(slots)}</span>
         </div>
       </header>

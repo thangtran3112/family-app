@@ -51,6 +51,7 @@ test("totals tiles hide the dollars and keep the percentages", () => {
   assert.deepEqual(masked.map((tile) => tile.value), [MASK, MASK, MASK, MASK]);
   assert.equal(masked.find((tile) => tile.key === "day")?.note, "+0.52% today");
   assert.equal(masked.find((tile) => tile.key === "unrealized")?.note, "+27.5%");
+  assert.deepEqual(masked.map((tile) => tile.tone), ["neutral", "up", "up", "neutral"], "plain totals carry the shared neutral tone, signed ones the sign");
   const shown = totalsTiles(holdings.totals, false);
   assert.deepEqual(shown.map((tile) => tile.value), ["$483,720", "+$2,521", "+$104,280", "$379,440"]);
   clean(masked);

@@ -2,14 +2,15 @@
 
 import type { Condition, Operand } from "@ai-trading/contracts";
 import type { Problem } from "@/lib/api/schemas";
-import { OperandPicker } from "@/components/screener/editor/ConditionRows";
+import { OperandPicker } from "@/components/conditions/OperandPicker";
 import { ALERT_OPERATORS, PATTERN_OPTIONS, operatorOf, withOperator, type AlertForm, type AlertOperatorId } from "@/lib/desk/alertForm";
 import { problemsForRow } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
-import editorStyles from "@/components/screener/editor/editor.module.css";
+import { Button } from "@/components/ui/Button";
+import { ChoiceGroup, Field, FieldError, FieldRow, NumberInput, Radio, ReadOnlyValue, Select } from "@/components/ui/Field";
 import styles from "./setup.module.css";
-import { problemLine } from "@/lib/desk/problemCopy";
+import { problemLine } from "@/lib/desk/problems";
 
 type CompareCondition = Extract<Condition, { left: Operand; right: Operand }>;
 type PatternCondition = Extract<Condition, { op: "pattern" }>;
@@ -35,55 +36,43 @@ export function ConditionStep({ form, onChange, problems }: {
     <section className={styles.card} aria-labelledby="alert-step-condition">
       <h2 id="alert-step-condition" className={styles.stepTitle}>Condition</h2>
       {form.rows.length > 1 && (
-        <div role="group" aria-label="Match" className={editorStyles.controls}>
-          <label className={editorStyles.option}>
-            <input type="radio" name="alert-match" checked={form.mode === "all"} onChange={() => onChange({ ...form, mode: "all" })} />
-            All of these
-          </label>
-          <label className={editorStyles.option}>
-            <input type="radio" name="alert-match" checked={form.mode === "any"} onChange={() => onChange({ ...form, mode: "any" })} />
-            Any of these
-          </label>
-        </div>
+        <ChoiceGroup label="Match">
+          <Radio name="alert-match" label="All of these" checked={form.mode === "all"} onChange={() => onChange({ ...form, mode: "all" })} />
+          <Radio name="alert-match" label="Any of these" checked={form.mode === "any"} onChange={() => onChange({ ...form, mode: "any" })} />
+        </ChoiceGroup>
       )}
       {form.rows.map((row, index) => (
-        <div key={index} className={editorStyles.condition}>
-          <div className={editorStyles.controls}>
-            <ConditionFields row={row} onChange={(next) => setRow(index, next)} />
-            <button
-              type="button"
-              className={editorStyles.button}
+        <div key={index} className={styles.condition}>
+          <FieldRow className={styles.controls}>
+            <ConditionFields row={row} index={index} onChange={(next) => setRow(index, next)} />
+            <Button
               aria-label={`Remove condition ${index + 1}`}
               disabled={form.rows.length === 1}
               onClick={() => onChange({ ...form, rows: form.rows.filter((_, position) => position !== index) })}
             >
               Remove
-            </button>
-          </div>
-          {rowProblems[index]!.map((problem, position) => (
-            <span key={position} className={editorStyles.problem}>{problemLine(problem)}</span>
-          ))}
+            </Button>
+          </FieldRow>
+          {rowProblems[index]!.map((problem, position) => <FieldError key={position}>{problemLine(problem)}</FieldError>)}
         </div>
       ))}
-      {loose.map((problem, index) => (
-        <span key={index} className={editorStyles.problem}>{problemLine(problem)}</span>
-      ))}
-      <div className={editorStyles.controls}>
-        <button type="button" className={editorStyles.button} onClick={() => onChange({ ...form, rows: [...form.rows, BLANK_ROW] })}>Add condition</button>
-      </div>
+      {loose.map((problem, index) => <FieldError key={index}>{problemLine(problem)}</FieldError>)}
+      <FieldRow>
+        <Button onClick={() => onChange({ ...form, rows: [...form.rows, BLANK_ROW] })}>Add condition</Button>
+      </FieldRow>
     </section>
   );
 }
 
 /** One row's fields. Patterns and comparisons the picker can express are editable; anything else reads as text. */
-function ConditionFields({ row, onChange }: { row: Condition; onChange: (next: Condition) => void }) {
+function ConditionFields({ row, index, onChange }: { row: Condition; index: number; onChange: (next: Condition) => void }) {
+  const fieldId = (name: string) => `alert-condition-${index}-${name}`;
   const operator = (
-    <label className={editorStyles.field}>
-      <span>Operator</span>
-      <select value={operatorOf(row) ?? ""} onChange={(event) => onChange(withOperator(row, event.target.value as AlertOperatorId))}>
+    <Field id={fieldId("operator")} label="Operator">
+      <Select value={operatorOf(row) ?? ""} onChange={(event) => onChange(withOperator(row, event.target.value as AlertOperatorId))}>
         {ALERT_OPERATORS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
-      </select>
-    </label>
+      </Select>
+    </Field>
   );
 
   if (isPattern(row)) {
@@ -92,28 +81,24 @@ function ConditionFields({ row, onChange }: { row: Condition; onChange: (next: C
     return (
       <>
         {operator}
-        <label className={editorStyles.field}>
-          <span>Pattern</span>
-          <select value={row.pattern} onChange={(event) => edit({ pattern: event.target.value })}>
+        <Field id={fieldId("pattern")} label="Pattern">
+          <Select value={row.pattern} onChange={(event) => edit({ pattern: event.target.value })}>
             {PATTERN_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
-        </label>
-        <label className={editorStyles.field}>
-          <span>Trend</span>
-          <select value={row.trend ?? "any"} onChange={(event) => edit({ trend: event.target.value === "any" ? undefined : event.target.value })}>
+          </Select>
+        </Field>
+        <Field id={fieldId("trend")} label="Trend">
+          <Select value={row.trend ?? "any"} onChange={(event) => edit({ trend: event.target.value === "any" ? undefined : event.target.value })}>
             <option value="any">Any trend</option>
             <option value="after_downtrend">After a downtrend</option>
             <option value="after_uptrend">After an uptrend</option>
-          </select>
-        </label>
-        <label className={editorStyles.field}>
-          <span>Trend bars</span>
-          <input type="number" min={3} max={50} value={row.trendBars ?? ""} onChange={(event) => edit({ trendBars: count(event.target.value) })} />
-        </label>
-        <label className={editorStyles.field}>
-          <span>Within last bars</span>
-          <input type="number" min={1} max={5} value={row.withinBars ?? ""} onChange={(event) => edit({ withinBars: count(event.target.value) })} />
-        </label>
+          </Select>
+        </Field>
+        <Field id={fieldId("trend-bars")} label="Trend bars">
+          <NumberInput min={3} max={50} value={row.trendBars ?? ""} onChange={(event) => edit({ trendBars: count(event.target.value) })} />
+        </Field>
+        <Field id={fieldId("within-bars")} label="Within last bars">
+          <NumberInput min={1} max={5} value={row.withinBars ?? ""} onChange={(event) => edit({ withinBars: count(event.target.value) })} />
+        </Field>
       </>
     );
   }
@@ -124,15 +109,14 @@ function ConditionFields({ row, onChange }: { row: Condition; onChange: (next: C
         <OperandPicker label="Metric" operand={row.left} defs={OPERAND_CATALOG} onChange={(left) => onChange({ ...row, left })} />
         {operator}
         {"pct" in row && (
-          <label className={editorStyles.field}>
-            <span>Within %</span>
-            <input type="number" min={0} max={100} step="any" value={Number.isFinite(row.pct) ? row.pct : ""} onChange={(event) => onChange({ ...row, pct: number(event.target.value) })} />
-          </label>
+          <Field id={fieldId("pct")} label="Within %">
+            <NumberInput min={0} max={100} step="any" value={Number.isFinite(row.pct) ? row.pct : ""} onChange={(event) => onChange({ ...row, pct: number(event.target.value) })} />
+          </Field>
         )}
         <OperandPicker label="Compared with" operand={row.right} defs={OPERAND_CATALOG} allowNumber onChange={(right) => onChange({ ...row, right })} />
       </>
     );
   }
 
-  return <p className={editorStyles.static}>{describeCondition(row)}</p>;
+  return <ReadOnlyValue>{describeCondition(row)}</ReadOnlyValue>;
 }

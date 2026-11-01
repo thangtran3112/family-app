@@ -107,6 +107,13 @@ a:focus-visible {
   outline-offset: 3px;
 }
 
+/* Tone → colour (components/ui/tone.ts): the one table. Primitives read `var(--tone)`; a state maps to a tone name in lib/desk/*View.ts. */
+[data-tone="up"] { --tone: var(--color-up); }
+[data-tone="down"] { --tone: var(--color-down); }
+[data-tone="warn"] { --tone: var(--color-amber); }
+[data-tone="neutral"] { --tone: var(--color-muted); }
+[data-tone="ai"] { --tone: var(--color-ai); }
+
 /* Shared utilities (the only two besides tokens): opt-in, so adding them changes no existing element. */
 .sr-only {
   position: absolute;

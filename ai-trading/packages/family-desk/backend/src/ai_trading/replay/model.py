@@ -25,6 +25,8 @@ class Mark:
     trade_no: int | None = None
     source: Literal["her", "auto"] = "her"
     id: int | None = None
+    # an entry's snapshot of the day's P/L (realized + open at the clock); null: unknown
+    day_pnl_usd: float | None = None
 
 
 @dataclass(frozen=True)

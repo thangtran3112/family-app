@@ -25,8 +25,8 @@ test("a row with many strategies shows two chips and counts the rest, so the Act
     { kind: "armed" as const, label: "High-of-day break armed", at: null },
   ];
   const { shown, hidden } = strategyChips(tags);
-  assert.deepEqual(shown, [{ text: "ORB 15m armed", armed: true }, { text: "VWAP reclaim armed", armed: true }]);
-  assert.deepEqual(hidden, [{ text: "Hammer 15m · 10:15 AM", armed: false }, { text: "High-of-day break armed", armed: true }]);
+  assert.deepEqual(shown, [{ text: "ORB 15m armed", tone: "warn" }, { text: "VWAP reclaim armed", tone: "warn" }]);
+  assert.deepEqual(hidden, [{ text: "Hammer 15m · 10:15 AM", tone: "neutral" }, { text: "High-of-day break armed", tone: "warn" }]);
   assert.deepEqual(strategyChips(tags.slice(0, 2)).hidden, []);
   assert.deepEqual(strategyChips([]), { shown: [], hidden: [] });
 });

@@ -3,7 +3,7 @@ import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import { AlertLogSchema, AlertStrategiesSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
-import { actionError, actionFor, actionLabel, channelsText, defaultAlertFilters, frequencyText, lastFiredText, logRowText, sourceText, statusText, toQuery, triggerText } from "./alertsView.ts";
+import { actionError, actionFor, actionLabel, channelsText, defaultAlertFilters, frequencyText, lastFiredText, deliveryTone, logRowText, sourceText, statusText, statusTone, toQuery, triggerText } from "./alertsView.ts";
 
 const strategies = AlertStrategiesSchema.parse(loadDeskFixture("alert_strategies"));
 const log = AlertLogSchema.parse(loadDeskFixture("alerts_log"));
@@ -52,4 +52,9 @@ test("log rows show delivery wording, with held and no-channel visible", () => {
   assert.match(text.when, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   assert.doesNotMatch(text.what, /null|undefined/);
   assert.equal(logRowText({ ...log[0]!, symbol: null, strategy_name: null }).what, "— · Alert");
+});
+
+test("status and delivery map onto the tone model: a word plus colour, warn for a hold", () => {
+  assert.deepEqual((["active", "paused", "draft", "expired"] as const).map(statusTone), ["up", "warn", "neutral", "neutral"]);
+  assert.deepEqual(["delivered", "failed", "held_quiet_hours", "no_channel"].map(deliveryTone), ["up", "down", "warn", "warn"]);
 });

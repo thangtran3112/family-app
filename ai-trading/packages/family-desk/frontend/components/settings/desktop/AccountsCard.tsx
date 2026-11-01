@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useHoldings } from "@/components/shell/desktop/DeskContext";
 import { ImportLine } from "@/components/fundamental/shared/ImportLine";
+import { Field, FieldRow, Input, Select } from "@/components/ui/Field";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import type { AccountType, HoldingAccount } from "@/lib/api/fundamentalSchemas";
@@ -69,37 +70,34 @@ function AccountRow({ account, disabled, onSaved }: Readonly<{ account: HoldingA
   const locked = disabled || busy;
   return (
     <div className={styles.block} data-testid={`account-${account.id}`}>
-      <div className={styles.inline}>
-        <label className={styles.fieldLabel} htmlFor={`account-label-${account.id}`}>Account name</label>
-        <input
-          id={`account-label-${account.id}`}
-          data-testid={`account-label-${account.id}`}
-          className={`${styles.input} ${styles.textInput}`}
-          type="text"
-          value={label}
-          maxLength={ACCOUNT_LABEL_MAX + 10}
-          disabled={locked}
-          onChange={(event) => { setLabel(event.currentTarget.value); setMessage(null); }}
-          onBlur={commitLabel}
-          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-        />
-        <label className={styles.fieldLabel} htmlFor={`account-type-${account.id}`}>Account type</label>
-        <select
-          id={`account-type-${account.id}`}
-          data-testid={`account-type-${account.id}`}
-          className={styles.input}
-          value={type}
-          disabled={locked}
-          onChange={(event) => {
-            const next = event.currentTarget.value as AccountType;
-            setType(next);
-            void save({ type: next });
-          }}
-        >
-          {ACCOUNT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
+      <FieldRow>
+        <Field id={`account-label-${account.id}`} label="Account name">
+          <Input
+            data-testid={`account-label-${account.id}`}
+            value={label}
+            maxLength={ACCOUNT_LABEL_MAX + 10}
+            disabled={locked}
+            onChange={(event) => { setLabel(event.currentTarget.value); setMessage(null); }}
+            onBlur={commitLabel}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+          />
+        </Field>
+        <Field id={`account-type-${account.id}`} label="Account type">
+          <Select
+            data-testid={`account-type-${account.id}`}
+            value={type}
+            disabled={locked}
+            onChange={(event) => {
+              const next = event.currentTarget.value as AccountType;
+              setType(next);
+              void save({ type: next });
+            }}
+          >
+            {ACCOUNT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </Field>
         {message && <span className={message.tone === "error" ? styles.errorText : styles.saved} role="status">{message.text}</span>}
-      </div>
+      </FieldRow>
     </div>
   );
 }

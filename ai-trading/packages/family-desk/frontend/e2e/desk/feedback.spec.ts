@@ -280,7 +280,7 @@ test.describe("the dashboard", () => {
       duplicate_of: null,
     };
     const opened = { at: "2026-10-15T23:00:00Z", actor: "user", from_status: null, to_status: "open", note: null };
-    // The browser's clock is the seed clock (Thu 2026-10-15 20:00 ET), so "2 h ago" is 18:00 ET.
+    // The browser's clock is the seed clock (Thu 2026-10-15 20:00 ET), so "2 hr ago" is 18:00 ET.
     const working = {
       ...base,
       status: "in_progress",
@@ -300,7 +300,7 @@ test.describe("the dashboard", () => {
     await openDesk(page, `/feedback?id=${id}`);
     if (isNarrow()) await page.getByRole("tab", { name: "Report" }).click();
     const detail = rail(page);
-    await expect(detail.getByText("Claude Code is working on this · updated 2 h ago")).toBeVisible();
+    await expect(detail.getByText("Claude Code is working on this · updated 2 hr ago")).toBeVisible();
     await expect(detail.getByText("picked up by Claude Code")).toBeVisible();
     await expect(detail.getByText("In progress", { exact: true })).toBeVisible();
     await expectCleanScreen(page);

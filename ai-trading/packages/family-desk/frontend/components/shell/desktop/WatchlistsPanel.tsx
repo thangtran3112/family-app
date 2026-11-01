@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Delta } from "@/components/ui/Delta";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { useFreshness } from "@/components/ui/FreshnessBadge";
+import { useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { WatchlistTableRow } from "@/lib/api/schemas";
-import { changeTone, formatPrice, formatSignedPct } from "@/lib/desk/format";
+import { formatPrice } from "@/lib/desk/format";
 import { COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { ShellBand } from "@/lib/desk/viewport";
@@ -74,7 +75,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
       key: "change",
       label: "Chg %",
       align: "right",
-      render: (row) => <span className={styles[changeTone(row.change_pct)]}>{formatSignedPct(row.change_pct)}</span>,
+      render: (row) => <Delta value={row.change_pct} />,
     },
     {
       key: "tag",
@@ -84,7 +85,7 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
         const labels = row.tags.map((tag) => tag.label).join(", ");
         return (
           <span className={styles.tagDot} title={labels}>
-            <span className={styles.srOnly}>Strategy tag: {labels}</span>
+            <span className="sr-only">Strategy tag: {labels}</span>
           </span>
         );
       },

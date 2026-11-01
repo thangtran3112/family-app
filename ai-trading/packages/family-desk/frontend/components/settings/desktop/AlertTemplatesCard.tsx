@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui/Field";
 import { COPY } from "@/lib/desk/freshness";
 import { ALERT_TEMPLATES } from "@/lib/settings/fundamentalView";
 import styles from "./settingsDesktop.module.css";
@@ -13,11 +14,8 @@ export function AlertTemplatesCard() {
             <label className={styles.rowTitle} htmlFor={`template-${template.id}`}>{template.title}</label>
             <p className={styles.note}>{template.note}</p>
           </div>
-          <input
+          <Switch
             id={`template-${template.id}`}
-            type="checkbox"
-            role="switch"
-            className={styles.switch}
             checked={false}
             disabled
             aria-disabled="true"

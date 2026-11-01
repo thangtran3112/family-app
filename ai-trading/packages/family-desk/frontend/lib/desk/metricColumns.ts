@@ -1,6 +1,7 @@
 import type { HoldingRow, Rating } from "../api/fundamentalSchemas.ts";
 import { METRIC_KEYS, type MetricKey } from "../settings/fundamental.ts";
-import { changeTone, EMPTY_VALUE, formatNumber, formatPct, formatSignedPct, type Tone } from "./format.ts";
+import type { Tone } from "../../components/ui/tone.ts";
+import { EMPTY_VALUE, formatNumber, formatPct, formatSignedPct, signTone } from "./format.ts";
 import { formatUsdPrice, maskedQuantity } from "./mask.ts";
 
 // The Columns menu and the Fundamentals table (02n §c4): one label and one display kind per metric key, numbers or null.
@@ -48,7 +49,7 @@ export function metricCell(key: MetricKey, fundamentals: Fundamentals, masked: b
     case "pct":
       return plain(typeof value === "number" ? formatPct(value, 1) : EMPTY_VALUE);
     case "pct_signed":
-      return typeof value === "number" ? { text: formatSignedPct(value, 1), tone: changeTone(value), rating: null } : plain(EMPTY_VALUE);
+      return typeof value === "number" ? { text: formatSignedPct(value, 1), tone: signTone(value), rating: null } : plain(EMPTY_VALUE);
     case "price":
       return plain(typeof value === "number" ? formatUsdPrice(value) : EMPTY_VALUE);
     case "count":

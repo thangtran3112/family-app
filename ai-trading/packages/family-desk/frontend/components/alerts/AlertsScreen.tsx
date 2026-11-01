@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { defaultAlertFilters, toQuery, type AlertFilterState, type AlertsTab } from "@/lib/desk/alertsView";
@@ -42,7 +44,7 @@ export function AlertsScreen() {
     body = filtersActive
       ? (
         <EmptyBlock title="No alert strategies match these filters">
-          <button type="button" className={styles.button} onClick={() => setFilters(defaultAlertFilters())}>Clear filters</button>
+          <Button onClick={() => setFilters(defaultAlertFilters())}>Clear filters</Button>
         </EmptyBlock>
       )
       : (
@@ -68,7 +70,7 @@ export function AlertsScreen() {
     <div className={styles.root}>
       <header className={styles.header}>
         <h1 className={styles.title}>Alerts</h1>
-        <Link href="/alerts/new" className={`${styles.button} ${styles.primary}`}>New alert strategy</Link>
+        <Button variant="primary" href="/alerts/new" client>New alert strategy</Button>
       </header>
       <div role="tablist" aria-label="Alerts views" className={styles.tabs}>
         {TABS.map((item) => (
@@ -85,7 +87,7 @@ export function AlertsScreen() {
         ))}
       </div>
       <div className={styles.body}>
-        {banner && <p role="status" className={styles.banner}>{banner}</p>}
+        {banner && <Banner>{banner}</Banner>}
         {tab === "list" ? (
           <>
             <AlertFilters value={filters} onChange={setFilters} />

@@ -2,23 +2,21 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { AlertLogRow } from "@/lib/api/schemas";
 import { loadAlertLog } from "@/lib/desk/alerts";
-import { LOG_STATUSES, logRowText } from "@/lib/desk/alertsView";
+import { deliveryTone, LOG_STATUSES, logRowText } from "@/lib/desk/alertsView";
 import { channelLabel, deliveryLabel } from "@/lib/desk/labels";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "./alerts.module.css";
-
-/** Delivered is up, a hold or no channel is amber, a failure is down. */
-export const deliveryTone = (status: string) => (status === "delivered" ? "up" : status === "failed" ? "down" : "amber");
 
 const columns: DenseColumn<AlertLogRow>[] = [
   { key: "when", label: "Time", render: (row) => logRowText(row).when },
   { key: "what", label: "Alert", render: (row) => logRowText(row).what },
   { key: "channel", label: "Channel", render: (row) => channelLabel(row.channel) },
-  { key: "result", label: "Result", render: (row) => <span className={styles.chip} data-tone={deliveryTone(row.status)}>{deliveryLabel(row.status)}</span> },
+  { key: "result", label: "Result", render: (row) => <Badge tone={deliveryTone(row.status)}>{deliveryLabel(row.status)}</Badge> },
   { key: "detail", label: "Detail", render: (row) => <span className={styles.wrap}>{row.detail}</span> },
 ];
 

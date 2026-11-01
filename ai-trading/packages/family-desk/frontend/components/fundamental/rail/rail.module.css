@@ -5,7 +5,7 @@
 .row[data-band="1180"] { grid-template-columns: minmax(0, 1fr) auto auto; }
 .row:hover { background: var(--color-raised); }
 .row[aria-pressed="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
-.row:focus-visible { outline: 2px solid var(--color-amber); outline-offset: -2px; }
+.row:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .symbol { font-weight: var(--weight-bold); }
 .weight { color: var(--color-muted); text-align: right; }
 .change { text-align: right; }

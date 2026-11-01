@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { components } from "../api/openapi.js";
-import { ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
+import { OpenTradeSchema, ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
 import { ThreadBriefSchema, ThreadSummarySchema } from "./threads.ts";
 
 // Response shapes of the daily-list practice endpoints (02o-b v1), checked against the generated OpenAPI the way
@@ -140,7 +140,7 @@ const RescanSchema = z.object({
 
 export const StarSchema = z.object({ symbol: z.string(), starred_clock: timestamp }) satisfies z.ZodType<components["schemas"]["StarOut"]>;
 
-/** A name she has practiced today: the day strip's row (02o-b2). */
+/** A name she has opened today: a row of the day's portfolio (02o-b2). Flat unless `position` is set. */
 export const DaySessionSchema = z.object({
   id: finite.int(),
   symbol: z.string(),
@@ -148,9 +148,23 @@ export const DaySessionSchema = z.object({
   revealed_through: timestamp,
   /** Behind the day clock: its next advance catches it up, and it cannot be marked until then. */
   behind_clock: z.boolean(),
-  /** The day holds one open trade at a time: close it before moving to another name. */
+  /** The name holds an open trade: one per name, at most five across the day. */
   has_open_trade: z.boolean(),
+  /** Closed trades on this name today, and their P/L. */
+  trades: finite.int(),
+  realized_usd: finite,
+  /** The open trade marked at the DAY CLOCK (not the name's own playhead); null when flat. */
+  position: OpenTradeSchema.nullable(),
 }) satisfies z.ZodType<components["schemas"]["DaySessionOut"]>;
+
+/** The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock. */
+export const DayPnlSchema = z.object({
+  realized_usd: finite,
+  open_usd: finite,
+  total_usd: finite,
+  open_count: finite.int(),
+  as_of: timestamp,
+}) satisfies z.ZodType<components["schemas"]["DayPnlOut"]>;
 
 // -- peek -----------------------------------------------------------------------------------------------------
 
@@ -282,6 +296,7 @@ export const DayListSchema = z.object({
   watch_check: WatchCheckSchema,
   clock: timestamp.nullable(),
   sessions: z.array(DaySessionSchema),
+  day_pnl: DayPnlSchema,
   /** The SIMULATED balance and today's realized P/L of the thread this day books into (02r). */
   thread: ThreadBriefSchema.nullable(),
   warnings: z.array(z.string()),
@@ -321,6 +336,7 @@ export type DayListStatus = z.infer<typeof DayListStatusSchema>;
 export type PracticePlan = z.infer<typeof PracticePlanSchema>;
 export type OpenNext = z.infer<typeof OpenNextSchema>;
 export type DayList = z.infer<typeof DayListSchema>;
+export type DayPnl = z.infer<typeof DayPnlSchema>;
 export type ListColumn = z.infer<typeof ListColumnSchema>;
 export type Candidate = z.infer<typeof CandidateSchema>;
 export type Rescan = NonNullable<DayList["rescan"]>;

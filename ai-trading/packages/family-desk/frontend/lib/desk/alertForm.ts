@@ -2,6 +2,7 @@ import { PATTERN_IDS, type Condition } from "@ai-trading/contracts";
 import type { AlertStrategySpecV1 } from "@ai-trading/contracts/alert-strategy";
 import type { Problem } from "../api/schemas.ts";
 import { COPY, type AlertsRuntimeState } from "./freshness.ts";
+import { operatorLabel } from "../spec/labels.ts";
 import { symbolsFromText, type ConditionMode } from "./filterForm.ts";
 import { operandFor } from "./operands.ts";
 import { previewInterval } from "./screenerView.ts";
@@ -140,16 +141,9 @@ export function alertFormToSpec(form: AlertForm): Record<string, unknown> {
 export const isAlertFormDirty = (original: AlertForm, draft: AlertForm): boolean => JSON.stringify(alertFormToSpec(original)) !== JSON.stringify(alertFormToSpec(draft));
 
 // Operators: the TradingView set mapped to the contract, plus "pattern detected" (02l D10).
-export const ALERT_OPERATORS = [
-  { id: "crosses_above", label: "Crossing up" },
-  { id: "crosses_below", label: "Crossing down" },
-  { id: "gt", label: "Greater than" },
-  { id: "gte", label: "At least" },
-  { id: "lt", label: "Less than" },
-  { id: "lte", label: "At most" },
-  { id: "within_pct", label: "Within % of" },
-  { id: "pattern", label: "Pattern detected" },
-] as const;
+/** Alerts list the crossings first. Every comparison reads as in lib/spec/labels.ts; a pattern is the one operator that is not a comparison. */
+const ALERT_COMPARE_ORDER = ["crosses_above", "crosses_below", "gt", "gte", "lt", "lte", "within_pct"] as const;
+export const ALERT_OPERATORS = [...ALERT_COMPARE_ORDER.map((id) => ({ id, label: operatorLabel(id) })), { id: "pattern" as const, label: "a pattern appears" }];
 export type AlertOperatorId = (typeof ALERT_OPERATORS)[number]["id"];
 
 export function operatorOf(condition: Condition): AlertOperatorId | null {
@@ -206,4 +200,3 @@ export function groupProblems(problems: readonly Problem[]): Record<Step, Proble
   return groups;
 }
 
-export const problemsBanner = (count: number): string | null => (count === 0 ? null : count === 1 ? "1 problem to fix" : `${count} problems to fix`);

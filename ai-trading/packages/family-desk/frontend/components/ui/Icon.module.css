@@ -1,0 +1,3 @@
+.icon { flex-shrink: 0; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5px; }
+/* One stroke weight at every size: the 24-grid paths do not thin out when drawn at 12 or 16 px. */
+.icon path { vector-effect: non-scaling-stroke; }

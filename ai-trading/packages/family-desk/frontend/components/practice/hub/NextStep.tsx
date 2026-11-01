@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { planCard } from "@/lib/replay/dayView";
+import { loadDayList } from "@/lib/desk/replay";
+import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { openTodayText, planCard } from "@/lib/replay/dayView";
 import type { PracticePlan } from "@/lib/replay/daily";
 import { planFinishedLine, swingGate } from "@/lib/replay/overviewView";
 import { swingCardView } from "@/lib/replay/swing";
@@ -34,7 +37,24 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
   // A day plan whose last day has ended: its summary sits above the one action, "Start a new plan" (D-096).
   const planDone = !closed && thread.mode === "day" && plan !== null && plan.thread_id === thread.id && plan.finished;
   const title = closed ? PRACTICE_COPY.threadClosedTitle : swing ? PRACTICE_COPY.overviewNext : view.label;
-  const result = <ResultLine pnl={view.pnl} line={view.line} />;
+  // A day under way may hold open trades: the server prices them at the day clock (the day list's `day_pnl`).
+  const live = useDeskQuery(`thread-open:${today?.day_list_id}`, (signal) => loadDayList(today?.day_list_id ?? 0, {}, { signal }), {
+    enabled: !closed && today?.status === "practicing",
+  });
+  const openText = live.data === null ? null : openTodayText(live.data.day_pnl);
+  const result = (
+    <>
+      <ResultLine pnl={view.pnl} line={view.line} />
+      {live.data !== null && openText !== null && (
+        <>
+          {" · "}
+          <span data-testid="today-open"><ResultLine pnl={live.data.day_pnl.open_usd} line={openText} /></span>
+          {" "}
+          <SimulatedBadge />
+        </>
+      )}
+    </>
+  );
 
   return (
     <section className={`${styles.panel} ${styles.nextStep}`} aria-label="Practice day">

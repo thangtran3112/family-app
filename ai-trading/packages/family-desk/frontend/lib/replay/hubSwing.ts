@@ -2,7 +2,7 @@ import { practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingOpenNext, UniversePreview } from "./swingApi.ts";
 import type { SwingProblems } from "./swingSetup.ts";
 import { startBlocker } from "./universeView.ts";
-import { niceTicks, type Box, type Tick } from "./threadChart.ts";
+import { balanceTicks, type Box, type Tick } from "./threadChart.ts";
 import type { SwingEquityPoint } from "./threads.ts";
 
 // What the hub and the thread journal need for swing threads beyond F1's `swing*.ts`: the thread modes,
@@ -125,7 +125,7 @@ export type SwingCurve = {
 export function swingCurveLayout(series: readonly SwingEquityPoint[], startingBalance: number, days: number, box: Box): SwingCurve {
   const plot = { x: box.left, y: box.top, width: box.width - box.left - box.right, height: box.height - box.top - box.bottom };
   const values = [startingBalance, ...series.flatMap((point) => [point.balance_usd, point.equity_usd])];
-  const ticks = niceTicks(Math.min(...values), Math.max(...values));
+  const ticks = balanceTicks(Math.min(...values), Math.max(...values));
   const lo = ticks[0]!;
   const hi = ticks[ticks.length - 1]!;
   const yOf = (value: number) => plot.y + plot.height - ((value - lo) / (hi - lo || 1)) * plot.height;

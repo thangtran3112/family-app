@@ -104,11 +104,28 @@
 .warn { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--color-amber); font-size: var(--text-micro); line-height: var(--line-micro); }
 
 /* Day names (02o-b2): switch between the names of the day */
-.dayNames { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
-.switchButton { min-height: 24px; flex: 0 0 auto; margin-left: auto; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-amber); font: inherit; font-size: var(--text-micro); font-weight: var(--weight-semibold); cursor: pointer; }
-.switchButton:hover:not(:disabled) { background: var(--color-raised); }
-.switchButton:disabled { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
-.switchButton:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.portfolio { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.portfolioHead { display: flex; align-items: center; justify-content: flex-end; }
+.portfolioItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-bottom: 1px solid var(--color-hairline); }
+.portfolioRow { display: flex; width: 100%; min-width: 0; min-height: 32px; flex-direction: column; justify-content: center; gap: 2px; border: 0; background: transparent; padding: 2px var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
+.portfolioItem > .portfolioRow[data-inert="true"] { grid-column: 1 / -1; }
+.portfolioRow:hover:not([aria-disabled="true"]):not([aria-current="true"]):not([data-inert="true"]) { background: var(--color-raised); }
+.portfolioRow[aria-current="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); cursor: default; }
+.portfolioRow[aria-disabled="true"] { cursor: default; opacity: 0.7; }
+.portfolioRow[data-inert="true"] { cursor: default; }
+.portfolioRow:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+.portfolioLine { display: flex; min-width: 0; align-items: baseline; gap: var(--space-2); }
+.portfolioPosition { min-width: 0; flex: 1 1 auto; color: var(--color-muted); }
+.portfolioPnl { flex: 0 0 auto; min-width: 9ch; text-align: right; font-weight: var(--weight-semibold); }
+.portfolioMeta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--color-muted); font-size: var(--text-micro); }
+.portfolioStop { color: var(--color-amber); font-weight: var(--weight-semibold); }
+/* A held row's Exit: a text button beside the row, not a bordered control (the row itself is the switch). */
+.portfolioExit { min-height: 28px; border: 0; background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; }
+.portfolioExit:hover:not(:disabled) { color: var(--color-amber); }
+.portfolioExit:disabled { color: var(--color-muted); cursor: default; }
+.portfolioExit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.portfolioItem:has(.portfolioStop) { box-shadow: inset 2px 0 0 var(--color-amber); }
+.portfolioTotal { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-2); margin: 0; border-top: 1px solid var(--color-hairline); padding-top: var(--space-2); font-size: var(--text-label); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); }
 .problem { margin: 0; color: var(--color-amber); font-size: var(--text-label); }
 .unseen { opacity: 0.6; }
 .unseenNote { color: var(--color-muted); font-size: var(--text-micro); }

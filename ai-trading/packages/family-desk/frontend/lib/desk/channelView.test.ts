@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SettingsChannelsSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
-import { channelRow, channelRows, hasExternalChannel, NO_CHANNEL_NOTE, testResultText, validateChatId } from "./channelView.ts";
+import { channelRow, channelRows, channelStatusTone, hasExternalChannel, NO_CHANNEL_NOTE, testResultText, validateChatId } from "./channelView.ts";
 
 const channels = SettingsChannelsSchema.parse(loadDeskFixture("settings_channels"));
 
@@ -37,4 +37,8 @@ test("chat id and test result wording", () => {
   assert.equal(testResultText("not_connected"), "Not connected yet · nothing was sent");
   assert.equal(testResultText("failed"), "Couldn't send the test · Try again");
   assert.equal(testResultText("error"), "Couldn't send the test · Try again");
+});
+
+test("only a connected channel reads as up; everything else is neutral", () => {
+  assert.deepEqual((["always_on", "connected", "not_connected", "not_set_up"] as const).map(channelStatusTone), ["neutral", "up", "neutral", "neutral"]);
 });

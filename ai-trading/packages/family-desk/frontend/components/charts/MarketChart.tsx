@@ -13,7 +13,7 @@ import type {
   WhitespaceData,
 } from "lightweight-charts";
 import { formatPrice } from "@/lib/desk/format";
-import { qualityLabel } from "@/lib/labels";
+import { qualityPhrase } from "@/lib/desk/freshness";
 import type { ChartType } from "@/lib/replay/chartPrefs";
 import {
   candlestickData,
@@ -557,7 +557,7 @@ export function MarketChart({
     >
       {!bare && <header className={styles.chartHeader}>
         <h2>{interval.toUpperCase()} chart · {symbol}</h2>
-        <p><span>{qualityLabel(quality)}</span><span>{formatAsOf(asOf)}</span></p>
+        <p><span>{qualityPhrase(quality)}</span><span>{formatAsOf(asOf)}</span></p>
       </header>}
       {!bare && (overlays.length > 0 || panes.length > 0) && <div className={styles.chartLegend}>
         {overlays.map((overlay) => <span key={overlay.id}><i style={{ backgroundColor: overlay.color }} />{overlay.label}</span>)}

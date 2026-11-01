@@ -2,7 +2,9 @@
 
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
-import { FreshnessBadge, useFreshness } from "@/components/ui/FreshnessBadge";
+import { Banner } from "@/components/ui/Banner";
+import { Button } from "@/components/ui/Button";
+import { Freshness, useFreshness } from "@/components/ui/Freshness";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadDashboard } from "@/lib/desk/dashboard";
 import { alertsBanner, COPY } from "@/lib/desk/freshness";
@@ -31,11 +33,11 @@ export function DashboardScreen() {
       <header className={styles.head}>
         <h1 className={styles.pageTitle}>Today</h1>
         {/* "Updating" shows in the caption below; the badge keeps showing the data's own state. */}
-        {data && <FreshnessBadge stamp={data.stamp} session={data.market.session} connection={connection} feed />}
+        {data && <Freshness stamp={data.stamp} session={data.market.session} connection={connection} feed />}
         {query.updating && <span className={styles.caption}>{COPY.updating}</span>}
-        <button type="button" className={styles.button} onClick={query.refresh}>Refresh</button>
+        <Button size="md" onClick={query.refresh}>Refresh</Button>
       </header>
-      {banner && <p role="status" className={styles.banner}>{banner}</p>}
+      {banner && <Banner>{banner}</Banner>}
       {data ? (
         <>
           <MarketStrip strip={data.market_strip} nextUpdateAt={data.market.next_update_at ?? null} dim={dim} staleMark={fresh.mark} />

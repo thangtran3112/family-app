@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { MarketChart } from "@/components/charts/MarketChart";
+import { Button } from "@/components/ui/Button";
+import { Delta } from "@/components/ui/Delta";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { StatTile } from "@/components/ui/StatTile";
 import type { Research } from "@/lib/api/fundamentalSchemas";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadBars } from "@/lib/desk/charts";
@@ -21,14 +25,11 @@ export function StockOverview({ symbol, research, price }: { symbol: string; res
         <Consensus consensus={research.consensus} />
         <div className={local.stack}>
           <Targets targets={research.targets} />
-          <section className={styles.panel} aria-label="Alerts">
-            <div className={styles.panelHead}>
-              <h2 className={styles.panelTitle}>Alerts</h2>
-              {/* The alert templates are not started (02n §e): the button stays off and the reason is in words. */}
-              <button type="button" className={styles.button} disabled aria-describedby="fund-alert-note">Alert me</button>
-            </div>
+          <Panel aria-label="Alerts">
+            {/* The alert templates are not started (02n §e): the button stays off and the reason is in words. */}
+            <PanelHeader title="Alerts" actions={<Button size="md" disabled aria-describedby="fund-alert-note">Alert me</Button>} />
             <p className={styles.muted} id="fund-alert-note">{COPY.alertTemplatesNotStarted}</p>
-          </section>
+          </Panel>
         </div>
       </div>
       <PriceChart symbol={symbol} />
@@ -39,48 +40,52 @@ export function StockOverview({ symbol, research, price }: { symbol: string; res
 function Consensus({ consensus }: { consensus: Research["consensus"] }) {
   if (consensus === null) {
     return (
-      <section className={styles.panel} aria-label="Consensus EPS" data-testid="fund-consensus">
-        <h2 className={styles.panelTitle}>Consensus EPS</h2>
-        <p className={styles.muted}>{NO_CONSENSUS}</p>
-      </section>
+      <div data-testid="fund-consensus">
+        <Panel aria-label="Consensus EPS">
+          <PanelHeader title="Consensus EPS" />
+          <p className={styles.muted}>{NO_CONSENSUS}</p>
+        </Panel>
+      </div>
     );
   }
   const quarters = consensusPeriods(consensus.quarters);
   const years = consensusPeriods(consensus.fiscal_years);
   const surprises = surpriseRows(consensus.surprises);
   return (
-    <section className={styles.panel} aria-label="Consensus EPS" data-testid="fund-consensus">
-      <h2 className={styles.panelTitle}>Consensus EPS</h2>
-      <p className={styles.muted}>Next earnings · {nextEarningsText(consensus.next_earnings)}</p>
-      <ul className={local.revisions} aria-label="Estimate revisions">
-        {revisionCells(consensus.revisions).map((cell) => (
-          <li key={cell.label} className={styles.tile}>
-            <span className={styles.tileLabel}>Revised {cell.label}</span>
-            <span className={`${styles.tileValue} ${cell.text === EPS_NOT_ENOUGH_HISTORY ? local.quiet : ""}`}>
-              <span className={styles.tone} data-tone={cell.tone}>{cell.text}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <PeriodTable caption="Quarterly estimates" rows={quarters} />
-      <PeriodTable caption="Fiscal-year estimates" rows={years} />
-      {surprises.length > 0 && (
-        <table className={local.table} aria-label="Earnings surprises">
-          <thead><tr><th scope="col">Quarter</th><th scope="col">Actual</th><th scope="col">Estimate</th><th scope="col">Surprise</th><th scope="col">Result</th></tr></thead>
-          <tbody>
-            {surprises.map((row) => (
-              <tr key={row.period}>
-                <th scope="row">{row.period}</th>
-                <td>{row.actual}</td>
-                <td>{row.estimate}</td>
-                <td><span className={styles.tone} data-tone={row.tone}>{row.surprise}</span></td>
-                <td>{row.word}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+    <div data-testid="fund-consensus">
+      <Panel aria-label="Consensus EPS">
+        <PanelHeader title="Consensus EPS" />
+        <p className={styles.muted}>Next earnings · {nextEarningsText(consensus.next_earnings)}</p>
+        <ul className={local.revisions} aria-label="Estimate revisions">
+          {revisionCells(consensus.revisions).map((cell) => (
+            <li key={cell.label}>
+              <StatTile
+                label={`Revised ${cell.label}`}
+                value={cell.text === EPS_NOT_ENOUGH_HISTORY ? <span className={local.quiet}>{cell.text}</span> : <Delta tone={cell.tone}>{cell.text}</Delta>}
+              />
+            </li>
+          ))}
+        </ul>
+        <PeriodTable caption="Quarterly estimates" rows={quarters} />
+        <PeriodTable caption="Fiscal-year estimates" rows={years} />
+        {surprises.length > 0 && (
+          <table className={local.table} aria-label="Earnings surprises">
+            <thead><tr><th scope="col">Quarter</th><th scope="col">Actual</th><th scope="col">Estimate</th><th scope="col">Surprise</th><th scope="col">Result</th></tr></thead>
+            <tbody>
+              {surprises.map((row) => (
+                <tr key={row.period}>
+                  <th scope="row">{row.period}</th>
+                  <td>{row.actual}</td>
+                  <td>{row.estimate}</td>
+                  <td><Delta tone={row.tone}>{row.surprise}</Delta></td>
+                  <td>{row.word}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Panel>
+    </div>
   );
 }
 
@@ -102,19 +107,21 @@ function PeriodTable({ caption, rows }: { caption: string; rows: ReturnType<type
 function Targets({ targets }: { targets: Research["targets"] }) {
   const view = targets === null ? null : targetsView(targets);
   return (
-    <section className={styles.panel} aria-label="Analyst targets" data-testid="fund-targets">
-      <h2 className={styles.panelTitle}>Analyst targets</h2>
-      {view === null ? (
-        <p className={styles.muted}>No analyst targets for this symbol yet</p>
-      ) : (
-        <dl className={local.kvList}>
-          <div className={local.kv}><dt>Low</dt><dd>{view.low}</dd></div>
-          <div className={local.kv}><dt>Mean</dt><dd>{view.mean}</dd></div>
-          <div className={local.kv}><dt>High</dt><dd>{view.high}</dd></div>
-          <div className={local.kv}><dt>Ratings</dt><dd>{view.counts}</dd></div>
-        </dl>
-      )}
-    </section>
+    <div data-testid="fund-targets">
+      <Panel aria-label="Analyst targets">
+        <PanelHeader title="Analyst targets" />
+        {view === null ? (
+          <p className={styles.muted}>No analyst targets for this symbol yet</p>
+        ) : (
+          <dl className={local.kvList}>
+            <div className={local.kv}><dt>Low</dt><dd>{view.low}</dd></div>
+            <div className={local.kv}><dt>Mean</dt><dd>{view.mean}</dd></div>
+            <div className={local.kv}><dt>High</dt><dd>{view.high}</dd></div>
+            <div className={local.kv}><dt>Ratings</dt><dd>{view.counts}</dd></div>
+          </dl>
+        )}
+      </Panel>
+    </div>
   );
 }
 
@@ -127,26 +134,30 @@ function PriceChart({ symbol }: { symbol: string }) {
   const [interval, setInterval] = useState<Interval>("1d");
   const bars = useDeskQuery(`bars:${symbol}:${interval}`, (signal) => loadBars(symbol, interval, { days: DAYS[interval] }, { signal }));
   return (
-    <section className={styles.panel} aria-label="Price chart" data-testid="fund-chart">
-      <div className={local.chartHead}>
-        <h2 className={styles.panelTitle}>Price</h2>
-        <div className={local.toggle} role="group" aria-label="Chart range">
-          {(["1d", "1w"] as const).map((value) => (
-            <button key={value} type="button" className={local.toggleButton} aria-pressed={interval === value} onClick={() => setInterval(value)}>{value === "1d" ? "1D" : "1W"}</button>
-          ))}
-        </div>
-      </div>
-      {bars.data ? (
-        bars.data.bars.length > 0 ? (
-          <MarketChart symbol={symbol} interval={interval} bars={bars.data.bars} quality={bars.data.quality} asOf={bars.data.as_of} height={260} />
+    <div data-testid="fund-chart">
+      <Panel aria-label="Price chart">
+        <PanelHeader
+          title="Price"
+          actions={
+            <div className={local.toggle} role="group" aria-label="Chart range">
+              {(["1d", "1w"] as const).map((value) => (
+                <Button key={value} variant="ghost" size="sm" aria-pressed={interval === value} onClick={() => setInterval(value)}>{value === "1d" ? "1D" : "1W"}</Button>
+              ))}
+            </div>
+          }
+        />
+        {bars.data ? (
+          bars.data.bars.length > 0 ? (
+            <MarketChart symbol={symbol} interval={interval} bars={bars.data.bars} quality={bars.data.quality} asOf={bars.data.as_of} height={260} />
+          ) : (
+            <EmptyBlock title="No price history for this symbol yet" />
+          )
+        ) : bars.error !== null ? (
+          <ErrorBlock subject="chart" onRetry={bars.refresh} />
         ) : (
-          <EmptyBlock title="No price history for this symbol yet" />
-        )
-      ) : bars.error !== null ? (
-        <ErrorBlock subject="chart" onRetry={bars.refresh} />
-      ) : (
-        <LoadingBlock label="Loading chart…" height={260} />
-      )}
-    </section>
+          <LoadingBlock label="Loading chart…" height={260} />
+        )}
+      </Panel>
+    </div>
   );
 }

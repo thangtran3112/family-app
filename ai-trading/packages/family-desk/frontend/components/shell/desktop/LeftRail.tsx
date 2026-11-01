@@ -2,6 +2,8 @@
 
 import { Suspense, useId, useState } from "react";
 import { HoldingsRailPanel } from "@/components/fundamental/rail/HoldingsRailPanel";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import type { ShellBand } from "@/lib/desk/viewport";
 import { LEFT_RAIL_TABS, type LeftRailTab } from "@/lib/lanes";
 import { useDeskUi } from "./DeskContext";
@@ -28,14 +30,15 @@ export function LeftRail({ band }: { band: ShellBand }) {
     return (
       <aside aria-label={label} className={styles.root}>
         <div className={styles.strip}>
-          <button type="button" className={styles.iconButton} aria-label="Expand left panel" onClick={() => setLeftCollapsed(false)}>
-            <ChevronIcon direction="right" />
-          </button>
+          <Button variant="ghost" size="md" iconOnly aria-label="Expand left panel" onClick={() => setLeftCollapsed(false)}>
+            <Icon name="chevron-right" />
+          </Button>
           {TABS.map((item) => (
-            <button
+            <Button
               key={item.id}
-              type="button"
-              className={styles.iconButton}
+              variant="ghost"
+              size="md"
+              iconOnly
               aria-label={item.label}
               title={item.label}
               onClick={() => {
@@ -43,8 +46,8 @@ export function LeftRail({ band }: { band: ShellBand }) {
                 setLeftCollapsed(false);
               }}
             >
-              {item.id === "filters" ? <FilterIcon /> : <ListIcon />}
-            </button>
+              <Icon name={item.id === "filters" ? "filter" : "list"} />
+            </Button>
           ))}
         </div>
       </aside>
@@ -71,9 +74,9 @@ export function LeftRail({ band }: { band: ShellBand }) {
             </button>
           ))}
         </div>
-        <button type="button" className={styles.iconButton} aria-label="Collapse left panel" onClick={() => setLeftCollapsed(true)}>
-          <ChevronIcon direction="left" />
-        </button>
+        <Button variant="ghost" size="md" iconOnly aria-label="Collapse left panel" onClick={() => setLeftCollapsed(true)}>
+          <Icon name="chevron-left" />
+        </Button>
       </div>
       <div id={panelId} role="tabpanel" aria-labelledby={`${id}-${tab}`} className={styles.panel}>
         {tab === "holdings" ? (
@@ -88,29 +91,5 @@ export function LeftRail({ band }: { band: ShellBand }) {
         )}
       </div>
     </aside>
-  );
-}
-
-function ChevronIcon({ direction }: { direction: "left" | "right" }) {
-  return (
-    <svg className={styles.icon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path d={direction === "left" ? "M10 3.5 5.5 8l4.5 4.5" : "M6 3.5 10.5 8 6 12.5"} />
-    </svg>
-  );
-}
-
-function ListIcon() {
-  return (
-    <svg className={styles.icon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path d="M6 4h8M6 8h8M6 12h8M2.5 4h.5M2.5 8h.5M2.5 12h.5" />
-    </svg>
-  );
-}
-
-function FilterIcon() {
-  return (
-    <svg className={styles.icon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path d="M2.5 3.5h11L9 8.5v4l-2 1v-5z" />
-    </svg>
   );
 }

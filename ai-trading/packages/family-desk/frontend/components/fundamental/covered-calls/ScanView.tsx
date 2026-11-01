@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { CoverageRow, HoldingAccount, ImportState } from "@/lib/api/fundamentalSchemas";
 import { accountLabel, capText, coverageReason, defaultCoverageRow } from "@/lib/desk/coveredCallsView";
@@ -11,7 +12,6 @@ import { importLine } from "@/lib/desk/fundamentalView";
 import { maskedQuantity } from "@/lib/desk/mask";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { ImportText } from "../shared/ImportText";
-import styles from "../fundamental.module.css";
 import local from "./coveredCalls.module.css";
 import { CandidatesPanel } from "./CandidatesPanel";
 
@@ -45,11 +45,8 @@ export function ScanView({ accounts, importState }: { accounts: readonly Holding
   }
   return (
     <>
-      <section className={styles.panel} aria-label="Coverage">
-        <div className={styles.panelHead}>
-          <h2 className={styles.panelTitle}>Coverage</h2>
-          <p className={local.cap}>{capText(coverage.data.cap_pct)}</p>
-        </div>
+      <Panel aria-label="Coverage">
+        <PanelHeader title="Coverage" actions={<p className={local.cap}>{capText(coverage.data.cap_pct)}</p>} />
         <DenseTable
           caption="Coverage"
           columns={columns}
@@ -60,7 +57,7 @@ export function ScanView({ accounts, importState }: { accounts: readonly Holding
           onSelect={(item) => setChosen(rowKey(item))}
           empty={<EmptyBlock title={importState ? <ImportText text={importLine(importState).text} /> : "No holdings to cover yet"} />}
         />
-      </section>
+      </Panel>
       {row && <CandidatesPanel key={rowKey(row)} row={row} accountName={accountLabel(accounts, row.account_id)} />}
     </>
   );

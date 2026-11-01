@@ -1,3 +1,4 @@
+import { niceTicks } from "../desk/ticks.ts";
 import type { CurvePoint, ThreadDay } from "./threads.ts";
 import type { Week } from "./threadView.ts";
 
@@ -6,25 +7,10 @@ import type { Week } from "./threadView.ts";
 
 export type Box = { width: number; height: number; left: number; right: number; top: number; bottom: number };
 
-/** Round tick values for a numeric axis: steps of 1, 2 or 5 times a power of ten that cover `min` to `max`. */
-export function niceTicks(min: number, max: number, target = 5): number[] {
-  let low = min;
-  let high = max;
-  if (low === high) {
-    const pad = Math.max(Math.abs(low) * 0.01, 1);
-    low -= pad;
-    high += pad;
-  }
-  const raw = (high - low) / Math.max(target - 1, 1);
-  const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const norm = raw / magnitude;
-  // Whole dollars at least: a finer step would print the same rounded figure twice.
-  const step = Math.max((norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * magnitude, 1);
-  const first = Math.floor(low / step + 1e-9) * step;
-  const last = Math.ceil(high / step - 1e-9) * step;
-  const ticks: number[] = [];
-  for (let value = first; value <= last + step / 2; value += step) ticks.push(Math.round(value / step) * step);
-  return ticks;
+/** Round tick values for a dollar axis that cover `min` to `max`, whole dollars at least; a flat series still gets an axis (a little above and below it). */
+export function balanceTicks(min: number, max: number): number[] {
+  const pad = min === max ? Math.max(Math.abs(min) * 0.01, 1) : 0;
+  return niceTicks(min - pad, max + pad, { minStep: 1 });
 }
 
 export type Tick = { value: number; y: number };
@@ -49,7 +35,7 @@ export type CurveLayout = {
 export function curveLayout(curve: readonly CurvePoint[], daily: readonly ThreadDay[], startingBalance: number, box: Box): CurveLayout {
   const plot = { x: box.left, y: box.top, width: box.width - box.left - box.right, height: box.height - box.top - box.bottom };
   const balances = [startingBalance, ...curve.map((point) => point.balance)];
-  const ticks = niceTicks(Math.min(...balances), Math.max(...balances));
+  const ticks = balanceTicks(Math.min(...balances), Math.max(...balances));
   const lo = ticks[0]!;
   const hi = ticks[ticks.length - 1]!;
   const yOf = (value: number) => plot.y + plot.height - ((value - lo) / (hi - lo || 1)) * plot.height;

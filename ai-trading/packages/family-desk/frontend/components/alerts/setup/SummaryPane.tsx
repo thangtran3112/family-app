@@ -1,6 +1,6 @@
 "use client";
 
-import { JsonPanel } from "@/components/screener/editor/JsonPanel";
+import { JsonPanel } from "@/components/conditions/JsonPanel";
 import editorStyles from "@/components/screener/editor/editor.module.css";
 import { type AlertForm } from "@/lib/desk/alertForm";
 import { describeSpec } from "@/lib/spec/describe";

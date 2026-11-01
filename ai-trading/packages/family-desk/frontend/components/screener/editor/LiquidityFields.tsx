@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment } from "react";
+import { FieldGroup, Field, NumberInput } from "@/components/ui/Field";
 import type { Problem } from "@/lib/api/schemas";
 import { problemsFor, type FilterForm } from "@/lib/desk/filterForm";
-import styles from "./editor.module.css";
+import { fieldError } from "@/lib/desk/problems";
 
 const FIELDS = [
   { key: "minPrice", label: "Minimum price ($)" },
@@ -13,22 +13,12 @@ const FIELDS = [
 
 export function LiquidityFields({ form, onChange, problems }: { form: FilterForm; onChange: (next: FilterForm) => void; problems: readonly Problem[] }) {
   return (
-    <fieldset className={styles.group}>
-      <legend>Liquidity floor</legend>
+    <FieldGroup legend="Liquidity floor" error={fieldError(problems.filter((problem) => problem.path === "liquidity"))}>
       {FIELDS.map(({ key, label }) => (
-        <Fragment key={key}>
-          <label className={styles.field}>
-            <span>{label}</span>
-            <input type="number" step="any" value={form[key]} onChange={(event) => onChange({ ...form, [key]: event.target.value })} />
-          </label>
-          {problemsFor(problems, `liquidity.${key}`).map((problem, index) => (
-            <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
-          ))}
-        </Fragment>
+        <Field key={key} id={`filter-${key}`} label={label} error={fieldError(problemsFor(problems, `liquidity.${key}`))}>
+          <NumberInput step="any" value={form[key]} onChange={(event) => onChange({ ...form, [key]: event.target.value })} />
+        </Field>
       ))}
-      {problems.filter((problem) => problem.path === "liquidity").map((problem, index) => (
-        <span key={index} className={styles.problem}>{problem.message}<span className={styles.problemPath}>{problem.path}</span></span>
-      ))}
-    </fieldset>
+    </FieldGroup>
   );
 }

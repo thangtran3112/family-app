@@ -501,6 +501,9 @@ class ReplaySession(Base):
     )
     # Alembic 0009 (02o-b2): the spans `[from, to]` (ISO) in which she was not on this name; see `replay/model.py`.
     away: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list)
+    # Alembic 0014: when play last paused on this session's open trade because its stop was crossed (a day holds one
+    # open trade per name, so one flag). A new entry, stop note or exit clears it.
+    stop_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PracticeMark(Base):
@@ -528,6 +531,10 @@ class PracticeMark(Base):
     note: Mapped[str | None] = mapped_column(Text)
     trade_no: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String, nullable=False)  # "her" | "auto"
+    # Alembic 0014: the day's P/L (realized + open trades marked at the day clock) when an entry was placed: the
+    # max-loss rule's basis. Entry marks of a day-list session only; null on any other row (the journal then reads
+    # realized only).
+    day_pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

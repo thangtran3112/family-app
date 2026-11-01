@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adherenceHint, journalDatesHidden, swingJournalDay, formatR, formatUsd, noTradesText, sessionOverText, signalRows, summaryTiles, tradeRows, tradesCountText } from "./journalView.ts";
+import { formatSignedUsd } from "../desk/mask.ts";
+import { adherenceHint, journalDatesHidden, swingJournalDay, formatR, noTradesText, sessionOverText, signalRows, summaryTiles, tradeRows, tradesCountText } from "./journalView.ts";
 import { journal as journalFixture } from "./fixtures.ts";
 import { JournalSchema, type ReplayJournal } from "./schemas.ts";
 
@@ -17,12 +18,12 @@ const emptyJournal: ReplayJournal = {
 };
 
 test("money and R carry the sign, with a proper minus sign, and zero has none", () => {
-  assert.equal(formatUsd(63), "+$63.00");
-  assert.equal(formatUsd(-42), "−$42.00");
-  assert.equal(formatUsd(1234.5), "+$1,234.50");
-  assert.equal(formatUsd(0), "$0.00");
-  assert.equal(formatUsd(-0.001), "$0.00", "a rounds-to-zero loss shows no sign");
-  assert.equal(formatUsd(null), "—");
+  assert.equal(formatSignedUsd(63, { cents: true }), "+$63.00");
+  assert.equal(formatSignedUsd(-42, { cents: true }), "−$42.00");
+  assert.equal(formatSignedUsd(1234.5, { cents: true }), "+$1,234.50");
+  assert.equal(formatSignedUsd(0, { cents: true }), "$0.00");
+  assert.equal(formatSignedUsd(-0.001, { cents: true }), "$0.00", "a rounds-to-zero loss shows no sign");
+  assert.equal(formatSignedUsd(null, { cents: true }), "—");
   assert.equal(formatR(1.21), "+1.21R");
   assert.equal(formatR(-0.4), "−0.40R");
   assert.equal(formatR(0), "0.00R");

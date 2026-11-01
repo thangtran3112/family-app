@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Idempotent Desk role/schema init script for the shared VPS Postgres cluster
-# (infrastructure/vps/steps/30-postgres.sh, owner decision 2026-10-12, D-e --
+# (infrastructure/host/steps/30-postgres.sh, owner decision 2026-10-12, D-e --
 # no desk-postgres container). Same shape as
 # expense-tax-management/docker/postgres/zz-20-expense-tax-roles.sh (migrator/
 # runtime split, CREATE ROLE/SCHEMA IF NOT EXISTS), scaled down to the Desk's

@@ -2,7 +2,10 @@
 
 import { AiRatingChip } from "@/components/fundamental/shared/AiRatingChip";
 import { DeskAiNotStarted } from "@/components/fundamental/shared/DeskAiNotStarted";
+import { Delta } from "@/components/ui/Delta";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Panel } from "@/components/ui/Panel";
+import { StatTile } from "@/components/ui/StatTile";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
 import { loadBrief } from "@/lib/desk/research";
@@ -26,9 +29,9 @@ const COLUMNS: DenseColumn<BriefRowView>[] = withPriorities<DenseColumn<BriefRow
       ),
     },
     { key: "target", label: "Base target", align: "right", render: (row) => <span title={`Range ${row.range}`}>{row.target}</span> },
-    { key: "upside_pct", label: "Upside", align: "right", sortValue: (row) => row.upsideValue, render: (row) => <span className={styles.tone} data-tone={row.upsideTone}>{row.upside}</span> },
+    { key: "upside_pct", label: "Upside", align: "right", sortValue: (row) => row.upsideValue, render: (row) => <Delta tone={row.upsideTone}>{row.upside}</Delta> },
     { key: "confidence", label: "Confidence", align: "right", sortValue: (row) => row.confidenceValue, render: (row) => row.confidence },
-    { key: "eps_rev_30d_pct", label: "EPS rev. 30d", align: "right", sortValue: (row) => row.epsRevValue, render: (row) => <span className={styles.tone} data-tone={row.epsRevTone}>{row.epsRev30d}</span> },
+    { key: "eps_rev_30d_pct", label: "EPS rev. 30d", align: "right", sortValue: (row) => row.epsRevValue, render: (row) => <Delta tone={row.epsRevTone}>{row.epsRev30d}</Delta> },
     { key: "earnings_in_days", label: "Earnings", align: "right", sortValue: (row) => row.earningsDays, firstSort: "asc", render: (row) => row.earnings },
     { key: "stale", label: "", render: (row) => (row.stale ? <span className={styles.caption} title={row.stale}>Stale</span> : null) },
   ],
@@ -53,33 +56,31 @@ export function StocksBrief() {
         <div data-testid="fund-brief" className={local.stack}>
           <ul className={styles.tiles} aria-label="Desk AI track record">
             {trackRecordTiles(brief.track_record).map((tile) => (
-              <li key={tile.label} className={styles.tile}>
-                <span className={styles.tileLabel}>{tile.label}</span>
-                <span className={styles.tileValue}>{tile.value}</span>
+              <li key={tile.label}>
+                <StatTile label={tile.label} value={tile.value} />
               </li>
             ))}
           </ul>
           {briefNotStarted(brief) ? (
             <div data-testid="fund-brief-notstarted"><DeskAiNotStarted title="Desk AI daily brief" /></div>
           ) : (
-            <section className={styles.panel} aria-label="AI daily brief">
+            <Panel aria-label="AI daily brief">
               {runLine && <p className={styles.muted} data-testid="fund-brief-run">{runLine}</p>}
-              <div className={styles.tight}>
-                <DenseTable
-                  caption="AI daily brief"
-                  columns={COLUMNS}
-                  rows={rows}
-                  rowKey={(row) => row.symbol}
-                  density="compact"
-                  empty={<EmptyBlock title="No stocks were analyzed in this run" />}
-                />
-              </div>
+              <DenseTable
+                caption="AI daily brief"
+                columns={COLUMNS}
+                rows={rows}
+                rowKey={(row) => row.symbol}
+                density="compact"
+                tight
+                empty={<EmptyBlock title="No stocks were analyzed in this run" />}
+              />
               {staleRows.length > 0 && (
                 <ul className={local.rangeLegend} aria-label="Stale views">
                   {staleRows.map((row) => <li key={row.symbol}>{row.symbol}: {row.stale}</li>)}
                 </ul>
               )}
-            </section>
+            </Panel>
           )}
         </div>
       ) : query.error !== null ? (

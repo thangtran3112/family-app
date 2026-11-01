@@ -36,12 +36,6 @@ export function earliestListAt(filter: FilterTiming): string {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
-/** "10:00" as "10:00 AM". */
-export function clock12(hhmm: string): string {
-  const [hours, minutes] = hhmm.split(":").map(Number) as [number, number];
-  return `${hours % 12 || 12}:${pad(minutes)} ${hours < 12 ? "AM" : "PM"}`;
-}
-
 export type FilterTimings = ReadonlyMap<number, FilterTiming>;
 
 /** The latest of the chosen filters' earliest list times, and the filters that set it. */

@@ -89,11 +89,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0013() -> None:
+def test_migration_chain_has_a_single_head_at_0014() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0013"]
+    assert script.get_heads() == ["0014"]
+    assert script.get_revision("0014").down_revision == "0013"
     assert script.get_revision("0013").down_revision == "0012"
     assert script.get_revision("0012").down_revision == "0011"
     assert script.get_revision("0011").down_revision == "0010"
@@ -144,6 +145,33 @@ def test_tables_exist(db_engine: Engine) -> None:
         assert "thread_id" in {c["name"] for c in inspect(db_engine).get_columns(table)}, table
     assert "away" in {c["name"] for c in inspect(db_engine).get_columns("replay_sessions")}
     assert "hold_id" in {c["name"] for c in inspect(db_engine).get_columns("practice_ledger")}
+
+
+def _columns(db_engine: Engine, table: str) -> dict[str, dict]:
+    return {c["name"]: c for c in inspect(db_engine).get_columns(table)}
+
+
+def test_0014_adds_two_nullable_columns_and_downgrade_drops_exactly_those(db_engine: Engine) -> None:
+    """Several open practice positions (0014): `replay_sessions.stop_hit_at` and `practice_marks.day_pnl_usd`, both
+    nullable with no default (no backfill: an old row reads null and the journal falls back to realized-only)."""
+    url = db_engine.url.render_as_string(hide_password=False)
+    sessions, marks = _columns(db_engine, "replay_sessions"), _columns(db_engine, "practice_marks")
+    assert sessions["stop_hit_at"]["nullable"] and sessions["stop_hit_at"]["default"] is None
+    assert sessions["stop_hit_at"]["type"].timezone is True
+    assert marks["day_pnl_usd"]["nullable"] and marks["day_pnl_usd"]["default"] is None
+    assert (marks["day_pnl_usd"]["type"].precision, marks["day_pnl_usd"]["type"].scale) == (18, 2)
+    try:
+        command.downgrade(_alembic_config(url), "0013")
+        after_sessions, after_marks = _columns(db_engine, "replay_sessions"), _columns(db_engine, "practice_marks")
+        assert set(sessions) - set(after_sessions) == {"stop_hit_at"}
+        assert set(marks) - set(after_marks) == {"day_pnl_usd"}
+        assert "away" in after_sessions and "price" in after_marks  # nothing else moved
+        command.upgrade(_alembic_config(url), "head")
+        assert set(_columns(db_engine, "replay_sessions")) == set(sessions)
+        assert set(_columns(db_engine, "practice_marks")) == set(marks)
+    finally:
+        # Every other test in this module/package expects `db_engine` at head.
+        command.upgrade(_alembic_config(url), "head")
 
 
 def test_downgrade_to_0009_reverts_0012_to_0010_and_drops_exactly_what_0010_and_0012_made(db_engine: Engine) -> None:

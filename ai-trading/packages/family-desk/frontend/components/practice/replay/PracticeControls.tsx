@@ -2,12 +2,14 @@
 
 import { useId, useState, type FormEvent } from "react";
 import play from "@/components/practice/swing/play.module.css";
+import { Field, Input, Textarea } from "@/components/ui/Field";
 import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { changeTone, formatEtClock, formatPrice } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { OpenSide } from "@/lib/replay/keys";
-import { formatR, formatUsd } from "@/lib/replay/journalView";
+import { formatSignedUsd } from "@/lib/desk/mask";
+import { formatR } from "@/lib/replay/journalView";
 import type { MarkDraft } from "@/lib/replay/markInput";
 import type { OpenTrade } from "@/lib/replay/schemas";
 import type { SizingHint } from "@/lib/replay/swing";
@@ -74,10 +76,10 @@ function OpenTradeCard({ trade, since, realized, pnl }: { trade: OpenTrade | nul
         <div><dt>Last</dt><dd>{formatPrice(trade.last_price)}</dd></div>
         <div>
           <dt>Unrealized</dt>
-          <dd data-tone={changeTone(trade.unrealized_usd)}>{formatUsd(trade.unrealized_usd)}{trade.r != null && ` · ${formatR(trade.r)}`}</dd>
+          <dd data-tone={changeTone(trade.unrealized_usd)}>{formatSignedUsd(trade.unrealized_usd, { cents: true })}{trade.r != null && ` · ${formatR(trade.r)}`}</dd>
         </div>
       </dl>
-      <p className={styles.muted}>{`Realized so far ${formatUsd(realized)} · practice P/L ${formatUsd(pnl)}`}</p>
+      <p className={styles.muted}>{`Realized so far ${formatSignedUsd(realized, { cents: true })} · practice P/L ${formatSignedUsd(pnl, { cents: true })}`}</p>
     </div>
   );
 }
@@ -86,6 +88,8 @@ function OpenTradeCard({ trade, since, realized, pnl }: { trade: OpenTrade | nul
 function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { composer: Exclude<Composer, null>; lastPrice: number | null; onStop: (price: string) => void; onNote: (text: string) => void; onClose: () => void }) {
   const [stopText, setStopText] = useState(lastPrice == null ? "" : String(lastPrice));
   const [noteText, setNoteText] = useState("");
+  const stopFieldId = useId();
+  const noteFieldId = useId();
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (composer === "stop") onStop(stopText);
@@ -95,15 +99,13 @@ function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { compos
   return (
     <form className={styles.composer} onSubmit={submit} aria-label={composer === "stop" ? "Stop note" : "Practice note"}>
       {composer === "stop" ? (
-        <label className={styles.field}>
-          Stop price
-          <input autoFocus className={styles.control} inputMode="decimal" value={stopText} onChange={(event) => setStopText(event.target.value)} />
-        </label>
+        <Field id={stopFieldId} label="Stop price">
+          <Input autoFocus inputMode="decimal" value={stopText} onChange={(event) => setStopText(event.target.value)} />
+        </Field>
       ) : (
-        <label className={styles.field}>
-          Note
-          <textarea autoFocus className={styles.control} rows={3} maxLength={280} value={noteText} onChange={(event) => setNoteText(event.target.value)} />
-        </label>
+        <Field id={noteFieldId} label="Note">
+          <Textarea autoFocus rows={3} maxLength={280} value={noteText} onChange={(event) => setNoteText(event.target.value)} />
+        </Field>
       )}
       <div className={styles.buttonRow}>
         <button type="submit" className={`${styles.button} ${styles.primary}`}>Save</button>
@@ -136,14 +138,12 @@ export function PracticeControls(props: PracticeControlsProps) {
         </p>
       )}
       <div className={styles.fields}>
-        <label className={styles.field} htmlFor={sharesId}>
-          Shares
-          <input id={sharesId} className={styles.control} inputMode="numeric" value={draft.shares ?? swing?.defaultShares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
-        </label>
-        <label className={styles.field} htmlFor={stopId}>
-          {entering ? (props.stopRequired ? "Stop price (required)" : "Stop price (optional)") : "Stop price"}
-          <input id={stopId} className={styles.control} inputMode="decimal" aria-describedby={hintShown ? hintId : undefined} value={draft.stopPrice ?? ""} onChange={(event) => onDraft({ ...draft, stopPrice: event.target.value })} />
-        </label>
+        <Field id={sharesId} label="Shares">
+          <Input inputMode="numeric" value={draft.shares ?? swing?.defaultShares ?? ""} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
+        </Field>
+        <Field id={stopId} label={entering ? (props.stopRequired ? "Stop price (required)" : "Stop price (optional)") : "Stop price"}>
+          <Input inputMode="decimal" aria-describedby={hintShown ? hintId : undefined} value={draft.stopPrice ?? ""} onChange={(event) => onDraft({ ...draft, stopPrice: event.target.value })} />
+        </Field>
       </div>
       {hintShown && <p id={hintId} className={styles.hint} role="status">{PRACTICE_COPY.stopFirst}</p>}
       <p className={styles.footnote}>{swing ? PRACTICE_COPY.entryResetsSwing : PRACTICE_COPY.entryResets}</p>

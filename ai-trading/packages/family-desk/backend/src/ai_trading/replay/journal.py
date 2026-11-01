@@ -74,6 +74,7 @@ class Trade:
     exit_price: float | None = None
     exit_source: str = "her"
     exit_mark_id: int | None = None  # the mark that realized it: the ledger's key
+    day_pnl_usd: float | None = None  # the day's P/L (realized + open at the clock) when it was entered; null: unknown
 
     @property
     def sign(self) -> int:
@@ -103,6 +104,7 @@ def assemble(marks: list[Mark]) -> tuple[list[Trade], Trade | None]:
                 shares=mark.shares,
                 stop_price=mark.stop_price,
                 stops=[] if mark.stop_price is None else [(mark.at, mark.stop_price)],
+                day_pnl_usd=mark.day_pnl_usd,
             )
         elif mark.kind == "stop" and current is not None and mark.stop_price is not None:
             current.stops.append((mark.at, mark.stop_price))
@@ -127,6 +129,7 @@ def open_trade_out(trade: Trade | None, last_price: float | None) -> dict[str, A
         "side": trade.side,
         "shares": trade.shares,
         "entry_price": trade.entry_price,
+        "entry_at": trade.entry_at,
         "stop_price": trade.stops[-1][1] if trade.stops else None,
         "last_price": last_price,
         "unrealized_usd": trade.unrealized(last_price),
@@ -155,16 +158,19 @@ def _stop_honored(trade: Trade, bars: pd.DataFrame) -> bool:
 
 
 def _breaches(book: list[Trade], max_loss_usd: int | None) -> int:
-    """Entries taken after the day's realized loss had already reached the max loss. A trade counts as realized
-    once its exit is at or before the next entry, so sequential trades behave as they always did."""
+    """Entries taken after the day's loss had already reached the max loss. The day's loss at an entry is the snapshot
+    the entry carried: realized plus every open trade marked at the day clock. An entry without one (a mark from before
+    several positions could be open, or a standalone session's) falls back to the realized loss alone, where a trade
+    counts as realized once its exit is at or before the entry."""
     if max_loss_usd is None:
         return 0
-    return sum(
-        1
-        for trade in book
-        if usd_sum([trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= trade.entry_at])
-        <= -max_loss_usd
-    )
+
+    def day_pnl(trade: Trade) -> float:
+        if trade.day_pnl_usd is not None:
+            return trade.day_pnl_usd
+        return usd_sum([trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= trade.entry_at])
+
+    return sum(1 for trade in book if day_pnl(trade) <= -max_loss_usd)
 
 
 def _checks(

@@ -1,5 +1,5 @@
-import { formatNumber } from "../desk/format.ts";
-import { formatUsd } from "./journalView.ts";
+import { formatClock, formatNumber } from "../desk/format.ts";
+import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade, ReplayJournal, ReplaySession, TapeFeed } from "./schemas.ts";
 
 // Live read of the plan against the session so far (02o §a3 plan checklist): ticks, never blocks.
@@ -68,9 +68,9 @@ export function planChecklist(plan: Plan, journal: Pick<ReplayJournal, "trades">
     plan.maxLossUsd !== undefined
       ? {
           id: "max_loss",
-          label: `Max loss ${formatUsd(-plan.maxLossUsd).replace("−", "")}`,
+          label: `Max loss ${formatSignedUsd(-plan.maxLossUsd, { cents: true }).replace("−", "")}`,
           state: maxLossReached(pnl, plan) ? "warn" : "ok",
-          detail: `${formatUsd(pnl)} so far`,
+          detail: `${formatSignedUsd(pnl, { cents: true })} so far`,
         }
       : { id: "max_loss", label: "Max loss", state: "off", detail: "None" };
 
@@ -82,12 +82,6 @@ export function planChecklist(plan: Plan, journal: Pick<ReplayJournal, "trades">
   return [stop, signal, maxLoss, maxTrades];
 }
 
-/** "09:30" to "9:30 AM". */
-export function clockText(hhmm: string): string {
-  const [hour = 0, minute = "00"] = hhmm.split(":").map((part, index) => (index === 0 ? Number(part) : part)) as [number, string];
-  return `${hour % 12 === 0 ? 12 : hour % 12}:${minute} ${hour < 12 ? "AM" : "PM"}`;
-}
-
 /** The session block of the left rail (P2): who and which attempt, the window, and the candle interval with the tape's feed. */
 export function sessionFacts(
   spec: Pick<ReplaySession["spec"], "symbol" | "window" | "session" | "interval">,
@@ -97,7 +91,7 @@ export function sessionFacts(
   const tape = feed === null ? null : feed === "sip" ? "consolidated" : "IEX only";
   return [
     { id: "symbol", label: "Symbol · attempt", value: `${spec.symbol} · attempt ${attempt}` },
-    { id: "window", label: `Window (${spec.session})`, value: `${clockText(spec.window.from)} – ${clockText(spec.window.to)} ET` },
+    { id: "window", label: `Window (${spec.session})`, value: `${formatClock(spec.window.from)} – ${formatClock(spec.window.to)} ET` },
     { id: "interval", label: "Interval · tape", value: tape === null ? spec.interval : `${spec.interval} · ${tape}` },
   ];
 }

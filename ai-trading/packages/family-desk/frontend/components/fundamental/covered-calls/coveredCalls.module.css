@@ -3,13 +3,11 @@
 .tabLink { display: inline-flex; min-height: 32px; align-items: center; border-bottom: 2px solid transparent; color: var(--color-muted); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .tabLink:hover { color: var(--color-text); }
 .tabLink[aria-current="page"] { border-bottom-color: var(--color-amber); color: var(--color-text); }
-.tabLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.tabLink:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 .cap { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
 .stamps { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: 0; }
 .stamps > * { margin: 0; }
-
-.opportunity { margin: 0; border: 1px solid var(--color-up); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 
 /* Flags and risks are the decision-relevant words in these tables: they wrap onto a second line, never an ellipsis ("Cove…"). The full text is also the cell's title. */
 .flagsCell { display: inline-block; max-width: 96px; padding-block: 2px; line-height: 1.25; overflow-wrap: anywhere; vertical-align: middle; white-space: normal; }
@@ -19,7 +17,7 @@
 
 .notes { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--color-muted); font-size: var(--text-micro); }
 
-.aiNote { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-label); }
+.aiNote { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--tone); font-size: var(--text-label); }
 
 .sketch { display: grid; gap: var(--space-1); }
 .chart { width: 100%; max-width: 460px; height: auto; color: var(--color-muted); }
@@ -34,18 +32,12 @@
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 
-.detail { display: grid; gap: var(--space-3); }
 .detailGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .detailList { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 0 0 var(--space-4); font-size: var(--text-label); }
-.subTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 
 .assignments { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--text-label); }
 .assignments li { display: flex; gap: var(--space-3); min-height: 24px; align-items: center; }
 .total { margin: 0; font-size: var(--text-label); }
 
 /* The 13-column candidates table runs edge to edge inside its panel so it fits the 1440 centre without scrolling; the flags are spelled out under it. */
-.tableBleed { margin-inline: calc(-1 * var(--space-4)); }
-/* !important beats DenseTable's own compact padding, which has higher specificity. */
-.tableBleed :is(th, td) { padding-inline: 4px !important; }
-.tableBleed :is(th, td):first-child { padding-left: var(--space-4) !important; }
-.tableBleed :is(th, td):last-child { padding-right: var(--space-4) !important; }
+.tableBleed { --dense-edge: var(--space-4); margin-inline: calc(-1 * var(--space-4)); }
