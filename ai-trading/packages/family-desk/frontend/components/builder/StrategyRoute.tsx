@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StrategyList } from "@/components/strategies/StrategyList";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FormActionBar } from "@/components/ui/FormActionBar";
 import { deskFetch } from "@/lib/api/client";
 import {
@@ -20,11 +21,12 @@ import { nextStage, type StrategyStage } from "@/lib/strategy/stage";
 import { positiveStrategyId } from "@/lib/strategy/id";
 import { STRATEGY_TEMPLATES } from "@/lib/templates";
 import type { StrategyVersion } from "./types";
-import { JsonView } from "./JsonView";
+import { JsonPanel } from "@/components/conditions/JsonPanel";
 import { saveBarCopy } from "@/lib/strategy/saveBar";
 import { SpecForm, validateSpecForm } from "./SpecForm";
 import { StageControl } from "./StageControl";
 import { VersionList } from "./VersionList";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import styles from "./builder.module.css";
 import strategiesStyles from "@/components/strategies/strategies.module.css";
 
@@ -65,6 +67,8 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
   const [saving, setSaving] = useState(false);
   const [stagePending, setStagePending] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // What she was about to do (pick another version or template) while the question about her unsaved edits is open.
+  const [discarding, setDiscarding] = useState<{ proceed: () => void } | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [initialTemplate, setInitialTemplate] = useState(STRATEGY_TEMPLATES[0]?.slug ?? "");
 
@@ -118,34 +122,38 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
   const validation = useMemo(() => form ? validateSpecForm(form) : null, [form]);
   const canSave = validation?.result.success === true;
 
-  function confirmDiscard(): boolean {
-    return !dirty || window.confirm("You have unsaved changes. Discard them?");
+  /** Runs `proceed` now, or after she agrees to drop her unsaved edits. */
+  function afterDiscard(proceed: () => void) {
+    if (dirty) setDiscarding({ proceed });
+    else proceed();
   }
 
   function selectVersion(version: StrategyVersion) {
-    if (!confirmDiscard()) return;
-    const nextForm = initialForm(version.spec);
-    setSelectedVersionId(version.id);
-    setDirty(false);
-    setSaveError("");
-    if (!nextForm) {
-      setForm(null);
-      setFormError("This stored version does not match the current schema. Its exact stored JSON remains available below.");
-      return;
-    }
-    setFormError("");
-    setForm(nextForm);
+    afterDiscard(() => {
+      const nextForm = initialForm(version.spec);
+      setSelectedVersionId(version.id);
+      setDirty(false);
+      setSaveError("");
+      if (!nextForm) {
+        setForm(null);
+        setFormError("This stored version does not match the current schema. Its exact stored JSON remains available below.");
+        return;
+      }
+      setFormError("");
+      setForm(nextForm);
+    });
   }
 
   function selectInitialTemplate(slug: string) {
-    if (!confirmDiscard()) return;
-    const template = STRATEGY_TEMPLATES.find((item) => item.slug === slug);
-    if (!template || !loaded) return;
-    const nextForm = initialForm({ ...template.spec, name: loaded.strategy.name });
-    setInitialTemplate(slug);
-    setForm(nextForm);
-    setFormError("");
-    setDirty(true);
+    afterDiscard(() => {
+      const template = STRATEGY_TEMPLATES.find((item) => item.slug === slug);
+      if (!template || !loaded) return;
+      const nextForm = initialForm({ ...template.spec, name: loaded.strategy.name });
+      setInitialTemplate(slug);
+      setForm(nextForm);
+      setFormError("");
+      setDirty(true);
+    });
   }
 
   async function saveVersion() {
@@ -195,18 +203,18 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
     }
   }
 
-  if (loading) return <section className={styles.detail} aria-busy="true"><p className={styles.feedback}>Loading strategy…</p></section>;
+  if (loading) return <section className={styles.detail} aria-busy="true"><LoadingBlock label="Loading strategy…" height={120} /></section>;
   if (loadingError || !loaded) {
     return (
       <section className={styles.detail}>
-        <div className={styles.routeError} role="alert">
-          <p>{loadingError || "Could not load strategy."}</p>
-          <button className={styles.secondaryButton} onClick={() => {
+        <ErrorBlock
+          message={loadingError || "Could not load strategy."}
+          onRetry={() => {
             setLoading(true);
             setLoadingError("");
             setLoadAttempt((attempt) => attempt + 1);
-          }} type="button">Try again</button>
-        </div>
+          }}
+        />
         <p><a className={styles.backLink} href="/strategies">Back to strategies</a></p>
       </section>
     );
@@ -236,7 +244,6 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
           selectedVersionId={selectedVersionId}
           versions={loaded.versions}
         />
-        {selectedVersion && <JsonView spec={storedSpec} />}
       </div>
 
       <StageControl
@@ -266,6 +273,7 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
           readOnly={readOnly || saving}
         />
       )}
+      {selectedVersion && <JsonPanel spec={storedSpec} />}
       {saveError && <p className={styles.error} role="alert">{saveError}</p>}
       {form && (
         <FormActionBar
@@ -277,6 +285,20 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
               {saving ? "Saving…" : `Save as v${nextVersion}`}
             </Button>
           }
+        />
+      )}
+      {discarding && (
+        <ConfirmDialog
+          title="Discard your changes?"
+          body="You have unsaved changes to this strategy. Continuing drops them."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          tone="danger"
+          onCancel={() => setDiscarding(null)}
+          onConfirm={() => {
+            setDiscarding(null);
+            discarding.proceed();
+          }}
         />
       )}
     </section>

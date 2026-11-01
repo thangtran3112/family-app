@@ -115,7 +115,7 @@ export function TechnicalSummary({ symbol, timeframe, onTimeframe }: { symbol: s
         view="summary"
         notice={noData ? COPY.noMarketDataBadge : undefined}
       />
-      <div className={styles.tabs}><TimeframeTabs options={SUMMARY_TIMEFRAMES} value={timeframe} onChange={onTimeframe} /></div>
+      <TimeframeTabs options={SUMMARY_TIMEFRAMES} value={timeframe} onChange={onTimeframe} />
       <div className={styles.content} data-dim={connection === "reconnecting" ? "true" : undefined}>{body}</div>
       <RightRail sections={railSections} label="Symbol context" />
     </div>

@@ -317,21 +317,28 @@ def delivery_log_status(status: str, channel: str, wired: Collection[str]) -> st
 def fires(session: Session, user_id: int, strategy_id: int, limit: int, wired: Collection[str]) -> list[dict[str, Any]]:
     """The strategy's signals across versions, newest first, with their deliveries and a 15-minute thumbnail."""
     _view(session, strategy_id, user_id)
-    rows = session.execute(
-        select(Signal)
-        .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-        .where(StrategyVersion.strategy_id == strategy_id)
-        .order_by(Signal.bar_time.desc(), Signal.id.desc())
-        .limit(limit)
-    ).scalars()
+    rows = list(
+        session.execute(
+            select(Signal)
+            .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+            .where(StrategyVersion.strategy_id == strategy_id)
+            .order_by(Signal.bar_time.desc(), Signal.id.desc())
+            .limit(limit)
+        ).scalars()
+    )
+    # One query for every listed signal's deliveries, not one per signal (was an N+1 over `limit` rows).
+    deliveries_by_signal: dict[int, list[tuple[str, str]]] = {}
+    if rows:
+        for signal_id, channel, status in session.execute(
+            select(Alert.signal_id, Delivery.channel, Delivery.status)
+            .join(Alert, Alert.id == Delivery.alert_id)
+            .where(Alert.signal_id.in_([signal.id for signal in rows]))
+            .order_by(Delivery.id)
+        ):
+            deliveries_by_signal.setdefault(signal_id, []).append((channel, status))
     out = []
     for signal in rows:
-        deliveries = session.execute(
-            select(Delivery.channel, Delivery.status)
-            .join(Alert, Alert.id == Delivery.alert_id)
-            .where(Alert.signal_id == signal.id)
-            .order_by(Delivery.id)
-        ).all()
+        deliveries = deliveries_by_signal.get(signal.id, [])
         mapped = [(channel, delivery_log_status(status, channel, wired)) for channel, status in deliveries]
         out.append(
             {

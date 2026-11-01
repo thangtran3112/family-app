@@ -34,6 +34,7 @@ import { RightRailSummary } from "./RightRailSummary";
 import { StrategyMatches } from "./StrategyMatches";
 import { SymbolHeader } from "./SymbolHeader";
 import styles from "./workspace.module.css";
+import { alertNewHref } from "@/lib/desk/hrefs";
 
 const humanize = (pattern: string) => pattern.replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
 
@@ -161,7 +162,7 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
         onSession={setSession}
         indicators={indicators}
         onToggleIndicator={(id) => setIndicators((current) => toggleIndicator(current, id))}
-        alertHref={`/alerts/new?source=symbol:${encodeURIComponent(symbol)}`}
+        alertHref={alertNewHref({ symbol })}
       />
       <div className={styles.chartSlot}>{chartArea}</div>
       {bars.data && !noData && <div className={styles.asOf}><AsOfLine stamp={bars.data.stamp} /></div>}

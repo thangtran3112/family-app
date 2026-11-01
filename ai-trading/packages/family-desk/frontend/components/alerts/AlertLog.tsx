@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import type { AlertLogRow } from "@/lib/api/schemas";
 import { loadAlertLog } from "@/lib/desk/alerts";
 import { deliveryTone, LOG_STATUSES, logRowText } from "@/lib/desk/alertsView";
@@ -29,18 +29,21 @@ export function AlertLog() {
     { intervalMs: 60_000 },
   );
 
-  let body;
-  if (log.data === null) {
-    body = log.error === null ? <LoadingBlock label="Loading delivery log…" /> : <ErrorBlock subject="delivery log" onRetry={log.refresh} />;
-  } else if (log.data.length === 0) {
-    body = (
-      <EmptyBlock title="Nothing delivered yet">
-        <Link href="/alerts/new" className={styles.link}>New alert strategy</Link>
-      </EmptyBlock>
-    );
-  } else {
-    body = <DenseTable caption="Alert delivery log" columns={columns} rows={log.data} rowKey={(row) => String(row.delivery_id)} />;
-  }
+  const body = (
+    <QueryBoundary
+      query={log}
+      loading="Loading delivery log…"
+      subject="delivery log"
+      isEmpty={(rows) => rows.length === 0}
+      empty={
+        <EmptyBlock title="Nothing delivered yet">
+          <Link href="/alerts/new" className={styles.link}>New alert strategy</Link>
+        </EmptyBlock>
+      }
+    >
+      {(rows) => <DenseTable caption="Alert delivery log" columns={columns} rows={rows} rowKey={(row) => String(row.delivery_id)} />}
+    </QueryBoundary>
+  );
 
   return (
     <>

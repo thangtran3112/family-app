@@ -1,0 +1,12 @@
+/* The one modal (design-component-system §4.3, DS-5): a native dialog in the top layer, so it needs no portal; the scrim is its ::backdrop. */
+.root { z-index: var(--z-modal); width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); padding: 0; color: var(--color-text); font-family: var(--font-sans); font-size: var(--text-label); line-height: var(--line-label); text-align: left; white-space: normal; overscroll-behavior: contain; }
+.root[open] { display: flex; }
+.root[data-size="sm"] { width: min(420px, calc(100vw - 32px)); }
+.root[data-size="lg"] { width: min(720px, calc(100vw - 32px)); }
+.root::backdrop { background: var(--color-scrim); }
+/* Head and foot stay; the body scrolls. */
+.frame { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.head { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
+.title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
+.body { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-3); overflow-y: auto; padding: var(--space-4); }
+.foot { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: var(--space-3); border-top: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }

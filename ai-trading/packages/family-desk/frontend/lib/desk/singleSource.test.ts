@@ -44,3 +44,10 @@ test("every operator reads one way in the screener, the alert setup, the builder
   assert.equal(sentence, `close ${operatorLabel("crosses_above")} VWAP`);
   assert.equal(describeCondition({ op: "lte", left: { series: "close" }, right: { value: 5 } }), `close ${operatorLabel("lte")} 5`);
 });
+
+test("the tree and the rows read the group and operator words from labels.ts", () => {
+  const kit = sources(new URL("../../components/conditions/", import.meta.url));
+  const literals = ["All of these", "Any of these", "crosses_above"];
+  const copies = kit.filter((file) => literals.some((word) => readFileSync(file, "utf8").includes(word)));
+  assert.deepEqual(copies, [], "read the group and operator words from lib/spec/labels.ts");
+});

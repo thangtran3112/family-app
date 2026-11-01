@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { areaLabel, formatShortDay, KIND_LABEL, reporterInitial, STATUS_LABEL, statusTone } from "@/lib/desk/feedbackView";
 import type { FeedbackItem } from "@/lib/feedback/schemas";
-import styles from "./feedback.module.css";
 
 const COPIED_MS = 1500;
 
-/** The Open and Copy id buttons a row shows on hover or keyboard focus (02s §Frontend); they sit over the end of the title, as on the board. */
+/** The Open and Copy id buttons a row shows on hover or keyboard focus; they stop propagation so the row is not selected. */
 function RowActions({ item, onOpen }: { item: FeedbackItem; onOpen: (id: number) => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -21,14 +22,16 @@ function RowActions({ item, onOpen }: { item: FeedbackItem; onOpen: (id: number)
     }
   }
   return (
-    <span className={styles.hoverActions}>
-      <button type="button" className={styles.miniButton} aria-label={`Open ${item.ref}`} onClick={() => onOpen(item.id)}>Open</button>
-      <button type="button" className={styles.miniButton} aria-label={`Copy id ${item.ref}`} onClick={(event) => { event.stopPropagation(); void copy(); }}>{copied ? "Copied" : "Copy id"}</button>
-    </span>
+    <>
+      <Button size="sm" aria-label={`Open ${item.ref}`} onClick={() => onOpen(item.id)}>Open</Button>
+      <Button size="sm" variant="secondary" aria-label={`Copy id ${item.ref}`} onClick={(event) => { event.stopPropagation(); void copy(); }}>
+        {copied ? "Copied" : "Copy id"}
+      </Button>
+    </>
   );
 }
 
-/** The dense table of reports: 28 px rows, a 2 px amber edge on the selected row, hover on `--color-raised`. */
+/** The dense table of reports: 28 px rows, a 2 px amber edge on the selected row, row actions revealed on hover and focus. */
 export function FeedbackTable({
   items,
   selectedId,
@@ -39,39 +42,38 @@ export function FeedbackTable({
   onSelect: (id: number) => void;
 }) {
   const columns: DenseColumn<FeedbackItem>[] = [
-    { key: "id", label: "ID", render: (item) => <span className={styles.id}>{item.ref}</span> },
-    { key: "type", label: "Type", render: (item) => <span className={styles.kind} data-kind={item.kind}>{KIND_LABEL[item.kind]}</span> },
+    { key: "id", label: "ID", minWidth: 56, render: (item) => <span className="tabular-nums">{item.ref}</span> },
+    { key: "type", label: "Type", render: (item) => <Badge tone="neutral">{KIND_LABEL[item.kind]}</Badge> },
     {
       key: "title",
       label: "Title",
-      render: (item) => (
-        <span className={styles.titleCell} data-selected={item.id === selectedId}>
-          <span className={styles.titleText} title={item.title}>{item.title}</span>
-          <RowActions item={item} onOpen={onSelect} />
-        </span>
-      ),
+      fill: true,
+      truncate: true,
+      render: (item) => item.title,
     },
-    { key: "where", label: "Where", render: (item) => <span className={styles.where} title={item.route}>{item.route}</span> },
-    { key: "area", label: "Area", render: (item) => <span className={`${styles.cell} ${styles.cellArea}`}>{areaLabel(item.area)}</span> },
-    { key: "by", label: "Reported by", render: (item) => <span className={`${styles.cell} ${styles.cellBy}`}>{reporterInitial(item.reported_by)}</span> },
-    { key: "updated", label: "Updated", render: (item) => <span className={styles.cellUpdated}>{formatShortDay(item.updated_at)}</span> },
+    { key: "where", label: "Where", minWidth: 120, truncate: true, render: (item) => item.route },
+    { key: "area", label: "Area", minWidth: 80, render: (item) => areaLabel(item.area) },
+    { key: "by", label: "Reported by", minWidth: 90, render: (item) => reporterInitial(item.reported_by) },
+    { key: "updated", label: "Updated", minWidth: 96, render: (item) => formatShortDay(item.updated_at) },
     {
       key: "status",
       label: "Status",
-      render: (item) => <span className={styles.status} data-tone={statusTone(item.status)}>{STATUS_LABEL[item.status]}</span>,
+      minWidth: 90,
+      render: (item) => <Badge tone={statusTone(item.status)}>{STATUS_LABEL[item.status]}</Badge>,
     },
   ];
   return (
-    <div className={styles.tableWrap}>
-      <DenseTable
-        caption="Feedback reports"
-        columns={columns}
-        tight
-        rows={items}
-        rowKey={(item) => String(item.id)}
-        selectedKey={selectedId === null ? null : String(selectedId)}
-        onSelect={(item) => onSelect(item.id)}
-      />
-    </div>
+    <DenseTable
+      caption="Feedback reports"
+      columns={columns}
+      tight
+      rows={items}
+      rowKey={(item) => String(item.id)}
+      selectedKey={selectedId === null ? null : String(selectedId)}
+      onSelect={(item) => onSelect(item.id)}
+      rowActions={(item) => <RowActions item={item} onOpen={onSelect} />}
+      actions="hover"
+      scrollX
+    />
   );
 }

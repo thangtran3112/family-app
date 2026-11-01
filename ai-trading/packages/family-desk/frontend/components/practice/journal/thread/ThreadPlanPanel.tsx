@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { ThreadPlanFields } from "@/components/practice/thread/ThreadPlanFields";
 import { DeskApiError } from "@/lib/api/client";
@@ -12,6 +13,7 @@ import { planRows } from "@/lib/replay/threadView";
 import { planToDraft, threadProblems, validatePlanEdit, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 /** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. */
 export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
@@ -87,17 +89,19 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
         </form>
       ) : (
         <>
-          <dl className={styles.planList}>
-            {(swing ? weeklyPlanRows(planRows(plan)) : planRows(plan)).map((row) => (
-              <div key={row.id} className={styles.planRow}>
-                <dt className={styles.planLabel}>{row.label}</dt>
-                <dd className={styles.planValue}>
+          <FactList
+            divided
+            facts={(swing ? weeklyPlanRows(planRows(plan)) : planRows(plan)).map((row) => ({
+              id: row.id,
+              label: row.label,
+              value: (
+                <>
                   {row.value}
                   {row.id === "max_loss" && row.value !== "None" && <SimulatedBadge />}
-                </dd>
-              </div>
-            ))}
-          </dl>
+                </>
+              ),
+            }))}
+          />
           {swing && <p className={styles.planNote}>{PRACTICE_COPY.swingPerWeekNote}</p>}
           <p className={styles.planNote}>{`${PRACTICE_COPY.threadPlanNote}: ${plan.planNote ?? PRACTICE_COPY.threadPlanNoteNone}`}</p>
         </>
@@ -111,6 +115,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
 export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
   const { id, status, mode } = thread.thread;
   const [confirming, setConfirming] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
   if (status === "closed") return <p className={styles.muted}>{PRACTICE_COPY.threadClosedBody}</p>;
@@ -131,15 +136,22 @@ export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChan
 
   return (
     <div className={styles.stack}>
-      <button type="button" className={`${styles.button} ${styles.danger}`} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
+      <button ref={closeRef} type="button" className={`${styles.button} ${styles.danger}`} onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</button>
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
       {mode === "swing" && <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p>}
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>
       {confirming && (
-        <div role="group" aria-label="Confirm closing the thread" className={styles.confirm}>
-          <button type="button" className={`${styles.button} ${styles.primary}`} onClick={close} disabled={closing}>{PRACTICE_COPY.threadCloseConfirm}</button>
-          <button type="button" className={styles.button} onClick={() => setConfirming(false)} disabled={closing}>{PRACTICE_COPY.threadCloseKeep}</button>
-        </div>
+        <InlineConfirm
+          label="Confirm closing the thread"
+          size="md"
+          tone="danger"
+          confirmLabel={PRACTICE_COPY.threadCloseConfirm}
+          cancelLabel={PRACTICE_COPY.threadCloseKeep}
+          busy={closing}
+          returnFocus={closeRef}
+          onConfirm={close}
+          onCancel={() => setConfirming(false)}
+        />
       )}
       {closeError && <p role="alert" className={styles.alert}>{closeError}</p>}
     </div>

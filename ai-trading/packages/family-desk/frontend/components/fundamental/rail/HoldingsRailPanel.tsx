@@ -2,6 +2,7 @@
 
 import { useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
 import { Delta } from "@/components/ui/Delta";
+import { RailList, RailValue } from "@/components/ui/RailList";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { holdingsEmptyText, railRows } from "@/lib/desk/holdingsView";
 import type { ShellBand } from "@/lib/desk/viewport";
@@ -19,18 +20,19 @@ export function HoldingsRailPanel({ band }: { band: ShellBand }) {
   const emptyText = holdingsEmptyText(holdings.import, holdings.rows.length);
   if (emptyText) return <p className={styles.note} data-testid="fund-rail-holdings"><ImportText text={emptyText} /></p>;
 
-  return (
-    <ul className={styles.list} aria-label="Holdings" data-testid="fund-rail-holdings">
-      {railRows(holdings.rows).map((row) => (
-        <li key={row.symbol}>
-          <button type="button" className={styles.row} data-band={band} aria-pressed={selectedSymbol === row.symbol} onClick={() => setSelectedSymbol(row.symbol)}>
-            <span className={styles.symbol}>{row.symbol}</span>
-            <span className={styles.weight}>{row.weight}</span>
-            <Delta tone={row.change.tone} className={styles.change}>{row.change.text}</Delta>
-            {band === "1440" && <span className={styles.dot}><AiRatingChip rating={row.rating} compact /></span>}
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
+  const rows = railRows(holdings.rows).map((row) => ({
+    id: row.symbol,
+    label: <strong>{row.symbol}</strong>,
+    title: row.symbol,
+    selected: selectedSymbol === row.symbol,
+    onSelect: () => setSelectedSymbol(row.symbol),
+    value: (
+      <>
+        <RailValue>{row.weight}</RailValue>
+        <Delta tone={row.change.tone}>{row.change.text}</Delta>
+        {band === "1440" && <AiRatingChip rating={row.rating} compact />}
+      </>
+    ),
+  }));
+  return <RailList rows={rows} label="Holdings" testId="fund-rail-holdings" className={styles.holdings} />;
 }

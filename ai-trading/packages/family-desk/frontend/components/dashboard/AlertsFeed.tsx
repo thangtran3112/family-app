@@ -2,7 +2,7 @@
 
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { Button } from "@/components/ui/Button";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { formatEtTime } from "@/lib/desk/format";
 import { symbolHref } from "@/lib/desk/listNav";
 import { loadAlertInbox, markAlertRead, markAllAlertsRead } from "@/lib/desk/status";
@@ -26,18 +26,15 @@ export function AlertsFeed() {
     alerts.refresh();
   }
 
-  if (alerts.data === null) {
-    return alerts.error ? <ErrorBlock subject="alert list" onRetry={alerts.refresh} /> : <LoadingBlock label="Loading alerts…" height={120} />;
-  }
-  if (alerts.data.length === 0) return <EmptyBlock title="No alerts yet" />;
-
   return (
+    <QueryBoundary query={alerts} loading="Loading alerts…" height={120} subject="alert list" isEmpty={(rows) => rows.length === 0} empty={<EmptyBlock title="No alerts yet" />}>
+      {(rows) => (
     <>
       <div className={styles.feedHead}>
         <Button size="md" onClick={markAll}>Mark all read</Button>
       </div>
       <ul className={styles.feed}>
-        {alerts.data.map((alert) => {
+        {rows.map((alert) => {
           const unread = alert.read_at === null;
           return (
             <li key={alert.id} className={styles.item}>
@@ -57,5 +54,7 @@ export function AlertsFeed() {
         })}
       </ul>
     </>
+      )}
+    </QueryBoundary>
   );
 }

@@ -1,10 +1,10 @@
-import { PATTERN_IDS, type Condition } from "@ai-trading/contracts";
+import type { Condition } from "@ai-trading/contracts";
 import type { AlertStrategySpecV1 } from "@ai-trading/contracts/alert-strategy";
 import type { Problem } from "../api/schemas.ts";
 import { COPY, type AlertsRuntimeState } from "./freshness.ts";
 import { operatorLabel } from "../spec/labels.ts";
 import { symbolsFromText, type ConditionMode } from "./filterForm.ts";
-import { operandFor } from "./operands.ts";
+import { PATTERN_OPTIONS, withOperator } from "./conditionTree.ts";
 import { previewInterval } from "./screenerView.ts";
 
 // The alert setup form (D10, 02m §a3.7): four steps (Source, Condition, Trigger, Deliver) that build an
@@ -150,16 +150,8 @@ export function operatorOf(condition: Condition): AlertOperatorId | null {
   return "op" in condition && ALERT_OPERATORS.some((operator) => operator.id === condition.op) ? (condition.op as AlertOperatorId) : null;
 }
 
-/** Switch a row to another operator, keeping its operands where the new operator has them. */
-export function withOperator(condition: Condition, id: AlertOperatorId): Condition {
-  if (id === "pattern") return { op: "pattern", pattern: "hammer" };
-  const left = "left" in condition ? condition.left : { series: "close" as const };
-  const right = "right" in condition ? condition.right : operandFor({ id: "value", value: 0 });
-  if (id === "within_pct") return { op: "within_pct", left, right, pct: "pct" in condition ? condition.pct : 1 };
-  return { op: id, left, right };
-}
-
-export const PATTERN_OPTIONS = PATTERN_IDS.map((id) => ({ id, label: id.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase()) }));
+// The operator switch and the pattern list are shared with the condition kit (conditionTree.ts): one copy each.
+export { PATTERN_OPTIONS, withOperator };
 
 export type MiniChartModel = { symbol: string | null; level: number | null; levelLabel: string | null; patternLabel: string | null; interval: "15m" | "1d" };
 

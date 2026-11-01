@@ -8,9 +8,11 @@ import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { DeskQueryResult } from "@/lib/desk/useDeskQuery";
 import type { DayList } from "@/lib/replay/daily";
 import { blockLadder, blockOpenByDefault, riskPlanText } from "@/lib/replay/dayView";
-import { dayResultTone, formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
+import { formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./day.module.css";
+import { FactList } from "@/components/ui/FactList";
+import { signTone } from "@/lib/desk/format";
 
 export type DayLeftPanelProps = {
   list: DayList;
@@ -41,12 +43,12 @@ export function DayLeftPanel({ list, thread, portfolio }: DayLeftPanelProps) {
               <h2 className={styles.sideTitle}>{thread ? threadName(thread.thread) : "Practice thread"}</h2>
               <SimulatedBadge />
             </div>
-            <dl className={styles.sideFacts}>
-              <div><dt>{PRACTICE_COPY.threadBalance}</dt><dd>{formatBalance(brief.balance)}</dd></div>
-              {brief.today_pnl_usd !== null && (
-                <div><dt>{PRACTICE_COPY.threadToday}</dt><dd className={styles[dayResultTone(brief.today_pnl_usd)]}>{formatDayResult(brief.today_pnl_usd)}</dd></div>
-              )}
-            </dl>
+            <FactList
+              facts={[
+                { id: "balance", label: PRACTICE_COPY.threadBalance, value: formatBalance(brief.balance) },
+                ...(brief.today_pnl_usd === null ? [] : [{ id: "today", label: PRACTICE_COPY.threadToday, value: formatDayResult(brief.today_pnl_usd), tone: signTone(brief.today_pnl_usd) }]),
+              ]}
+            />
             {thread && <p className={styles.muted}>{riskPlanText(thread.thread.plan)}</p>}
           </section>
         )}

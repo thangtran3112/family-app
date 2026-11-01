@@ -1,0 +1,9 @@
+/* Tabs switch what is shown below (design-component-system §4.3): the selected tab is a 2 px amber underline, never a fill (Segmented) or a side bar (lists). */
+.root { box-sizing: border-box; display: flex; gap: var(--space-1); }
+.root[data-track="true"] { border-bottom: 1px solid var(--color-hairline); }
+.root[data-size="md"] { min-height: var(--size-md); }
+.root[data-size="lg"] { min-height: var(--size-lg); }
+.tab { display: inline-flex; min-width: 40px; align-items: center; justify-content: center; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 0 var(--space-3); color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-medium); line-height: var(--line-label); white-space: nowrap; cursor: pointer; }
+.tab:hover { color: var(--color-text); }
+.tab[aria-selected="true"] { border-bottom-color: var(--color-amber); color: var(--color-text); font-weight: var(--weight-semibold); }
+.tab:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }

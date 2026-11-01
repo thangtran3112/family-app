@@ -15,6 +15,7 @@ import { SwingOverview } from "./SwingOverview";
 import { planOpensIn } from "./ThreadAction";
 import styles from "./landing.module.css";
 import o from "./overview.module.css";
+import { Skeleton } from "@/components/ui/StateBlocks";
 
 const POLL_MS = 4000;
 
@@ -90,27 +91,27 @@ function PageSkeleton() {
     <div role="status" aria-busy="true" aria-label={PRACTICE_COPY.threadPageLoading} className={o.grid}>
       <div className={o.main}>
         <div className={styles.panel}>
-          <span className={`${styles.skel} ${styles.skelTitle}`} />
-          <span className={`${styles.skel} ${styles.skelMoney}`} />
-          <span className={`${styles.skel} ${styles.skelLine}`} />
+          <Skeleton width={120} />
+          <Skeleton width={96} height={14} />
+          <Skeleton width="60%" />
         </div>
         <div className={styles.panel}>
-          <span className={`${styles.skel} ${styles.skelTitle}`} />
-          <span className={`${styles.skel} ${styles.skelButton}`} />
-          <span className={`${styles.skel} ${styles.skelLine}`} />
+          <Skeleton width={120} />
+          <Skeleton width={160} height={40} />
+          <Skeleton width="60%" />
         </div>
         <div className={styles.panel}>
-          <span className={`${styles.skel} ${styles.skelTitle}`} />
-          <span className={`${styles.skel} ${styles.skelCurve}`} />
+          <Skeleton width={120} />
+          <Skeleton height={200} />
         </div>
       </div>
       <div className={o.side}>
         <div className={styles.panel}>
-          <span className={`${styles.skel} ${styles.skelTitle}`} />
+          <Skeleton width={120} />
           <div className={styles.skelStats}>
-            <span className={`${styles.skel} ${styles.skelStat}`} />
-            <span className={`${styles.skel} ${styles.skelStat}`} />
-            <span className={`${styles.skel} ${styles.skelStat}`} />
+            <Skeleton height={32} />
+            <Skeleton height={32} />
+            <Skeleton height={32} />
           </div>
         </div>
       </div>

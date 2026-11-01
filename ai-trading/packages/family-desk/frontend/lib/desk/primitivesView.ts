@@ -67,3 +67,66 @@ export const UNSAVED_TEXT = "You have unsaved changes";
 export function formBarStatus<T>({ dirty = false, status }: { dirty?: boolean; status?: T | null }): T | string | null {
   return status ?? (dirty ? UNSAVED_TEXT : null);
 }
+
+/**
+ * Roving focus for Segmented and Tabs, the contract `technicals/TimeframeTabs` set: the arrows move one step and wrap, Home and End jump to
+ * the ends. A disabled index is skipped. Returns the index to move to, or null when the key is not a move (or nothing can take focus).
+ * `axis: "horizontal"` listens to Left and Right only (tabs); the default also takes Up and Down (a radio group).
+ */
+export function rovingTarget(key: string, index: number, count: number, options: { enabled?: ReadonlyArray<boolean>; axis?: "horizontal" | "any" } = {}): number | null {
+  const { enabled, axis = "any" } = options;
+  const forward = key === "ArrowRight" || (axis === "any" && key === "ArrowDown");
+  const back = key === "ArrowLeft" || (axis === "any" && key === "ArrowUp");
+  const step = forward || key === "Home" ? 1 : back || key === "End" ? -1 : 0;
+  if (step === 0 || count <= 0) return null;
+  let at = key === "Home" ? -1 : key === "End" ? count : index;
+  for (let tries = 0; tries < count; tries += 1) {
+    at = (at + step + count) % count;
+    if (enabled?.[at] !== false) return at;
+  }
+  return null;
+}
+
+/** The index that takes Tab focus in a roving group: the selected one, else the first that is not disabled (so the group is never skipped). */
+export function rovingStop(selected: number, enabled: ReadonlyArray<boolean>): number {
+  if (selected >= 0 && selected < enabled.length && enabled[selected]) return selected;
+  return Math.max(0, enabled.findIndex((on) => on));
+}
+
+/** The DOM ids a tab and its panel share: the tab names its panel (`aria-controls`) and the panel names its tab (`aria-labelledby`). */
+export const tabDomIds = (base: string, id: string): { tab: string; panel: string } => ({ tab: `${base}-tab-${id}`, panel: `${base}-panel-${id}` });
+
+/** A control that opens a mode (Manage, Edit) says "Done" while the mode is open, instead of looking pressed: nothing is switched on, the screen changed. */
+export const modeLabel = (label: string, open: boolean): string => (open ? "Done" : label);
+
+/** What a RailList row is: a link when it has an `href`, a button when it has `onSelect`, else plain text. A row that looks clickable is never plain text. */
+export function railRowKind(row: { href?: string; onSelect?: () => void }): "link" | "button" | "text" {
+  if (row.href !== undefined) return "link";
+  return row.onSelect === undefined ? "text" : "button";
+}
+
+/** The selected row of a list is marked the way its element allows: `aria-current` on a link, `aria-pressed` on a button, nothing on text. */
+export function railRowSelection(kind: "link" | "button" | "text", selected: boolean): { "aria-current"?: "page"; "aria-pressed"?: boolean } {
+  if (kind === "link") return { "aria-current": selected ? "page" : undefined };
+  if (kind === "button") return { "aria-pressed": selected };
+  return {};
+}
+
+/** How many columns a FactList lays out: one is the default, two only when asked (a wide panel); anything else is one. */
+export const factColumns = (columns: number | undefined): 1 | 2 => (columns === 2 ? 2 : 1);
+
+/** The label shown while a QueryBoundary retry is in flight: it says what is happening instead of staying "Try again". */
+export const retryLabel = (retrying: boolean): string => (retrying ? "Trying again" : "Try again");
+
+export type QueryView = "ready" | "empty" | "loading" | "error" | "retrying";
+
+/**
+ * What a QueryBoundary shows. Data wins: a failed refresh keeps the old values on screen. Without data, a retry in flight keeps the
+ * error block on screen saying "Trying again" (instead of flashing the loading block), a failure shows the error block, and the
+ * rest is loading. `isEmpty` is whether the data that arrived has nothing to list.
+ */
+export function queryView(query: { data: unknown; error: unknown; loading: boolean }, options: { retrying?: boolean; isEmpty?: boolean } = {}): QueryView {
+  if (query.data !== null) return options.isEmpty ? "empty" : "ready";
+  if (options.retrying && query.loading) return "retrying";
+  return query.error !== null ? "error" : "loading";
+}

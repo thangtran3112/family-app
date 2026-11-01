@@ -1,5 +1,6 @@
 import { StrategySpecV1Schema, type StrategySpecV1 } from "@ai-trading/contracts";
 import { DeskApiError } from "../api/client.ts";
+import { strategyHref } from "../desk/hrefs.ts";
 import type { StrategyTemplate } from "../templates.ts";
 
 type StrategyRecord = { id: number; name: string };
@@ -31,7 +32,7 @@ export function selectStrategyTemplate(state: StrategyCreationState): StrategyCr
 export function strategyCreationRecovery(state: StrategyCreationState): { href: string; label: string } | null {
   if (state.kind === "version-failed") {
     return {
-      href: `/strategies?id=${state.strategyId}`,
+      href: strategyHref(state.strategyId),
       label: `Open strategy ${state.strategyId} to add its version`,
     };
   }

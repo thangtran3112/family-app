@@ -3,7 +3,8 @@
 import type { Condition, Operand } from "@ai-trading/contracts";
 import type { Problem } from "@/lib/api/schemas";
 import { OperandPicker } from "@/components/conditions/OperandPicker";
-import { ALERT_OPERATORS, PATTERN_OPTIONS, operatorOf, withOperator, type AlertForm, type AlertOperatorId } from "@/lib/desk/alertForm";
+import { PatternFields, type PatternCondition } from "@/components/conditions/PatternFields";
+import { ALERT_OPERATORS, operatorOf, withOperator, type AlertForm, type AlertOperatorId } from "@/lib/desk/alertForm";
 import { problemsForRow } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
@@ -13,15 +14,11 @@ import styles from "./setup.module.css";
 import { problemLine } from "@/lib/desk/problems";
 
 type CompareCondition = Extract<Condition, { left: Operand; right: Operand }>;
-type PatternCondition = Extract<Condition, { op: "pattern" }>;
 const isCompare = (row: Condition): row is CompareCondition => "left" in row && "right" in row;
 const isPattern = (row: Condition): row is PatternCondition => "op" in row && row.op === "pattern";
 
 const BLANK_ROW: Condition = { op: "crosses_above", left: { series: "close" }, right: { series: "vwap" } };
 const number = (text: string) => (text.trim() === "" ? Number.NaN : Number(text));
-const count = (text: string) => (text.trim() === "" ? undefined : Number(text));
-/** Drops undefined keys so an empty trend or count is left out of the spec. */
-const compact = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Condition;
 
 export function ConditionStep({ form, onChange, problems }: {
   form: AlertForm;
@@ -76,29 +73,10 @@ function ConditionFields({ row, index, onChange }: { row: Condition; index: numb
   );
 
   if (isPattern(row)) {
-    const edit = (changes: Record<string, unknown>) =>
-      onChange(compact({ op: "pattern", pattern: row.pattern, trend: row.trend, trendBars: row.trendBars, withinBars: row.withinBars, ...changes }));
     return (
       <>
         {operator}
-        <Field id={fieldId("pattern")} label="Pattern">
-          <Select value={row.pattern} onChange={(event) => edit({ pattern: event.target.value })}>
-            {PATTERN_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </Select>
-        </Field>
-        <Field id={fieldId("trend")} label="Trend">
-          <Select value={row.trend ?? "any"} onChange={(event) => edit({ trend: event.target.value === "any" ? undefined : event.target.value })}>
-            <option value="any">Any trend</option>
-            <option value="after_downtrend">After a downtrend</option>
-            <option value="after_uptrend">After an uptrend</option>
-          </Select>
-        </Field>
-        <Field id={fieldId("trend-bars")} label="Trend bars">
-          <NumberInput min={3} max={50} value={row.trendBars ?? ""} onChange={(event) => edit({ trendBars: count(event.target.value) })} />
-        </Field>
-        <Field id={fieldId("within-bars")} label="Within last bars">
-          <NumberInput min={1} max={5} value={row.withinBars ?? ""} onChange={(event) => edit({ withinBars: count(event.target.value) })} />
-        </Field>
+        <PatternFields condition={row} idBase={`alert-condition-${index}`} onChange={onChange} />
       </>
     );
   }

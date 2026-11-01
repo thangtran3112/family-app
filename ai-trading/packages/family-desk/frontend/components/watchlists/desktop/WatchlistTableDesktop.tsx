@@ -14,6 +14,7 @@ import { SYMBOL_HREF } from "@/lib/lanes";
 import { biasUiTone } from "@/lib/desk/workspace";
 import { strategyChips } from "@/lib/desk/watchlistView";
 import styles from "./watchlistDesktop.module.css";
+import { alertNewHref } from "@/lib/desk/hrefs";
 
 type Row = WatchlistTable["rows"][number];
 
@@ -101,7 +102,7 @@ export function WatchlistTableDesktop({ rows, dim }: { rows: WatchlistTable["row
         if (href) router.push(href);
       }}
       rowActions={(row) => (
-        <a href={`/alerts/new?source=symbol:${encodeURIComponent(row.symbol)}`} className={styles.link}>+ Alert</a>
+        <a href={alertNewHref({ symbol: row.symbol })} className={styles.link}>+ Alert</a>
       )}
     />
   );

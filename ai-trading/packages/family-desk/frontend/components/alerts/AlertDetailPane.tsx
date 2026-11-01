@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { deleteAlertStrategy, loadAlertFires, loadAlertStrategy } from "@/lib/desk/alerts";
 import { actionError, actionFor, actionLabel, deliveryTone, sourceText, statusText, statusTone } from "@/lib/desk/alertsView";
@@ -15,6 +16,7 @@ import { parseAlertSpec } from "@/lib/spec/parse";
 import { runRowAction } from "./AlertTable";
 import { FireThumb } from "./FireThumb";
 import styles from "./alerts.module.css";
+import { alertNewHref } from "@/lib/desk/hrefs";
 
 /** Right pane of D9: the selected alert strategy, its sentence, JSON and recent fires. */
 export function AlertDetailPane({ id, onChanged }: { id: number | null; onChanged: () => void }) {
@@ -28,6 +30,7 @@ function AlertDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
   const [busy, setBusy] = useState<"action" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const deleteRef = useRef<HTMLButtonElement>(null);
   const [deleted, setDeleted] = useState(false);
 
   if (deleted) return <p className={styles.muted}>This alert strategy was deleted. Select another to see its details.</p>;
@@ -85,17 +88,21 @@ function AlertDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
             {busy === "action" ? "Working…" : actionLabel(action)}
           </Button>
         )}
-        <Link href={`/alerts/new?edit=${id}`} className={styles.link}>Edit</Link>
+        <Link href={alertNewHref({ edit: id })} className={styles.link}>Edit</Link>
         {confirming ? (
-          <span className={styles.confirm}>
-            Delete this alert strategy?
-            <Button variant="danger" disabled={busy !== null} loading={busy === "delete"} onClick={remove}>
-              {busy === "delete" ? "Deleting…" : "Delete"}
-            </Button>
-            <Button disabled={busy !== null} onClick={() => setConfirming(false)}>Keep</Button>
-          </span>
+          <InlineConfirm
+            label="Confirm deleting this alert strategy"
+            prompt="Delete this alert strategy?"
+            tone="danger"
+            confirmLabel={busy === "delete" ? "Deleting…" : "Delete"}
+            cancelLabel="Keep"
+            busy={busy === "delete"}
+            returnFocus={deleteRef}
+            onConfirm={remove}
+            onCancel={() => setConfirming(false)}
+          />
         ) : (
-          <Button variant="danger" onClick={() => setConfirming(true)}>Delete</Button>
+          <Button ref={deleteRef} variant="danger" onClick={() => setConfirming(true)}>Delete</Button>
         )}
       </div>
       {error && <p role="alert" className={styles.error}>{error}</p>}

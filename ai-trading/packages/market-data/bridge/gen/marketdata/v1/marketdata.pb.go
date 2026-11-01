@@ -292,6 +292,57 @@ func (Adjustment) EnumDescriptor() ([]byte, []int) {
 	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{4}
 }
 
+// H1. Where a bar came from. Set only when the archive is enabled (ARCHIVE_ENABLED=1); UNSPECIFIED
+// means the bridge was not asked to say, so a client from before H1 sees the answer it always saw.
+type BarSource int32
+
+const (
+	BarSource_BAR_SOURCE_UNSPECIFIED BarSource = 0
+	BarSource_PROVIDER               BarSource = 1 // fetched from the vendor for this request
+	BarSource_ARCHIVE                BarSource = 2 // read from the write-once RAW archive; no vendor call was made for it
+)
+
+// Enum value maps for BarSource.
+var (
+	BarSource_name = map[int32]string{
+		0: "BAR_SOURCE_UNSPECIFIED",
+		1: "PROVIDER",
+		2: "ARCHIVE",
+	}
+	BarSource_value = map[string]int32{
+		"BAR_SOURCE_UNSPECIFIED": 0,
+		"PROVIDER":               1,
+		"ARCHIVE":                2,
+	}
+)
+
+func (x BarSource) Enum() *BarSource {
+	p := new(BarSource)
+	*p = x
+	return p
+}
+
+func (x BarSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BarSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_marketdata_v1_marketdata_proto_enumTypes[5].Descriptor()
+}
+
+func (BarSource) Type() protoreflect.EnumType {
+	return &file_marketdata_v1_marketdata_proto_enumTypes[5]
+}
+
+func (x BarSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BarSource.Descriptor instead.
+func (BarSource) EnumDescriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{5}
+}
+
 type Right int32
 
 const (
@@ -325,11 +376,11 @@ func (x Right) String() string {
 }
 
 func (Right) Descriptor() protoreflect.EnumDescriptor {
-	return file_marketdata_v1_marketdata_proto_enumTypes[5].Descriptor()
+	return file_marketdata_v1_marketdata_proto_enumTypes[6].Descriptor()
 }
 
 func (Right) Type() protoreflect.EnumType {
-	return &file_marketdata_v1_marketdata_proto_enumTypes[5]
+	return &file_marketdata_v1_marketdata_proto_enumTypes[6]
 }
 
 func (x Right) Number() protoreflect.EnumNumber {
@@ -338,7 +389,7 @@ func (x Right) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Right.Descriptor instead.
 func (Right) EnumDescriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{5}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{6}
 }
 
 // Values are prefixed (unlike the 02t sketch): proto3 enum values are scoped to
@@ -385,11 +436,11 @@ func (x HealthState) String() string {
 }
 
 func (HealthState) Descriptor() protoreflect.EnumDescriptor {
-	return file_marketdata_v1_marketdata_proto_enumTypes[6].Descriptor()
+	return file_marketdata_v1_marketdata_proto_enumTypes[7].Descriptor()
 }
 
 func (HealthState) Type() protoreflect.EnumType {
-	return &file_marketdata_v1_marketdata_proto_enumTypes[6]
+	return &file_marketdata_v1_marketdata_proto_enumTypes[7]
 }
 
 func (x HealthState) Number() protoreflect.EnumNumber {
@@ -398,7 +449,7 @@ func (x HealthState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HealthState.Descriptor instead.
 func (HealthState) EnumDescriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{6}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{7}
 }
 
 type RoutingSource int32
@@ -434,11 +485,11 @@ func (x RoutingSource) String() string {
 }
 
 func (RoutingSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_marketdata_v1_marketdata_proto_enumTypes[7].Descriptor()
+	return file_marketdata_v1_marketdata_proto_enumTypes[8].Descriptor()
 }
 
 func (RoutingSource) Type() protoreflect.EnumType {
-	return &file_marketdata_v1_marketdata_proto_enumTypes[7]
+	return &file_marketdata_v1_marketdata_proto_enumTypes[8]
 }
 
 func (x RoutingSource) Number() protoreflect.EnumNumber {
@@ -447,7 +498,7 @@ func (x RoutingSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RoutingSource.Descriptor instead.
 func (RoutingSource) EnumDescriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{7}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{8}
 }
 
 type Attempt struct {
@@ -901,6 +952,7 @@ type Bar struct {
 	// close; a minute bar one minute after its start). Named close_at because field 5 already is
 	// `close`: protocol buffers forbid two fields with one name in a message.
 	CloseAt       *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=close_at,json=closeAt,proto3" json:"close_at,omitempty"`
+	Source        BarSource              `protobuf:"varint,9,opt,name=source,proto3,enum=familyapp.marketdata.v1.BarSource" json:"source,omitempty"` // H1
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -989,6 +1041,13 @@ func (x *Bar) GetCloseAt() *timestamppb.Timestamp {
 		return x.CloseAt
 	}
 	return nil
+}
+
+func (x *Bar) GetSource() BarSource {
+	if x != nil {
+		return x.Source
+	}
+	return BarSource_BAR_SOURCE_UNSPECIFIED
 }
 
 type GetBarsResponse struct {
@@ -1598,6 +1657,7 @@ func (*ListProvidersRequest) Descriptor() ([]byte, []int) {
 type ListProvidersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Providers     []*ProviderHealth      `protobuf:"bytes,1,rep,name=providers,proto3" json:"providers,omitempty"`
+	Archive       *ArchiveInfo           `protobuf:"bytes,2,opt,name=archive,proto3" json:"archive,omitempty"` // H1. Always set by a bridge that has it; absent from an older bridge.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1639,6 +1699,405 @@ func (x *ListProvidersResponse) GetProviders() []*ProviderHealth {
 	return nil
 }
 
+func (x *ListProvidersResponse) GetArchive() *ArchiveInfo {
+	if x != nil {
+		return x.Archive
+	}
+	return nil
+}
+
+// H1. The RAW history archive's state. The archive is bridge-wide, not per provider: each archived
+// session records the provider that filled it.
+type ArchiveInfo struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Enabled bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"` // ARCHIVE_ENABLED=1
+	Backend string                 `protobuf:"bytes,2,opt,name=backend,proto3" json:"backend,omitempty"`  // "none" | "postgres"
+	// Empty when healthy. Otherwise why the archive cannot be read, in words (bars then pass through
+	// from the provider, 02u §3.2), e.g. "database_unreachable".
+	Reason        string          `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Ranges        []*ArchiveRange `protobuf:"bytes,4,rep,name=ranges,proto3" json:"ranges,omitempty"` // one per archived timeframe that holds a session
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveInfo) Reset() {
+	*x = ArchiveInfo{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveInfo) ProtoMessage() {}
+
+func (x *ArchiveInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveInfo.ProtoReflect.Descriptor instead.
+func (*ArchiveInfo) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ArchiveInfo) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *ArchiveInfo) GetBackend() string {
+	if x != nil {
+		return x.Backend
+	}
+	return ""
+}
+
+func (x *ArchiveInfo) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ArchiveInfo) GetRanges() []*ArchiveRange {
+	if x != nil {
+		return x.Ranges
+	}
+	return nil
+}
+
+type ArchiveRange struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Timeframe       Timeframe              `protobuf:"varint,1,opt,name=timeframe,proto3,enum=familyapp.marketdata.v1.Timeframe" json:"timeframe,omitempty"` // MINUTE_1 or DAY_1
+	EarliestSession string                 `protobuf:"bytes,2,opt,name=earliest_session,json=earliestSession,proto3" json:"earliest_session,omitempty"`      // YYYY-MM-DD, XNYS
+	LatestSession   string                 `protobuf:"bytes,3,opt,name=latest_session,json=latestSession,proto3" json:"latest_session,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ArchiveRange) Reset() {
+	*x = ArchiveRange{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveRange) ProtoMessage() {}
+
+func (x *ArchiveRange) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveRange.ProtoReflect.Descriptor instead.
+func (*ArchiveRange) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ArchiveRange) GetTimeframe() Timeframe {
+	if x != nil {
+		return x.Timeframe
+	}
+	return Timeframe_TIMEFRAME_UNSPECIFIED
+}
+
+func (x *ArchiveRange) GetEarliestSession() string {
+	if x != nil {
+		return x.EarliestSession
+	}
+	return ""
+}
+
+func (x *ArchiveRange) GetLatestSession() string {
+	if x != nil {
+		return x.LatestSession
+	}
+	return ""
+}
+
+// H1. Fill the RAW archive for every finished session in [first_session, last_session] that is not
+// archived yet, without returning bars. Same fill path as GetBars (filled on read, written once).
+type EnsureHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbols       []string               `protobuf:"bytes,1,rep,name=symbols,proto3" json:"symbols,omitempty"`                                             // 1..100
+	Timeframe     Timeframe              `protobuf:"varint,2,opt,name=timeframe,proto3,enum=familyapp.marketdata.v1.Timeframe" json:"timeframe,omitempty"` // MINUTE_1 or DAY_1
+	FirstSession  string                 `protobuf:"bytes,3,opt,name=first_session,json=firstSession,proto3" json:"first_session,omitempty"`               // YYYY-MM-DD
+	LastSession   string                 `protobuf:"bytes,4,opt,name=last_session,json=lastSession,proto3" json:"last_session,omitempty"`                  // YYYY-MM-DD; must be a finished session (else INVALID_ARGUMENT)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnsureHistoryRequest) Reset() {
+	*x = EnsureHistoryRequest{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnsureHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnsureHistoryRequest) ProtoMessage() {}
+
+func (x *EnsureHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnsureHistoryRequest.ProtoReflect.Descriptor instead.
+func (*EnsureHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *EnsureHistoryRequest) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+func (x *EnsureHistoryRequest) GetTimeframe() Timeframe {
+	if x != nil {
+		return x.Timeframe
+	}
+	return Timeframe_TIMEFRAME_UNSPECIFIED
+}
+
+func (x *EnsureHistoryRequest) GetFirstSession() string {
+	if x != nil {
+		return x.FirstSession
+	}
+	return ""
+}
+
+func (x *EnsureHistoryRequest) GetLastSession() string {
+	if x != nil {
+		return x.LastSession
+	}
+	return ""
+}
+
+type SessionGap struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionDate   string                 `protobuf:"bytes,1,opt,name=session_date,json=sessionDate,proto3" json:"session_date,omitempty"`
+	Error         ErrorKind              `protobuf:"varint,2,opt,name=error,proto3,enum=familyapp.marketdata.v1.ErrorKind" json:"error,omitempty"`
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"` // never a secret
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SessionGap) Reset() {
+	*x = SessionGap{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionGap) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionGap) ProtoMessage() {}
+
+func (x *SessionGap) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionGap.ProtoReflect.Descriptor instead.
+func (*SessionGap) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SessionGap) GetSessionDate() string {
+	if x != nil {
+		return x.SessionDate
+	}
+	return ""
+}
+
+func (x *SessionGap) GetError() ErrorKind {
+	if x != nil {
+		return x.Error
+	}
+	return ErrorKind_ERROR_KIND_UNSPECIFIED
+}
+
+func (x *SessionGap) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// Per symbol, so one symbol's failure never fails the others (a failed fill is data, not a
+// transport error): archived + fetched_now + len(missing) = the finished sessions in the range.
+type Coverage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Archived      int32                  `protobuf:"varint,2,opt,name=archived,proto3" json:"archived,omitempty"`                       // already in the archive before this call
+	FetchedNow    int32                  `protobuf:"varint,3,opt,name=fetched_now,json=fetchedNow,proto3" json:"fetched_now,omitempty"` // filled by this call
+	Missing       []*SessionGap          `protobuf:"bytes,4,rep,name=missing,proto3" json:"missing,omitempty"`                          // finished sessions that could not be filled, with why
+	Uncovered     []string               `protobuf:"bytes,5,rep,name=uncovered,proto3" json:"uncovered,omitempty"`                      // weekdays before the calendar's history floor: never fabricated
+	Error         string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`                              // set when the symbol could not be checked at all (archive read failed)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Coverage) Reset() {
+	*x = Coverage{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Coverage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Coverage) ProtoMessage() {}
+
+func (x *Coverage) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Coverage.ProtoReflect.Descriptor instead.
+func (*Coverage) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *Coverage) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *Coverage) GetArchived() int32 {
+	if x != nil {
+		return x.Archived
+	}
+	return 0
+}
+
+func (x *Coverage) GetFetchedNow() int32 {
+	if x != nil {
+		return x.FetchedNow
+	}
+	return 0
+}
+
+func (x *Coverage) GetMissing() []*SessionGap {
+	if x != nil {
+		return x.Missing
+	}
+	return nil
+}
+
+func (x *Coverage) GetUncovered() []string {
+	if x != nil {
+		return x.Uncovered
+	}
+	return nil
+}
+
+func (x *Coverage) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type EnsureHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Coverage      []*Coverage            `protobuf:"bytes,1,rep,name=coverage,proto3" json:"coverage,omitempty"` // in request order, deduped
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnsureHistoryResponse) Reset() {
+	*x = EnsureHistoryResponse{}
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnsureHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnsureHistoryResponse) ProtoMessage() {}
+
+func (x *EnsureHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnsureHistoryResponse.ProtoReflect.Descriptor instead.
+func (*EnsureHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *EnsureHistoryResponse) GetCoverage() []*Coverage {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
 type ClassRouting struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DataClass     DataClass              `protobuf:"varint,1,opt,name=data_class,json=dataClass,proto3,enum=familyapp.marketdata.v1.DataClass" json:"data_class,omitempty"`
@@ -1651,7 +2110,7 @@ type ClassRouting struct {
 
 func (x *ClassRouting) Reset() {
 	*x = ClassRouting{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1663,7 +2122,7 @@ func (x *ClassRouting) String() string {
 func (*ClassRouting) ProtoMessage() {}
 
 func (x *ClassRouting) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[15]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1676,7 +2135,7 @@ func (x *ClassRouting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClassRouting.ProtoReflect.Descriptor instead.
 func (*ClassRouting) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{15}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ClassRouting) GetDataClass() DataClass {
@@ -1718,7 +2177,7 @@ type Routing struct {
 
 func (x *Routing) Reset() {
 	*x = Routing{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1730,7 +2189,7 @@ func (x *Routing) String() string {
 func (*Routing) ProtoMessage() {}
 
 func (x *Routing) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[16]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1743,7 +2202,7 @@ func (x *Routing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Routing.ProtoReflect.Descriptor instead.
 func (*Routing) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{16}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Routing) GetClasses() []*ClassRouting {
@@ -1777,7 +2236,7 @@ type ClassPreference struct {
 
 func (x *ClassPreference) Reset() {
 	*x = ClassPreference{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1789,7 +2248,7 @@ func (x *ClassPreference) String() string {
 func (*ClassPreference) ProtoMessage() {}
 
 func (x *ClassPreference) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[17]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1802,7 +2261,7 @@ func (x *ClassPreference) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClassPreference.ProtoReflect.Descriptor instead.
 func (*ClassPreference) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{17}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ClassPreference) GetDataClass() DataClass {
@@ -1829,7 +2288,7 @@ type SetRoutingRequest struct {
 
 func (x *SetRoutingRequest) Reset() {
 	*x = SetRoutingRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1841,7 +2300,7 @@ func (x *SetRoutingRequest) String() string {
 func (*SetRoutingRequest) ProtoMessage() {}
 
 func (x *SetRoutingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[18]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1854,7 +2313,7 @@ func (x *SetRoutingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoutingRequest.ProtoReflect.Descriptor instead.
 func (*SetRoutingRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{18}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetRoutingRequest) GetPreferences() []*ClassPreference {
@@ -1879,7 +2338,7 @@ type GetStatusRequest struct {
 
 func (x *GetStatusRequest) Reset() {
 	*x = GetStatusRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1891,7 +2350,7 @@ func (x *GetStatusRequest) String() string {
 func (*GetStatusRequest) ProtoMessage() {}
 
 func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[19]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1904,7 +2363,7 @@ func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetStatusRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{19}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{25}
 }
 
 type WatchStatusRequest struct {
@@ -1915,7 +2374,7 @@ type WatchStatusRequest struct {
 
 func (x *WatchStatusRequest) Reset() {
 	*x = WatchStatusRequest{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1927,7 +2386,7 @@ func (x *WatchStatusRequest) String() string {
 func (*WatchStatusRequest) ProtoMessage() {}
 
 func (x *WatchStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[20]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1940,7 +2399,7 @@ func (x *WatchStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchStatusRequest.ProtoReflect.Descriptor instead.
 func (*WatchStatusRequest) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{20}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{26}
 }
 
 type BridgeStatus struct {
@@ -1956,7 +2415,7 @@ type BridgeStatus struct {
 
 func (x *BridgeStatus) Reset() {
 	*x = BridgeStatus{}
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[21]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1968,7 +2427,7 @@ func (x *BridgeStatus) String() string {
 func (*BridgeStatus) ProtoMessage() {}
 
 func (x *BridgeStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_marketdata_v1_marketdata_proto_msgTypes[21]
+	mi := &file_marketdata_v1_marketdata_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1981,7 +2440,7 @@ func (x *BridgeStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BridgeStatus.ProtoReflect.Descriptor instead.
 func (*BridgeStatus) Descriptor() ([]byte, []int) {
-	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{21}
+	return file_marketdata_v1_marketdata_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *BridgeStatus) GetAt() *timestamppb.Timestamp {
@@ -2060,7 +2519,7 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"adjustment\x18\x05 \x01(\x0e2#.familyapp.marketdata.v1.AdjustmentR\n" +
 	"adjustment\x12!\n" +
 	"\fpin_provider\x18\x06 \x01(\tR\vpinProvider\x12/\n" +
-	"\x05as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\"\xf9\x01\n" +
+	"\x05as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\"\xb5\x02\n" +
 	"\x03Bar\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12\x12\n" +
 	"\x04open\x18\x02 \x01(\x01R\x04open\x12\x12\n" +
@@ -2069,7 +2528,8 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x05close\x18\x05 \x01(\x01R\x05close\x12\x16\n" +
 	"\x06volume\x18\x06 \x01(\x03R\x06volume\x12!\n" +
 	"\fsession_date\x18\a \x01(\tR\vsessionDate\x125\n" +
-	"\bclose_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\acloseAt\"\x94\x01\n" +
+	"\bclose_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\acloseAt\x12:\n" +
+	"\x06source\x18\t \x01(\x0e2\".familyapp.marketdata.v1.BarSourceR\x06source\"\x94\x01\n" +
 	"\x0fGetBarsResponse\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x120\n" +
 	"\x04bars\x18\x02 \x03(\v2\x1c.familyapp.marketdata.v1.BarR\x04bars\x127\n" +
@@ -2139,9 +2599,39 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\tfallbacks\x18\x03 \x01(\x03R\tfallbacks\x12\x15\n" +
 	"\x06p50_ms\x18\x04 \x01(\x05R\x05p50Ms\x12\x15\n" +
 	"\x06p95_ms\x18\x05 \x01(\x05R\x05p95Ms\"\x16\n" +
-	"\x14ListProvidersRequest\"^\n" +
+	"\x14ListProvidersRequest\"\x9e\x01\n" +
 	"\x15ListProvidersResponse\x12E\n" +
-	"\tproviders\x18\x01 \x03(\v2'.familyapp.marketdata.v1.ProviderHealthR\tproviders\"\xa1\x01\n" +
+	"\tproviders\x18\x01 \x03(\v2'.familyapp.marketdata.v1.ProviderHealthR\tproviders\x12>\n" +
+	"\aarchive\x18\x02 \x01(\v2$.familyapp.marketdata.v1.ArchiveInfoR\aarchive\"\x98\x01\n" +
+	"\vArchiveInfo\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x18\n" +
+	"\abackend\x18\x02 \x01(\tR\abackend\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12=\n" +
+	"\x06ranges\x18\x04 \x03(\v2%.familyapp.marketdata.v1.ArchiveRangeR\x06ranges\"\xa2\x01\n" +
+	"\fArchiveRange\x12@\n" +
+	"\ttimeframe\x18\x01 \x01(\x0e2\".familyapp.marketdata.v1.TimeframeR\ttimeframe\x12)\n" +
+	"\x10earliest_session\x18\x02 \x01(\tR\x0fearliestSession\x12%\n" +
+	"\x0elatest_session\x18\x03 \x01(\tR\rlatestSession\"\xba\x01\n" +
+	"\x14EnsureHistoryRequest\x12\x18\n" +
+	"\asymbols\x18\x01 \x03(\tR\asymbols\x12@\n" +
+	"\ttimeframe\x18\x02 \x01(\x0e2\".familyapp.marketdata.v1.TimeframeR\ttimeframe\x12#\n" +
+	"\rfirst_session\x18\x03 \x01(\tR\ffirstSession\x12!\n" +
+	"\flast_session\x18\x04 \x01(\tR\vlastSession\"\x83\x01\n" +
+	"\n" +
+	"SessionGap\x12!\n" +
+	"\fsession_date\x18\x01 \x01(\tR\vsessionDate\x128\n" +
+	"\x05error\x18\x02 \x01(\x0e2\".familyapp.marketdata.v1.ErrorKindR\x05error\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"\xd2\x01\n" +
+	"\bCoverage\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1a\n" +
+	"\barchived\x18\x02 \x01(\x05R\barchived\x12\x1f\n" +
+	"\vfetched_now\x18\x03 \x01(\x05R\n" +
+	"fetchedNow\x12=\n" +
+	"\amissing\x18\x04 \x03(\v2#.familyapp.marketdata.v1.SessionGapR\amissing\x12\x1c\n" +
+	"\tuncovered\x18\x05 \x03(\tR\tuncovered\x12\x14\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\"V\n" +
+	"\x15EnsureHistoryResponse\x12=\n" +
+	"\bcoverage\x18\x01 \x03(\v2!.familyapp.marketdata.v1.CoverageR\bcoverage\"\xa1\x01\n" +
 	"\fClassRouting\x12A\n" +
 	"\n" +
 	"data_class\x18\x01 \x01(\x0e2\".familyapp.marketdata.v1.DataClassR\tdataClass\x12\x1c\n" +
@@ -2195,7 +2685,11 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x16ADJUSTMENT_UNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03ALL\x10\x01\x12\t\n" +
 	"\x05SPLIT\x10\x02\x12\a\n" +
-	"\x03RAW\x10\x03*1\n" +
+	"\x03RAW\x10\x03*B\n" +
+	"\tBarSource\x12\x1a\n" +
+	"\x16BAR_SOURCE_UNSPECIFIED\x10\x00\x12\f\n" +
+	"\bPROVIDER\x10\x01\x12\v\n" +
+	"\aARCHIVE\x10\x02*1\n" +
 	"\x05Right\x12\x15\n" +
 	"\x11RIGHT_UNSPECIFIED\x10\x00\x12\b\n" +
 	"\x04CALL\x10\x01\x12\a\n" +
@@ -2210,7 +2704,7 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\rRoutingSource\x12\x1e\n" +
 	"\x1aROUTING_SOURCE_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vENV_DEFAULT\x10\x01\x12\b\n" +
-	"\x04DESK\x10\x022\xd1\x05\n" +
+	"\x04DESK\x10\x022\xc1\x06\n" +
 	"\n" +
 	"MarketData\x12b\n" +
 	"\tGetQuotes\x12).familyapp.marketdata.v1.GetQuotesRequest\x1a*.familyapp.marketdata.v1.GetQuotesResponse\x12\\\n" +
@@ -2220,7 +2714,8 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\tGetStatus\x12).familyapp.marketdata.v1.GetStatusRequest\x1a%.familyapp.marketdata.v1.BridgeStatus\x12c\n" +
 	"\vWatchStatus\x12+.familyapp.marketdata.v1.WatchStatusRequest\x1a%.familyapp.marketdata.v1.BridgeStatus0\x01\x12Z\n" +
 	"\n" +
-	"SetRouting\x12*.familyapp.marketdata.v1.SetRoutingRequest\x1a .familyapp.marketdata.v1.RoutingB\x8e\x02\n" +
+	"SetRouting\x12*.familyapp.marketdata.v1.SetRoutingRequest\x1a .familyapp.marketdata.v1.Routing\x12n\n" +
+	"\rEnsureHistory\x12-.familyapp.marketdata.v1.EnsureHistoryRequest\x1a..familyapp.marketdata.v1.EnsureHistoryResponseB\x8e\x02\n" +
 	"\x1bcom.familyapp.marketdata.v1B\x0fMarketdataProtoP\x01Z`github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1;marketdatav1\xa2\x02\x03FMX\xaa\x02\x17Familyapp.Marketdata.V1\xca\x02\x17Familyapp\\Marketdata\\V1\xe2\x02#Familyapp\\Marketdata\\V1\\GPBMetadata\xea\x02\x19Familyapp::Marketdata::V1b\x06proto3"
 
 var (
@@ -2235,100 +2730,117 @@ func file_marketdata_v1_marketdata_proto_rawDescGZIP() []byte {
 	return file_marketdata_v1_marketdata_proto_rawDescData
 }
 
-var file_marketdata_v1_marketdata_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_marketdata_v1_marketdata_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
+var file_marketdata_v1_marketdata_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_marketdata_v1_marketdata_proto_goTypes = []any{
 	(DataClass)(0),                 // 0: familyapp.marketdata.v1.DataClass
 	(Quality)(0),                   // 1: familyapp.marketdata.v1.Quality
 	(ErrorKind)(0),                 // 2: familyapp.marketdata.v1.ErrorKind
 	(Timeframe)(0),                 // 3: familyapp.marketdata.v1.Timeframe
 	(Adjustment)(0),                // 4: familyapp.marketdata.v1.Adjustment
-	(Right)(0),                     // 5: familyapp.marketdata.v1.Right
-	(HealthState)(0),               // 6: familyapp.marketdata.v1.HealthState
-	(RoutingSource)(0),             // 7: familyapp.marketdata.v1.RoutingSource
-	(*Attempt)(nil),                // 8: familyapp.marketdata.v1.Attempt
-	(*Served)(nil),                 // 9: familyapp.marketdata.v1.Served
-	(*GetQuotesRequest)(nil),       // 10: familyapp.marketdata.v1.GetQuotesRequest
-	(*Quote)(nil),                  // 11: familyapp.marketdata.v1.Quote
-	(*GetQuotesResponse)(nil),      // 12: familyapp.marketdata.v1.GetQuotesResponse
-	(*GetBarsRequest)(nil),         // 13: familyapp.marketdata.v1.GetBarsRequest
-	(*Bar)(nil),                    // 14: familyapp.marketdata.v1.Bar
-	(*GetBarsResponse)(nil),        // 15: familyapp.marketdata.v1.GetBarsResponse
-	(*GetOptionChainRequest)(nil),  // 16: familyapp.marketdata.v1.GetOptionChainRequest
-	(*OptionContract)(nil),         // 17: familyapp.marketdata.v1.OptionContract
-	(*GetOptionChainResponse)(nil), // 18: familyapp.marketdata.v1.GetOptionChainResponse
-	(*ProviderHealth)(nil),         // 19: familyapp.marketdata.v1.ProviderHealth
-	(*Counters)(nil),               // 20: familyapp.marketdata.v1.Counters
-	(*ListProvidersRequest)(nil),   // 21: familyapp.marketdata.v1.ListProvidersRequest
-	(*ListProvidersResponse)(nil),  // 22: familyapp.marketdata.v1.ListProvidersResponse
-	(*ClassRouting)(nil),           // 23: familyapp.marketdata.v1.ClassRouting
-	(*Routing)(nil),                // 24: familyapp.marketdata.v1.Routing
-	(*ClassPreference)(nil),        // 25: familyapp.marketdata.v1.ClassPreference
-	(*SetRoutingRequest)(nil),      // 26: familyapp.marketdata.v1.SetRoutingRequest
-	(*GetStatusRequest)(nil),       // 27: familyapp.marketdata.v1.GetStatusRequest
-	(*WatchStatusRequest)(nil),     // 28: familyapp.marketdata.v1.WatchStatusRequest
-	(*BridgeStatus)(nil),           // 29: familyapp.marketdata.v1.BridgeStatus
-	(*timestamppb.Timestamp)(nil),  // 30: google.protobuf.Timestamp
+	(BarSource)(0),                 // 5: familyapp.marketdata.v1.BarSource
+	(Right)(0),                     // 6: familyapp.marketdata.v1.Right
+	(HealthState)(0),               // 7: familyapp.marketdata.v1.HealthState
+	(RoutingSource)(0),             // 8: familyapp.marketdata.v1.RoutingSource
+	(*Attempt)(nil),                // 9: familyapp.marketdata.v1.Attempt
+	(*Served)(nil),                 // 10: familyapp.marketdata.v1.Served
+	(*GetQuotesRequest)(nil),       // 11: familyapp.marketdata.v1.GetQuotesRequest
+	(*Quote)(nil),                  // 12: familyapp.marketdata.v1.Quote
+	(*GetQuotesResponse)(nil),      // 13: familyapp.marketdata.v1.GetQuotesResponse
+	(*GetBarsRequest)(nil),         // 14: familyapp.marketdata.v1.GetBarsRequest
+	(*Bar)(nil),                    // 15: familyapp.marketdata.v1.Bar
+	(*GetBarsResponse)(nil),        // 16: familyapp.marketdata.v1.GetBarsResponse
+	(*GetOptionChainRequest)(nil),  // 17: familyapp.marketdata.v1.GetOptionChainRequest
+	(*OptionContract)(nil),         // 18: familyapp.marketdata.v1.OptionContract
+	(*GetOptionChainResponse)(nil), // 19: familyapp.marketdata.v1.GetOptionChainResponse
+	(*ProviderHealth)(nil),         // 20: familyapp.marketdata.v1.ProviderHealth
+	(*Counters)(nil),               // 21: familyapp.marketdata.v1.Counters
+	(*ListProvidersRequest)(nil),   // 22: familyapp.marketdata.v1.ListProvidersRequest
+	(*ListProvidersResponse)(nil),  // 23: familyapp.marketdata.v1.ListProvidersResponse
+	(*ArchiveInfo)(nil),            // 24: familyapp.marketdata.v1.ArchiveInfo
+	(*ArchiveRange)(nil),           // 25: familyapp.marketdata.v1.ArchiveRange
+	(*EnsureHistoryRequest)(nil),   // 26: familyapp.marketdata.v1.EnsureHistoryRequest
+	(*SessionGap)(nil),             // 27: familyapp.marketdata.v1.SessionGap
+	(*Coverage)(nil),               // 28: familyapp.marketdata.v1.Coverage
+	(*EnsureHistoryResponse)(nil),  // 29: familyapp.marketdata.v1.EnsureHistoryResponse
+	(*ClassRouting)(nil),           // 30: familyapp.marketdata.v1.ClassRouting
+	(*Routing)(nil),                // 31: familyapp.marketdata.v1.Routing
+	(*ClassPreference)(nil),        // 32: familyapp.marketdata.v1.ClassPreference
+	(*SetRoutingRequest)(nil),      // 33: familyapp.marketdata.v1.SetRoutingRequest
+	(*GetStatusRequest)(nil),       // 34: familyapp.marketdata.v1.GetStatusRequest
+	(*WatchStatusRequest)(nil),     // 35: familyapp.marketdata.v1.WatchStatusRequest
+	(*BridgeStatus)(nil),           // 36: familyapp.marketdata.v1.BridgeStatus
+	(*timestamppb.Timestamp)(nil),  // 37: google.protobuf.Timestamp
 }
 var file_marketdata_v1_marketdata_proto_depIdxs = []int32{
 	2,  // 0: familyapp.marketdata.v1.Attempt.error:type_name -> familyapp.marketdata.v1.ErrorKind
 	1,  // 1: familyapp.marketdata.v1.Served.quality:type_name -> familyapp.marketdata.v1.Quality
-	8,  // 2: familyapp.marketdata.v1.Served.attempts:type_name -> familyapp.marketdata.v1.Attempt
-	30, // 3: familyapp.marketdata.v1.Quote.as_of:type_name -> google.protobuf.Timestamp
+	9,  // 2: familyapp.marketdata.v1.Served.attempts:type_name -> familyapp.marketdata.v1.Attempt
+	37, // 3: familyapp.marketdata.v1.Quote.as_of:type_name -> google.protobuf.Timestamp
 	1,  // 4: familyapp.marketdata.v1.Quote.quality:type_name -> familyapp.marketdata.v1.Quality
-	11, // 5: familyapp.marketdata.v1.GetQuotesResponse.quotes:type_name -> familyapp.marketdata.v1.Quote
-	9,  // 6: familyapp.marketdata.v1.GetQuotesResponse.served:type_name -> familyapp.marketdata.v1.Served
+	12, // 5: familyapp.marketdata.v1.GetQuotesResponse.quotes:type_name -> familyapp.marketdata.v1.Quote
+	10, // 6: familyapp.marketdata.v1.GetQuotesResponse.served:type_name -> familyapp.marketdata.v1.Served
 	3,  // 7: familyapp.marketdata.v1.GetBarsRequest.timeframe:type_name -> familyapp.marketdata.v1.Timeframe
-	30, // 8: familyapp.marketdata.v1.GetBarsRequest.start:type_name -> google.protobuf.Timestamp
-	30, // 9: familyapp.marketdata.v1.GetBarsRequest.end:type_name -> google.protobuf.Timestamp
+	37, // 8: familyapp.marketdata.v1.GetBarsRequest.start:type_name -> google.protobuf.Timestamp
+	37, // 9: familyapp.marketdata.v1.GetBarsRequest.end:type_name -> google.protobuf.Timestamp
 	4,  // 10: familyapp.marketdata.v1.GetBarsRequest.adjustment:type_name -> familyapp.marketdata.v1.Adjustment
-	30, // 11: familyapp.marketdata.v1.GetBarsRequest.as_of:type_name -> google.protobuf.Timestamp
-	30, // 12: familyapp.marketdata.v1.Bar.start:type_name -> google.protobuf.Timestamp
-	30, // 13: familyapp.marketdata.v1.Bar.close_at:type_name -> google.protobuf.Timestamp
-	14, // 14: familyapp.marketdata.v1.GetBarsResponse.bars:type_name -> familyapp.marketdata.v1.Bar
-	9,  // 15: familyapp.marketdata.v1.GetBarsResponse.served:type_name -> familyapp.marketdata.v1.Served
-	5,  // 16: familyapp.marketdata.v1.GetOptionChainRequest.right:type_name -> familyapp.marketdata.v1.Right
-	30, // 17: familyapp.marketdata.v1.GetOptionChainRequest.now:type_name -> google.protobuf.Timestamp
-	5,  // 18: familyapp.marketdata.v1.OptionContract.right:type_name -> familyapp.marketdata.v1.Right
-	30, // 19: familyapp.marketdata.v1.OptionContract.as_of:type_name -> google.protobuf.Timestamp
-	30, // 20: familyapp.marketdata.v1.OptionContract.greeks_as_of:type_name -> google.protobuf.Timestamp
-	1,  // 21: familyapp.marketdata.v1.OptionContract.quality:type_name -> familyapp.marketdata.v1.Quality
-	17, // 22: familyapp.marketdata.v1.GetOptionChainResponse.contracts:type_name -> familyapp.marketdata.v1.OptionContract
-	9,  // 23: familyapp.marketdata.v1.GetOptionChainResponse.served:type_name -> familyapp.marketdata.v1.Served
-	0,  // 24: familyapp.marketdata.v1.ProviderHealth.classes:type_name -> familyapp.marketdata.v1.DataClass
-	6,  // 25: familyapp.marketdata.v1.ProviderHealth.state:type_name -> familyapp.marketdata.v1.HealthState
-	30, // 26: familyapp.marketdata.v1.ProviderHealth.last_ok:type_name -> google.protobuf.Timestamp
-	30, // 27: familyapp.marketdata.v1.ProviderHealth.newest_tick:type_name -> google.protobuf.Timestamp
-	1,  // 28: familyapp.marketdata.v1.ProviderHealth.quality:type_name -> familyapp.marketdata.v1.Quality
-	20, // 29: familyapp.marketdata.v1.ProviderHealth.counters:type_name -> familyapp.marketdata.v1.Counters
-	19, // 30: familyapp.marketdata.v1.ListProvidersResponse.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
-	0,  // 31: familyapp.marketdata.v1.ClassRouting.data_class:type_name -> familyapp.marketdata.v1.DataClass
-	23, // 32: familyapp.marketdata.v1.Routing.classes:type_name -> familyapp.marketdata.v1.ClassRouting
-	7,  // 33: familyapp.marketdata.v1.Routing.source:type_name -> familyapp.marketdata.v1.RoutingSource
-	0,  // 34: familyapp.marketdata.v1.ClassPreference.data_class:type_name -> familyapp.marketdata.v1.DataClass
-	25, // 35: familyapp.marketdata.v1.SetRoutingRequest.preferences:type_name -> familyapp.marketdata.v1.ClassPreference
-	30, // 36: familyapp.marketdata.v1.BridgeStatus.at:type_name -> google.protobuf.Timestamp
-	19, // 37: familyapp.marketdata.v1.BridgeStatus.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
-	24, // 38: familyapp.marketdata.v1.BridgeStatus.routing:type_name -> familyapp.marketdata.v1.Routing
-	10, // 39: familyapp.marketdata.v1.MarketData.GetQuotes:input_type -> familyapp.marketdata.v1.GetQuotesRequest
-	13, // 40: familyapp.marketdata.v1.MarketData.GetBars:input_type -> familyapp.marketdata.v1.GetBarsRequest
-	16, // 41: familyapp.marketdata.v1.MarketData.GetOptionChain:input_type -> familyapp.marketdata.v1.GetOptionChainRequest
-	21, // 42: familyapp.marketdata.v1.MarketData.ListProviders:input_type -> familyapp.marketdata.v1.ListProvidersRequest
-	27, // 43: familyapp.marketdata.v1.MarketData.GetStatus:input_type -> familyapp.marketdata.v1.GetStatusRequest
-	28, // 44: familyapp.marketdata.v1.MarketData.WatchStatus:input_type -> familyapp.marketdata.v1.WatchStatusRequest
-	26, // 45: familyapp.marketdata.v1.MarketData.SetRouting:input_type -> familyapp.marketdata.v1.SetRoutingRequest
-	12, // 46: familyapp.marketdata.v1.MarketData.GetQuotes:output_type -> familyapp.marketdata.v1.GetQuotesResponse
-	15, // 47: familyapp.marketdata.v1.MarketData.GetBars:output_type -> familyapp.marketdata.v1.GetBarsResponse
-	18, // 48: familyapp.marketdata.v1.MarketData.GetOptionChain:output_type -> familyapp.marketdata.v1.GetOptionChainResponse
-	22, // 49: familyapp.marketdata.v1.MarketData.ListProviders:output_type -> familyapp.marketdata.v1.ListProvidersResponse
-	29, // 50: familyapp.marketdata.v1.MarketData.GetStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
-	29, // 51: familyapp.marketdata.v1.MarketData.WatchStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
-	24, // 52: familyapp.marketdata.v1.MarketData.SetRouting:output_type -> familyapp.marketdata.v1.Routing
-	46, // [46:53] is the sub-list for method output_type
-	39, // [39:46] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	37, // 11: familyapp.marketdata.v1.GetBarsRequest.as_of:type_name -> google.protobuf.Timestamp
+	37, // 12: familyapp.marketdata.v1.Bar.start:type_name -> google.protobuf.Timestamp
+	37, // 13: familyapp.marketdata.v1.Bar.close_at:type_name -> google.protobuf.Timestamp
+	5,  // 14: familyapp.marketdata.v1.Bar.source:type_name -> familyapp.marketdata.v1.BarSource
+	15, // 15: familyapp.marketdata.v1.GetBarsResponse.bars:type_name -> familyapp.marketdata.v1.Bar
+	10, // 16: familyapp.marketdata.v1.GetBarsResponse.served:type_name -> familyapp.marketdata.v1.Served
+	6,  // 17: familyapp.marketdata.v1.GetOptionChainRequest.right:type_name -> familyapp.marketdata.v1.Right
+	37, // 18: familyapp.marketdata.v1.GetOptionChainRequest.now:type_name -> google.protobuf.Timestamp
+	6,  // 19: familyapp.marketdata.v1.OptionContract.right:type_name -> familyapp.marketdata.v1.Right
+	37, // 20: familyapp.marketdata.v1.OptionContract.as_of:type_name -> google.protobuf.Timestamp
+	37, // 21: familyapp.marketdata.v1.OptionContract.greeks_as_of:type_name -> google.protobuf.Timestamp
+	1,  // 22: familyapp.marketdata.v1.OptionContract.quality:type_name -> familyapp.marketdata.v1.Quality
+	18, // 23: familyapp.marketdata.v1.GetOptionChainResponse.contracts:type_name -> familyapp.marketdata.v1.OptionContract
+	10, // 24: familyapp.marketdata.v1.GetOptionChainResponse.served:type_name -> familyapp.marketdata.v1.Served
+	0,  // 25: familyapp.marketdata.v1.ProviderHealth.classes:type_name -> familyapp.marketdata.v1.DataClass
+	7,  // 26: familyapp.marketdata.v1.ProviderHealth.state:type_name -> familyapp.marketdata.v1.HealthState
+	37, // 27: familyapp.marketdata.v1.ProviderHealth.last_ok:type_name -> google.protobuf.Timestamp
+	37, // 28: familyapp.marketdata.v1.ProviderHealth.newest_tick:type_name -> google.protobuf.Timestamp
+	1,  // 29: familyapp.marketdata.v1.ProviderHealth.quality:type_name -> familyapp.marketdata.v1.Quality
+	21, // 30: familyapp.marketdata.v1.ProviderHealth.counters:type_name -> familyapp.marketdata.v1.Counters
+	20, // 31: familyapp.marketdata.v1.ListProvidersResponse.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
+	24, // 32: familyapp.marketdata.v1.ListProvidersResponse.archive:type_name -> familyapp.marketdata.v1.ArchiveInfo
+	25, // 33: familyapp.marketdata.v1.ArchiveInfo.ranges:type_name -> familyapp.marketdata.v1.ArchiveRange
+	3,  // 34: familyapp.marketdata.v1.ArchiveRange.timeframe:type_name -> familyapp.marketdata.v1.Timeframe
+	3,  // 35: familyapp.marketdata.v1.EnsureHistoryRequest.timeframe:type_name -> familyapp.marketdata.v1.Timeframe
+	2,  // 36: familyapp.marketdata.v1.SessionGap.error:type_name -> familyapp.marketdata.v1.ErrorKind
+	27, // 37: familyapp.marketdata.v1.Coverage.missing:type_name -> familyapp.marketdata.v1.SessionGap
+	28, // 38: familyapp.marketdata.v1.EnsureHistoryResponse.coverage:type_name -> familyapp.marketdata.v1.Coverage
+	0,  // 39: familyapp.marketdata.v1.ClassRouting.data_class:type_name -> familyapp.marketdata.v1.DataClass
+	30, // 40: familyapp.marketdata.v1.Routing.classes:type_name -> familyapp.marketdata.v1.ClassRouting
+	8,  // 41: familyapp.marketdata.v1.Routing.source:type_name -> familyapp.marketdata.v1.RoutingSource
+	0,  // 42: familyapp.marketdata.v1.ClassPreference.data_class:type_name -> familyapp.marketdata.v1.DataClass
+	32, // 43: familyapp.marketdata.v1.SetRoutingRequest.preferences:type_name -> familyapp.marketdata.v1.ClassPreference
+	37, // 44: familyapp.marketdata.v1.BridgeStatus.at:type_name -> google.protobuf.Timestamp
+	20, // 45: familyapp.marketdata.v1.BridgeStatus.providers:type_name -> familyapp.marketdata.v1.ProviderHealth
+	31, // 46: familyapp.marketdata.v1.BridgeStatus.routing:type_name -> familyapp.marketdata.v1.Routing
+	11, // 47: familyapp.marketdata.v1.MarketData.GetQuotes:input_type -> familyapp.marketdata.v1.GetQuotesRequest
+	14, // 48: familyapp.marketdata.v1.MarketData.GetBars:input_type -> familyapp.marketdata.v1.GetBarsRequest
+	17, // 49: familyapp.marketdata.v1.MarketData.GetOptionChain:input_type -> familyapp.marketdata.v1.GetOptionChainRequest
+	22, // 50: familyapp.marketdata.v1.MarketData.ListProviders:input_type -> familyapp.marketdata.v1.ListProvidersRequest
+	34, // 51: familyapp.marketdata.v1.MarketData.GetStatus:input_type -> familyapp.marketdata.v1.GetStatusRequest
+	35, // 52: familyapp.marketdata.v1.MarketData.WatchStatus:input_type -> familyapp.marketdata.v1.WatchStatusRequest
+	33, // 53: familyapp.marketdata.v1.MarketData.SetRouting:input_type -> familyapp.marketdata.v1.SetRoutingRequest
+	26, // 54: familyapp.marketdata.v1.MarketData.EnsureHistory:input_type -> familyapp.marketdata.v1.EnsureHistoryRequest
+	13, // 55: familyapp.marketdata.v1.MarketData.GetQuotes:output_type -> familyapp.marketdata.v1.GetQuotesResponse
+	16, // 56: familyapp.marketdata.v1.MarketData.GetBars:output_type -> familyapp.marketdata.v1.GetBarsResponse
+	19, // 57: familyapp.marketdata.v1.MarketData.GetOptionChain:output_type -> familyapp.marketdata.v1.GetOptionChainResponse
+	23, // 58: familyapp.marketdata.v1.MarketData.ListProviders:output_type -> familyapp.marketdata.v1.ListProvidersResponse
+	36, // 59: familyapp.marketdata.v1.MarketData.GetStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
+	36, // 60: familyapp.marketdata.v1.MarketData.WatchStatus:output_type -> familyapp.marketdata.v1.BridgeStatus
+	31, // 61: familyapp.marketdata.v1.MarketData.SetRouting:output_type -> familyapp.marketdata.v1.Routing
+	29, // 62: familyapp.marketdata.v1.MarketData.EnsureHistory:output_type -> familyapp.marketdata.v1.EnsureHistoryResponse
+	55, // [55:63] is the sub-list for method output_type
+	47, // [47:55] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_marketdata_v1_marketdata_proto_init() }
@@ -2344,8 +2856,8 @@ func file_marketdata_v1_marketdata_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_marketdata_v1_marketdata_proto_rawDesc), len(file_marketdata_v1_marketdata_proto_rawDesc)),
-			NumEnums:      8,
-			NumMessages:   22,
+			NumEnums:      9,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

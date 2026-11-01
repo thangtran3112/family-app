@@ -20,6 +20,7 @@ import {
 import { signalCountsBySymbol, signalsSinceEtStart } from "@/lib/watchlists/signals";
 import { watchlistItemDeletePath } from "@/lib/watchlists/symbols";
 import styles from "@/components/watchlists/watchlists.module.css";
+import { strategyHref } from "@/lib/desk/hrefs";
 
 type Watchlist = ReturnType<typeof WatchlistsResponseSchema.parse>[number];
 type Item = ReturnType<typeof WatchlistItemsSchema.parse>[number];
@@ -367,7 +368,7 @@ export function WatchlistsMobile() {
               <p className={styles.muted}>No current strategy version watches this list.</p>
             )}
             {!strategiesLoading && !strategiesError && usedBy.map(({ strategy }) => (
-              <a className={styles.strategyRow} href={`/strategies?id=${strategy.id}`} key={strategy.id}>
+              <a className={styles.strategyRow} href={strategyHref(strategy.id)} key={strategy.id}>
                 <span>{strategy.name}</span>
                 <span className={`${styles.stageBadge} ${strategy.stage === "draft" ? styles.stageDraft : ""}`}>
                   {strategy.stage === "draft" ? "Draft" : strategy.stage.replaceAll("_", " ")}

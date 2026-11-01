@@ -1,62 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
-import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
+import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { deskFetch } from "@/lib/api/client";
 import {
   StrategiesResponseSchema,
   StrategyVersionsResponseSchema,
 } from "@/lib/api/schemas";
+import { strategyHref } from "@/lib/desk/hrefs";
 import { stageLabel, stageTone } from "@/lib/desk/strategyView";
+import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "./strategies.module.css";
 
 type Strategy = ReturnType<typeof StrategiesResponseSchema.parse>[number];
 type StrategyVersion = ReturnType<typeof StrategyVersionsResponseSchema.parse>[number];
 type StrategyRow = { strategy: Strategy; currentVersion: StrategyVersion | null };
 
+async function loadRows(signal: AbortSignal): Promise<StrategyRow[]> {
+  const strategies = await deskFetch("/api/desk/strategies", StrategiesResponseSchema, { signal });
+  return Promise.all(strategies.map(async (strategy) => {
+    if (strategy.current_version_id === null) return { strategy, currentVersion: null };
+    const versions = await deskFetch(`/api/desk/strategies/${strategy.id}/versions`, StrategyVersionsResponseSchema, { signal });
+    const currentVersion = versions.find(({ id }) => id === strategy.current_version_id);
+    if (!currentVersion) throw new Error(`Current version for ${strategy.name} was not returned.`);
+    return { strategy, currentVersion };
+  }));
+}
+
 export function StrategyList() {
-  const [rows, setRows] = useState<StrategyRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const loadRows = useCallback(async () => {
-    const strategies = await deskFetch("/api/desk/strategies", StrategiesResponseSchema);
-    return Promise.all(strategies.map(async (strategy) => {
-      if (strategy.current_version_id === null) return { strategy, currentVersion: null };
-      const versions = await deskFetch(
-        `/api/desk/strategies/${strategy.id}/versions`,
-        StrategyVersionsResponseSchema,
-      );
-      const currentVersion = versions.find(({ id }) => id === strategy.current_version_id);
-      if (!currentVersion) throw new Error(`Current version for ${strategy.name} was not returned.`);
-      return { strategy, currentVersion };
-    }));
-  }, []);
-
-  const retry = useCallback(() => {
-    setLoading(true);
-    setError("");
-    void loadRows().then(setRows).catch(() => {
-      setError("Couldn't load the strategy list.");
-    }).finally(() => setLoading(false));
-  }, [loadRows]);
-
-  useEffect(() => {
-    let active = true;
-    void loadRows().then((result) => {
-      if (active) setRows(result);
-    }).catch(() => {
-      if (active) setError("Couldn't load the strategy list.");
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
-  }, [loadRows]);
+  const query = useDeskQuery("strategy-list", loadRows);
 
   return (
-    <section aria-busy={loading} className={styles.listSection}>
+    <section aria-busy={query.loading} className={styles.listSection}>
       <div className={styles.sectionHeading}>
         <div>
           <p className={styles.eyebrow}>YOUR DESK</p>
@@ -65,18 +41,18 @@ export function StrategyList() {
         <Button variant="primary" href="/strategies/new">New strategy</Button>
       </div>
 
-      {loading && <p aria-live="polite" className={styles.feedback}>Loading strategies…</p>}
-      {error && (
-        <Banner tone="down" action={<Button onClick={retry}>Try again</Button>}>{error}</Banner>
-      )}
-      {!loading && !error && rows.length === 0 && (
-        <div className={styles.emptyState}>
-          <h2>No strategies yet</h2>
-          <p>Start with a template. New strategies are saved as drafts.</p>
-          <Button variant="primary" href="/strategies/new">Browse templates</Button>
-        </div>
-      )}
-      {!loading && !error && rows.length > 0 && (
+      <QueryBoundary
+        query={query}
+        loading="Loading strategies…"
+        message="Couldn't load the strategy list."
+        isEmpty={(rows) => rows.length === 0}
+        empty={
+          <EmptyBlock title="No strategies yet" action={{ label: "Browse templates", href: "/strategies/new" }}>
+            Start with a template. New strategies are saved as drafts.
+          </EmptyBlock>
+        }
+      >
+        {(rows) => (
         <div className={styles.tableWrap}>
           <table className={styles.strategyTable}>
             <thead>
@@ -91,7 +67,7 @@ export function StrategyList() {
               {rows.map(({ strategy, currentVersion }) => (
                 <tr key={strategy.id}>
                   <td data-label="Name">
-                    <a className={styles.strategyName} href={`/strategies?id=${strategy.id}`}>
+                    <a className={styles.strategyName} href={strategyHref(strategy.id)}>
                       {strategy.name}
                     </a>
                   </td>
@@ -101,7 +77,7 @@ export function StrategyList() {
                   <td data-label="Current version">
                     {currentVersion
                       ? `v${currentVersion.version}`
-                      : <span className={styles.noVersion}>No version <a href={`/strategies?id=${strategy.id}`}>Add version</a></span>}
+                      : <span className={styles.noVersion}>No version <a href={strategyHref(strategy.id)}>Add version</a></span>}
                   </td>
                   <td data-label="30-day paper P&amp;L">
                     <span className={styles.fixtureValue}>Needs broker setup</span>
@@ -111,7 +87,8 @@ export function StrategyList() {
             </tbody>
           </table>
         </div>
-      )}
+        )}
+      </QueryBoundary>
     </section>
   );
 }

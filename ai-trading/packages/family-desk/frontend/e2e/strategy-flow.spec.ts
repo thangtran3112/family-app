@@ -15,8 +15,11 @@ test("template creates draft v1, alert_only real tick alerts, and v1 stays immut
   expect(versionsBefore).toHaveLength(1);
   const immutableV1 = versionsBefore[0].spec;
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: /Alert only/ }).click();
+  const move = page.getByRole("dialog", { name: "Move this strategy to alert only?" });
+  await expect(move).toContainText("It cannot move back to draft.");
+  await move.getByRole("button", { name: "Move to alert only" }).click();
+  await expect(move).toHaveCount(0);
   await expect(page.getByText(/alert only/i).first()).toBeVisible();
   const tick = await api(page, "/api/desk/__e2e/tick", { method: "POST" });
   expect(tick.ok()).toBeTruthy();

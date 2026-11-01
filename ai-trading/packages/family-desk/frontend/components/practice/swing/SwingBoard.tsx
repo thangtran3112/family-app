@@ -9,6 +9,7 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText, prepPercent } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
@@ -62,7 +63,6 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const confirmedWatch = useRef(initial.watch);
   const latestStar = useRef(0);
   const passButton = useRef<HTMLButtonElement>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
   // Arriving, and after Pass has replaced the day's buttons, the keyboard starts at the page heading, not at the skip link (D-093).
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -86,10 +86,6 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const peekData = peek.data !== null && isSwingDayList(peek.data) ? peek.data.peek : null;
 
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? dayOpenClock(list.day) });
-
-  useEffect(() => {
-    if (confirmPass) confirmButton.current?.focus();
-  }, [confirmPass]);
 
   useEffect(() => {
     mounted.current = true;
@@ -192,11 +188,6 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       follow(prepStep(await whenReady(() => continueSwingThread(threadId)), now, now));
     }, PRACTICE_COPY.swingContinueError);
 
-  function cancelPass() {
-    setConfirmPass(false);
-    requestAnimationFrame(() => passButton.current?.focus());
-  }
-
   const holdsOpen = list.holds.filter((hold) => hold.status === "open").length;
   const held = heldSides(list.holds);
   const after = ended ? endedDayView(list, swingState) : null;
@@ -249,13 +240,18 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
         {message && <p className={dayStyles.banner} role="alert">{message}</p>}
         {late && !ended && <p className={dayStyles.banner} role="status">{late}</p>}
         {confirmPass && !ended && (
-          <div role="group" aria-label="Confirm passing the day" className={dayStyles.confirm}>
-            <p className={dayStyles.line}>{passDayPrompt({ dayNo: list.day_no, holdsOpen })}</p>
-            <div className={dayStyles.actions}>
-              <button ref={confirmButton} type="button" className={`${dayStyles.button} ${dayStyles.primary}`} disabled={busy} onClick={() => void pass()}>{PRACTICE_COPY.swingPassDay}</button>
-              <button type="button" className={dayStyles.button} onClick={cancelPass}>{PRACTICE_COPY.dayKeepPracticing}</button>
-            </div>
-          </div>
+          <InlineConfirm
+            label="Confirm passing the day"
+            layout="block"
+            size="md"
+            prompt={<span>{passDayPrompt({ dayNo: list.day_no, holdsOpen })}</span>}
+            confirmLabel={PRACTICE_COPY.swingPassDay}
+            cancelLabel={PRACTICE_COPY.dayKeepPracticing}
+            busy={busy}
+            returnFocus={passButton}
+            onConfirm={() => void pass()}
+            onCancel={() => setConfirmPass(false)}
+          />
         )}
         {prep !== null && (
           <div role="status">
