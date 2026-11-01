@@ -65,7 +65,7 @@ export type PlanDraft = {
   filterIds: number[];
   listAt: string;
   maxList: string;
-  /** Window, session, interval and armed; the symbol, day, shares and risk plan are not the daily plan's (D-007). */
+  /** Window, session and interval; the symbol, day, shares and risk plan are not the daily plan's (D-007), and nothing is armed (D-153). */
   setup: SetupDraft;
 };
 
@@ -143,7 +143,7 @@ export function planDraftToSpec(draft: PlanDraft): unknown {
     sessions: numberOrNaN(draft.sessions),
     hideDates: draft.hideDates ? "yes" : "no",
     screen: { filters: draft.filterIds.map((id) => ({ id })), listAt: draft.listAt, maxList: numberOrNaN(draft.maxList) },
-    setup: { window: setup.window, session: setup.session, interval: setup.interval, armed: setup.armed },
+    setup: { window: setup.window, session: setup.session, interval: setup.interval, armed: [] }, // nothing is armed on a new plan (D-153); the contract wants the field
   };
 }
 

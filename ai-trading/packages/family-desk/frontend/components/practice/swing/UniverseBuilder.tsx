@@ -50,7 +50,7 @@ const COLUMNS: DenseColumn<UniverseRowView>[] = [
   { key: "chg_20d", label: "20-day change", align: "right", render: (row) => <span className={styles[row.chg20dTone]}>{row.chg20d}</span> },
   { key: "dollar_volume", label: "Avg dollar volume", align: "right", render: (row) => row.dollarVolume },
   { key: "atr", label: "ATR %", align: "right", render: (row) => row.atr },
-  { key: "warnings", label: "Warnings", render: (row) => <span className={styles.warning}>{row.warnings.join(" · ")}</span> },
+  { key: "warnings", label: "Warnings", hideWhenEmpty: true, render: (row) => (row.warnings.length > 0 ? <span className={styles.warning}>{row.warnings.join(" · ")}</span> : null) },
 ];
 
 /**
@@ -209,6 +209,8 @@ export function UniverseBuilder({
           <p className={modal.help} role="status">
             {preview ? prepProgressText(preview) : state.busy ? HUB_SWING_COPY.buildingList : PRACTICE_COPY.swingBuildFirst}
             {preview && state.busy && preview.state === "ready" && ` · ${HUB_SWING_COPY.updatingList}`}
+            {/* No request goes out while a setting is wrong: the table on screen is the last good one, and it says so (D-103). */}
+            {preview && !state.fresh && !state.busy && state.failure === null && ` · ${PRACTICE_COPY.swingListOld}`}
           </p>
           {state.expired && <p className={modal.fieldError} role="alert">{HUB_SWING_COPY.tooLong}</p>}
         </div>
@@ -229,6 +231,8 @@ export function UniverseBuilder({
                 rows={shown}
                 rowKey={(row) => row.symbol}
                 density="compact"
+                tight
+                scrollX
                 dim={!state.fresh}
                 empty={HUB_SWING_COPY.noRows}
                 rowActions={(row) => (

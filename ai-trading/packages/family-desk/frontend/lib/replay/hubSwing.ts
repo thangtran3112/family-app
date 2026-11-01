@@ -88,10 +88,6 @@ export function continueOutcome(next: Pick<SwingOpenNext, "day_list_id" | "plan"
   return { kind: "preparing", text: practiceText("swingPrepWait", { done: next.plan.prep.done, total: next.plan.prep.total, pct: prepPercent(next.plan.prep.done, next.plan.prep.total) }) };
 }
 
-/** The plan rows of a swing thread: the day rule's two limits count per week there (02p). */
-export const weeklyPlanRows = <T extends { id: string; label: string }>(rows: readonly T[]): T[] =>
-  rows.map((row) => (row.id === "max_loss" || row.id === "max_trades" ? { ...row, label: row.label.replace(/ a day$/, " a week") } : row));
-
 // -- the balance and equity curve ----------------------------------------------------------------------------------
 
 export type SwingCurveDay = {

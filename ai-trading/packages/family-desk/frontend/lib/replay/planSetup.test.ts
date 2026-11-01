@@ -49,6 +49,11 @@ test("a draft becomes the contract's JSON: yes/no words, no null, no shares and 
   assert.equal(spec.hideDates, "yes");
   assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "11:30" });
   assert.deepEqual(Object.keys(spec.setup as object), ["window", "session", "interval", "armed"]);
+  // D-153: the field is required by the contract and always empty, even when a draft carries strategies from elsewhere.
+  assert.deepEqual((spec.setup as Record<string, unknown>).armed, []);
+  const armedDraft = ready();
+  armedDraft.setup = { ...armedDraft.setup, armed: [{ source: "filter", id: 4 }] };
+  assert.deepEqual(((planDraftToSpec(armedDraft) as { setup: { armed: unknown } }).setup).armed, []);
   assert.equal(JSON.stringify(spec).includes("null"), false);
 });
 

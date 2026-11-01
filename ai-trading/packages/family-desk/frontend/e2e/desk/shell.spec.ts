@@ -277,6 +277,56 @@ test("Ctrl+K focuses symbol search; typing NV and choosing NVDA opens its chart"
   await expectCleanScreen(page);
 });
 
+// D-093: after a client-side route change the keyboard starts at the new page, not at the skip link and the chrome.
+test("a route change moves focus to the page heading, not the search box it started from (D-093)", async ({ page }) => {
+  await openDesk(page, "/");
+  await page.keyboard.press("Control+k");
+  await page.locator(".dk-top").getByRole("combobox", { name: "Search symbols" }).fill("NV");
+  await page.getByRole("listbox", { name: "Matching symbols" }).getByRole("option", { name: /^NVDA\b/ }).click();
+  await expect(page).toHaveURL(/\/technicals\?symbol=NVDA#chart$/);
+  const main = page.locator("#main-content");
+  await expect(main.getByRole("heading", { name: "NVDA", level: 1 })).toBeVisible();
+  const where = await page.evaluate(() => {
+    const active = document.activeElement;
+    return { inMain: !!active?.closest("#main-content"), tag: active?.tagName, onBody: active === document.body };
+  });
+  expect(where, "focus is inside the page, never on the body or the search box").toMatchObject({ inMain: true, onBody: false });
+});
+
+test("when the focused control leaves the page, focus goes to the page heading, not the body (D-093)", async ({ page }) => {
+  await openDesk(page, "/screener");
+  const main = page.locator("#main-content");
+  await expect(main.getByRole("heading", { level: 1 })).toBeVisible();
+  // A control that is replaced by another (Buy becomes Next day): focus it, then remove it.
+  await main.evaluate((node) => {
+    const gone = document.createElement("button");
+    gone.id = "e2e-gone";
+    gone.textContent = "Soon gone";
+    node.append(gone);
+    gone.focus();
+  });
+  await expect(page.locator("#e2e-gone")).toBeFocused();
+  await page.locator("#e2e-gone").evaluate((node) => node.remove());
+  await expect(main.getByRole("heading", { level: 1 })).toBeFocused();
+});
+
+test("a removed control never pulls focus off the top bar (D-093)", async ({ page }) => {
+  await openDesk(page, "/screener");
+  const main = page.locator("#main-content");
+  await main.evaluate((node) => {
+    const gone = document.createElement("button");
+    gone.id = "e2e-gone";
+    node.append(gone);
+    gone.focus();
+  });
+  // The mode button exists in both bands (the search collapses to an icon at 1180).
+  const modeButton = page.locator(".dk-top").getByRole("button", { name: /^Mode: / });
+  await modeButton.focus();
+  await page.locator("#e2e-gone").evaluate((node) => node.remove());
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await expect(modeButton).toBeFocused();
+});
+
 test("the chart's right rail: open at 1440, a collapsed strip with a drawer at 1180, and orders stay off", async ({ page }) => {
   const compact = test.info().project.name === "desktop-1180";
   await openDesk(page, "/technicals?symbol=NVDA#chart");
@@ -317,6 +367,26 @@ test("the search keeps its room beside two pills, the market pill drops the repe
     await expect(top.getByTitle(/^Market closed · opens /), "the pill keeps the whole text as its title").toBeVisible();
     await expect(top.getByTitle(/^Market closed · opens /)).not.toContainText("Market closed");
   }
+});
+
+test("the unread count sits above the bell, never on the glyph, even as 9+ (D-106)", async ({ page }) => {
+  await page.route("**/api/desk/status", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.alerts.unread = 12;
+    await route.fulfill({ response, json: body });
+  });
+  await openDesk(page, "/screener");
+  const bell = page.locator(".dk-top").getByRole("button", { name: "Alerts, 12 unread" });
+  await expect(bell).toBeVisible();
+  const rects = await bell.evaluate((button) => {
+    const box = (node: Element | null) => node!.getBoundingClientRect().toJSON() as { top: number; bottom: number; left: number; right: number };
+    return { icon: box(button.querySelector("svg")), badge: box(button.querySelector("span")), button: box(button) };
+  });
+  expect(await bell.locator("span").textContent(), "twelve unread read as 9+").toBe("9+");
+  // The bell is drawn 1.5 px inside its icon box, so the badge may dip that far and no further.
+  expect(rects.badge.bottom, "the count clears the glyph").toBeLessThanOrEqual(rects.icon.top + 1.5);
+  expect(rects.badge.top, "the count stays inside the viewport").toBeGreaterThanOrEqual(0);
 });
 
 test("a nav link's focus ring is drawn inside the bar, and the 404 links to Practice (D-108, D-135)", async ({ page }) => {

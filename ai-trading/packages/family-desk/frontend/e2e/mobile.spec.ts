@@ -6,6 +6,9 @@ test.beforeEach(async ({ context }) => prepare(context));
 test("390x844 mobile exposes five tabs, More routes, and no horizontal overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openDesk(page, "/more");
+  // D-109: the mobile shell's content region is the one `main`, and the skip link can focus it.
+  await expect(page.locator("main")).toHaveCount(1);
+  await expect(page.locator("main#main-content")).toHaveAttribute("tabindex", "-1");
   const nav = page.getByRole("navigation", { name: "Primary navigation" });
   await expect(nav.getByRole("link")).toHaveCount(5);
   for (const name of ["Watchlists", "Holdings", "Settings"]) {

@@ -26,6 +26,8 @@
 th.sticky { z-index: 2; }
 .actionsHead { width: 1%; }
 .actions { width: 1%; text-align: right; }
+/* A row's actions stay on one line: a caller's flex-wrap wrapper would otherwise stack its buttons in the 1%-wide cell and double the row height. */
+.table td.actions > * { flex-wrap: nowrap; }
 /* actions="hover" (the densest tables only): hidden until the row is hovered or holds focus. The default is visible, so touch and sight can reach them. */
 .wrap[data-actions="hover"] .actions > * { opacity: 0; }
 .wrap[data-actions="hover"] .row:hover .actions > *, .wrap[data-actions="hover"] .row:focus-within .actions > *, .wrap[data-actions="hover"] .actions > *:focus-visible { opacity: 1; }
