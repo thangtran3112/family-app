@@ -78,7 +78,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     alive.current = true;
     if (threadId === null) return;
     const controller = new AbortController();
-    void read(controller.signal);
+    const first = setTimeout(() => void read(controller.signal), 0); // after this effect, so the first answer is not a setState inside it
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void read(controller.signal);
     }, POLL_MS);
@@ -89,6 +89,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     return () => {
       alive.current = false;
       controller.abort();
+      clearTimeout(first);
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };

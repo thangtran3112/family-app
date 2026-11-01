@@ -243,10 +243,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       return;
     }
     switch (action.type) {
-      case "toggle_play": followed ? api.notify("info", PRACTICE_COPY.chartClockHint) : toggle(); break;
-      case "step": followed ? api.notify("info", PRACTICE_COPY.chartClockHint) : api.step(); break;
-      case "next_signal": followed ? api.notify("info", PRACTICE_COPY.chartClockHint) : api.nextSignal(); break;
-      case "speed": followed ? api.notify("info", PRACTICE_COPY.chartClockHint) : api.setSpeed(action.speed); break;
+      // A day thread's clock is the Summary's: its keys say so instead of moving anything (ADR-0018).
+      case "toggle_play": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else toggle(); break;
+      case "step": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.step(); break;
+      case "next_signal": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.nextSignal(); break;
+      case "speed": if (followed) api.notify("info", PRACTICE_COPY.chartClockHint); else api.setSpeed(action.speed); break;
       case "mark": placeMark(action.kind); break;
       case "stop_note": openComposer("stop"); break;
       case "note": openComposer("note"); break;
