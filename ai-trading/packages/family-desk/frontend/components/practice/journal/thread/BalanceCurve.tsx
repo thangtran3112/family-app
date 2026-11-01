@@ -4,7 +4,7 @@ import { useId } from "react";
 import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
-import { curveLayout, type Box } from "@/lib/replay/threadChart";
+import { curveLayout, dayTickStep, type Box } from "@/lib/replay/threadChart";
 import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
@@ -22,8 +22,8 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   const bottom = plot.y + plot.height;
   const last = points.length - 1;
   const drawn = points.length > 1;
-  // ponytail: x labels thinned to about 20 at most; per-point labels crowd past that. Upgrade: a responsive axis.
-  const every = Math.max(1, Math.ceil(points.length / 20));
+  // The x labels sit at one regular step ("Start", D5, D10 ...), as on the swing curve (D-123): no odd one out beside "Start".
+  const step = dayTickStep(last);
   const lowRight = lowest !== null && lowest.x > plot.x + plot.width - 80;
   // When the newest point is also the lowest, "Now" already says it: a second label on the same spot would print over it.
   const lowIsNow = lowest !== null && now !== null && lowest.x === now.x && lowest.y === now.y;
@@ -63,7 +63,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
           ),
         )}
       {points.map((point, index) =>
-        index % every === 0 || index === last ? (
+        point.n % step === 0 ? (
           <text key={point.n} x={point.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{point.label}</text>
         ) : null,
       )}
