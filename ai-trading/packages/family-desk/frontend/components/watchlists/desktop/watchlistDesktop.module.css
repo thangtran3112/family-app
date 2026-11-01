@@ -31,11 +31,9 @@
 .field input:hover, .field select:hover { background: var(--color-raised); }
 .grow { flex: 1; }
 .rows { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
-.symbolRow, .strategyRow { display: flex; min-height: 28px; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); }
+.symbolRow { display: flex; min-height: 28px; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); }
 .pending { color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
-.ellipsis { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Right rail: strategies on this list */
 .strategies { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
-.strategyRow { font-size: var(--text-label); }
 .slots { color: var(--color-muted); font-size: 12px; white-space: nowrap; }

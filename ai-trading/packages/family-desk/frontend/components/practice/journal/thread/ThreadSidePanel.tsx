@@ -6,8 +6,9 @@ import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { dayResultTone, formatBalance, formatDayResult, threadModeLabel, threadName, type Week } from "@/lib/replay/threadView";
+import { dayResultTone, formatDayResult, type Week } from "@/lib/replay/threadView";
 import type { Thread, ThreadSummary } from "@/lib/replay/threads";
+import { ThreadList } from "./ThreadList";
 import styles from "./threadJournal.module.css";
 
 /** The journal's left rail (P8, D-039): her threads (switch or start one), the weeks with their day results, and how to read the charts.
@@ -29,29 +30,7 @@ export function ThreadSidePanel({ thread, weeks, swing = false }: { thread: Thre
             <h2 id="thread-switcher-title" className={styles.sectionTitle}>{PRACTICE_COPY.threadSwitcher}</h2>
             <Link href="/practice#threads" className={styles.link}>{PRACTICE_COPY.threadNewTitle}</Link>
           </div>
-          <ul role="list" className={styles.list}>
-            {rows.map((row) => {
-              const active = row.thread.id === current;
-              return (
-                <li key={row.thread.id}>
-                  <Link
-                    href={`/practice/journal?thread=${row.thread.id}`}
-                    className={styles.threadRow}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <span className={styles.rowMain}>
-                      <span className={styles.rowTitle}>{threadName(row.thread)}</span>
-                      <span className={styles.rowMeta}>{`${row.thread.status === "active" ? PRACTICE_COPY.threadActive : PRACTICE_COPY.threadClosedBadge} · ${threadModeLabel(row.thread.mode)}`}</span>
-                    </span>
-                    <span className={styles.rowEnd}>
-                      <span>{formatBalance(row.thread.stats.balance)}</span>
-                      <SimulatedBadge />
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <ThreadList rows={rows} current={current} />
         </section>
 
         {!swing && (

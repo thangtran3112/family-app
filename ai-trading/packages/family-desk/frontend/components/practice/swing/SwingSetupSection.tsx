@@ -1,7 +1,7 @@
 "use client";
 
-import { Segments } from "@/components/practice/hub/FormCells";
 import { Field, Input, NumberInput } from "@/components/ui/Field";
+import { Segmented } from "@/components/ui/Segmented";
 import modal from "@/components/practice/hub/newplan.module.css";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { EARLIEST_SWING_DAY, MAX_OPEN_HOLDS, MAX_SESSIONS, MIN_SESSIONS, SWING_INTERVALS, SWING_TAPES, calendarLine, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
@@ -42,8 +42,7 @@ export function SwingSetupSection({
             <NumberInput fill inputMode="numeric" min={MIN_SESSIONS} max={MAX_SESSIONS} step={1} value={draft.sessions} onChange={(event) => onDraft({ ...draft, sessions: event.target.value })} />
           </Field>
           <Field id="swing-hide" label={PRACTICE_COPY.swingHideDates} group note={PRACTICE_COPY.planHideDatesHint} error={problems.hideDates}>
-            <Segments
-              id="swing-hide"
+            <Segmented
               value={draft.hideDates ? "yes" : "no"}
               options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
               onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
@@ -53,8 +52,7 @@ export function SwingSetupSection({
             <NumberInput fill inputMode="numeric" min={1} max={MAX_OPEN_HOLDS} step={1} value={draft.maxOpenHolds} onChange={(event) => onDraft({ ...draft, maxOpenHolds: event.target.value })} />
           </Field>
           <Field id="swing-interval" label={PRACTICE_COPY.swingInterval} group error={problems.interval}>
-            <Segments
-              id="swing-interval"
+            <Segmented
               value={draft.interval}
               options={SWING_INTERVALS.map((value) => ({ value, label: value }))}
               onChange={(interval) => onDraft({ ...draft, interval })}
@@ -64,8 +62,7 @@ export function SwingSetupSection({
             <NumberInput fill inputMode="numeric" min={1} max={100000} step={1} placeholder="Optional" value={draft.riskPerHoldUsd} onChange={(event) => onDraft({ ...draft, riskPerHoldUsd: event.target.value })} />
           </Field>
           <Field id="swing-tape" label={PRACTICE_COPY.swingTape} group error={problems.tape}>
-            <Segments
-              id="swing-tape"
+            <Segmented
               value={draft.tape}
               options={SWING_TAPES.map((value) => ({ value, label: TAPE_LABEL[value] }))}
               onChange={(tape) => onDraft({ ...draft, tape })}

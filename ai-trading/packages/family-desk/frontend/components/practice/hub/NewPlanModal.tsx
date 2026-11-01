@@ -20,7 +20,7 @@ import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-
 import { DayPlanFields } from "./DayPlanFields";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input } from "@/components/ui/Field";
-import { Segments } from "./FormCells";
+import { Segmented } from "@/components/ui/Segmented";
 import styles from "./hub.module.css";
 import landing from "./landing.module.css";
 import modal from "./newplan.module.css";
@@ -253,8 +253,7 @@ export function NewPlanModal({
             />
           </Field>
           <Field id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
-            <Segments
-              id="new-plan-mode"
+            <Segmented
               value={mode}
               options={[{ value: "day", label: PRACTICE_COPY.threadModeDay }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
               onChange={(next) => editThread({ ...threadDraft, mode: next })}

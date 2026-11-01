@@ -1,0 +1,3 @@
+/* The frame of a small SVG chart (design-component-system §4.3). Colours are chartPalette attributes; type is a token. */
+.svg { display: block; width: 100%; height: auto; overflow: visible; }
+.text { font-size: var(--text-micro); font-variant-numeric: tabular-nums; }

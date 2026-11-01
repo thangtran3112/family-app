@@ -1,5 +1,6 @@
 "use client";
 
+import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { HUB_SWING_COPY, startNoteSpot, swingCurveLayout, swingCurveSummary, type CurveLabel } from "@/lib/replay/hubSwing";
 import type { Box } from "@/lib/replay/threadChart";
@@ -34,15 +35,12 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
 
   return (
     <div className={styles.stack}>
-      <svg viewBox={`0 0 ${BOX.width} ${BOX.height}`} role="img" aria-label={summary} className={styles.chart}>
-        {layout.ticks.map((tick) => (
-          <g key={tick.value}>
-            <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-            <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value)}</text>
-          </g>
-        ))}
-        <line x1={plot.x} x2={plot.x + plot.width} y1={layout.startY} y2={layout.startY} className={styles.startLine} />
-        <text x={note.x} y={note.y} textAnchor={note.anchor} className={styles.note}>{note.text}</text>
+      <MiniChartFrame
+        box={BOX}
+        label={summary}
+        yTicks={layout.ticks.map((tick) => ({ key: tick.value, y: tick.y, label: formatAxisDollars(tick.value) }))}
+        start={{ y: layout.startY, note }}
+      >
         {layout.days.length > 1 && (
           <>
             <path d={layout.equityLine} className={styles.equityLine} />
@@ -64,7 +62,7 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
         {endLabels[1] && (
           <text x={endLabels[1].x} y={endLabels[1].y} textAnchor="end" className={styles.nowLabel}>{endLabels[1].text}</text>
         )}
-      </svg>
+      </MiniChartFrame>
       <ul role="list" className={styles.keyList}>
         <li className={styles.legendRow}>
           <span className={`${styles.keyLine} ${styles.keyBalance}`} aria-hidden="true" />

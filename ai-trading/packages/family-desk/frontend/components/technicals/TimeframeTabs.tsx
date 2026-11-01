@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { useId } from "react";
+import { Tabs } from "@/components/ui/Tabs";
 import type { TimeframeOption } from "@/lib/desk/timeframes";
-import styles from "./summary.module.css";
 
+/** The timeframe choices as `Tabs`: arrows select and wrap, Home and End jump. There is no panel; the chart below follows the choice. */
 export function TimeframeTabs({
   options,
   value,
@@ -15,37 +16,5 @@ export function TimeframeTabs({
   onChange: (api: string) => void;
   label?: string;
 }) {
-  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
-  const active = Math.max(0, options.findIndex((option) => option.api === value));
-
-  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    const count = options.length;
-    const moves: Record<string, number> = { ArrowRight: (index + 1) % count, ArrowLeft: (index + count - 1) % count, Home: 0, End: count - 1 };
-    const next = moves[event.key];
-    if (next === undefined) return;
-    event.preventDefault();
-    tabs.current[next]?.focus();
-    const option = options[next];
-    if (option) onChange(option.api);
-  }
-
-  return (
-    <div role="tablist" aria-label={label} className={styles.tabs}>
-      {options.map((option, index) => (
-        <button
-          key={option.api}
-          ref={(element) => { tabs.current[index] = element; }}
-          type="button"
-          role="tab"
-          aria-selected={option.api === value}
-          tabIndex={index === active ? 0 : -1}
-          className={styles.tab}
-          onClick={() => onChange(option.api)}
-          onKeyDown={(event) => onKeyDown(event, index)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
+  return <Tabs idBase={useId()} label={label} tabs={options.map((option) => ({ id: option.api, label: option.label }))} value={value} onChange={onChange} panelMounted={false} />;
 }

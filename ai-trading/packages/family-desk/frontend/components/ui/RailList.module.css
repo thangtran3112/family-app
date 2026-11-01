@@ -1,0 +1,15 @@
+/* Rows of a label and a value (design-component-system §4.3): grid minmax(0, 1fr) auto, so the value is never clipped. Selection = a 2 px amber left bar. */
+.list { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+.row { box-sizing: border-box; display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; text-align: left; text-decoration: none; }
+.list[data-size="sm"] .row { min-height: var(--size-sm); }
+.list[data-size="md"] .row { min-height: var(--size-md); }
+.list[data-divided="true"] li + li .row { border-top: 1px solid var(--color-hairline); border-radius: 0; }
+.row[data-kind="link"], .row[data-kind="button"] { cursor: pointer; }
+.row[data-kind="link"]:hover, .row[data-kind="button"]:hover { background: var(--color-raised); }
+.row[data-selected="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); }
+.row:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+.main { display: flex; min-width: 0; flex-direction: column; }
+.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { overflow: hidden; color: var(--color-muted); font-size: var(--text-meta); text-overflow: ellipsis; white-space: nowrap; }
+.value { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-2); white-space: nowrap; }
+.tone { color: var(--tone); }

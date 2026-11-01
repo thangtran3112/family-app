@@ -5,6 +5,7 @@ import { MarketChart } from "@/components/charts/MarketChart";
 import { Button } from "@/components/ui/Button";
 import { Delta } from "@/components/ui/Delta";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { Segmented } from "@/components/ui/Segmented";
 import { StatTile } from "@/components/ui/StatTile";
 import type { Research } from "@/lib/api/fundamentalSchemas";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -15,6 +16,7 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import styles from "../fundamental.module.css";
 import local from "./stocks.module.css";
 import { VerdictCard } from "./VerdictCard";
+import { FactList } from "@/components/ui/FactList";
 
 /** FD8 Stock overview (02n §b3): the Desk AI verdict, consensus EPS and revisions, analyst targets as context, and a price chart with no indicators. */
 export function StockOverview({ symbol, research, price }: { symbol: string; research: Research; price: number | null }) {
@@ -113,12 +115,14 @@ function Targets({ targets }: { targets: Research["targets"] }) {
         {view === null ? (
           <p className={styles.muted}>No analyst targets for this symbol yet</p>
         ) : (
-          <dl className={local.kvList}>
-            <div className={local.kv}><dt>Low</dt><dd>{view.low}</dd></div>
-            <div className={local.kv}><dt>Mean</dt><dd>{view.mean}</dd></div>
-            <div className={local.kv}><dt>High</dt><dd>{view.high}</dd></div>
-            <div className={local.kv}><dt>Ratings</dt><dd>{view.counts}</dd></div>
-          </dl>
+          <FactList
+            facts={[
+              { id: "low", label: "Low", value: view.low },
+              { id: "mean", label: "Mean", value: view.mean },
+              { id: "high", label: "High", value: view.high },
+              { id: "ratings", label: "Ratings", value: view.counts },
+            ]}
+          />
         )}
       </Panel>
     </div>
@@ -126,6 +130,10 @@ function Targets({ targets }: { targets: Research["targets"] }) {
 }
 
 type Interval = "1d" | "1w";
+const RANGES = [
+  { value: "1d", label: "1D" },
+  { value: "1w", label: "1W" },
+] as const;
 // Calendar days of bars to ask for: a year of daily bars, five of weekly (the same spans the Technicals chart uses).
 const DAYS: Record<Interval, number> = { "1d": 365, "1w": 1825 };
 
@@ -139,11 +147,7 @@ function PriceChart({ symbol }: { symbol: string }) {
         <PanelHeader
           title="Price"
           actions={
-            <div className={local.toggle} role="group" aria-label="Chart range">
-              {(["1d", "1w"] as const).map((value) => (
-                <Button key={value} variant="ghost" size="sm" aria-pressed={interval === value} onClick={() => setInterval(value)}>{value === "1d" ? "1D" : "1W"}</Button>
-              ))}
-            </div>
+            <Segmented label="Chart range" size="md" value={interval} options={RANGES} onChange={setInterval} />
           }
         />
         {bars.data ? (

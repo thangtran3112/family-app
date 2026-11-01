@@ -24,6 +24,7 @@ import { SwingWeeksTable } from "./SwingWeeksTable";
 import { CloseThreadPanel, ThreadPlanPanel } from "./ThreadPlanPanel";
 import { ThreadSidePanel } from "./ThreadSidePanel";
 import styles from "./threadJournal.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 /**
  * `/practice/journal?thread=` for a swing thread (02p h): the balance and the equity at each close, the weeks with links to
@@ -170,17 +171,19 @@ function SwingSetupPanel({ thread, hidden }: { thread: Thread; hidden: boolean }
   ];
   return (
     <div className={styles.stack}>
-      <dl className={styles.planList}>
-        {rows.map((row) => (
-          <div key={row.label} className={styles.planRow}>
-            <dt className={styles.planLabel}>{row.label}</dt>
-            <dd className={styles.planValue}>
+      <FactList
+        divided
+        facts={rows.map((row) => ({
+          id: row.label,
+          label: row.label,
+          value: (
+            <>
               {row.value}
               {row.money && <SimulatedBadge />}
-            </dd>
-          </div>
-        ))}
-      </dl>
+            </>
+          ),
+        }))}
+      />
       <p className={styles.planNote}>{universeSummary({ size: setup.universe.length, mix: mixOf(setup.universe) })}</p>
     </div>
   );

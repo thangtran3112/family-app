@@ -1,0 +1,6 @@
+/* Chips that switch a view setting (design-component-system §4.3): pressed = amber outline and text, hover = raised fill. */
+.root { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.item { display: inline-flex; min-width: 36px; min-height: var(--size-sm); align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); background: transparent; padding: 0 var(--space-2); color: var(--color-muted); font: inherit; font-size: var(--text-meta); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
+.item:hover { background: var(--color-raised); color: var(--color-text); }
+.item[aria-pressed="true"], .item[data-open="true"] { border-color: var(--color-amber); color: var(--color-amber); }
+.item:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }

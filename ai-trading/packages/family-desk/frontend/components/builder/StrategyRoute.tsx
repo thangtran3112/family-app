@@ -26,6 +26,7 @@ import { saveBarCopy } from "@/lib/strategy/saveBar";
 import { SpecForm, validateSpecForm } from "./SpecForm";
 import { StageControl } from "./StageControl";
 import { VersionList } from "./VersionList";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import styles from "./builder.module.css";
 import strategiesStyles from "@/components/strategies/strategies.module.css";
 
@@ -202,18 +203,18 @@ function StrategyBuilder({ strategyId }: { strategyId: number }) {
     }
   }
 
-  if (loading) return <section className={styles.detail} aria-busy="true"><p className={styles.feedback}>Loading strategy…</p></section>;
+  if (loading) return <section className={styles.detail} aria-busy="true"><LoadingBlock label="Loading strategy…" height={120} /></section>;
   if (loadingError || !loaded) {
     return (
       <section className={styles.detail}>
-        <div className={styles.routeError} role="alert">
-          <p>{loadingError || "Could not load strategy."}</p>
-          <button className={styles.secondaryButton} onClick={() => {
+        <ErrorBlock
+          message={loadingError || "Could not load strategy."}
+          onRetry={() => {
             setLoading(true);
             setLoadingError("");
             setLoadAttempt((attempt) => attempt + 1);
-          }} type="button">Try again</button>
-        </div>
+          }}
+        />
         <p><a className={styles.backLink} href="/strategies">Back to strategies</a></p>
       </section>
     );

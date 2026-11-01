@@ -1,37 +1,5 @@
 /* Desk technical summary (D4), desktop density: 32 px tabs, 28 px rows, 2 px amber focus ring. */
 
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--color-hairline);
-}
-
-.tab {
-  min-width: 40px;
-  height: 32px;
-  margin-bottom: -1px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--color-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  padding: 0 10px;
-}
-
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab[aria-selected="true"] {
-  border-bottom-color: var(--color-amber);
-  color: var(--color-text);
-  font-weight: var(--weight-semibold);
-}
-
-.tab:focus-visible,
 .method summary:focus-visible {
   outline: 2px solid var(--color-amber);
   outline-offset: 2px;

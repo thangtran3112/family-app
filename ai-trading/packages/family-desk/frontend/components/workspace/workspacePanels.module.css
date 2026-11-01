@@ -32,7 +32,6 @@
 
 .link:hover { text-decoration: underline; }
 
-.tab:focus-visible,
 .collapse:focus-visible,
 .link:focus-visible {
   outline: 2px solid var(--color-amber);
@@ -56,12 +55,6 @@
   border-bottom: 1px solid var(--color-hairline);
 }
 
-.tabs {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.tab,
 .collapse {
   min-height: 24px;
   border: 0;
@@ -70,31 +63,9 @@
   font: inherit;
   font-size: var(--text-label);
   cursor: pointer;
-}
-
-.tab {
-  position: relative;
   padding: 0 var(--space-3);
 }
 
-.tab[aria-selected="true"] {
-  color: var(--color-text);
-  font-weight: var(--weight-semibold);
-}
-
-.tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  height: 2px;
-  background: var(--color-amber);
-}
-
-.collapse {
-  padding: 0 var(--space-3);
-}
-
-.tab:hover,
 .collapse:hover {
   color: var(--color-text);
 }
@@ -174,51 +145,3 @@
   gap: var(--space-2);
 }
 
-.list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.listRow {
-  display: flex;
-  min-height: 24px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--color-hairline);
-  font-size: var(--text-label);
-}
-
-.listRow:hover {
-  background: var(--color-raised);
-}
-
-.alertRow {
-  min-height: 28px;
-}
-
-.listRow > * {
-  white-space: nowrap;
-}
-
-.ellipsis {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ends {
-  display: inline-flex;
-  gap: var(--space-2);
-}
-
-.ends strong {
-  font-weight: var(--weight-semibold);
-}
-
-.price {
-  font-variant-numeric: tabular-nums;
-}

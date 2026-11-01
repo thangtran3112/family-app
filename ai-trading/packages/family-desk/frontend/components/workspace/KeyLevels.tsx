@@ -1,3 +1,4 @@
+import { RailList } from "@/components/ui/RailList";
 import type { Technicals } from "@/lib/api/schemas";
 import { formatPrice } from "@/lib/desk/format";
 import { keyLevelRows } from "@/lib/desk/workspace";
@@ -11,14 +12,7 @@ export function KeyLevels({ technicals }: { technicals: Technicals }) {
       {rows.length === 0 ? (
         <p className={styles.muted}>Levels are not available yet</p>
       ) : (
-        <ul className={styles.list}>
-          {rows.map((row) => (
-            <li key={row.label} className={styles.listRow}>
-              <span>{row.label}</span>
-              <span className={styles.price}>{formatPrice(row.price)}</span>
-            </li>
-          ))}
-        </ul>
+        <RailList rows={rows.map((row) => ({ id: row.label, label: row.label, value: formatPrice(row.price) }))} divided />
       )}
     </section>
   );

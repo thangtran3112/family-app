@@ -39,7 +39,7 @@
 .danger { border-color: var(--color-down); color: var(--color-down); }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .link:hover { text-decoration: underline; }
-.button:focus-visible, .link:focus-visible, .threadRow:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.button:focus-visible, .link:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 
 /* Signed money: the sign carries the meaning, the colour repeats it. Flat is muted. Fill is for the SVG bars and labels. */
 .up { color: var(--color-up); fill: var(--color-up); }
@@ -50,13 +50,9 @@
 .block { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .blockHead { display: flex; min-height: 24px; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .list { display: flex; min-width: 0; margin: 0; padding: 0; flex-direction: column; list-style: none; }
-.threadRow { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) var(--space-2); color: var(--color-text); text-decoration: none; }
-.threadRow:hover { background: var(--color-raised); }
-.threadRow[aria-current="page"] { background: var(--color-raised); box-shadow: inset 3px 0 0 var(--color-amber); }
 .rowMain { display: flex; min-width: 0; flex-direction: column; }
 .rowTitle { font-size: var(--text-label); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .rowMeta { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
-.rowEnd { display: flex; flex-shrink: 0; flex-direction: column; align-items: flex-end; gap: 2px; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .weekRow { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-1) 0; }
 .money { flex-shrink: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .legendRow { display: flex; min-height: 24px; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
@@ -66,13 +62,9 @@
 .swatchSkipped { border: 1px dashed var(--color-muted); }
 
 /* Balance curve and day bars (SVG) */
-.chart { display: block; width: 100%; height: auto; overflow: visible; }
-.grid { stroke: var(--color-hairline); stroke-width: 1; }
 .zeroLine { stroke: var(--color-muted); stroke-width: 1; }
 .hairline { stroke: var(--color-hairline); stroke-width: 1; }
 .axis { fill: var(--color-muted); font-size: var(--text-micro); font-variant-numeric: tabular-nums; }
-.note { fill: var(--color-muted); font-size: var(--text-micro); }
-.startLine { stroke: var(--color-muted); stroke-width: 1; stroke-dasharray: 4 4; }
 .below { fill: var(--color-down); fill-opacity: 0.18; }
 .line { fill: none; stroke: var(--color-text); stroke-width: 2; stroke-linejoin: round; }
 .dot { fill: var(--color-text); }
@@ -108,10 +100,6 @@
 .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .caveat { display: flex; flex-direction: column; gap: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-raised); padding: var(--space-3); }
 .caveatTitle { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); }
-.planList { display: flex; margin: 0; padding: 0; flex-direction: column; }
-.planRow { display: flex; min-height: 24px; align-items: center; justify-content: space-between; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); font-size: var(--text-label); }
-.planLabel { min-width: 0; color: var(--color-muted); }
-.planValue { display: inline-flex; flex-shrink: 0; align-items: center; gap: var(--space-1); margin: 0; text-align: right; white-space: nowrap; }
 .planNote { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
 .form { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); }
 .closeBlock { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding-top: var(--space-3); }

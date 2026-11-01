@@ -13,6 +13,7 @@ import { planRows } from "@/lib/replay/threadView";
 import { planToDraft, threadProblems, validatePlanEdit, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 /** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. */
 export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
@@ -88,17 +89,19 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
         </form>
       ) : (
         <>
-          <dl className={styles.planList}>
-            {(swing ? weeklyPlanRows(planRows(plan)) : planRows(plan)).map((row) => (
-              <div key={row.id} className={styles.planRow}>
-                <dt className={styles.planLabel}>{row.label}</dt>
-                <dd className={styles.planValue}>
+          <FactList
+            divided
+            facts={(swing ? weeklyPlanRows(planRows(plan)) : planRows(plan)).map((row) => ({
+              id: row.id,
+              label: row.label,
+              value: (
+                <>
                   {row.value}
                   {row.id === "max_loss" && row.value !== "None" && <SimulatedBadge />}
-                </dd>
-              </div>
-            ))}
-          </dl>
+                </>
+              ),
+            }))}
+          />
           {swing && <p className={styles.planNote}>{PRACTICE_COPY.swingPerWeekNote}</p>}
           <p className={styles.planNote}>{`${PRACTICE_COPY.threadPlanNote}: ${plan.planNote ?? PRACTICE_COPY.threadPlanNoteNone}`}</p>
         </>

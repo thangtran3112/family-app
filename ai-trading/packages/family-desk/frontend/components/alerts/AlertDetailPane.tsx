@@ -16,6 +16,7 @@ import { parseAlertSpec } from "@/lib/spec/parse";
 import { runRowAction } from "./AlertTable";
 import { FireThumb } from "./FireThumb";
 import styles from "./alerts.module.css";
+import { alertNewHref } from "@/lib/desk/hrefs";
 
 /** Right pane of D9: the selected alert strategy, its sentence, JSON and recent fires. */
 export function AlertDetailPane({ id, onChanged }: { id: number | null; onChanged: () => void }) {
@@ -87,7 +88,7 @@ function AlertDetail({ id, onChanged }: { id: number; onChanged: () => void }) {
             {busy === "action" ? "Working…" : actionLabel(action)}
           </Button>
         )}
-        <Link href={`/alerts/new?edit=${id}`} className={styles.link}>Edit</Link>
+        <Link href={alertNewHref({ edit: id })} className={styles.link}>Edit</Link>
         {confirming ? (
           <InlineConfirm
             label="Confirm deleting this alert strategy"

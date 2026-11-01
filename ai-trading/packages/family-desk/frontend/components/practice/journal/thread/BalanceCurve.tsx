@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
 import { curveLayout, type Box } from "@/lib/replay/threadChart";
@@ -36,20 +37,17 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, now ${formatBalance(stats.balance)}, ${lowText}.`;
 
   return (
-    <svg viewBox={`0 0 ${BOX.width} ${BOX.height}`} role="img" aria-label={summary} className={styles.chart}>
+    <MiniChartFrame
+      box={BOX}
+      label={summary}
+      yTicks={layout.ticks.map((tick) => ({ key: tick.value, y: tick.y, label: formatAxisDollars(tick.value) }))}
+      start={{ y: startY, note }}
+    >
       <defs>
         <clipPath id={clipId}>
           <rect x={plot.x} y={startY} width={plot.width} height={bottom - startY} />
         </clipPath>
       </defs>
-      {layout.ticks.map((tick) => (
-        <g key={tick.value}>
-          <line x1={plot.x} x2={plot.x + plot.width} y1={tick.y} y2={tick.y} className={styles.grid} />
-          <text x={plot.x - 8} y={tick.y} dy="0.32em" textAnchor="end" className={styles.axis}>{formatAxisDollars(tick.value)}</text>
-        </g>
-      ))}
-      <line x1={plot.x} x2={plot.x + plot.width} y1={startY} y2={startY} className={styles.startLine} />
-      <text x={note.x} y={note.y} textAnchor={note.anchor} className={styles.note}>{note.text}</text>
       {drawn && (
         <>
           <path d={layout.area} clipPath={`url(#${clipId})`} className={styles.below} />
@@ -82,6 +80,6 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
           {`Lowest ${formatBalance(lowest.balance)}`}
         </text>
       )}
-    </svg>
+    </MiniChartFrame>
   );
 }

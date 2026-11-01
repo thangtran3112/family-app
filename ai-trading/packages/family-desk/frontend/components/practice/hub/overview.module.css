@@ -31,7 +31,3 @@
 .stat { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .stat dd { margin: 0; font-size: var(--text-row); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .statHint { color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
-.planList { display: flex; margin: 0; flex-direction: column; gap: var(--space-2); }
-.planItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-3); }
-.planItem dt { color: var(--color-muted); font-size: var(--text-micro); }
-.planItem dd { margin: 0; font-size: var(--text-label); font-variant-numeric: tabular-nums; }
