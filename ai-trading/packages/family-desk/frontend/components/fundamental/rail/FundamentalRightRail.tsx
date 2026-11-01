@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import { useDeskUi, useHoldings } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -15,6 +14,7 @@ import { AiRatingChip } from "../shared/AiRatingChip";
 import { DeskAiNotStarted } from "../shared/DeskAiNotStarted";
 import fund from "../fundamental.module.css";
 import styles from "./rail.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 const PROMPT = "Select a holding to see its verdict, calls and events";
 
@@ -73,10 +73,7 @@ function CallsCard({ symbol }: { symbol: string }) {
   const note = card.note ?? (candidates.error !== null && candidates.data === null ? "Option quotes unavailable right now" : null);
   return (
     <div className={styles.block} data-testid="fund-calls">
-      <dl className={styles.kv}>
-        <dt>Coverable contracts</dt><dd>{card.coverable}</dd>
-        <dt>Open calls</dt><dd>{card.openCalls}</dd>
-      </dl>
+      <FactList facts={[{ id: "coverable", label: "Coverable contracts", value: card.coverable }, { id: "open", label: "Open calls", value: card.openCalls }]} />
       {card.best ? (
         <p className={styles.line}>
           Best call: <strong>{card.best.strike}</strong> · {card.best.expiry} · bid {card.best.bid} · <strong>{card.best.annualized}</strong> a year
@@ -93,13 +90,6 @@ function EventsCard({ symbol }: { symbol: string }) {
   const row = holdings?.rows.find((item) => item.symbol === symbol) ?? null;
   const lines = eventLines(row, research.data);
   return (
-    <dl className={styles.kv} data-testid="fund-events">
-      {lines.map((line) => (
-        <Fragment key={line.key}>
-          <dt>{line.label}</dt>
-          <dd>{line.text}</dd>
-        </Fragment>
-      ))}
-    </dl>
+    <FactList testId="fund-events" facts={lines.map((line) => ({ id: line.key, label: line.label, value: line.text }))} />
   );
 }

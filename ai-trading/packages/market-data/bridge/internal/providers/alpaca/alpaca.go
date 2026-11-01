@@ -15,7 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 	_ "time/tzdata" // the distroless static image's zoneinfo is not guaranteed
@@ -218,7 +218,7 @@ func toBars(rows []barJSON, tf pb.Timeframe, now, start, end time.Time) []*pb.Ba
 		// bar's midnight stamp, so a window opening at a session's extended open includes it.
 		first, last = cal.SessionDate(start), cal.SessionDate(end)
 	}
-	byStart := map[int64]barJSON{} // duplicates: keep the last
+	byStart := make(map[int64]barJSON, len(rows)) // duplicates: keep the last; sized up front, no rehash while filling
 	for _, b := range rows {
 		if !valid(b) || !closed(b.T, tf, now) {
 			continue
@@ -234,7 +234,7 @@ func toBars(rows []barJSON, tf pb.Timeframe, now, start, end time.Time) []*pb.Ba
 	for k := range byStart {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	slices.Sort(keys)
 	out := make([]*pb.Bar, 0, len(keys))
 	for _, k := range keys {
 		b := byStart[k]

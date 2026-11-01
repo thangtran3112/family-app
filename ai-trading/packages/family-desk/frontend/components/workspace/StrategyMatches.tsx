@@ -1,6 +1,7 @@
+import { RailList, RailValue } from "@/components/ui/RailList";
 import type { Technicals } from "@/lib/api/schemas";
 import { countsLine, STRATEGY_GAUGE_EMPTY } from "@/lib/desk/summary";
-import { biasTone } from "@/lib/desk/workspace";
+import { biasUiTone } from "@/lib/desk/workspace";
 import styles from "./workspacePanels.module.css";
 
 const VOTE_WORD = { buy: "Buy", neutral: "Neutral", sell: "Sell" } as const;
@@ -15,30 +16,26 @@ export function StrategyMatches({ gauge }: { gauge: Technicals["gauges"]["strate
       ) : (
         <>
           <p className={styles.muted}>{countsLine(gauge.counts)}</p>
-          <ul className={styles.list}>
-            {gauge.votes.map((vote) => {
+          <RailList
+            divided
+            rows={gauge.votes.map((vote) => {
               const word = VOTE_WORD[vote.vote];
-              return (
-                <li key={vote.strategy_id} className={styles.listRow}>
-                  <span className={styles.ellipsis} title={vote.name}>{vote.name}</span>
-                  <span className={styles.ends}>
-                    <strong className={styles[biasTone(word)]}>{word}</strong>
-                    <span className={styles.muted}>{BIAS_WORD[vote.bias]}</span>
-                  </span>
-                </li>
-              );
+              return {
+                id: String(vote.strategy_id),
+                label: vote.name,
+                value: (
+                  <>
+                    <strong><RailValue tone={biasUiTone(word)}>{word}</RailValue></strong>
+                    <RailValue>{BIAS_WORD[vote.bias]}</RailValue>
+                  </>
+                ),
+              };
             })}
-          </ul>
+          />
           {gauge.watching.length > 0 && (
             <>
               <h4 className={styles.heading}>Watching</h4>
-              <ul className={styles.list}>
-                {gauge.watching.map((item) => (
-                  <li key={item.strategy_id} className={styles.listRow}>
-                    <span className={`${styles.muted} ${styles.ellipsis}`} title={item.name}>{item.name}</span>
-                  </li>
-                ))}
-              </ul>
+              <RailList divided rows={gauge.watching.map((item) => ({ id: String(item.strategy_id), label: <RailValue>{item.name}</RailValue>, title: item.name }))} />
             </>
           )}
         </>

@@ -27,9 +27,11 @@ caller (`SEC_USER_AGENT`), and refuses an unidentified request with 403.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from ai_trading_common._provider import Provider
 from ai_trading_common.errors import NoData, NotConfigured, Unavailable
@@ -45,6 +47,9 @@ HOST_KEY = "sec_edgar"
 MIN_INTERVAL_S = 1.0 / 10.0
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+#: How long a downloaded ticker -> CIK map is trusted. New listings are rare and a miss is a clean `NoData`, so a
+#: new ticker is found at most this long after SEC publishes it.
+TICKERS_TTL_S = 6 * 3600.0
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 # An older filings.files page (`{"name": "CIK...-submissions-NNN.json", ...}`)
@@ -186,6 +191,9 @@ class SecEdgar:
     def __init__(self, user_agent: str, *, http: ThrottledClient | None = None) -> None:
         self.user_agent = user_agent
         self._http = http or ThrottledClient()
+        #: `(fetched_at, normalized ticker -> raw cik_str)` from `company_tickers.json`, or None before the first
+        #: lookup. One tuple, replaced whole, so threads sharing this client never see a half-built index.
+        self._cik_index: tuple[float, dict[str, Any]] | None = None
 
     def company_facts(self, ticker: str, as_of: date, *, concepts: tuple[str, ...] | None = None) -> list[Fact]:
         """CompanyFacts as known at `as_of`: amendments resolved, un-spanned facts dropped."""
@@ -225,12 +233,19 @@ class SecEdgar:
         return sorted(found, key=lambda f: f.filed)
 
     def _cik(self, ticker: str) -> str:
-        payload = self._get_json(TICKERS_URL)
         wanted = ticker.strip().upper().replace(".", "-")  # SEC lists class shares as BRK-B
-        for entry in payload.values():
-            if entry.get("ticker", "").upper() == wanted:
-                return f"{int(entry['cik_str']):010d}"
-        raise NoData(PROVIDER_NAME, f"{ticker!r} is not a US SEC filer")
+        cached = self._cik_index
+        if cached is None or time.monotonic() - cached[0] > TICKERS_TTL_S:
+            # One download and one pass over the ~10k-entry file per TTL, not per lookup: every `company_facts` and
+            # `item_202_filings` call used to refetch and rescan it. Failures raise before anything is cached.
+            index: dict[str, Any] = {}
+            for entry in self._get_json(TICKERS_URL).values():
+                index.setdefault(entry.get("ticker", "").upper(), entry.get("cik_str"))  # first match wins, as before
+            cached = self._cik_index = (time.monotonic(), index)
+        cik = cached[1].get(wanted)
+        if cik is None:
+            raise NoData(PROVIDER_NAME, f"{ticker!r} is not a US SEC filer")
+        return f"{int(cik):010d}"
 
     def _get_json(self, url: str) -> dict:
         if not self.user_agent:

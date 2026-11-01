@@ -1,5 +1,11 @@
 name: ai-trading-ci
 
+# ADR-0015 re-enables the unit and contract gates that ADR-0013 moved to local
+# runs. Pull requests to dev and pushes to dev only: main stays deploy-only
+# (ai-trading-deploy.yml), so a release never waits on or reruns these.
+# Recovered from 97baa1b4^ (the file ADR-0013 deleted) and narrowed to the
+# Verification gates in ai-trading/AGENTS.md; the image, E2E, shellcheck and
+# buf jobs of the old file are not restored.
 on:
   pull_request:
     branches: [dev]
@@ -9,10 +15,14 @@ on:
       - "!ai-trading/**/*.md"
       - ".gitmodules"
       - ".github/workflows/ai-trading-ci.yml"
-      # Task 5 (app-controls): the Linux installer lives outside ai-trading/
-      # entirely -- without this, an installer-only change would never
-      # trigger this workflow's own scripts/shellcheck job at all.
-      - "infrastructure/vps/app-controls/**"
+  push:
+    branches: [dev]
+    paths:
+      - "ai-trading/**"
+      - "!ai-trading/plans/**"
+      - "!ai-trading/**/*.md"
+      - ".gitmodules"
+      - ".github/workflows/ai-trading-ci.yml"
   workflow_dispatch:
 
 concurrency:
@@ -27,8 +37,94 @@ defaults:
     shell: bash
 
 jobs:
-  hub:
-    name: Hub web app
+  desk-backend:
+    name: Desk backend (ruff, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # the DB-backed suite takes about 14 minutes
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: desk
+          POSTGRES_PASSWORD: desk
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U desk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DESK_TEST_DATABASE_URL: postgresql+psycopg://desk:desk@localhost:5432/postgres
+      DESK_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0  # no floating major tag; Dependabot bumps it
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            ai-trading/packages/family-desk/backend/uv.lock
+            ai-trading/common/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  desk-contracts:
+    name: Desk contracts (typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/contracts
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  desk-frontend:
+    name: Desk frontend (typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      - name: Install linked contracts dependencies
+        run: pnpm --dir ../contracts install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  hub-frontend:
+    name: Hub frontend (test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,28 +142,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: ai-trading/frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
       - run: pnpm test
-      - name: Build static export
-        env:
-          # Syntactically valid but fake Clerk publishable key (decodes to
-          # "ci-fake.clerk.accounts.dev$") -- PR CI never has the real,
-          # repo-variable-sourced key (ai-trading-deploy.yml), and the
-          # frontend's own requireClerkPublishableKey() fails the build
-          # closed if this is empty, so a fake key is required here, never
-          # a real one.
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2ktZmFrZS5jbGVyay5hY2NvdW50cy5kZXYk
-        run: pnpm build
-      - name: Check static export
-        run: ../deploy/ci/check-static-export.sh out
-      - name: Check exported workspace routes and layout
-        run: pnpm test:export
-      - name: Upload-hub-static mock-gcloud test
-        run: ../deploy/ci/upload-hub-static.test.sh
 
   bridge:
-    name: Market-data bridge (Go)
+    name: Market-data bridge (go vet, go test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -80,341 +158,30 @@ jobs:
         with:
           go-version-file: ai-trading/packages/market-data/bridge/go.mod
           cache-dependency-path: ai-trading/packages/market-data/bridge/go.sum
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          version: 1.75.0
-          github_token: ${{ github.token }}
-      - name: go.mod is tidy
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
       - run: go vet ./...
-      - name: Tests (offline, httptest fakes and contract goldens)
+      - name: Tests (offline fakes and contract goldens)
         run: go test -race -count=1 ./...
-      - run: buf lint
-      - name: buf breaking against origin/dev
-        run: |
-          git fetch --no-tags --depth=1 origin dev:refs/remotes/origin/dev
-          if git cat-file -e origin/dev:ai-trading/packages/market-data/bridge/buf.yaml 2>/dev/null; then
-            buf breaking --against "$(git rev-parse --show-toplevel)/.git#ref=refs/remotes/origin/dev,subdir=ai-trading/packages/market-data/bridge"
-          else
-            echo "origin/dev has no bridge module yet (first introduction): nothing to compare against"
-          fi
-      - name: buf generate leaves no diff
-        run: |
-          buf generate
-          test -z "$(git status --porcelain -- gen)" || { git status --short -- gen; git diff -- gen | head -50; exit 1; }
+      # The Alpaca live smoke test (internal/providers/alpaca/live_smoke_test.go)
+      # is already inside `./...` above and skips when ALPACA_API_KEY_ID is
+      # unset. CI has no provider keys by design (they live in Firestore), so
+      # this step only makes the SKIP visible in the log. Run it with a real
+      # key locally; see the file header.
+      - name: Alpaca live smoke (skips without provider keys)
+        run: go test -v -count=1 -run 'TestLive' ./internal/providers/alpaca/
 
-  desk-web:
-    name: Desk web app
+  common:
+    name: Common (pytest)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ai-trading/packages/family-desk/frontend
+        working-directory: ai-trading/common
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: |
-            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
-            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
-      - uses: astral-sh/setup-uv@v10.3.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: |
-            ai-trading/packages/family-desk/backend/uv.lock
-            ai-trading/common/uv.lock
-      - name: Install linked contracts dependencies
-        run: pnpm --dir ../contracts install --frozen-lockfile
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-      - name: Install backend dependencies for OpenAPI generation
-        working-directory: ai-trading/packages/family-desk/backend
-        run: uv sync --locked
-      - run: pnpm gen:api
-      - run: git diff --exit-code -- lib/api
-      - run: pnpm build
-      - run: pnpm test:export
-      - run: ../../../deploy/ci/check-static-export.sh out desk
-
-  desk:
-    name: Desk contracts and backend
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: desk
-          POSTGRES_PASSWORD: desk
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U desk"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
       - uses: astral-sh/setup-uv@v10.3.0  # no floating major tag; Dependabot bumps it
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            ai-trading/packages/family-desk/backend/uv.lock
-            ai-trading/common/uv.lock
-      - name: Common (providers, throttle, bar hygiene)
-        working-directory: ai-trading/common
-        run: |
-          uv sync --locked
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pytest -q
-          uv run pytest -q ../packages/consensus/test_server.py
-      - name: Contracts (Zod, fixtures, JSON Schema drift)
-        working-directory: ai-trading/packages/family-desk/contracts
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm typecheck
-          pnpm test
-      - name: Backend (Pydantic parity and drift, core, templates, DB)
-        working-directory: ai-trading/packages/family-desk/backend
-        env:
-          DESK_TEST_DATABASE_URL: postgresql+psycopg://desk:desk@localhost:5432/postgres
-          DESK_REQUIRE_DB: "1"
-        run: |
-          uv sync --locked
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pytest -q
-
-  desk-e2e-services:
-    name: Desk E2E services (Part A)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: desk
-          POSTGRES_PASSWORD: desk
-          POSTGRES_DB: postgres
-        ports:
-          - 55438:5432
-        options: >-
-          --health-cmd "pg_isready -U desk"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: |
-            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
-            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
-      - uses: astral-sh/setup-uv@v10.3.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: |
-            ai-trading/packages/family-desk/backend/uv.lock
-            ai-trading/common/uv.lock
-      - name: Install linked contracts dependencies
-        working-directory: ai-trading/packages/family-desk/frontend
-        run: pnpm --dir ../contracts install --frozen-lockfile
-      - name: Build Desk static export
-        working-directory: ai-trading/packages/family-desk/frontend
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-          pnpm exec playwright install --with-deps chromium
-      # The proxy tests, the Playwright suite (the legacy specs, then one spec per board family at 1440x900 and
-      # 1180x820 on the Technical seed) and the real-HTTP and frozen-clock alert-path checks (02m d5).
-      - name: Run isolated real-HTTP, proxy, and Chromium E2E
-        working-directory: ai-trading/packages/family-desk/backend
-        env:
-          DESK_E2E_ADMIN_DATABASE_URL: postgresql+psycopg://desk:desk@127.0.0.1:55438/postgres
-        run: |
-          uv sync --locked
-          uv run python tests/e2e/run.py
-      - name: Keep Playwright traces of a failed run
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: desk-e2e-traces
-          path: ai-trading/packages/family-desk/frontend/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
-  scripts:
-    name: Scripts and compose
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Terminal session names
-        run: sh ai-trading/deploy/upstream/terminal/test-session.sh
-      - name: Shellcheck
-        run: |
-          shopt -s nullglob
-          files=(ai-trading/deploy/upstream/terminal/*.sh ai-trading/deploy/ci/*.sh
-            ai-trading/deploy/production/*.sh infrastructure/cloudflare/ai-trading/*.sh
-            infrastructure/vps/app-controls/*.sh)
-          shellcheck "${files[@]}"
-      - name: Upload-mirofish-static mock-gcloud test
-        run: ai-trading/deploy/ci/upload-mirofish-static.test.sh
-      - name: Clerk publishable key validator test (F1 fix round 1)
-        run: ai-trading/deploy/ci/check-clerk-publishable-key.test.sh
-      - name: deploy.sh Firestore-render test (A9a1)
-        run: ai-trading/deploy/ci/test-deploy-firestore.sh
-      - name: app-controls deploy/installer test (Task 5)
-        run: ai-trading/deploy/ci/test-app-controls-deploy.sh
-      - name: Health-check rollback mode (offline)
-        run: ai-trading/deploy/ci/test-health-rollback.sh
-      - name: Control helper tests (Task 5/7)
-        # Must run as root on real Linux, matching the private helper's
-        # actual production identity (control/state.py's owner_uid
-        # defaults to 0; its own SO_PEERCRED/ownership checks are
-        # Linux-only and intentionally fail closed for any other owner --
-        # never weakened here). The GitHub-hosted Ubuntu runner itself
-        # executes job steps as non-root UID 1001, which fails test
-        # setup's root-ownership validation before assertions even run --
-        # a disposable, network-disabled container run as its default
-        # root user is required, not the host shell directly. Read-only
-        # source mount only; no chmod/ownership change on the host.
-        run: docker run --rm --network none -v "$PWD/ai-trading:/app:ro" -w /app/control python:3.12-slim python -m unittest discover -s . -v
-      - name: render-env.sh test (A9a2)
-        run: ai-trading/deploy/ci/test-render-env.sh
-      - name: Auth service tests
-        working-directory: ai-trading/auth
-        run: |
-          npm ci
-          npm test
-      - name: app-controls real-Caddy/auth/helper gateway test (Task 4/7)
-        # Needs ai-trading/auth/node_modules (real @clerk/backend), so it
-        # runs after "Auth service tests" installs them, never before.
-        run: ai-trading/deploy/ci/test-app-controls-gateway.sh
-      - name: Vibe golden evaluation offline tests
-        run: |
-          python3 -m venv "$RUNNER_TEMP/vibe-eval-venv"
-          "$RUNNER_TEMP/vibe-eval-venv/bin/python" -m pip install --disable-pip-version-check pytest==9.1.1 httpx==0.28.1
-          "$RUNNER_TEMP/vibe-eval-venv/bin/python" -m pytest ai-trading/tools/vibe-eval -q
-      - name: Market data tests
-        working-directory: ai-trading/packages/market-data
-        run: python3 -m unittest discover -v
-      - name: Worker tests
-        run: |
-          node --test infrastructure/cloudflare/ai-trading/worker/*.test.js
-          node --test infrastructure/cloudflare/ai-trading/workers/*.test.js
-      - name: TradingAgents research UI tests
-        run: node --test ai-trading/tradingagents-web/tests/test_ui.mjs
-      - name: Validate compose files
-        run: |
-          set -euo pipefail
-          secrets="$RUNNER_TEMP/ai-trading-secrets"
-          mkdir -p "$secrets"
-          for name in tradingagents ai-hedge-fund vibe-trading vibe-gateway vibe-consensus cloudflared auth market-data market-data-bridge desk; do : >"$secrets/$name.env"; done
-          export AI_TRADING_SECRETS_DIR="$secrets"
-          export AI_TRADING_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567
-          docker compose -f ai-trading/deploy/production/docker-compose.yml \
-            -f ai-trading/deploy/production/docker-compose.mirofish.yml config --quiet
-          docker compose -f ai-trading/deploy/production/docker-compose.yml \
-            -f ai-trading/deploy/production/docker-compose.mirofish.yml \
-            -f ai-trading/deploy/local/docker-compose.override.yml config --quiet
-
-  desk-caddy-acceptance:
-    name: Desk current-dark and target-state Caddy acceptance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Current production source stays Desk-dark
-        run: ai-trading/deploy/ci/test-l6-desk.sh
-
-  images:
-    name: Images and smoke tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - name: Verify Vibe family overlay
-        run: bash ai-trading/deploy/ci/test-vibe-overlay.sh
-      - uses: docker/setup-buildx-action@v3
-      - name: Build images
-        uses: docker/bake-action@v7
-        env:
-          TAG: ci
-          # Syntactically valid but fake Clerk publishable key (decodes to
-          # "ci-fake.clerk.accounts.dev$"); see ai-trading-deploy.yml for
-          # the real, repo-variable-sourced production key.
-          CLERK_PUBLISHABLE_KEY: pk_test_Y2ktZmFrZS5jbGVyay5hY2NvdW50cy5kZXYk
-        with:
-          files: |
-            ai-trading/deploy/docker-bake.hcl
-            ai-trading/deploy/docker-bake.ci.hcl
-          load: true
-      - name: Build MiroFish static frontend
-        # Not in the default Bake group (it exports files, not an image) and
-        # not loadable (--load needs an image target); built separately with
-        # its own GHA cache scope from docker-bake.ci.hcl.
-        uses: docker/bake-action@v7
-        env:
-          TAG: ci
-        with:
-          # Local export would otherwise include provenance.json, which is
-          # build metadata (not a Vue asset) containing Dockerfile check text.
-          provenance: false
-          files: |
-            ai-trading/deploy/docker-bake.hcl
-            ai-trading/deploy/docker-bake.ci.hcl
-          targets: mirofish-frontend
-      - name: Smoke tests
-        env:
-          TAG: ci
-        run: ai-trading/deploy/ci/smoke-test.sh all
-      - name: Isolated target-state Desk API/auth/Postgres acceptance
-        env:
-          AUTH_IMAGE: ghcr.io/thangtran3112/family-app/ai-trading-auth:ci
-          DESK_IMAGE: ghcr.io/thangtran3112/family-app/ai-trading-desk:ci
-        run: ai-trading/deploy/ci/test-desk-target-state.sh
-      - name: Private Vibe consensus image
-        env:
-          TAG: ci
-        run: ai-trading/deploy/ci/test-vibe-consensus-image.sh
-      - name: TradingAgents research image tests
-        env:
-          TAG: ci
-        run: ai-trading/deploy/ci/test-tradingagents-research.sh
+          cache-dependency-glob: ai-trading/common/uv.lock
+      - run: uv sync --locked
+      - run: uv run pytest -q

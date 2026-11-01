@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { RightRail } from "@/components/shell/desktop/RightRail";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { Button } from "@/components/ui/Button";
+import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadFeedback } from "@/lib/desk/feedback";
 import { countsText, defaultFilters, listFootnote, toQuery, totalOf, type FeedbackFilters as Filters } from "@/lib/desk/feedbackView";
 import { reportUrl } from "@/lib/desk/feedbackContext";
@@ -53,17 +53,16 @@ export function FeedbackScreen() {
     body = list.error === null ? <LoadingBlock label="Loading reports…" /> : <ErrorBlock subject="report list" onRetry={list.refresh} />;
   } else if (empty) {
     body = (
-      <div className={styles.emptyBox}>
-        <p>No reports yet · file one when something looks wrong, or when you want something built</p>
-        <Link href={reportUrl("/feedback")} className={styles.primary}>New report</Link>
-      </div>
+      <EmptyBlock
+        title="No reports yet · file one when something looks wrong, or when you want something built"
+        action={{ label: "New report", href: reportUrl("/feedback") }}
+      />
     );
   } else if (list.data.items.length === 0) {
     body = (
-      <div className={styles.emptyBox}>
-        <p>No reports match these filters</p>
-        <button type="button" className={styles.button} onClick={clearFilters}>Clear filters</button>
-      </div>
+      <EmptyBlock title="No reports match these filters">
+        <Button onClick={clearFilters}>Clear filters</Button>
+      </EmptyBlock>
     );
   } else {
     body = (
@@ -84,7 +83,7 @@ export function FeedbackScreen() {
             <h1 className={styles.title}>Feedback</h1>
             {counts && <p className={styles.counts}>{countsText(counts)}</p>}
           </div>
-          <Link href={reportUrl("/feedback")} className={styles.primary}>New report</Link>
+          <Button href={reportUrl("/feedback")} variant="primary">New report</Button>
         </div>
         <FeedbackFilters key={resets} value={filters} onChange={setFilters} items={list.data?.items ?? []} disabled={empty} />
       </div>

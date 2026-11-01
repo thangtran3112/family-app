@@ -162,6 +162,16 @@ class TestSecEdgarClient:
         assert sec._cik("BRK.B") == "0001067983"
         assert session.calls[0][2]["User-Agent"] == "ua"
 
+    def test_cik_lookups_download_the_ticker_file_once(self):
+        # One response only: a second download would pop an empty list and fail the second lookup.
+        client, session, _ = make_client([FakeResponse(200, TICKERS_BODY)])
+        sec = SecEdgar("ua", http=client)
+        assert sec._cik("BRK.B") == "0001067983"
+        assert sec._cik("brk-b") == "0001067983"
+        with pytest.raises(NoData):
+            sec._cik("ZZZZ")  # a miss is answered from the same download too
+        assert len(session.calls) == 1
+
     def test_unknown_ticker_raises_no_data(self):
         client, _, _ = make_client([FakeResponse(200, TICKERS_BODY)])
         sec = SecEdgar("ua", http=client)

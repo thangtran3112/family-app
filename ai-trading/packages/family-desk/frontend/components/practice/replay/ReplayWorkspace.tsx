@@ -70,6 +70,7 @@ import { SignalsRail, signalKey } from "./SignalsRail";
 import { TapePanel } from "./TapePanel";
 import { TransportBar } from "./TransportBar";
 import styles from "./replay.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 /** `/practice/replay?id=`: the chart, the tape, the controls and the keyboard map (02o §a3). Reads the URL, so the page wraps it in Suspense. */
 export function ReplayWorkspace() {
@@ -555,11 +556,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
             <>
               <section className={styles.sessionSection} aria-label="Session">
                 <h2 className={styles.railTitle}>Session</h2>
-                <dl className={styles.sessionFacts}>
-                  {sessionFacts(spec, session.attempt, session.tape_feed).map((row) => (
-                    <div key={row.id}><dt>{row.label}</dt><dd>{row.value}</dd></div>
-                  ))}
-                </dl>
+                <FactList facts={sessionFacts(spec, session.attempt, session.tape_feed)} />
               </section>
               <section className={styles.sessionSection} aria-label={session.thread ? PRACTICE_COPY.threadPlanTitle : "Plan"}>
                 {session.thread ? (

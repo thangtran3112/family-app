@@ -1,4 +1,4 @@
-// Session exchange, check, and browser-cookie logout only. Caddy (ai-trading/deploy/production/Caddyfile, the
+// Session exchange, check, and browser-cookie logout only. Caddy (infrastructure/apps/ai-trading/Caddyfile, the
 // "gateway" service) owns every reverse-proxy and WebSocket concern
 // declaratively; this file never does either -- no `node:net`, no
 // `http.request` against another service, no WebSocket handling.

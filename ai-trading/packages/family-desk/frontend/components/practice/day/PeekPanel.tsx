@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
-import { changeTone, EMPTY_VALUE, formatPrice, formatSignedPct } from "@/lib/desk/format";
+import { EMPTY_VALUE, formatPrice, formatSignedPct, signTone } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { Candidate, Peek } from "@/lib/replay/daily";
 import { peekDailyBars } from "@/lib/replay/dayView";
 import styles from "./day.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 const AMBER = "#FFB020";
 
@@ -108,13 +109,13 @@ export function PeekPanel({
 function PeekFacts({ row }: { row: Candidate }) {
   const change = row.metrics.list_change_pct ?? null;
   return (
-    <dl className={styles.peekFacts}>
-      <div><dt>{PRACTICE_COPY.dayPeekPrevClose}</dt><dd>{row.prior_close === null ? EMPTY_VALUE : formatPrice(row.prior_close)}</dd></div>
-      <div>
-        <dt>{PRACTICE_COPY.dayPeekVsPrev}</dt>
-        <dd className={change === null ? undefined : styles[changeTone(change)]}>{change === null ? EMPTY_VALUE : formatSignedPct(change, 2)}</dd>
-      </div>
-      <div><dt>{PRACTICE_COPY.dayPeekEarnings}</dt><dd>{row.reported_before_open ? PRACTICE_COPY.dayPeekEarningsFlagged : PRACTICE_COPY.dayPeekEarningsNone}</dd></div>
-    </dl>
+    <FactList
+      divided
+      facts={[
+        { id: "prev", label: PRACTICE_COPY.dayPeekPrevClose, value: row.prior_close === null ? EMPTY_VALUE : formatPrice(row.prior_close) },
+        { id: "vs", label: PRACTICE_COPY.dayPeekVsPrev, value: change === null ? EMPTY_VALUE : formatSignedPct(change, 2), tone: change === null ? undefined : signTone(change) },
+        { id: "earnings", label: PRACTICE_COPY.dayPeekEarnings, value: row.reported_before_open ? PRACTICE_COPY.dayPeekEarningsFlagged : PRACTICE_COPY.dayPeekEarningsNone },
+      ]}
+    />
   );
 }

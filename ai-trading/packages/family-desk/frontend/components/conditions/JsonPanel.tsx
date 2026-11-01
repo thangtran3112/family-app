@@ -3,11 +3,11 @@
 import { Button } from "@/components/ui/Button";
 import styles from "./conditions.module.css";
 
-export function JsonPanel({ spec }: { spec: Record<string, unknown> }) {
+export function JsonPanel({ spec, summary = "View JSON" }: { spec: unknown; summary?: string }) {
   const text = JSON.stringify(spec, null, 2);
   return (
     <details className={styles.panel}>
-      <summary className={styles.summary}>View JSON</summary>
+      <summary className={styles.summary}>{summary}</summary>
       <div className={styles.jsonBody}>
         <Button onClick={() => void navigator.clipboard?.writeText(text).catch(() => undefined)}>Copy</Button>
         <pre className={styles.pre}>{text}</pre>

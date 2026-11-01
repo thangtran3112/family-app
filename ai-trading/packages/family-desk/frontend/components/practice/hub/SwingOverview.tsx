@@ -19,6 +19,7 @@ import { NextStep } from "./NextStep";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 import o from "./overview.module.css";
+import { FactList } from "@/components/ui/FactList";
 
 const tone = (value: HoldRowView["resultTone"] | OverviewWeekRow["realizedTone"]) => o[value];
 
@@ -120,14 +121,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
           <h2 className={styles.panelTitle}>{PRACTICE_COPY.overviewPlanTitle}</h2>
           <p className={styles.dayLine}>{card.title}</p>
           {setup && swingDatesHidden(setup) && <p className={hub.muted}>{HUB_SWING_COPY.dateHidden}</p>}
-          <dl className={o.planList}>
-            {planRows(thread.plan, "swing").map((row) => (
-              <div key={row.id} className={o.planItem}>
-                <dt>{row.label}</dt>
-                <dd>{row.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <FactList facts={planRows(thread.plan, "swing").map((row) => ({ id: row.id, label: row.label, value: row.value }))} />
         </section>
         <StatsPanel thread={thread} />
       </div>

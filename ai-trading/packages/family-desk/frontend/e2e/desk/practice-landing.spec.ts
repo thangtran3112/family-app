@@ -98,8 +98,8 @@ test.describe("Practice landing", () => {
     const badge = dialog.getByText(PRACTICE_COPY.threadSimulated, { exact: true }).first();
     await expect(badge).toBeVisible();
     expect(await badge.evaluate((node) => node.closest("input, [class*=moneyBox]") === null), "SIMULATED sits outside the money box").toBe(true);
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
 
     // Filters: one column. Every checkbox shares a left edge and sits below the one before.
     const filters = dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
@@ -120,12 +120,12 @@ test.describe("Practice landing", () => {
 
     // The rest of the form is on screen: dates (with the recorded-day note), days, hide dates, list time and size, interval, window.
     await expect(dialog.getByTestId("first-day-note")).toBeVisible();
-    await expect(dialog.getByRole("group", { name: "Days" }).getByRole("button")).toHaveText(["5", "10", "20", "30"]);
+    await expect(dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio")).toHaveText(["5", "10", "20", "30"]);
     await expect(dialog.getByText("Names a day"), "a day opens any list name: no cap to pick").toHaveCount(0);
-    await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planHideDates }).getByRole("button", { name: "Yes" })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planListAt }).getByRole("button")).toHaveCount(3);
+    await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planHideDates }).getByRole("radio", { name: "Yes" })).toBeChecked();
+    await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt }).getByRole("radio")).toHaveCount(3);
     await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");
-    await expect(dialog.getByRole("group", { name: PRACTICE_COPY.planInterval })).toBeVisible();
+    await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planInterval })).toBeVisible();
     for (const label of [PRACTICE_COPY.planWindowFrom, PRACTICE_COPY.planWindowTo]) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
     // D-076: no Arm strategies, no Risk plan.
     await expect(dialog.getByRole("group", { name: "Arm strategies" })).toHaveCount(0);
@@ -216,9 +216,9 @@ test.describe("Practice landing", () => {
     const id = threadIdOf(page);
     await openDesk(page, "/practice");
     const dialog = await clickNewPlan(page);
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-pressed", "true");
-    await expect(dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
     await expect(dialog.getByText("is already active")).toHaveCount(0);
     await page.keyboard.press("Escape");
 
@@ -292,7 +292,7 @@ test.describe("New plan modal redesign", () => {
 
   /** The segmented groups of the dialog (a group whose children are buttons), with how far their content pokes out and the tallest button. */
   const segmentedGroups = (dialog: Locator) =>
-    dialog.locator('[role="group"]:has(> button[aria-pressed])').evaluateAll((nodes) =>
+    dialog.locator('[role="radiogroup"]').evaluateAll((nodes) =>
       nodes.map((node) => {
         const box = node.getBoundingClientRect();
         const buttons = [...node.querySelectorAll("button")].map((button) => button.getBoundingClientRect());
@@ -330,7 +330,7 @@ test.describe("New plan modal redesign", () => {
   test("a held list time says why in view, and the blocked Start button is focusable with its reason in a status line", async ({ page }) => {
     const dialog = await openNewPlan(page);
     const filters = dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
-    const premarket = dialog.getByRole("group", { name: PRACTICE_COPY.planListAt, exact: true }).getByRole("button", { name: /^8:30/ });
+    const premarket = dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt, exact: true }).getByRole("radio", { name: /^8:30/ });
     await filters.getByRole("checkbox", { name: "Abnormal volume" }).check();
     await expect(premarket).toHaveAttribute("aria-disabled", "true");
     await expect(premarket).not.toHaveAttribute("disabled", /.*/);
@@ -344,7 +344,7 @@ test.describe("New plan modal redesign", () => {
     await start.focus();
     await expect(start).toBeFocused();
 
-    await dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await expect(dialog.locator("footer").getByRole("status")).toContainText(PRACTICE_COPY.swingBuildFirst);
     await expect(dialog.getByRole("button", { name: START_BUTTON })).toHaveAttribute("aria-disabled", "true");
   });
@@ -357,13 +357,13 @@ test.describe("New plan modal redesign", () => {
     const date = dialog.locator('input[type="date"]');
     await expect(date).toHaveAttribute("max", "2026-10-15"); // the last finished day on the E2E clock
     await date.fill("2026-10-05");
-    const listTime = dialog.getByRole("group", { name: PRACTICE_COPY.planListAt, exact: true });
+    const listTime = dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt, exact: true });
     const before = (await listTime.boundingBox())!.y;
     const start = dialog.getByRole("button", { name: START_BUTTON });
-    await dialog.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
+    await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "5", exact: true }).click();
     await expect(start).toHaveAccessibleName("Start 5-day practice");
 
-    await dialog.getByRole("group", { name: "Days" }).getByRole("button", { name: "30", exact: true }).click();
+    await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "30", exact: true }).click();
     await expect(start).toHaveAccessibleName("Start 30-day practice");
     const message = /30 sessions from .* run past the last finished day/;
     await expect(dialog.getByRole("alert").filter({ hasText: message })).toBeVisible();
@@ -371,7 +371,7 @@ test.describe("New plan modal redesign", () => {
     await expect(start).toHaveAttribute("aria-disabled", "true");
     expect((await listTime.boundingBox())!.y, "the error line was reserved: nothing moved").toBeCloseTo(before, 0);
 
-    await dialog.getByRole("group", { name: "Days" }).getByRole("button", { name: "5", exact: true }).click();
+    await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "5", exact: true }).click();
     await expect(dialog.getByRole("alert").filter({ hasText: message })).toHaveCount(0);
     await expect(start).not.toHaveAttribute("aria-disabled", "true");
     expect((await listTime.boundingBox())!.y).toBeCloseTo(before, 0);
@@ -387,7 +387,7 @@ test.describe("New plan modal redesign", () => {
       await route.fulfill({ response: answer, json: body });
     });
     const dialog = await openNewPlan(page);
-    await dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await expect(dialog.getByLabel("First day")).toHaveValue("2026-09-18"); // inside the recorded window, not the guess three months back
     const universe = dialog.getByRole("group", { name: PRACTICE_COPY.swingUniverseSection, exact: true });
     await expect(universe).toContainText(universeNeedLine(0));
@@ -402,7 +402,7 @@ test.describe("New plan modal redesign", () => {
   // M-05: Escape on a form she has edited asks before it throws the form away.
   test("Escape on an edited swing form asks first, Keep editing keeps it, Discard closes it", async ({ page }) => {
     const dialog = await openNewPlan(page);
-    await dialog.getByRole("button", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await dialog.getByLabel("Sessions").fill("17");
     await page.keyboard.press("Escape");
     await expect(dialog).toBeVisible();

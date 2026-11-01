@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChipToggleGroup } from "@/components/ui/ChipToggleGroup";
 import type { Speed } from "@/lib/replay/clock";
 import { KEY_LEGEND } from "@/lib/replay/keys";
 import { statusLine, type PlayerStatus } from "@/lib/replay/player";
@@ -8,6 +9,8 @@ import { JumpMenu } from "./JumpMenu";
 import { ReplayTimeline } from "./ReplayTimeline";
 import { SpeedChips } from "./SpeedChips";
 import styles from "./replay.module.css";
+
+const INTERVAL_CHIPS = INTERVALS.map((value) => ({ id: value, label: value, title: `${value} candles` }));
 
 export type TransportBarProps = {
   status: PlayerStatus;
@@ -62,13 +65,7 @@ export function TransportBar(props: TransportBarProps) {
         />
         {props.quick}
         {props.chartToggle ?? (
-          <div className={styles.chips} role="group" aria-label="Chart interval">
-            {INTERVALS.map((value) => (
-              <button key={value} type="button" className={styles.chipButton} aria-pressed={props.interval === value} title={`${value} candles`} onClick={() => props.onInterval(value)}>
-                {value}
-              </button>
-            ))}
-          </div>
+          <ChipToggleGroup label="Chart interval" options={INTERVAL_CHIPS} pressed={[props.interval]} onToggle={props.onInterval} />
         )}
         {props.view}
         <p className={styles.status} role="status" aria-live="polite">{statusLine(status, speed, revealedThrough, windowStart)}</p>

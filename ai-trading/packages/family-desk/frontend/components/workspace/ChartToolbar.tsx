@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Segmented } from "@/components/ui/Segmented";
 import { CHART_TIMEFRAMES } from "@/lib/desk/timeframes";
 import { useDismiss } from "@/lib/desk/useDismiss";
 import { INDICATOR_OPTIONS, type IndicatorId } from "@/lib/desk/workspace";
@@ -60,19 +61,7 @@ export function ChartToolbar({ timeframe, onTimeframe, session, onSession, indic
           </button>
         ))}
       </div>
-      <div role="group" aria-label="Session" className={styles.segmented}>
-        {SESSIONS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={styles.segment}
-            aria-pressed={session === item.value}
-            onClick={() => onSession(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <Segmented label="Session" size="lg" value={session} options={SESSIONS} onChange={onSession} className={styles.session} />
       <div className={styles.menuAnchor} ref={wrapRef}>
         <button
           ref={buttonRef}

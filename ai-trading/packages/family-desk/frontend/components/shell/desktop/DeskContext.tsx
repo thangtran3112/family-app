@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { Holdings } from "@/lib/api/fundamentalSchemas";
 import type { DeskStatus } from "@/lib/api/schemas";
 import { loadHoldings } from "@/lib/desk/holdings";
@@ -71,7 +72,11 @@ export type DeskUiValue = {
   invalidate: (kind: "watchlists" | "filters") => void;
   /** A screen with unsaved edits sets this; shell navigation that stays in the page (search, alerts bell) then asks first. */
   setDirty: (dirty: boolean) => void;
-  confirmLeave: () => boolean;
+  /**
+   * Shell navigation calls this before it leaves. With nothing unsaved it returns true and the caller goes on. Otherwise it returns
+   * false, asks in a dialog, and runs `go` only if she chooses to leave: the caller stops and lets `go` do the leaving.
+   */
+  confirmLeave: (go: () => void) => boolean;
 };
 
 const UiContext = createContext<DeskUiValue | null>(null);
@@ -118,13 +123,38 @@ export function DeskUiProvider({ children }: { children: ReactNode }) {
   const setDirty = useCallback((flag: boolean) => {
     dirty.current = flag;
   }, []);
-  const confirmLeave = useCallback(() => !dirty.current || window.confirm("You have unsaved changes. Leave this page?"), []);
+  const [leaving, setLeaving] = useState<{ go: () => void } | null>(null);
+  const confirmLeave = useCallback((go: () => void) => {
+    if (!dirty.current) return true;
+    setLeaving({ go });
+    return false;
+  }, []);
   const rememberLane = useCallback((next: Lane) => writeLanePreference(window.localStorage, next), []);
   const value = useMemo<DeskUiValue>(
     () => ({ lane, rememberLane, selectedListId, setSelectedListId, selectedSymbol, setSelectedSymbol, maskValues, setMaskValues, leftCollapsed, setLeftCollapsed, chartFocus, setChartFocus, revisions, invalidate, setDirty, confirmLeave }),
     [lane, rememberLane, selectedListId, selectedSymbol, maskValues, setMaskValues, leftCollapsed, chartFocus, revisions, invalidate, setDirty, confirmLeave],
   );
-  return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
+  return (
+    <UiContext.Provider value={value}>
+      {children}
+      {leaving && (
+        <ConfirmDialog
+          title="Leave this page?"
+          body="You have unsaved changes. If you leave now, they are lost."
+          confirmLabel="Leave page"
+          cancelLabel="Stay"
+          tone="danger"
+          onCancel={() => setLeaving(null)}
+          onConfirm={() => {
+            // The edits are given up: the next check (the caller may run its whole handler again) must not ask twice.
+            dirty.current = false;
+            setLeaving(null);
+            leaving.go();
+          }}
+        />
+      )}
+    </UiContext.Provider>
+  );
 }
 
 /** The shell's UI state, or null outside the desktop shell (the mobile shell has none), for a component that works in both. */

@@ -205,11 +205,13 @@ def filter_inputs(
 ) -> list[FilterInput]:
     """Her daily filters as `build_list` scans them: a `market` filter scans `universe`, a watchlist filter its list."""
     out = []
+    kinds: dict[str, str] | None = None  # the whole universe table, read at most once per call, not once per filter
     for row, spec, version_id in resolved:
         if "market" in spec["watch"]["universe"]:
             symbols = universe
             if spec.get("assetTypes"):
-                kinds = dict(db.execute(select(UniverseSymbol.symbol, UniverseSymbol.asset_type)).all())
+                if kinds is None:
+                    kinds = dict(db.execute(select(UniverseSymbol.symbol, UniverseSymbol.asset_type)).all())
                 symbols = [s for s in universe if kinds.get(s, "stock") in spec["assetTypes"]]
         else:
             symbols = source_symbols(db, spec, user_id)

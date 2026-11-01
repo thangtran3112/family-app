@@ -1,20 +1,11 @@
-/* The modal: a native dialog over a dimmed page. The body scrolls; the header and footer stay. */
-.dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); margin: auto; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-ground); padding: 0; color: var(--color-text); font-family: var(--font-sans); }
-.dialog[open] { display: flex; }
-.dialog::backdrop { background: rgb(0 0 0 / 0.68); }
-.dialogForm { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-.dialogHead { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
-.dialogTitle { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
-.dialogBody { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-3); overflow-y: auto; padding: var(--space-4); }
-.dialogFoot { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--color-hairline); padding: var(--space-3) var(--space-4); }
-.footNotes { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+/* The New plan modal is a ui/Dialog; what is left here is its form. */
 .submit { min-width: 200px; gap: var(--space-2); }
 .submit[aria-disabled="true"] { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
 .submit[aria-disabled="true"]:hover { background: transparent; }
 .filterList { max-height: none; overflow-y: visible; }
 
 /* The footer: one status line (the reason Start is off, or what it will do) and one button. The line keeps two lines of room so a long reason never resizes the footer. */
-.status { margin: 0; min-height: calc(2 * var(--line-label)); color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
+.status { flex: 1 1 auto; margin: 0; min-height: calc(2 * var(--line-label)); color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
 .discard { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 
 /* The form: sections (a fieldset with a sentence-case legend) around one two-column grid. Labels, notes and the sections' text are 13 px (M-07). */

@@ -4,7 +4,7 @@ const PARAMS: Record<string, string> = {
   name: "Name", symbols: "Symbols", watchlist: "Watchlist", filter: "Screener filter", universe: "Universe",
   session: "Session", runOn: "Run on", channels: "Alert channels", severity: "Alert severity",
   frequency: "Frequency", expiresOn: "Expires on", side: "Side", size: "Size", stop: "Stop", target: "Target",
-  left: "left side", right: "right side", value: "Value", pct: "Percent", start: "Start time", end: "End time",
+  left: "Metric", right: "Compared with", value: "Value", pct: "Percent", start: "Start time", end: "End time",
   length: "Length", fast: "Fast length", slow: "Slow length", mid: "Mid length", signal: "Signal length",
   smoothK: "%K smoothing", smoothD: "%D smoothing", rsiLength: "RSI length", stochLength: "Stochastic length",
   lookbackDays: "Lookback (days)", conversionLength: "Conversion line length", baseLength: "Base line length",

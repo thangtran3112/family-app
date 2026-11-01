@@ -9,7 +9,6 @@
 .link { border: 0; background: transparent; padding: 0; color: var(--color-amber); font: inherit; font-size: 13px; font-weight: var(--weight-semibold); text-decoration: none; cursor: pointer; }
 .link:hover { text-decoration: underline; }
 .error { color: var(--color-down); font-size: 13px; }
-.confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: 13px; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
 .universe { color: var(--color-muted); font-size: 13px; line-height: 17px; }
 .universe p { margin: 0; }

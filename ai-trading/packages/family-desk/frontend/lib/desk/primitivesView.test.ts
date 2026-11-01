@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { TONES } from "../../components/ui/tone.ts";
 import { signTone } from "./format.ts";
-import { bannerRole, buttonState, countText, deltaView, fieldWiring, formBarStatus, iconA11y, panelHeadingTag, requirementText, statTileTag, UNSAVED_TEXT } from "./primitivesView.ts";
+import { bannerRole, buttonState, countText, deltaView, factColumns, fieldWiring, formBarStatus, iconA11y, modeLabel, panelHeadingTag, railRowKind, queryView, railRowSelection, requirementText, retryLabel, rovingStop, rovingTarget, statTileTag, tabDomIds, UNSAVED_TEXT } from "./primitivesView.ts";
 import { warnBeforeUnload } from "./unsavedGuard.ts";
 
 test("tone: every tone has a colour in globals.css, and a sign maps onto the model", () => {
@@ -79,4 +79,75 @@ test("unsaved guard: leaving the page is interrupted, in the way every browser a
   warnBeforeUnload(event);
   assert.equal(prevented, 1);
   assert.equal(event.returnValue, "");
+});
+
+test("Segmented and Tabs: the arrows move one step and wrap, Home and End jump, a disabled step is skipped", () => {
+  assert.equal(rovingTarget("ArrowRight", 0, 3), 1);
+  assert.equal(rovingTarget("ArrowRight", 2, 3), 0, "wraps forward");
+  assert.equal(rovingTarget("ArrowLeft", 0, 3), 2, "wraps back");
+  assert.equal(rovingTarget("ArrowDown", 0, 3), 1, "a radio group also takes Down");
+  assert.equal(rovingTarget("ArrowUp", 0, 3), 2);
+  assert.equal(rovingTarget("ArrowDown", 0, 3, { axis: "horizontal" }), null, "tabs leave Up and Down to the page");
+  assert.equal(rovingTarget("Home", 2, 4), 0);
+  assert.equal(rovingTarget("End", 0, 4), 3);
+  assert.equal(rovingTarget("a", 0, 3), null, "a letter is not a move");
+  assert.equal(rovingTarget("ArrowRight", 0, 0), null, "an empty group has nowhere to go");
+  const enabled = [true, false, true, false];
+  assert.equal(rovingTarget("ArrowRight", 0, 4, { enabled }), 2, "skips the disabled step");
+  assert.equal(rovingTarget("ArrowRight", 2, 4, { enabled }), 0, "and wraps past the disabled end");
+  assert.equal(rovingTarget("End", 0, 4, { enabled }), 2, "End lands on the last step that can take focus");
+  assert.equal(rovingTarget("Home", 2, 4, { enabled: [false, true, true, true] }), 1);
+  assert.equal(rovingTarget("ArrowRight", 0, 2, { enabled: [false, false] }), null, "nothing can take focus");
+});
+
+test("Segmented and Tabs: Tab enters the group once, on the selected step, else the first that is enabled", () => {
+  assert.equal(rovingStop(1, [true, true, true]), 1);
+  assert.equal(rovingStop(-1, [true, true]), 0, "nothing selected: the first");
+  assert.equal(rovingStop(0, [false, true, true]), 1, "the selected step is disabled: the first enabled");
+  assert.equal(rovingStop(5, [true, true]), 0, "a stale selection falls back to the first");
+});
+
+test("Tabs: a tab names its panel and the panel names its tab", () => {
+  assert.deepEqual(tabDomIds("alerts", "active"), { tab: "alerts-tab-active", panel: "alerts-panel-active" });
+});
+
+test("a control that opens a mode says Done while the mode is open, instead of looking pressed", () => {
+  assert.equal(modeLabel("Manage", false), "Manage");
+  assert.equal(modeLabel("Manage", true), "Done");
+});
+
+test("RailList: a row with an href is a link, with onSelect a button, with neither plain text; the selection is marked the way the element allows", () => {
+  assert.equal(railRowKind({ href: "/a" }), "link");
+  assert.equal(railRowKind({ onSelect: () => {} }), "button");
+  assert.equal(railRowKind({}), "text", "no hover, no pointer: it does not look clickable");
+  assert.equal(railRowKind({ href: "/a", onSelect: () => {} }), "link", "an href wins");
+  assert.deepEqual(railRowSelection("link", true), { "aria-current": "page" });
+  assert.deepEqual(railRowSelection("link", false), { "aria-current": undefined });
+  assert.deepEqual(railRowSelection("button", true), { "aria-pressed": true });
+  assert.deepEqual(railRowSelection("button", false), { "aria-pressed": false });
+  assert.deepEqual(railRowSelection("text", true), {}, "a plain row is never marked");
+});
+
+test("FactList: one column unless two are asked for", () => {
+  assert.equal(factColumns(undefined), 1);
+  assert.equal(factColumns(1), 1);
+  assert.equal(factColumns(2), 2);
+  assert.equal(factColumns(3), 1, "anything else is one");
+});
+
+test("QueryBoundary: the retry says Trying again only while a retry runs", () => {
+  assert.equal(retryLabel(false), "Try again");
+  assert.equal(retryLabel(true), "Trying again");
+});
+
+test("QueryBoundary: data wins, a retry keeps the error block up, the rest is loading or error", () => {
+  const first = { data: null, error: null, loading: true };
+  assert.equal(queryView(first), "loading");
+  assert.equal(queryView({ data: null, error: new Error("x"), loading: false }), "error");
+  assert.equal(queryView({ data: null, error: null, loading: true }, { retrying: true }), "retrying", "the retry started: error cleared, loading true");
+  assert.equal(queryView({ data: null, error: new Error("again"), loading: false }, { retrying: true }), "error", "the retry failed: Try again is back");
+  assert.equal(queryView({ data: [1], error: new Error("refresh failed"), loading: false }), "ready", "a failed refresh keeps the old values");
+  assert.equal(queryView({ data: [], error: null, loading: false }, { isEmpty: true }), "empty");
+  assert.equal(queryView({ data: [1], error: null, loading: false }, { isEmpty: false }), "ready");
+  assert.equal(queryView({ data: null, error: null, loading: false }), "loading", "a query that is switched off waits");
 });

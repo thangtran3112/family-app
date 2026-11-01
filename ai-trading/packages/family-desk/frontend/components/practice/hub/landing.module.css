@@ -42,25 +42,13 @@
 .gateChip { margin-top: 4px; color: var(--color-amber); }
 
 /* Loading skeletons (the landing's rows and the thread page): grey bars in the shape of what is coming. */
-.skel { display: block; height: 12px; border-radius: var(--radius-sm); background: var(--color-raised); animation: pulse 1.4s ease-in-out infinite; }
 .skelRow:hover { background: transparent; }
-.skelName { width: 70%; min-width: 120px; height: 14px; }
-.skelMoney { width: 96px; height: 14px; }
-.skelNum { width: 32px; margin-left: auto; }
-.skelAction { width: 84px; height: 32px; margin-left: auto; }
-.skelStack { display: flex; flex-direction: column; gap: var(--space-4); }
-.skelTitle { width: 120px; }
-.skelButton { width: 160px; height: 40px; }
-.skelLine { width: 60%; }
-.skelCurve { height: 200px; }
+.skelEnd { margin-left: auto; }
 .skelStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
-.skelStat { height: 32px; }
 
-/* Delete: muted until the pointer is on it, then the down colour; the confirm dialog is a small one. */
+/* Delete: muted until the pointer is on it, then the down colour. */
 button.deleteButton { color: var(--color-muted); }
 button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); color: var(--color-down); }
-/* The dialog sits in the row's action cell, which is nowrap: its text must wrap again, or the warning clips (D-079). */
-.confirmDialog { width: min(420px, calc(100vw - 32px)); white-space: normal; }
 /* No threads yet: one centred card, one sentence, one primary button (D-115). */
 .emptyCard { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); margin: var(--space-8) auto 0; max-width: 420px; border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-panel); padding: var(--space-6); text-align: center; }
 .emptyTitle { margin: 0; font-size: var(--text-body); line-height: var(--line-body); }
@@ -70,8 +58,7 @@ button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); colo
 .spinner { width: 12px; height: 12px; flex-shrink: 0; border: 2px solid var(--color-hairline); border-top-color: var(--color-amber); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
-@keyframes pulse { 50% { opacity: 0.45; } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } .skel { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 
 /* The thread page */
 .page { display: flex; min-width: 0; flex-direction: column; }

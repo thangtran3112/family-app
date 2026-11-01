@@ -18,11 +18,6 @@
 .fieldError { margin: 0; color: var(--color-down); font-size: var(--text-micro); line-height: var(--line-micro); }
 
 /* Controls */
-.segmented { display: inline-flex; width: max-content; min-height: 32px; max-width: 100%; align-self: flex-start; overflow: hidden; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); }
-.segment { min-width: 40px; min-height: 30px; border: 0; border-radius: 0; background: transparent; padding: 0 var(--space-3); color: var(--color-muted); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
-.segment + .segment { border-left: 1px solid var(--color-hairline); }
-.segment:hover { background: var(--color-panel); color: var(--color-text); }
-.segment[aria-pressed="true"] { background: var(--color-raised); box-shadow: inset 0 -2px 0 var(--color-amber); color: var(--color-text); }
 .button, .primary, .primaryLink, .small, .linkButton { font: inherit; cursor: pointer; }
 .button { display: inline-flex; min-height: 32px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .button:hover:not(:disabled) { background: var(--color-raised); }
@@ -42,7 +37,6 @@
   outline: var(--focus-ring);
   outline-offset: 2px;
 }
-.segment:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 
 /* Symbol suggestions */
 .combo { position: relative; display: flex; min-width: 0; flex-direction: column; }
@@ -97,6 +91,5 @@
 .threadLink:hover { text-decoration: underline; }
 .threadLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 .actionNote { margin-right: auto; align-self: center; }
-.segment:disabled, .segment:disabled:hover, .segment[aria-disabled="true"], .segment[aria-disabled="true"]:hover { background: transparent; color: var(--color-muted); cursor: default; opacity: 0.55; }
 
 .threadTopRow { display: grid; grid-template-columns: minmax(130px, 0.8fr) minmax(0, 1.4fr); align-items: start; gap: var(--space-3); }

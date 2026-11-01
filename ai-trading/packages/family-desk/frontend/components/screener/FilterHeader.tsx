@@ -1,17 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type { ScreenerFilter, ScreenerFilterDetail } from "@/lib/api/schemas";
 import { COPY } from "@/lib/desk/freshness";
 import { createFilter, deleteFilter } from "@/lib/desk/screener";
 import { describeSpec } from "@/lib/spec/describe";
 import { parseFilterSpec } from "@/lib/spec/parse";
 import styles from "./screener.module.css";
+import { alertNewHref, filterHref } from "@/lib/desk/hrefs";
 
 type Action = "save" | "delete";
 
@@ -32,6 +34,7 @@ export function FilterHeader({
   const [pending, setPending] = useState<Action | null>(null);
   const [failed, setFailed] = useState<Action | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const deleteRef = useRef<HTMLButtonElement>(null);
   const rule = detail ? parseFilterSpec(detail.spec) : null;
 
   async function run(action: Action, task: () => Promise<void>) {
@@ -50,7 +53,7 @@ export function FilterHeader({
     run("save", async () => {
       const copy = await createFilter({ copy_of: filter.id });
       invalidate("filters");
-      router.push(`/screener/filters?id=${copy.id}`);
+      router.push(filterHref(copy.id));
     });
   const remove = () =>
     run("delete", async () => {
@@ -74,7 +77,7 @@ export function FilterHeader({
       </div>
       <div className={styles.controls}>
         {/* A default opens read-only, so it is a view, not an edit (A-SCR-15). */}
-        <Button href={`/screener/filters?id=${filter.id}`}>{filter.read_only ? "View rule" : "Edit"}</Button>
+        <Button href={filterHref(filter.id)}>{filter.read_only ? "View rule" : "Edit"}</Button>
         {filter.read_only ? (
           <>
             <Button variant="primary" loading={pending === "save"} disabled={pending !== null} onClick={saveCopy}>
@@ -88,23 +91,29 @@ export function FilterHeader({
             )}
           </>
         ) : confirming ? (
-          <span className={styles.confirm}>
-            Delete this filter?
-            <Button variant="danger" loading={pending === "delete"} disabled={pending !== null} onClick={remove}>
-              {pending === "delete" ? "Deleting…" : "Delete"}
-            </Button>
-            <Button onClick={() => setConfirming(false)}>Keep</Button>
+          <>
+            <InlineConfirm
+              label="Confirm deleting this filter"
+              prompt="Delete this filter?"
+              tone="danger"
+              confirmLabel={pending === "delete" ? "Deleting…" : "Delete"}
+              cancelLabel="Keep"
+              busy={pending === "delete"}
+              returnFocus={deleteRef}
+              onConfirm={remove}
+              onCancel={() => setConfirming(false)}
+            />
             {failed === "delete" && (
               <span role="alert" className={styles.error}>
                 {"Couldn't delete this filter · "}
                 <button type="button" className={styles.link} onClick={remove}>Try again</button>
               </span>
             )}
-          </span>
+          </>
         ) : (
-          <Button onClick={() => setConfirming(true)}>Delete</Button>
+          <Button ref={deleteRef} onClick={() => setConfirming(true)}>Delete</Button>
         )}
-        <a href={`/alerts/new?from=filter:${filter.id}`} className={styles.link}>Alert on this filter</a>
+        <a href={alertNewHref({ filter: filter.id })} className={styles.link}>Alert on this filter</a>
       </div>
     </header>
   );

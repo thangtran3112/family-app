@@ -22,7 +22,8 @@ export function ModeMenu() {
       if (!target || !event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
       if (isTextField(document.activeElement as HTMLElement | null)) return;
       event.preventDefault();
-      if (confirmLeave()) window.location.assign(LANE_HOME[target]);
+      const go = () => window.location.assign(LANE_HOME[target]);
+      if (confirmLeave(go)) go();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -40,8 +41,9 @@ export function ModeMenu() {
         description: LANE_SUMMARY[mode],
         checked: mode === lane,
         shortcut: `Alt+${index + 1}`,
+        // Unsaved edits: hold the link, ask, and follow it from the dialog's Leave.
         onClick: (event) => {
-          if (!confirmLeave()) event.preventDefault();
+          if (!confirmLeave(() => window.location.assign(LANE_HOME[mode]))) event.preventDefault();
         },
       }))}
       trigger={(props) => (
