@@ -886,6 +886,8 @@ test.describe("Practice day list · fix wave 5S", () => {
       return { overflow: wrap.scrollWidth > wrap.clientWidth, inside: b.left >= w.left - 1 && b.right <= w.right + 1 };
     });
     expect(fits.inside, "the Open action is inside the visible part of the table").toBe(true);
+    const peek = await page.getByRole("table", { name: "Candidates" }).getByRole("button", { name: "Peek at TSLA" }).boundingBox();
+    expect(Math.abs(peek!.y - (await button.boundingBox())!.y), "Open and Peek share one line in the pinned cell").toBeLessThan(2);
     await button.click();
     await page.waitForURL(SESSION_URL);
   });
@@ -936,6 +938,9 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle)).toBeVisible();
     await expect(page.getByText(/\bof \d+ matched\b/), "one count model: the third count is gone").toHaveCount(0);
     await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan }), "the dead Re-scan is not offered").toHaveCount(0);
+    const hint = (await page.getByText(PRACTICE_COPY.dayNoMatchHint).boundingBox())!;
+    const skip = (await page.getByRole("button", { name: PRACTICE_COPY.daySkip }).boundingBox())!;
+    expect(skip.y - (hint.y + hint.height), "the hint does not touch the buttons under it").toBeGreaterThanOrEqual(8);
     await expect(page.getByRole("link", { name: /widen a filter/ }), "the Screener cannot edit this thread's plan").toHaveCount(0);
     await page.getByRole("button", { name: PRACTICE_COPY.dayChangePlan }).click();
     await expect(page.getByRole("dialog", { name: /^New plan for / })).toBeVisible();
