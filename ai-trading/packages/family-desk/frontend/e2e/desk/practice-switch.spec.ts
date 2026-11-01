@@ -31,15 +31,6 @@ async function portfolioPanel(page: Page) {
   return drawer;
 }
 
-/** The day's portfolio on the day page: the left rail at 1440, the right drawer's "Portfolio" tab at 1180. */
-async function dayPagePortfolio(page: Page) {
-  if (test.info().project.name !== "desktop-1180") return page.getByRole("complementary", { name: "Practice side panel" }).getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-  const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
-  if (!(await drawer.isVisible())) await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-  await expect(drawer).toBeVisible();
-  return drawer;
-}
-
 /** The Desk "recorded" these mornings' universes (`universe_days`); the e2e server writes the rows the premarket pass would. */
 async function recordUniverse(context: BrowserContext, days: { day: string; symbols: string[] }[]) {
   expect((await context.request.post(`${origin}/api/desk/__e2e/universe-days`, { data: { days } })).ok()).toBeTruthy();
@@ -157,9 +148,9 @@ test.describe("Practice: switching names", () => {
     await page.waitForURL(dayUrl);
     await expect(page.locator("body")).not.toContainText(/names practiced today|allows \d+ names/);
     await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Switch to LRCX" })).toHaveText("Switch"); // a name in hand switches back
-    const dayPortfolio = await dayPagePortfolio(page);
-    await expect(dayPortfolio.locator("li")).toHaveCount(4);
-    await expect(dayPortfolio.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    // The day list is only the list of names: its portfolio is the Portfolio tab's, not a section of this screen.
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     // Resume is the day's, never a name's: no per-name button says Resume, and the header resumes the whole day on its shared clock.
     await expect(page.getByRole("button", { name: /^Resume/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Resume Day \d+$/ })).toBeVisible();
