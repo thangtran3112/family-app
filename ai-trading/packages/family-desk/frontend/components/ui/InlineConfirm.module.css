@@ -1,0 +1,7 @@
+/* The two-step inline confirm (DS-5). inline = a row in a toolbar; block = a bordered panel with the question above the buttons;
+   floating = a block that opens over the page (the caller's className places it: position, width). */
+.root { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-label); line-height: var(--line-label); }
+.root[data-layout="block"], .root[data-layout="floating"] { flex-direction: column; align-items: stretch; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-3); }
+.root[data-layout="floating"] { z-index: var(--z-popover); background: var(--color-panel); box-shadow: var(--shadow-pop); }
+.prompt { display: flex; flex-direction: column; gap: var(--space-1); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
