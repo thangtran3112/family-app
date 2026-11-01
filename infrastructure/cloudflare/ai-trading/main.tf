@@ -37,14 +37,19 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
 
   # Establish the Worker route before removing interim ingress at cutover.
   # No dependency on the hub/terminal routes and no DNS replacement.
-  depends_on = [cloudflare_workers_route.desk_static]
+  # The Access application goes first when the SSH endpoint is on: the ssh://
+  # ingress must never be live before Access gates its hostname.
+  depends_on = [
+    cloudflare_workers_route.desk_static,
+    cloudflare_zero_trust_access_application.laptop_ssh,
+  ]
 
   config = {
     ingress = concat(
       var.desk_cutover_enabled ? [] : [
         {
           # Public hostname's dynamic paths are routed to the Caddy "gateway"
-          # service (ai-trading/deploy/production/Caddyfile), not directly to
+          # service (infrastructure/apps/ai-trading/Caddyfile), not directly to
           # the terminals. Routing straight to ta-terminal/ahf-terminal here
           # would trust the client-supplied `Cf-Access-Authenticated-User-Email`
           # header (ttyd's own `--auth-header` trust boundary), which is fully
@@ -97,6 +102,16 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
         hostname = host
         service  = "http://gateway:8080"
       }],
+      var.laptop_ssh_enabled ? [
+        {
+          # laptop-ssh.tf: operator SSH, only while laptop_ssh_enabled. The
+          # connector is a container, so laptop_ssh_origin must resolve from
+          # inside it (host.docker.internal + extra_hosts host-gateway); the
+          # hostname is gated by an Access application, not by Caddy.
+          hostname = var.laptop_ssh_hostname
+          service  = "ssh://${var.laptop_ssh_origin}"
+        },
+      ] : [],
       [
         {
           # hub-static-variables.tf's hub_origin_hostname: unrouted BY THE
@@ -109,7 +124,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
           # directly (fix-round-1 reviewer P1: corrected from an earlier,
           # inaccurate "private"/"reached only by the tunnel" description).
           # The actual authentication boundary is the Caddy "gateway" service
-          # (ai-trading/deploy/production/Caddyfile): it strips any inbound
+          # (infrastructure/apps/ai-trading/Caddyfile): it strips any inbound
           # identity header and forward_auths every /u/* and /__auth/* request
           # against `auth:8181`'s HMAC cookie check regardless of which
           # hostname the request arrived on. Added here only after this
@@ -133,7 +148,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "ai_trading" {
           # is a proxied, publicly resolvable CNAME to this same tunnel, so
           # anyone who learns this hostname can reach it directly. The actual
           # authentication boundary is this same Caddy "gateway" service
-          # (ai-trading/deploy/production/Caddyfile's `handle /api/*` block):
+          # (infrastructure/apps/ai-trading/Caddyfile's `handle /api/*` block):
           # it strips any inbound identity header and forward_auths every
           # /api/* request against `auth:8181`'s HMAC cookie check before
           # reverse-proxying to `mirofish:5001` — Flask is never reachable
@@ -167,6 +182,7 @@ locals {
       vibe_trading = var.vibe_trading_hostname
     },
     var.terminal_hostnames,
+    var.laptop_ssh_enabled ? { laptop_ssh = var.laptop_ssh_hostname } : {},
   )
 }
 

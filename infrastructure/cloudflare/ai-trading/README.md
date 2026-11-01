@@ -1,6 +1,6 @@
 # ai-trading Cloudflare (Tunnel + staging Workers)
 
-Terraform for the ai-trading tunnel, staging Workers, and DNS. Caddy/Clerk protects every VPS upstream route; Cloudflare Access is deferred for Release 1. This root does not read or apply `infrastructure/cloudflare/zero-trust/`, which remains for a separate future decision. State lives in `gs://tobytran-portfolio-tfstate` under prefix `cloudflare/ai-trading`. The expense tunnel is separate and untouched.
+Terraform for the ai-trading tunnel, staging Workers, and DNS. Caddy/Clerk protects every VPS upstream route; Cloudflare Access is deferred for Release 1, with one off-by-default exception: the operator SSH endpoint (`laptop-ssh.tf`, "Operator SSH" below). This root does not read or apply `infrastructure/cloudflare/zero-trust/`, which remains for a separate future decision. State lives in `gs://tobytran-portfolio-tfstate` under prefix `cloudflare/ai-trading`. The expense tunnel is separate and untouched.
 
 | Hostname | Routes |
 |---|---|
@@ -61,9 +61,44 @@ This removes the Desk route and restores all four interim ingress entries.
 Keep its bucket, Worker, DNS and origin. Ensure future infra runs use the same
 persisted boolean. No manual console changes or targeted applies are needed.
 
+## Operator SSH (`laptop-ssh.tf`, off by default)
+
+Operator access to the host goes through this tunnel behind Cloudflare Access, not over the tailnet (which is CI deploys only; `.claude/rules/tailscale.md`). The client side, the status checks and the failure modes are in the skill `manage-cloudflare-tunnel` (`.claude/skills/`). With `laptop_ssh_enabled=false` (the default) nothing below exists.
+
+| Variable | Default | Firestore key in `ai-trading/cloudflare` |
+|---|---|---|
+| `laptop_ssh_enabled` | `false` | `TF_VAR_laptop_ssh_enabled` |
+| `laptop_ssh_hostname` | empty; a hostname inside `zone_name` | `TF_VAR_laptop_ssh_hostname` |
+| `laptop_ssh_owner_email` | empty; the one identity the policy requires | `TF_VAR_laptop_ssh_owner_email` |
+| `laptop_ssh_ci_service_token_id` | empty; the Access service token's internal id. Non-empty adds the CI Service Auth policy | `TF_VAR_laptop_ssh_ci_service_token_id` |
+| `laptop_ssh_origin` | `host.docker.internal:2222`; `host:port` as seen from inside the `cloudflared` container | `TF_VAR_laptop_ssh_origin` (only to override) |
+
+`family_config.py run ai-trading/cloudflare` turns these keys into `TF_VAR_*` like the others. Set them from stdin so no value touches a command line (`printf '%s' "$VALUE" | common/config/family_config.py set ai-trading/cloudflare TF_VAR_laptop_ssh_hostname`). Never write a hostname or an email into this repository.
+
+When on, the root adds: one `ssh://` ingress (before the 404 catch-all), the proxied CNAME to the tunnel (the same `cloudflare_dns_record.tunnel` every tunnel hostname uses, so no separate DNS resource), one self-hosted Access application on the hostname, and one `allow` policy that both includes and `require`s the owner email. Enabling it with an empty hostname or owner email fails at `plan` (variable validation, plus a precondition on the policy), so the apply can never create a policy that admits everyone. The tunnel config depends on the Access application, so the `ssh://` route cannot go live before Access gates it.
+
+Apply order (the operator's; an agent runs `plan` only):
+
+1. **Zero Trust exists in the account** (team name, one-time-PIN login). `infrastructure/cloudflare/zero-trust/` records that decision and this root does not apply it. Access has not enabled successfully on this account before, so expect to onboard it first. The shared `shared/cloudflare` token needs the Access applications and policies edit permission; broaden it per the token policy above.
+2. **The connector can reach sshd.** The `cloudflared` service is a container on bridge networks, so `localhost` is the container. `infrastructure/apps/ai-trading/docker-compose.yml` needs `extra_hosts: ["host.docker.internal:host-gateway"]` on it (it has none today), sshd must listen on the origin port, and the host firewall must admit the connector's bridge subnet to that port (today `2222` is allowed on `tailscale0` only). That is a separate ai-trading release, not part of this root.
+3. Persist the three keys above, then `terraform plan` through `family_config.py run`. Review the whole plan: it should add one DNS record, one policy, one application, and change the tunnel config by one ingress rule.
+4. Apply. Verify with the skill's status section, then from the client with `cloudflared access ssh`.
+
+### CI deploys through Access (no browser)
+
+The deploy workflows (`ai-trading-deploy.yml`, `expense-tax-deploy.yml`) reach the laptop's sshd through this endpoint with the CI service token instead of the tailnet. The runner installs a pinned `cloudflared` and runs `ssh -o ProxyCommand="cloudflared access ssh --hostname %h"` with `TUNNEL_SERVICE_TOKEN_ID` and `TUNNEL_SERVICE_TOKEN_SECRET` in the environment (never in argv). `cloudflared` sends them as `CF-Access-Client-Id` / `CF-Access-Client-Secret` on the websocket handshake, so nothing opens a browser. Only the client side runs: no listener on the laptop.
+
+The service token must be admitted by a **Service Auth** policy (`decision = "non_identity"`, `laptop_ssh_ci` in `laptop-ssh.tf`). Under an `allow` policy the edge recognises the token but answers `403`, the SSH websocket never opens and the connector sees no traffic (`websocket: bad handshake`).
+
+Credentials: the token's client id and secret are Firestore `shared/laptop` `CLOUDFLARE_ACCESS_CI_CLIENT_ID` / `CLOUDFLARE_ACCESS_CI_CLIENT_SECRET` (copied to the GitHub `production` secrets `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` for `expense-tax-deploy.yml`, which has no GCP auth). `ai-trading-deploy.yml` reads them from Firestore. The expense workflow also needs the GitHub variable `LAPTOP_SSH_HOSTNAME` (the SSH hostname). The pinned host keys keep their key material; the workflows only relabel them to the Access hostname.
+
+Rollback: persist `TF_VAR_laptop_ssh_enabled=false`, review and apply. That removes the ingress rule, the CNAME, the Access application and the policy in one apply. No console edits and no targeted applies.
+
+## Offline checks
+
 Offline checks (no credentials/backend): `node --test worker/*.test.js`,
 `terraform init -backend=false`, `terraform validate`, and `terraform test`.
-The last uses mocked providers to check both cutover states and preserved routes.
+`terraform test` uses mocked providers to check both cutover states, preserved routes, and the SSH endpoint (off by default, gated and last-before-404 when on, refused with an empty owner identity or hostname).
 
 ## Existing infra workflow
 
@@ -85,7 +120,7 @@ $CLI run ai-trading/cloudflare -- terraform apply -auto-approve tfplan
 rm -f tfplan
 ```
 
-`family_config.py run` adds `CLOUDFLARE_API_TOKEN`, `TF_VAR_cloudflare_account_id`, `TF_VAR_zone_name`, and `TF_VAR_mirofish_bucket_name` from the `ai-trading/cloudflare` Firestore profile. No Access IDP or allowed-email variable is required by this root.
+`family_config.py run` adds `CLOUDFLARE_API_TOKEN`, `TF_VAR_cloudflare_account_id`, `TF_VAR_zone_name`, and `TF_VAR_mirofish_bucket_name` from the `ai-trading/cloudflare` Firestore profile. Unless the SSH endpoint below is on, no Access IDP or allowed-email variable is required by this root.
 
 After the first apply, fetch the tunnel token for local/manual use from the Cloudflare API (the deploy workflow does this automatically in `render-env.sh`):
 
