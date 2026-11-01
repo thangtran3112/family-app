@@ -897,6 +897,14 @@ vibe_monotonic_seconds() {
   python3 -c 'import time; print(int(time.monotonic()))'
 }
 
+# vibe_gate_log MESSAGE: one stderr line naming the gate branch that failed.
+# Before 2026-11-01 every refusal below was a bare `|| return 1`, so a deploy
+# aborted with nothing in the CI log. Messages carry no lease, key, container
+# id or reply body, and logging never changes a branch's status.
+vibe_gate_log() {
+  echo "deploy: vibe gate: $*" >&2
+}
+
 wait_for_legacy_idle() {
   local container_id="$1" start deadline now remaining counts confirm
   start="$(vibe_monotonic_seconds)" || return 1
@@ -944,27 +952,27 @@ except (KeyError, TypeError, ValueError):
 
 wait_for_vibe_idle() {
   local container_id="$1" lease="$2" started deadline now remaining reply counts
-  started="$(vibe_monotonic_seconds)" || return 1
-  [[ "$started" =~ ^[0-9]+$ ]] || return 1
+  started="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+  [[ "$started" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
   deadline=$((started + 3600))
   while :; do
-    now="$(vibe_monotonic_seconds)" || return 1
-    [[ "$now" =~ ^[0-9]+$ ]] || return 1
-    ((now <= deadline)) || return 1
-    reply="$(vibe_drain_request "$container_id" status "$lease")" || return 1
-    now="$(vibe_monotonic_seconds)" || return 1
-    [[ "$now" =~ ^[0-9]+$ ]] || return 1
-    ((now <= deadline)) || return 1
-    counts="$(vibe_drain_counts <<<"$reply")" || return 1
-    vibe_drain_request "$container_id" renew "$lease" >/dev/null || return 1
-    now="$(vibe_monotonic_seconds)" || return 1
-    [[ "$now" =~ ^[0-9]+$ ]] || return 1
-    ((now <= deadline)) || return 1
+    now="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    [[ "$now" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    ((now <= deadline)) || { vibe_gate_log "idle wait exceeded 3600s"; return 1; }
+    reply="$(vibe_drain_request "$container_id" status "$lease")" || { vibe_gate_log "drain status request failed"; return 1; }
+    now="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    [[ "$now" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    ((now <= deadline)) || { vibe_gate_log "idle wait exceeded 3600s"; return 1; }
+    counts="$(vibe_drain_counts <<<"$reply")" || { vibe_gate_log "drain status reply malformed"; return 1; }
+    vibe_drain_request "$container_id" renew "$lease" >/dev/null || { vibe_gate_log "drain lease renew rejected while waiting for idle"; return 1; }
+    now="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    [[ "$now" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    ((now <= deadline)) || { vibe_gate_log "idle wait exceeded 3600s"; return 1; }
     [[ "$counts" == '0 0' ]] && return 0
-    now="$(vibe_monotonic_seconds)" || return 1
-    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    now="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
+    [[ "$now" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable while waiting for idle"; return 1; }
     remaining=$((deadline - now))
-    ((remaining > 0)) || return 1
+    ((remaining > 0)) || { vibe_gate_log "idle wait exceeded 3600s"; return 1; }
     sleep "$((remaining < 10 ? remaining : 10))"
   done
 }
@@ -1055,14 +1063,14 @@ except Exception:
 begin_vibe_release_gate() {
   local desired container_id probe_code probe_reply start_reply lease
   VIBE_GATE_MODE=none
-  desired="$(read_desired_vibe)" || return 1
-  [[ "$desired" == true || "$desired" == false ]] || return 1
+  desired="$(read_desired_vibe)" || { vibe_gate_log "desired Vibe preference unreadable"; return 1; }
+  [[ "$desired" == true || "$desired" == false ]] || { vibe_gate_log "desired Vibe preference is not true or false"; return 1; }
   [[ "$desired" == true ]] || return 0
-  container_id="$(vibe_container_ids)" || return 1
+  container_id="$(vibe_container_ids)" || { vibe_gate_log "running Vibe containers could not be listed"; return 1; }
   [[ -n "$container_id" ]] || return 0
-  [[ "$container_id" != *$'\n'* ]] || return 1
+  [[ "$container_id" != *$'\n'* ]] || { vibe_gate_log "more than one running Vibe container"; return 1; }
   VIBE_GATE_CONTAINER_ID="$container_id"
-  probe_reply="$(vibe_drain_request "$container_id" probe)" || return 1
+  probe_reply="$(vibe_drain_request "$container_id" probe)" || { vibe_gate_log "drain probe request failed"; return 1; }
   probe_code="$(python3 -c '
 import json, sys
 try:
@@ -1071,15 +1079,15 @@ try:
     print(value)
 except (KeyError, TypeError, ValueError):
     raise SystemExit(1) from None
-' <<<"$probe_reply" 2>/dev/null)" || return 1
+' <<<"$probe_reply" 2>/dev/null)" || { vibe_gate_log "drain probe reply malformed"; return 1; }
   case "$probe_code" in
     404)
-      enter_legacy_barrier "$container_id" || return 1
+      enter_legacy_barrier "$container_id" || { vibe_gate_log "legacy admission barrier could not be entered"; return 1; }
       VIBE_GATE_MODE=legacy
-      wait_for_legacy_idle "$container_id"
+      wait_for_legacy_idle "$container_id" || { vibe_gate_log "legacy runs did not go idle"; return 1; }
       ;;
     409)
-      start_reply="$(vibe_drain_request "$container_id" start)" || return 1
+      start_reply="$(vibe_drain_request "$container_id" start)" || { vibe_gate_log "drain start request failed"; return 1; }
       lease="$(python3 -c '
 import json, re, sys
 try:
@@ -1089,41 +1097,41 @@ try:
     print(value)
 except (KeyError, TypeError, ValueError):
     raise SystemExit(1) from None
-' <<<"$start_reply" 2>/dev/null)" || return 1
+' <<<"$start_reply" 2>/dev/null)" || { vibe_gate_log "drain lease reply malformed"; return 1; }
       VIBE_DRAIN_LEASE="$lease"
       VIBE_GATE_MODE=runtime
-      wait_for_vibe_idle "$container_id" "$lease" || return 1
-      arm_vibe_admission_marker
+      wait_for_vibe_idle "$container_id" "$lease" || { vibe_gate_log "runtime drain did not go idle"; return 1; }
+      arm_vibe_admission_marker || { vibe_gate_log "admission marker could not be armed"; return 1; }
       ;;
-    *) return 1 ;;
+    *) vibe_gate_log "unexpected drain probe status $probe_code"; return 1 ;;
   esac
 }
 
 verify_vibe_gate_before_switch() {
   local current reply counts now
   [[ "$VIBE_GATE_MODE" == none ]] && return 0
-  current="$(vibe_container_ids)" || return 1
-  [[ -n "$current" && "$current" == "$VIBE_GATE_CONTAINER_ID" ]] || return 1
+  current="$(vibe_container_ids)" || { vibe_gate_log "running Vibe container could not be listed"; return 1; }
+  [[ -n "$current" && "$current" == "$VIBE_GATE_CONTAINER_ID" ]] || { vibe_gate_log "running Vibe container changed since the gate opened"; return 1; }
   case "$VIBE_GATE_MODE" in
     runtime)
-      legacy_marker_owned || return 1
-      now="$(vibe_monotonic_seconds)" || return 1
-      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
-      ((now < BOOTSTRAP_STARTED + 3900)) || return 1
-      vibe_drain_request "$current" renew "$VIBE_DRAIN_LEASE" >/dev/null || return 1
-      reply="$(vibe_drain_request "$current" status "$VIBE_DRAIN_LEASE")" || return 1
-      counts="$(vibe_drain_counts <<<"$reply")" || return 1
-      [[ "$counts" == '0 0' ]]
+      legacy_marker_owned || { vibe_gate_log "admission marker is no longer owned by this run"; return 1; }
+      now="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable before switch"; return 1; }
+      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable before switch"; return 1; }
+      ((now < BOOTSTRAP_STARTED + 3900)) || { vibe_gate_log "bootstrap bound of 3900s exceeded"; return 1; }
+      vibe_drain_request "$current" renew "$VIBE_DRAIN_LEASE" >/dev/null || { vibe_gate_log "lease renew rejected before switch (lease expired or was released)"; return 1; }
+      reply="$(vibe_drain_request "$current" status "$VIBE_DRAIN_LEASE")" || { vibe_gate_log "lease status request failed before switch"; return 1; }
+      counts="$(vibe_drain_counts <<<"$reply")" || { vibe_gate_log "lease status reply malformed"; return 1; }
+      [[ "$counts" == '0 0' ]] || { vibe_gate_log "chat admission is not idle before switch (active chat/private committees: $counts)"; return 1; }
       ;;
     legacy)
-      legacy_marker_owned || return 1
-      now="$(vibe_monotonic_seconds)" || return 1
-      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || return 1
-      ((now < BOOTSTRAP_STARTED + 3900)) || return 1
-      counts="$(legacy_active_counts "$current")" || return 1
-      [[ "$counts" == '0 0' ]]
+      legacy_marker_owned || { vibe_gate_log "admission marker is no longer owned by this run"; return 1; }
+      now="$(vibe_monotonic_seconds)" || { vibe_gate_log "monotonic clock unreadable before switch"; return 1; }
+      [[ "$now" =~ ^[0-9]+$ && "$BOOTSTRAP_STARTED" =~ ^[0-9]+$ ]] || { vibe_gate_log "monotonic clock unreadable before switch"; return 1; }
+      ((now < BOOTSTRAP_STARTED + 3900)) || { vibe_gate_log "bootstrap bound of 3900s exceeded"; return 1; }
+      counts="$(legacy_active_counts "$current")" || { vibe_gate_log "legacy active-run counts unreadable before switch"; return 1; }
+      [[ "$counts" == '0 0' ]] || { vibe_gate_log "legacy runs are not idle before switch (counts: $counts)"; return 1; }
       ;;
-    *) return 1 ;;
+    *) vibe_gate_log "unknown gate mode"; return 1 ;;
   esac
 }
 
