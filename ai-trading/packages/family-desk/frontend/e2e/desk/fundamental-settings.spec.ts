@@ -121,16 +121,16 @@ test("scan filters name a problem before a save, never send an invalid draft, an
 
   // The shortest expiry above the longest: the problem sits on the longest, Save is blocked, nothing is sent.
   await filters.getByTestId("scan-min_dte").fill("50");
-  await expect(filters.locator("#scan-max_dte-problem")).toHaveText("Must not be below 50");
+  await expect(filters.locator("#scan-max_dte-error")).toHaveText("Must not be below 50");
   await expect(save).toBeDisabled();
   await filters.getByTestId("scan-cap_pct").fill("0");
-  await expect(filters.locator("#scan-cap_pct-problem")).toHaveText("Must be between 1 and 100");
+  await expect(filters.locator("#scan-cap_pct-error")).toHaveText("Must be between 1 and 100");
   expect(api.paths().filter((path) => path.startsWith("PUT "))).toEqual([]);
 
   // A valid draft saves, and the saved values come back after a reload.
   await filters.getByTestId("scan-cap_pct").fill("40");
   await filters.getByTestId("scan-max_dte").fill("60");
-  await expect(filters.locator("#scan-max_dte-problem")).toHaveCount(0);
+  await expect(filters.locator("#scan-max_dte-error")).toHaveCount(0);
   await expect(save).toBeEnabled();
   await save.click();
   await expect(savedNote(page)).toBeVisible();

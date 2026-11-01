@@ -77,8 +77,8 @@ export function Field({
 }
 
 /** A problem line for a set of controls rather than one field (a condition row, a step): announced, in the error tone. */
-export function FieldError({ children, className }: Layout & { children: ReactNode }) {
-  return <p role="alert" data-error="true" className={join(styles.message, className)}>{children}</p>;
+export function FieldError({ id, children, className }: Layout & { id?: string; children: ReactNode }) {
+  return <p id={id} role="alert" data-error="true" className={join(styles.message, className)}>{children}</p>;
 }
 
 /** A row of fields (or a field and its buttons) that wraps instead of clipping. */
@@ -87,10 +87,10 @@ export function FieldRow({ children, className }: Layout & { children: ReactNode
 }
 
 /** A bordered set of related fields under one caps legend (a `fieldset`). `error` is the line for a problem that belongs to the whole set. */
-export function FieldGroup({ legend, error, bare = false, children, className, ...rest }: Layout & { legend: ReactNode; error?: string | null; bare?: boolean; disabled?: boolean; children: ReactNode; "aria-describedby"?: string }) {
+export function FieldGroup({ legend, hideLegend = false, error, bare = false, children, className, ...rest }: Layout & { legend: ReactNode; /** Name the group for assistive tech only (the section already has a visible heading). */ hideLegend?: boolean; error?: string | null; bare?: boolean; disabled?: boolean; children: ReactNode; "aria-describedby"?: string }) {
   return (
-    <fieldset className={join(styles.group, className)} data-bare={bare ? "true" : undefined} {...rest}>
-      <legend>{legend}</legend>
+    <fieldset className={join(styles.group, className)} data-bare={bare || hideLegend ? "true" : undefined} {...rest}>
+      <legend className={hideLegend ? "sr-only" : undefined}>{legend}</legend>
       {children}
       {error && <FieldError>{error}</FieldError>}
     </fieldset>
@@ -151,4 +151,9 @@ export function ChoiceGroup({ label, stack = false, children, className }: Layou
 /** A value that is shown, not edited (a locked setting): plain text, never a greyed control (V-SCR-11). */
 export function ReadOnlyValue({ children, className }: Layout & { children: ReactNode }) {
   return <p className={join(styles.value, className)}>{children}</p>;
+}
+
+/** An on/off setting that applies at once: a checkbox with `role="switch"`. Label it with a `<label htmlFor>` or `aria-label`. */
+export function Switch({ className, ...props }: Layout & Omit<ComponentPropsWithoutRef<"input">, "className" | "type" | "role">) {
+  return <input type="checkbox" role="switch" {...props} className={join(styles.switch, className)} />;
 }

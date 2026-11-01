@@ -34,3 +34,11 @@ textarea.control { height: auto; min-height: calc(var(--size-lg) * 2); resize: v
 .choices[data-stack="true"] { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 
 .value { margin: 0; color: var(--color-text); font-size: var(--text-label); line-height: var(--line-label); }
+
+.switch { position: relative; width: calc(var(--size-sm) + var(--space-4)); height: var(--size-sm); flex-shrink: 0; margin: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); background: var(--color-raised); cursor: pointer; appearance: none; transition: background-color 120ms ease, border-color 120ms ease; }
+.switch::after { content: ""; position: absolute; top: 50%; left: var(--space-1); width: var(--space-4); height: var(--space-4); border-radius: var(--radius-full); background: var(--color-muted); transform: translateY(-50%); transition: transform 120ms ease; }
+.switch:hover:not(:disabled) { border-color: var(--color-muted); }
+.switch:checked { border-color: var(--color-amber); background: var(--color-amber); }
+.switch:checked::after { background: var(--color-on-pill); transform: translate(var(--space-4), -50%); }
+.switch:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.switch:disabled { cursor: not-allowed; opacity: 0.6; }
