@@ -48,7 +48,7 @@ const BASELINE: Record<keyof typeof METRICS, number> = {
   "raw font shorthand (font: Npx)": 0,
   "raw border-radius: Npx": 30,
   "outline: 2px solid restatements (use var(--focus-ring))": 42,
-  "local .button rules (use components/ui Button)": 45,
+  "local .button rules (use components/ui Button)": 40,
   "local .chip rules (use components/ui Badge)": 14,
   "local .srOnly / .visuallyHidden rules (use .sr-only)": 10,
   "local modal / confirm rules (use components/ui Dialog, ConfirmDialog, InlineConfirm)": 0,
