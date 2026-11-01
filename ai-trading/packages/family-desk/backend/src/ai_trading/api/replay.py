@@ -427,13 +427,22 @@ def _pool_prep_in_background(
 
 @router.get("/daily", response_model=DailyOut)
 def get_daily(
+    request: Request,
+    background: BackgroundTasks,
     thread_id: int | None = Query(default=None, alias="threadId", ge=1),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """The daily-list card: a plan and where its cursor is, and its thread with its SIMULATED balance and stats; either
     is `null` before she has one. `threadId` names the thread whose plan to read (404 when it is not hers); without it
     the answer is her most recently started active day thread."""
+    # This is the poll of a thread that is still preparing its data. A prep that stopped reporting (its process died)
+    # is started again from here, once, so a thread is never stranded on "Preparing" (`plan.restart_stale_prep`).
+    stale = _call(plan_mod.restart_stale_prep, db, user.id, services.now(), thread_id)
+    if stale is not None:
+        db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
+        background.add_task(_prep_in_background, request.app, services, stale.id)
     return _call(plan_mod.hub, db, user.id, thread_id)
 
 

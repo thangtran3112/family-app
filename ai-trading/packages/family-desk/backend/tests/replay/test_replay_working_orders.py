@@ -207,22 +207,143 @@ def test_a_working_sell_against_a_long_fills_as_a_partial_exit_on_the_tape(db_se
     assert [(t.shares, t.exit_price) for t in session_mod.journal_mod.assemble(journal.marks)[0]] == [(4, 51.5)]
 
 
-def test_an_order_the_account_can_no_longer_afford_is_cancelled_with_the_reason(
+def test_an_order_the_account_can_no_longer_afford_at_its_fill_is_cancelled_with_the_reason(
     db_session, user_id, svc, world
 ) -> None:
-    _bend(world, "FLAT", "10:20", "10:21", low=49.0)
-    _, gapper, flat = _flat(db_session, user_id, svc, balance=1_000)
-    _order(
-        db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=15
-    )  # 742.50 <= 1,000
-    session_mod.place_mark(db_session, user_id, gapper.id, svc, {"kind": "long_entry", "shares": 5})  # 550 of the cash
-    db_session.commit()
-    out = _advance(db_session, user_id, svc, flat.id, "10:30")
+    """The reserve is priced at the limit; a sell limit that the tape gaps through fills ABOVE it, so the short's
+    notional can outgrow the cash held back. The check at the fill is the safety net, and it names the shortfall."""
+    _bend(world, "FLAT", "10:20", "10:21", open=53.0, high=53.5)
+    _, _, flat = _flat(db_session, user_id, svc, balance=1_000)
+    _order(db_session, user_id, svc, flat.id, side="sell", orderType="limit", limitPrice=52.5, shares=19)  # 997.50
+    out = _advance(db_session, user_id, svc, flat.id, "10:30")  # fills at the 53.00 open: 1,007 > 1,000
     assert out["fills"] is None and out["open_trade"] is None
     assert (
         out["orders"][0]["status"] == "cancelled"
-        and out["orders"][0]["reason"] == "Not enough practice cash · $450 free"
+        and out["orders"][0]["reason"] == "Not enough practice cash · $1,000 free"
     )
+
+
+# -- a working order holds its cash back (the same buying power for every path) ---------------------------------------
+
+
+def test_a_working_order_holds_its_cash_back_from_the_next_order_and_the_next_mark(db_session, user_id, svc) -> None:
+    _, _, flat = _flat(db_session, user_id, svc, balance=1_000)
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=15)  # 742.50
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=40.0, shares=6)  # 240: 982.50
+    with pytest.raises(ReplayProblem) as second:  # each alone fits the 1,000; together with the others they do not
+        session_mod.place_order(
+            db_session, user_id, flat.id, svc, {"side": "buy", "orderType": "limit", "limitPrice": 40.0, "shares": 1}
+        )
+    assert (second.value.path, second.value.message) == ("shares", "Not enough practice cash · $17 free")
+    with pytest.raises(ReplayProblem) as market:  # a market entry sees the same 17.50: 50 a share
+        session_mod.place_mark(db_session, user_id, flat.id, svc, {"kind": "long_entry", "shares": 1})
+    assert market.value.message == "Not enough practice cash · $17 free"
+    assert [o["status"] for o in _orders(db_session, flat.id)] == ["working", "working"]  # nothing else was stored
+
+
+def test_cancelling_a_working_order_releases_its_cash(db_session, user_id, svc) -> None:
+    _, _, flat = _flat(db_session, user_id, svc, balance=1_000)
+    placed = _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=15)
+    with pytest.raises(ReplayProblem):
+        session_mod.place_mark(db_session, user_id, flat.id, svc, {"kind": "long_entry", "shares": 10})  # 500 > 257.50
+    session_mod.cancel_order(db_session, user_id, flat.id, placed["order"]["id"], svc)
+    db_session.commit()
+    assert session_mod.place_mark(db_session, user_id, flat.id, svc, {"kind": "long_entry", "shares": 10})["mark"]
+
+
+def test_a_working_order_on_another_name_holds_cash_back_too(db_session, user_id, svc) -> None:
+    """The cash is the thread's, so a name's order reserves against every name of the day."""
+    _, gapper, flat = _flat(db_session, user_id, svc, balance=1_000)
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=15)  # 742.50
+    with pytest.raises(ReplayProblem) as caught:  # GAPPER costs 110: 257.50 buys 2, not 3
+        session_mod.place_mark(db_session, user_id, gapper.id, svc, {"kind": "long_entry", "shares": 3})
+    assert caught.value.message == "Not enough practice cash · $257 free"
+    assert session_mod.place_mark(db_session, user_id, gapper.id, svc, {"kind": "long_entry", "shares": 2})["mark"]
+
+
+def test_a_working_order_that_only_closes_shares_holds_no_cash_back(db_session, user_id, svc) -> None:
+    _, _, flat = _flat(db_session, user_id, svc, balance=1_000)
+    session_mod.place_mark(db_session, user_id, flat.id, svc, {"kind": "long_entry", "shares": 10})  # 500 of 1,000
+    db_session.commit()
+    _order(db_session, user_id, svc, flat.id, side="sell", orderType="limit", limitPrice=51.5, shares=4)  # closes 4
+    waiting = _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.0, shares=10)
+    assert waiting["order"]["status"] == "working"  # 490 fits the 500 left: the sell reserved nothing (206 would not)
+
+
+def test_each_fill_releases_its_own_reserve_so_two_affordable_orders_both_fill(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", low=49.0)
+    _, _, flat = _flat(db_session, user_id, svc, balance=1_000)
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=10)  # 495
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.2, shares=10)  # 492: 987
+    out = _advance(db_session, user_id, svc, flat.id, "10:30")
+    assert [f["shares"] for f in out["fills"]] == [10, 10]
+    assert [o["status"] for o in out["orders"]] == ["filled", "filled"]  # the second was not counted twice
+
+
+# -- no order fills in a span she was on another name ----------------------------------------------------------------
+
+
+def _away_flat(db_session, user_id, svc, world, *, balance=50_000):
+    """FLAT with a limit buy at 49.5 waiting, then the clock moved to 11:00 through GAPPER: FLAT is 09:35, behind."""
+    row, gapper, flat = _flat(db_session, user_id, svc, balance=balance)
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=10)
+    _advance(db_session, user_id, svc, gapper.id, "11:00")
+    return row, gapper, flat
+
+
+def test_an_order_the_tape_filled_while_she_was_on_another_name_is_cancelled_not_filled(
+    db_session, user_id, svc, world
+) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", low=49.0)  # inside 09:35..11:00, a span she never watched on FLAT
+    _, _, flat = _away_flat(db_session, user_id, svc, world)
+    out = _advance(db_session, user_id, svc, flat.id, "11:00")  # catch up to the clock
+    assert out["fills"] is None and out["open_trade"] is None
+    (order,) = out["orders"]
+    assert (order["status"], order["reason"]) == ("cancelled", session_mod.AWAY_FILL)
+    assert (order["fill_price"], order["mark_id"]) == (None, None)
+    assert session_mod._load_marks(db_session, flat.id) == []  # no trade to score
+    assert _advance(db_session, user_id, svc, flat.id, "11:30")["fills"] is None  # and no later phantom fill
+
+
+def test_an_order_not_reached_while_away_still_fills_after_the_catch_up(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "11:10", "11:11", low=49.0)  # after the clock (11:00): in front of her
+    _, _, flat = _away_flat(db_session, user_id, svc, world)
+    out = _advance(db_session, user_id, svc, flat.id, "11:00")
+    assert out["fills"] is None and out["orders"][0]["status"] == "working"
+    out = _advance(db_session, user_id, svc, flat.id, "11:30")
+    (fill,) = out["fills"]
+    assert (fill["price"], fill["at"]) == (49.5, et(DAYS[0], "11:11"))
+
+
+def test_a_stop_limit_triggered_while_away_keeps_working_with_its_trigger_recorded(
+    db_session, user_id, svc, world
+) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", high=51.5)  # triggers the 51.0 stop leg inside the away span
+    _bend(world, "FLAT", "11:10", "11:11", low=49.4)  # the limit leg is reached after the clock
+    row, gapper, flat = _flat(db_session, user_id, svc)
+    _order(
+        db_session, user_id, svc, flat.id, side="buy", orderType="stop_limit", stopPrice=51.0, limitPrice=49.5, shares=2
+    )
+    _advance(db_session, user_id, svc, gapper.id, "11:00")
+    out = _advance(db_session, user_id, svc, flat.id, "11:00")
+    assert out["fills"] is None
+    assert (out["orders"][0]["status"], out["orders"][0]["triggered_at"]) == (
+        "working",
+        et(DAYS[0], "10:21").isoformat(),
+    )
+    out = _advance(db_session, user_id, svc, flat.id, "11:30")
+    assert out["fills"][0]["price"] == 49.5
+
+
+def test_a_resumed_name_lifted_to_the_clock_settles_its_orders_the_same_way(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", low=49.0)
+    row, _, flat = _away_flat(db_session, user_id, svc, world)
+    resumed = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)  # the Portfolio's row: lifts to 11:00
+    db_session.commit()
+    assert resumed.id == flat.id and resumed.revealed_through == et(DAYS[0], "11:00")
+    (order,) = _orders(db_session, flat.id)
+    assert (order["status"], order["reason"]) == ("cancelled", session_mod.AWAY_FILL)
+    assert session_mod._load_marks(db_session, flat.id) == []
 
 
 def test_a_filled_order_cannot_be_undone_but_its_trade_can_be_exited(db_session, user_id, svc, world) -> None:
