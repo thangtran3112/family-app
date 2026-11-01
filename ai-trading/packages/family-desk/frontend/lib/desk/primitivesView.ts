@@ -60,3 +60,10 @@ export function requirementText({ required = false, optional = false, hint }: { 
   const parts = [required ? "Required" : optional ? "Optional" : null, hint ?? null].filter((part): part is string => part !== null && part !== "");
   return parts.length === 0 ? null : parts.join(" · ");
 }
+
+export const UNSAVED_TEXT = "You have unsaved changes";
+
+/** What the form bar says on the left: the screen's own status, else "You have unsaved changes" while dirty, else nothing. */
+export function formBarStatus<T>({ dirty = false, status }: { dirty?: boolean; status?: T | null }): T | string | null {
+  return status ?? (dirty ? UNSAVED_TEXT : null);
+}

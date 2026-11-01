@@ -64,8 +64,8 @@
 .note { margin: 0; color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }
 
 /* Sticky footer: Send report with its truthful reason */
-.footer { display: flex; height: 64px; flex: 0 0 64px; align-items: center; gap: var(--space-3); border-top: 1px solid var(--color-hairline); background: var(--color-panel); padding-inline: var(--space-8); }
-.footNotes { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: var(--text-micro); line-height: var(--line-micro); }
+.bar { margin: 0 var(--space-8) var(--space-4); }
+.footNotes { display: flex; min-width: 0; flex-direction: column; gap: var(--space-0-5); font-size: var(--text-meta); font-weight: var(--weight-regular); line-height: var(--line-meta); }
 .footMuted { color: var(--color-muted); }
 .sendError { color: var(--color-down); }
 

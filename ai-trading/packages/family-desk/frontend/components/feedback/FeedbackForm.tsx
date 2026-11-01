@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Textarea } from "@/components/ui/Field";
+import { FormActionBar } from "@/components/ui/FormActionBar";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { createFeedbackReport } from "@/lib/desk/feedback";
 import { capture, captureRoute, contextOf } from "@/lib/desk/feedbackContext";
@@ -156,14 +157,18 @@ export function FeedbackForm() {
         <ScreenshotsField {...shots} />
       </div>
 
-      <div className={styles.footer}>
-        <Button type="submit" variant="primary" disabled={reason !== null} loading={sending}>{sending ? "Sending…" : "Send report"}</Button>
-        <Button onClick={cancel}>Cancel</Button>
-        <div className={styles.footNotes} aria-live="polite">
-          <span className={error ? styles.sendError : undefined} role={error ? "alert" : undefined}>{error ?? reason ?? READY_TEXT}</span>
-          <span className={styles.footMuted}>Nothing is sent anywhere else · the report stays on this Desk</span>
-        </div>
-      </div>
+      <FormActionBar
+        className={styles.bar}
+        label="Send report"
+        status={
+          <div className={styles.footNotes} aria-live="polite">
+            <span className={error ? styles.sendError : undefined} role={error ? "alert" : undefined}>{error ?? reason ?? READY_TEXT}</span>
+            <span className={styles.footMuted}>Nothing is sent anywhere else · the report stays on this Desk</span>
+          </div>
+        }
+        secondary={<Button onClick={cancel}>Cancel</Button>}
+        primary={<Button type="submit" variant="primary" disabled={reason !== null} loading={sending}>{sending ? "Sending…" : "Send report"}</Button>}
+      />
       {rail}
     </form>
   );

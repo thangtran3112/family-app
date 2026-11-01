@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { TONES } from "../../components/ui/tone.ts";
 import { signTone } from "./format.ts";
-import { bannerRole, buttonState, countText, deltaView, fieldWiring, iconA11y, panelHeadingTag, requirementText, statTileTag } from "./primitivesView.ts";
+import { bannerRole, buttonState, countText, deltaView, fieldWiring, formBarStatus, iconA11y, panelHeadingTag, requirementText, statTileTag, UNSAVED_TEXT } from "./primitivesView.ts";
+import { warnBeforeUnload } from "./unsavedGuard.ts";
 
 test("tone: every tone has a colour in globals.css, and a sign maps onto the model", () => {
   const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
@@ -61,4 +62,21 @@ test("Field: the cue next to the label names what is asked, in one order", () =>
   assert.equal(requirementText({ optional: true, hint: "bugs only" }), "Optional · bugs only");
   assert.equal(requirementText({ required: true, hint: "label and URL" }), "Required · label and URL");
   assert.equal(requirementText({ required: true, optional: true }), "Required", "required wins over optional");
+});
+
+test("FormActionBar: a dirty form says so unless the screen has something more specific to say", () => {
+  assert.equal(UNSAVED_TEXT, "You have unsaved changes");
+  assert.equal(formBarStatus({ dirty: true }), UNSAVED_TEXT);
+  assert.equal(formBarStatus({ dirty: false }), null);
+  assert.equal(formBarStatus({}), null);
+  assert.equal(formBarStatus({ dirty: true, status: "Saving…" }), "Saving…");
+  assert.equal(formBarStatus({ dirty: false, status: "Sent" }), "Sent");
+});
+
+test("unsaved guard: leaving the page is interrupted, in the way every browser asks for", () => {
+  let prevented = 0;
+  const event: { preventDefault(): void; returnValue?: unknown } = { preventDefault: () => { prevented += 1; } };
+  warnBeforeUnload(event);
+  assert.equal(prevented, 1);
+  assert.equal(event.returnValue, "");
 });

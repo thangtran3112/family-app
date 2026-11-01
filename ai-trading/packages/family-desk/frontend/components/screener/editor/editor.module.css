@@ -41,32 +41,6 @@
   padding: 0;
 }
 
-.unsaved {
-  position: sticky;
-  bottom: 0;
-  z-index: var(--z-sticky);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-md);
-  background: var(--color-raised);
-  padding: var(--space-3) var(--space-4);
-}
-
-.unsaved p {
-  margin: 0;
-  font-size: var(--text-label);
-  font-weight: var(--weight-semibold);
-}
-
-.actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
 .panel {
   display: flex;
   flex-direction: column;

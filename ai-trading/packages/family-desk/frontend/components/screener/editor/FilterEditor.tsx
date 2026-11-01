@@ -22,12 +22,12 @@ import { LiveMatches } from "./LiveMatches";
 import { RankFields } from "./RankFields";
 import { SessionRunOnFields } from "./SessionRunOnFields";
 import { UniverseFields } from "./UniverseFields";
-import { UnsavedBar } from "./UnsavedBar";
 import styles from "./editor.module.css";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { Field, FieldError, FieldRow, Input, NumberInput } from "@/components/ui/Field";
+import { FormActionBar } from "@/components/ui/FormActionBar";
 import { fieldError, formProblems } from "@/lib/desk/problems";
 
 export function FilterEditor() {
@@ -84,7 +84,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   onNotice: (text: string) => void;
 }) {
   const router = useRouter();
-  const { invalidate, setDirty } = useDeskUi();
+  const { invalidate } = useDeskUi();
   const [original] = useState(() => specToForm(spec));
   const [form, setForm] = useState(original);
   const [previewSpecJson, setPreviewSpecJson] = useState(() => JSON.stringify(formToSpec(original)));
@@ -107,18 +107,6 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
   const problems = saveProblems.length > 0 ? saveProblems : (preview.data?.problems ?? []);
 
   useEffect(() => () => clearTimeout(previewTimer.current), []);
-
-  useEffect(() => {
-    setDirty(dirty);
-    return () => setDirty(false);
-  }, [dirty, setDirty]);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
 
   // Every change goes through here: the form updates now, the live check follows 500 ms after the last change.
   function change(next: FilterForm) {
@@ -201,12 +189,21 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
         </Field>
       </fieldset>
       {filter === null && (
-        <FieldRow>
-          <Button variant="primary" onClick={save} loading={saving}>{saving ? "Creating…" : "Create filter"}</Button>
-          <Button href="/screener" client>Cancel</Button>
-        </FieldRow>
+        <FormActionBar
+          label="Create filter"
+          dirty={dirty}
+          secondary={<Button href="/screener" client>Cancel</Button>}
+          primary={<Button variant="primary" onClick={save} loading={saving}>{saving ? "Creating…" : "Create filter"}</Button>}
+        />
       )}
-      {dirty && filter !== null && <UnsavedBar onSave={save} onDiscard={() => change(original)} saving={saving} canSave={!saving} />}
+      {dirty && filter !== null && (
+        <FormActionBar
+          label="Unsaved changes"
+          dirty
+          secondary={<Button onClick={() => change(original)} disabled={saving}>Discard changes</Button>}
+          primary={<Button variant="primary" onClick={save} loading={saving}>{saving ? "Saving…" : "Save draft"}</Button>}
+        />
+      )}
       <RightRail
         label="Filter preview"
         sections={[
