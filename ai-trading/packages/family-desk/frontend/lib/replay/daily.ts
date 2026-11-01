@@ -148,7 +148,7 @@ export const DaySessionSchema = z.object({
   revealed_through: timestamp,
   /** Behind the day clock: its next advance catches it up, and it cannot be marked until then. */
   behind_clock: z.boolean(),
-  /** The name holds an open trade: one per name, at most five across the day. */
+  /** The name holds an open position: one average-cost position per name, however many fills built it. */
   has_open_trade: z.boolean(),
   /** Closed trades on this name today, and their P/L. */
   trades: finite.int(),

@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
+import { practiceText } from "../../lib/desk/freshness.ts";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { createStubSession } from "./hub-helpers";
 import { replayRail } from "./swing-helpers";
@@ -49,6 +49,36 @@ test.describe("Practice order ticket", () => {
     await expect(practice.getByText("No open position")).toBeVisible();
     await page.getByRole("tab", { name: "Marks" }).click();
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
+  });
+
+  test("a Buy while long adds to the position, a Sell of fewer shares sells part, and a Sell of more flips it", async ({ page, context }) => {
+    const practice = await openTicket(page, context);
+    const buy = practice.getByRole("button", { name: "Buy", exact: true });
+    const sell = practice.getByRole("button", { name: "Sell", exact: true });
+    const quantity = practice.getByLabel("Quantity");
+    const messages = page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) }); // the route announcer is an alert too
+    await quantity.fill("5");
+    await buy.click();
+    await expect(practice.getByText(/^Long · 5 shares/)).toBeVisible();
+    await page.getByRole("button", { name: "Step", exact: true }).click(); // a later bar: the second fill is a different price
+    await quantity.fill("3");
+    await buy.click(); // already long: it adds, there is no "already open" refusal
+    await expect(practice.getByText(/^Long · 8 shares/)).toBeVisible();
+    await expect(messages).toHaveCount(0);
+
+    await practice.getByRole("radio", { name: "Sell" }).click();
+    await quantity.fill("2");
+    await sell.click(); // fewer than the 8 held: a partial exit, the rest stays long
+    await expect(practice.getByText(/^Long · 6 shares/)).toBeVisible();
+    await quantity.fill("10");
+    await sell.click(); // more than the 6 held: closes them and goes short with the other 4
+    await expect(practice.getByText(/^Short · 4 shares/)).toBeVisible();
+    await expect(messages).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Marks" }).click();
+    const marks = page.getByRole("tabpanel");
+    for (const label of ["Practice buy 5", "Practice buy 3", "Practice sell 2", "Practice sell 10"]) await expect(marks).toContainText(label);
+    await expectCleanScreen(page);
   });
 
   test("Sell is a short entry with the same quantity field, and a ticket the user got wrong names the field", async ({ page, context }) => {
@@ -112,6 +142,5 @@ test.describe("Practice order ticket", () => {
     for (const text of [/type a stop price first/i, /your plan asks for a stop/i, /sizing hint/i, /required/i]) {
       await expect(practice.getByText(text)).toHaveCount(0);
     }
-    await expect(page.getByText(PRACTICE_COPY.tradeAlreadyOpen)).toHaveCount(0);
   });
 });

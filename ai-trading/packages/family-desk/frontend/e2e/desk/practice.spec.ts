@@ -191,7 +191,7 @@ test.describe("Practice", () => {
     await page.keyboard.press("b");
     await marksTab(page).click();
     const marks = page.getByRole("tabpanel");
-    await expect(marks).toContainText("Practice long");
+    await expect(marks).toContainText("Practice buy");
 
     // T opens the stop note; Enter saves it.
     await page.keyboard.press("t");
@@ -207,8 +207,8 @@ test.describe("Practice", () => {
     await page.keyboard.press("ControlOrMeta+z");
     await expect(page.getByText(PRACTICE_COPY.undone)).toBeVisible();
     await expect(marks).not.toContainText("Practice exit");
-    await page.keyboard.press("s"); // the opposite key exits an open long
-    await expect(marks).toContainText("Practice exit");
+    await page.keyboard.press("s"); // Sell with the ticket's quantity: every share of the long, so it closes
+    await expect(marks).toContainText("Practice sell");
     await expectCleanScreen(page);
 
     // Ending early asks first, then scores and opens the journal.
@@ -367,7 +367,7 @@ test.describe("Practice", () => {
     await stopForm.getByRole("button", { name: "Save" }).click();
     await marksTab(page).click();
     await expect(page.getByRole("tabpanel")).toContainText("Practice stop");
-    await expect(page.getByRole("tabpanel")).toContainText("Practice long");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
     await expect(strip).toContainText("today");
@@ -599,7 +599,7 @@ test.describe("Practice", () => {
     await expect(playhead(page)).not.toContainText("9:30:00");
     await page.keyboard.press("b");
     await marksTab(page).click();
-    await expect(page.getByRole("tabpanel")).toContainText("Practice long");
+    await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
     for (let step = 0; step < 6; step += 1) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");

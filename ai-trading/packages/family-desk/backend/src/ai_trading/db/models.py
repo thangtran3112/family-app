@@ -518,8 +518,8 @@ class ReplaySession(Base):
     # Alembic 0016: the practice orders that were not filled at once (a limit, stop or stop-limit entry waiting on the
     # tape) with what became of them; see replay/orders.py.
     orders: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list)
-    # Alembic 0014: when play last paused on this session's open trade because its stop was crossed (a day holds one
-    # open trade per name, so one flag). A new entry, stop note or exit clears it.
+    # Alembic 0014: when play last paused on this session's open trade because its stop was crossed (a name holds one
+    # open position, so one flag). A new entry, stop note or exit clears it.
     stop_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -552,6 +552,10 @@ class PracticeMark(Base):
     # max-loss rule's basis. Entry marks of a day-list session only; null on any other row (the journal then reads
     # realized only).
     day_pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    # Alembic 0017: a swing entry mark that added to an open hold (a scale-in) records the hold as it stood before, as
+    # `{shares, entry_price, stop_at_entry, stop_price}`, so undoing the mark restores the average cost to the digit
+    # (a weighted average cannot be un-averaged exactly). Null on every other mark.
+    position_before: Mapped[Any | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -765,7 +769,9 @@ class PracticeLedger(Base):
 class PracticeHold(Base):
     """A swing practice hold: open from the day she enters until she exits it (or a close does). A stop never exits
     it (it only flags `stop_hit_at`); the exit session and mark are null for an auto exit at a close. At most one open
-    hold per symbol in a thread."""
+    hold per symbol in a thread, and it is the name's average-cost position: a second buy of the name adds to it (shares
+    up, `entry_price` re-averaged), and a sale of part of it closes a slice as its own row (`part_exit`) while the open
+    row keeps the rest at the same cost. The unique index below is therefore the model's invariant, not a limit."""
 
     __tablename__ = "practice_holds"
     __table_args__ = (
@@ -813,6 +819,9 @@ class PracticeHold(Base):
     last_close: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     last_close_day: Mapped[date | None] = mapped_column(Date)
     splits: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    # Alembic 0017: true on a closed row that is only the part of a position a partial exit closed (the position itself
+    # lives on in another row). The weekly review counts positions opened and open at once from the other rows.
+    part_exit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

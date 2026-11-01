@@ -27,8 +27,8 @@ export type PortfolioFrom = { symbol: string; playhead: string; openTrade: OpenT
 export const useDayPortfolio = (dayListId: number | null, revision = 0, enabled = true): DeskQueryResult<DayList> =>
   useDeskQuery(`portfolio:${dayListId}`, (signal) => loadDayList(dayListId ?? 0, {}, { signal }), { revision, enabled: enabled && dayListId !== null });
 
-/** The day's portfolio (practice = portfolio): a row for every name she opened, flat or holding its one open trade, with the
- *  day's P/L. SIMULATED. Up to five names hold a trade at once. A row opens or resumes that name's chart at the shared day
+/** The day's portfolio (practice = portfolio): a row for every name she opened, flat or holding its one open position (any number of fills, one average cost), with the
+ *  day's P/L. SIMULATED. Any number of names hold a position at once. A row opens or resumes that name's chart at the shared day
  *  clock; a held row also has Exit, which closes that name's trade from wherever she is. `from` and `onExitHere` exist only in
  *  the replay: the live view of the name on the chart and the workspace's own exit for it. */
 export function PortfolioPanel({

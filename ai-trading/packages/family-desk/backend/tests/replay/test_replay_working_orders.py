@@ -148,14 +148,11 @@ def test_an_order_is_refused_with_a_plain_sentence_and_nothing_is_stored(
     assert _orders(db_session, flat.id) == []
 
 
-def test_an_order_needs_no_stop_and_the_open_trade_rule_still_holds(db_session, user_id, svc, world) -> None:
+def test_an_order_needs_no_stop_and_an_order_on_a_held_name_is_accepted(db_session, user_id, svc, world) -> None:
     _, _, flat = _flat(db_session, user_id, svc, stopNoteOnEntry="yes")
     _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=51.0, shares=1)  # fills now
-    with pytest.raises(ReplayProblem) as caught:
-        session_mod.place_order(
-            db_session, user_id, flat.id, svc, {"side": "buy", "orderType": "limit", "limitPrice": 40.0}
-        )
-    assert caught.value.message == "Close the open practice trade first"
+    waiting = _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=40.0, shares=1)
+    assert waiting["order"]["status"] == "working"  # the name is held; a second order is just another buy
 
 
 def test_cancel_stops_an_order_filling_and_is_a_409_the_second_time(db_session, user_id, svc, world) -> None:
@@ -173,7 +170,7 @@ def test_cancel_stops_an_order_filling_and_is_a_409_the_second_time(db_session, 
         session_mod.cancel_order(db_session, user_id, flat.id, 99, svc)
 
 
-def test_the_second_order_on_a_name_is_cancelled_once_the_first_has_opened_a_trade(
+def test_a_second_order_on_a_name_fills_into_the_same_position_at_the_average_cost(
     db_session, user_id, svc, world
 ) -> None:
     _bend(world, "FLAT", "10:20", "10:21", low=49.0)
@@ -181,10 +178,33 @@ def test_the_second_order_on_a_name_is_cancelled_once_the_first_has_opened_a_tra
     _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.5, shares=10)
     _order(db_session, user_id, svc, flat.id, side="buy", orderType="limit", limitPrice=49.2, shares=5)
     out = _advance(db_session, user_id, svc, flat.id, "10:30")
-    assert [f["shares"] for f in out["fills"]] == [10]
+    assert [f["shares"] for f in out["fills"]] == [10, 5]  # both reached by the same bar, in order id order
     first, second = out["orders"]
-    assert (first["status"], second["status"]) == ("filled", "cancelled")
-    assert second["reason"] == "Close the open practice trade first"
+    assert (first["status"], second["status"]) == ("filled", "filled")
+    assert (first["fill_price"], second["fill_price"]) == (49.5, 49.2)
+    assert (out["open_trade"]["shares"], out["open_trade"]["entry_price"]) == (15, 49.4)  # (495 + 246) / 15
+
+
+def test_a_working_sell_against_a_long_fills_as_a_partial_exit_on_the_tape(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", high=52.0)
+    _, _, flat = _flat(db_session, user_id, svc)
+    session_mod.place_mark(db_session, user_id, flat.id, svc, {"kind": "long_entry", "shares": 10})  # at 50
+    db_session.commit()
+    waiting = _order(db_session, user_id, svc, flat.id, side="sell", orderType="limit", limitPrice=51.5, shares=4)
+    assert waiting["order"]["status"] == "working" and waiting["open_trade"]["shares"] == 10
+    assert _advance(db_session, user_id, svc, flat.id, "10:10")["fills"] is None  # the spike has not happened yet
+    out = _advance(db_session, user_id, svc, flat.id, "10:30")
+    (fill,) = out["fills"]
+    assert (fill["kind"], fill["price"], fill["shares"], fill["at"]) == ("short_entry", 51.5, 4, et(DAYS[0], "10:21"))
+    assert (out["open_trade"]["side"], out["open_trade"]["shares"], out["open_trade"]["entry_price"]) == (
+        "long",
+        6,
+        50.0,
+    )
+    row = db_session.get(ReplaySession, flat.id)
+    assert row.orders[0]["status"] == "filled" and row.orders[0]["fill_price"] == 51.5
+    journal = session_mod.context(db_session, svc, row)
+    assert [(t.shares, t.exit_price) for t in session_mod.journal_mod.assemble(journal.marks)[0]] == [(4, 51.5)]
 
 
 def test_an_order_the_account_can_no_longer_afford_is_cancelled_with_the_reason(
