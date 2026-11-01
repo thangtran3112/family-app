@@ -67,3 +67,34 @@ export const UNSAVED_TEXT = "You have unsaved changes";
 export function formBarStatus<T>({ dirty = false, status }: { dirty?: boolean; status?: T | null }): T | string | null {
   return status ?? (dirty ? UNSAVED_TEXT : null);
 }
+
+/**
+ * Roving focus for Segmented and Tabs, the contract `technicals/TimeframeTabs` set: the arrows move one step and wrap, Home and End jump to
+ * the ends. A disabled index is skipped. Returns the index to move to, or null when the key is not a move (or nothing can take focus).
+ * `axis: "horizontal"` listens to Left and Right only (tabs); the default also takes Up and Down (a radio group).
+ */
+export function rovingTarget(key: string, index: number, count: number, options: { enabled?: ReadonlyArray<boolean>; axis?: "horizontal" | "any" } = {}): number | null {
+  const { enabled, axis = "any" } = options;
+  const forward = key === "ArrowRight" || (axis === "any" && key === "ArrowDown");
+  const back = key === "ArrowLeft" || (axis === "any" && key === "ArrowUp");
+  const step = forward || key === "Home" ? 1 : back || key === "End" ? -1 : 0;
+  if (step === 0 || count <= 0) return null;
+  let at = key === "Home" ? -1 : key === "End" ? count : index;
+  for (let tries = 0; tries < count; tries += 1) {
+    at = (at + step + count) % count;
+    if (enabled?.[at] !== false) return at;
+  }
+  return null;
+}
+
+/** The index that takes Tab focus in a roving group: the selected one, else the first that is not disabled (so the group is never skipped). */
+export function rovingStop(selected: number, enabled: ReadonlyArray<boolean>): number {
+  if (selected >= 0 && enabled[selected] !== false) return selected;
+  return Math.max(0, enabled.findIndex((on) => on));
+}
+
+/** The DOM ids a tab and its panel share: the tab names its panel (`aria-controls`) and the panel names its tab (`aria-labelledby`). */
+export const tabDomIds = (base: string, id: string): { tab: string; panel: string } => ({ tab: `${base}-tab-${id}`, panel: `${base}-panel-${id}` });
+
+/** A control that opens a mode (Manage, Edit) says "Done" while the mode is open, instead of looking pressed: nothing is switched on, the screen changed. */
+export const modeLabel = (label: string, open: boolean): string => (open ? "Done" : label);
