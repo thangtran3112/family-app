@@ -1,3 +1,4 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import type { Stamp } from "../api/schemas.ts";
 import type { ShellBand } from "./viewport.ts";
 import { formatAgo, formatAsOfText, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
@@ -101,7 +102,6 @@ export function containsBannedTerm(text: string): boolean {
 export type FreshnessState =
   | "live" | "delayed" | "updating" | "reconnecting" | "paused" | "backup"
   | "closed" | "pre_market" | "after_hours" | "unavailable";
-export type FreshnessTone = "up" | "muted" | "amber" | "down";
 /** Client-side connection state: a request in flight, or the quote connection down (02m §a1). */
 export type Connection = "ok" | "updating" | "reconnecting";
 export type MarketSession = "pre" | "regular" | "after" | "closed";
@@ -120,7 +120,7 @@ export type FreshnessInput = {
 export type FreshnessView = {
   state: FreshnessState;
   label: string;
-  tone: FreshnessTone;
+  tone: Tone;
   /** A filled dot beside the label (only "Live"). */
   dot: boolean;
   /** The last price stays visible but dimmed. */
@@ -131,16 +131,16 @@ export type FreshnessView = {
   mark: string | null;
 };
 
-const TONE: Record<FreshnessState, FreshnessTone> = {
+const TONE: Record<FreshnessState, Tone> = {
   live: "up",
-  delayed: "muted",
-  updating: "muted",
-  reconnecting: "amber",
-  paused: "amber",
-  backup: "amber",
-  closed: "muted",
-  pre_market: "muted",
-  after_hours: "muted",
+  delayed: "neutral",
+  updating: "neutral",
+  reconnecting: "warn",
+  paused: "warn",
+  backup: "warn",
+  closed: "neutral",
+  pre_market: "neutral",
+  after_hours: "neutral",
   unavailable: "down",
 };
 

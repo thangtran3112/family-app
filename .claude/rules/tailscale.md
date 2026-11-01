@@ -12,6 +12,7 @@ Paths are relative to the repository root.
 - Public traffic goes through the Cloudflare tunnel. It never uses the tailnet.
 - The tailnet carries admin and CI SSH only: port 2222 on `tag:family-host`.
 - The policy is default-deny: `autogroup:admin` and `tag:ci` may reach `tag:family-host:2222`, nothing else.
+- The owner's own machine is not a member: remote SSH to the host is the Cloudflare Access path the skill describes, never a device enrolment.
 
 ## Configuration
 

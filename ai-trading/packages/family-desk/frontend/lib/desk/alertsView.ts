@@ -1,3 +1,4 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import type { AlertLogRow, AlertStrategy } from "../api/schemas.ts";
 import { DeskApiError } from "../api/client.ts";
 import { describeCondition } from "../spec/describe.ts";
@@ -47,6 +48,12 @@ export const frequencyText = (strategy: Pick<AlertStrategy, "frequency" | "coold
 export const channelsText = (channels: readonly string[]): string => channels.map(channelLabel).join(", ");
 
 export const lastFiredText = (iso: string | null): string => (iso ? formatEtStamp(iso) : "Never fired");
+
+/** Active is up, paused is warn, draft and expired stay neutral (a word plus colour). */
+export const statusTone = (status: AlertStrategy["status"]): Tone => (status === "active" ? "up" : status === "paused" ? "warn" : "neutral");
+
+/** Delivered is up, a hold or no channel is warn, a failure is down. */
+export const deliveryTone = (status: string): Tone => (status === "delivered" ? "up" : status === "failed" ? "down" : "warn");
 
 /** Status word plus the reason for a pause. */
 export const statusText = (strategy: Pick<AlertStrategy, "status" | "paused_reason">): string =>

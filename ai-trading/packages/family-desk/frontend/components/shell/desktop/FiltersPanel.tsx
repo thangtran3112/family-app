@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { Icon } from "@/components/ui/Icon";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { ScreenerFilter } from "@/lib/api/schemas";
 import { EMPTY_VALUE } from "@/lib/desk/format";
@@ -10,23 +11,14 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useDeskUi } from "./DeskContext";
 import styles from "./leftrail.module.css";
 
-function LockIcon() {
-  return (
-    <svg className={styles.lock} viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <rect x="2.5" y="5.5" width="7" height="5" rx="1" />
-      <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" />
-    </svg>
-  );
-}
-
 function FilterRow({ filter, active }: { filter: ScreenerFilter; active: boolean }) {
   return (
     <li>
       <a href={`/screener?filter=${filter.id}`} className={styles.filterRow} aria-current={active ? "page" : undefined}>
         {filter.read_only && (
           <>
-            <LockIcon />
-            <span className={styles.srOnly}>Read-only</span>
+            <span className={styles.lock}><Icon name="lock" size={12} /></span>
+            <span className="sr-only">Read-only</span>
           </>
         )}
         <span className={styles.filterName}>{filter.name}</span>

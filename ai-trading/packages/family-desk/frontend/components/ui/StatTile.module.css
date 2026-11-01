@@ -1,0 +1,7 @@
+.root { display: flex; height: 100%; box-sizing: border-box; flex-wrap: wrap; align-items: baseline; gap: var(--space-0-5) var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-2) var(--space-3); color: inherit; font-variant-numeric: tabular-nums; }
+a.root:hover { background: var(--color-raised); }
+a.root:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.label { flex-basis: 100%; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); }
+.value { font-size: var(--text-row); line-height: var(--line-row); font-weight: var(--weight-semibold); }
+.delta { font-size: var(--text-label); }
+.note { flex-basis: 100%; color: var(--color-muted); font-size: var(--text-meta); }

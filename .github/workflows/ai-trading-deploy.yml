@@ -76,12 +76,14 @@ on:
         description: >-
           Host the deploy job targets: the Firestore group (shared/<target>)
           its SSH host, port, user, deploy key and known hosts are read from.
-          A push to main always deploys to vps. Only takes effect when
-          deploy_app is also true. laptop stays unusable until the Tailscale
-          join step below exists (0001a/0001c).
+          A push to main deploys to laptop (prod serves from the laptop since
+          the 2026-11-01 cutover); vps is an explicit opt-in only (stopped
+          rollback reference). Only takes effect when deploy_app is also true.
+          laptop joins the tailnet as tag:ci first (Join the tailnet step) and
+          reaches the host's tailnet address on port 2222.
         type: choice
-        options: [vps, laptop]
-        default: vps
+        options: [laptop, vps]
+        default: laptop
       dark:
         description: >-
           Dark deploy (DEPLOY_DARK=1 to deploy.sh): start the stack without
@@ -224,8 +226,8 @@ jobs:
       id-token: write
     env:
       # Firestore group holding the host's SSH details (VPS_HOST, VPS_PORT, VPS_USER,
-      # VPS_DEPLOY_SSH_PRIVATE_KEY, VPS_SSH_KNOWN_HOSTS). Push to main is always vps.
-      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'vps' }}
+      # VPS_DEPLOY_SSH_PRIVATE_KEY, VPS_SSH_KNOWN_HOSTS). Push to main is always laptop.
+      TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.target) || 'laptop' }}
       # Already-pushed tag to deploy; empty means the commit this run built.
       IMAGE_TAG_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.image_tag) || '' }}
     steps:
@@ -260,6 +262,34 @@ jobs:
       - name: Render production env files
         run: infrastructure/apps/ai-trading/render-env.sh "$RUNNER_TEMP/ai-trading-env"
 
+      # target=laptop only: the laptop is reachable over the tailnet, not the
+      # public internet. This job has GCP auth, so the CI OAuth client (scope
+      # auth_keys, tag:ci) is read from Firestore shared/tailscale and masked;
+      # the ai-trading-production environment holds no copies of it. No OIDC
+      # join: the action uses the OAuth client, id-token is only for WIF above.
+      - name: Read tailnet join credentials
+        id: ts_creds
+        if: ${{ env.TARGET == 'laptop' }}
+        run: |
+          set -euo pipefail
+          get_val() { common/config/family_config.py get shared/tailscale "$1" | awk '/^::add-mask::/ { print > "/dev/stderr"; next } { print }'; }
+          client_id="$(get_val TAILSCALE_CI_OAUTH_CLIENT_ID)"
+          client_secret="$(get_val TAILSCALE_CI_OAUTH_CLIENT_SECRET)"
+          for value in "$client_id" "$client_secret"; do
+            [[ -n "$value" ]] || { echo "shared/tailscale is missing a TAILSCALE_CI_OAUTH_* value" >&2; exit 1; }
+            echo "::add-mask::$value"
+          done
+          echo "client-id=$client_id" >>"$GITHUB_OUTPUT"
+          echo "client-secret=$client_secret" >>"$GITHUB_OUTPUT"
+
+      - name: Join the tailnet
+        if: ${{ env.TARGET == 'laptop' }}
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ steps.ts_creds.outputs.client-id }}
+          oauth-secret: ${{ steps.ts_creds.outputs.client-secret }}
+          tags: tag:ci
+
       - name: Fetch VPS deploy SSH key and known hosts
         run: |
           set -euo pipefail
@@ -267,10 +297,6 @@ jobs:
           # Older family_config.py prints ::add-mask:: lines on stdout; move them to
           # stderr (still processed by the runner) so the files hold only the value.
           get_file() { common/config/family_config.py get "$1" "$2" | awk '/^::add-mask::/ { print > "/dev/stderr"; next } { print }' >"$3"; }
-          # TODO(0001c, Tailscale org): when TARGET=laptop, a pinned
-          # tailscale/github-action step must join the tailnet as tag:ci (OAuth
-          # credentials from shared/tailscale, masked) BEFORE this step; until
-          # then target=laptop cannot reach the host and the deploy fails at ssh.
           get_file "shared/$TARGET" VPS_DEPLOY_SSH_PRIVATE_KEY "$RUNNER_TEMP/ssh-key"
           chmod 600 "$RUNNER_TEMP/ssh-key"
           # Multi-line, so read from the shared group (profile values must be single-line).

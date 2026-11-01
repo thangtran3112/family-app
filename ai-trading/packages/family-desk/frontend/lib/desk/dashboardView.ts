@@ -1,5 +1,6 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import type { Dashboard } from "../api/schemas.ts";
-import { changeTone, formatEtDay, formatEtWeekdayTime, formatPrice, formatSignedPct, type Tone } from "./format.ts";
+import { formatEtDay, formatEtWeekdayTime, formatPrice, formatSignedPct, signTone } from "./format.ts";
 import { COPY, fillCopy } from "./freshness.ts";
 import { runOnLabel, timingLabel } from "./labels.ts";
 
@@ -33,7 +34,7 @@ export function stripTiles(strip: Dashboard["market_strip"], nextUpdateAt: strin
       symbol: tile.symbol,
       last: unavailable ? "—" : formatPrice(tile.last),
       change: unavailable ? "—" : formatSignedPct(tile.change_pct),
-      tone: unavailable ? "flat" : changeTone(tile.change_pct),
+      tone: unavailable ? "neutral" : signTone(tile.change_pct),
       unavailable,
       readOnly,
       note: tileNote(tile, unavailable, readOnly, nextUpdateAt, staleMark),

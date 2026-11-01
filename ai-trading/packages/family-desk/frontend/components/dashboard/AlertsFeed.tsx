@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
+import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatEtTime } from "@/lib/desk/format";
 import { symbolHref } from "@/lib/desk/listNav";
@@ -33,7 +34,7 @@ export function AlertsFeed() {
   return (
     <>
       <div className={styles.feedHead}>
-        <button type="button" className={styles.button} onClick={markAll}>Mark all read</button>
+        <Button size="md" onClick={markAll}>Mark all read</Button>
       </div>
       <ul className={styles.feed}>
         {alerts.data.map((alert) => {
@@ -42,14 +43,14 @@ export function AlertsFeed() {
             <li key={alert.id} className={styles.item}>
               <div className={styles.itemHead}>
                 <span className={styles.dot} data-unread={unread ? "true" : undefined} aria-hidden="true" />
-                {unread && <span className={styles.srOnly}>Unread</span>}
+                {unread && <span className="sr-only">Unread</span>}
                 <span className={styles.itemTitle}>{alert.title}</span>
                 <span className={styles.muted}>{formatEtTime(alert.created_at)}</span>
               </div>
               <p className={styles.itemBody}>{alert.body}</p>
               <div className={styles.itemFoot}>
                 {alert.symbol && <a className={styles.link} href={symbolHref(alert.symbol)}>{alert.symbol}</a>}
-                {unread && <button type="button" className={styles.button} onClick={() => markRead(alert.id)}>Mark read</button>}
+                {unread && <Button size="md" onClick={() => markRead(alert.id)}>Mark read</Button>}
               </div>
             </li>
           );

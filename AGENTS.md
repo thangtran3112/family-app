@@ -27,14 +27,15 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 | `common/config/` | Firestore `family-config` CLI | `common/config/README.md` |
 | `docs/superpowers/` | Cross-app specs and plans | n/a |
 
-## Component rules are lazy-loaded from `.claude/rules/`
+## Rules and skills: shared at the root, package-specific in the package
 
-`AGENTS.md` is the always-loaded baseline. Rules that only matter in one component of the app live in that component's `.claude/rules/`, one markdown file per area (`tailscale.md`, `deploy.md`, …), so they cost a session nothing until they are relevant. Expect this directory to grow into the repository's rule library.
+`AGENTS.md` is the always-loaded baseline. Everything else is lazy-loaded from `.claude/`, one markdown file per area (`tailscale.md`, `deploy.md`, …), so it costs a session nothing until it is relevant.
 
-- **Claude Code** loads `.claude/rules/*.md` natively: the ones in the working directory and above it at launch, and a subdirectory's own rules on demand. An optional `paths:` list in the frontmatter scopes a file to matching globs; omit it when the rule covers the whole component. Only `paths` is read, and the frontmatter is stripped before the rule enters context.
-- **OpenCode** has no native support for this path: each package lists the glob in the `instructions` array of its `opencode.json` (`"instructions": ["AGENTS.md", ".claude/rules/*.md"]`, beside any `.opencode/rules/*.rules` it already has). A package without an `opencode.json` will not load its rules in OpenCode, so add the file when you add the directory.
-- The same rule applies to skills: `<package>/.claude/skills/<name>/SKILL.md` is discovered by both harnesses, so a procedure that outgrows a rule belongs there rather than in a longer rule file.
-- Put a rule here in `AGENTS.md` when it applies to every session; put it in a component rule when it applies to one area, and add that component's rule file only to the component that needs it.
+- **Shared rules and skills live at the repository root**: `.claude/rules/*.md` and `.claude/skills/<name>/SKILL.md`. A rule or procedure that applies to more than one package belongs there and exists once. `.claude/rules/tailscale.md` and the `manage-family-tailscale` skill are the first of these. A package `AGENTS.md` keeps a pointer to it, not a copy.
+- A `.claude/rules/` inside a package is only for that package's own rules. When a package gains one, it also needs the OpenCode wiring below; a package with no rules has no `opencode.json` glob.
+- **Claude Code** loads `.claude/rules/*.md` natively: the ones in the working directory and above it at launch, and a subdirectory's own rules on demand. An optional `paths:` list in the frontmatter scopes a file to matching globs; omit it when the rule covers the whole component. Only `paths` is read, and the frontmatter is stripped before the rule enters context. Skills at the root are found from a package directory too; this is checked, not assumed.
+- **OpenCode** has no native support for these paths: the root `opencode.json` lists `"instructions": ["AGENTS.md", ".claude/rules/*.md"]` once for the whole repository, and a package `opencode.json` lists its own `AGENTS.md` plus any package rule glob it has. OpenCode resolves the root config and the package config separately, so both apply from inside a package. A package that adds a rule without adding the glob will not load it in OpenCode.
+- Put a rule in `AGENTS.md` when it applies to every session; put it in `.claude/rules/` when it applies to one area; make it a skill when it is a procedure with commands.
 
 ## Everywhere
 

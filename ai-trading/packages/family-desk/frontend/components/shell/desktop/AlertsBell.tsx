@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Popover } from "@/components/ui/Popover";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatEtTime } from "@/lib/desk/format";
@@ -53,7 +56,7 @@ export function AlertsBell() {
               <span className={styles.dot} data-unread={alert.read_at === null ? "true" : undefined} aria-hidden="true" />
               <span className={styles.alertBody}>
                 <span className={styles.alertTitle}>
-                  {alert.read_at === null && <span className={styles.srOnly}>Unread: </span>}
+                  {alert.read_at === null && <span className="sr-only">Unread: </span>}
                   {alert.title}
                 </span>
                 {alert.symbol && <span className={styles.alertMeta}>{alert.symbol}</span>}
@@ -74,20 +77,17 @@ export function AlertsBell() {
       label="Recent alerts"
       width={360}
       trigger={(props) => (
-        <button type="button" className={styles.iconButton} aria-label={unread > 0 ? `Alerts, ${unread} unread` : "Alerts"} {...props}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-            <path d="M6 9a6 6 0 1 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-            <path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          {unread > 0 && <span className={styles.badge} aria-hidden="true">{unread > 9 ? "9+" : unread}</span>}
-        </button>
+        <Button variant="ghost" iconOnly aria-label={unread > 0 ? `Alerts, ${unread} unread` : "Alerts"} {...props}>
+          <Icon name="bell" />
+          {unread > 0 && <Badge count={unread} tone="warn" className={styles.bellCount} aria-hidden="true" />}
+        </Button>
       )}
     >
       <div className={styles.panelHead}>Recent alerts</div>
       {body()}
       <div className={styles.panelFoot}>
-        <button type="button" className={styles.textButton} onClick={markAll}>Mark all read</button>
-        <a className={styles.textButton} href="/alerts">View alerts</a>
+        <Button variant="ghost" size="sm" onClick={markAll}>Mark all read</Button>
+        <Button variant="ghost" size="sm" href="/alerts">View alerts</Button>
       </div>
     </Popover>
   );
