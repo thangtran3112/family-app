@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import type { MarkRow } from "@/lib/replay/marks";
 import styles from "./panels.module.css";
 
@@ -13,7 +14,7 @@ export function MarksList({ rows }: { rows: MarkRow[] }) {
           <span className={styles.markLabel}>{row.label}</span>
           {row.price !== "" && <span>{row.price}</span>}
           {row.note && <span className={styles.markNote}>{row.note}</span>}
-          {row.auto && <span className={styles.chip}>auto</span>}
+          {row.auto && <Badge tone="neutral">auto</Badge>}
         </li>
       ))}
     </ul>

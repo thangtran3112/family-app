@@ -2,6 +2,7 @@
 
 import { useId, useState, type FormEvent } from "react";
 import play from "@/components/practice/swing/play.module.css";
+import { Button } from "@/components/ui/Button";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
@@ -108,8 +109,8 @@ function ComposerForm({ composer, lastPrice, onStop, onNote, onClose }: { compos
         </Field>
       )}
       <div className={styles.buttonRow}>
-        <button type="submit" className={`${styles.button} ${styles.primary}`}>Save</button>
-        <button type="button" className={styles.button} onClick={onClose}>Cancel</button>
+        <Button type="submit" size="md" variant="primary">Save</Button>
+        <Button size="md" onClick={onClose}>Cancel</Button>
       </div>
     </form>
   );
@@ -148,21 +149,20 @@ export function PracticeControls(props: PracticeControlsProps) {
       {hintShown && <p id={hintId} className={styles.hint} role="status">{PRACTICE_COPY.stopFirst}</p>}
       <p className={styles.footnote}>{swing ? PRACTICE_COPY.entryResetsSwing : PRACTICE_COPY.entryResets}</p>
       <div className={styles.buttonRow}>
-        <button type="button" className={`${styles.button} ${styles.long}`} disabled={disabled || waitsForStop} aria-describedby={waitsForStop ? hintId : undefined} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice long (B)"} onClick={props.onLong}>Long (B)</button>
-        <button type="button" className={`${styles.button} ${styles.short}`} disabled={disabled || waitsForStop} aria-describedby={waitsForStop ? hintId : undefined} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice short (S)"} onClick={props.onShort}>Short (S)</button>
-        <button type="button" className={styles.button} disabled={disabled || entering} title="Exit the open practice trade (X)" onClick={props.onExit}>Exit (X)</button>
+        <Button size="md" className={styles.long} disabled={disabled || waitsForStop} aria-describedby={waitsForStop ? hintId : undefined} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice long (B)"} onClick={props.onLong}>Long (B)</Button>
+        <Button size="md" className={styles.short} disabled={disabled || waitsForStop} aria-describedby={waitsForStop ? hintId : undefined} title={waitsForStop ? PRACTICE_COPY.stopFirst : "Practice short (S)"} onClick={props.onShort}>Short (S)</Button>
+        <Button size="md" disabled={disabled || entering} title="Exit the open practice trade (X)" onClick={props.onExit}>Exit (X)</Button>
       </div>
       <div className={styles.buttonRow}>
-        <button
-          type="button"
-          className={styles.button}
+        <Button
+          size="md"
           disabled={disabled || entering}
           title="Stop note (T)"
           onClick={() => ((draft.stopPrice ?? "").trim() === "" ? onComposer("stop") : props.onStop(draft.stopPrice ?? ""))}
         >
           Stop (T)
-        </button>
-        <button type="button" className={styles.button} disabled={disabled} title="Note (N)" onClick={() => onComposer("note")}>Note (N)</button>
+        </Button>
+        <Button size="md" disabled={disabled} title="Note (N)" onClick={() => onComposer("note")}>Note (N)</Button>
       </div>
       {composer && <ComposerForm key={composer} composer={composer} lastPrice={lastPrice} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}
       <p className={styles.footnote}>{swing?.tape === "off" ? PRACTICE_COPY.swingTapeOffFootnote : PRACTICE_COPY.priceFootnote}</p>

@@ -7,7 +7,6 @@
 .titleBlock { display: flex; min-width: 0; flex: 1 1 280px; flex-direction: column; gap: var(--space-1); }
 .titleRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); line-height: var(--line-row); }
-.chip { display: inline-flex; min-height: 24px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); white-space: nowrap; }
 .sub { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); }
 .balance { display: flex; flex: 0 0 auto; align-items: baseline; gap: var(--space-2); }
 .balanceLabel { color: var(--color-muted); font-size: var(--text-label); }
@@ -32,14 +31,9 @@
 
 /* Controls */
 .actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
-.button:hover:not(:disabled) { background: var(--color-raised); }
-.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
-.primary { border-color: var(--color-amber); color: var(--color-amber); }
-.danger { border-color: var(--color-down); color: var(--color-down); }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .link:hover { text-decoration: underline; }
-.button:focus-visible, .link:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 /* Signed money: the sign carries the meaning, the colour repeats it. Flat is muted. Fill is for the SVG bars and labels. */
 .up { color: var(--color-up); fill: var(--color-up); }
@@ -102,9 +96,6 @@
 .caveatTitle { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .planNote { margin: 0; color: var(--color-muted); font-size: var(--text-label); line-height: var(--line-label); overflow-wrap: anywhere; }
 .form { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); }
-.closeBlock { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding-top: var(--space-3); }
-
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Swing thread (02p): balance and equity header, the two-line curve and its key, the weeks table. */
 .balanceStack { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 2px; }
@@ -118,7 +109,4 @@
 .keyEquity { border-top-color: var(--color-amber); border-top-style: dashed; }
 .nextRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3); }
 .nextText { display: flex; min-width: 0; flex: 1 1 240px; flex-direction: column; gap: 2px; }
-.primaryLink { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: 0 var(--space-4); color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: none; white-space: nowrap; }
-.primaryLink:hover { background: var(--color-raised); }
-.primaryLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 .tableWrap { min-width: 0; }

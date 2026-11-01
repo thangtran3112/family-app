@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/Button";
 import { formatNumber } from "@/lib/desk/format";
 import type { PlanItem } from "@/lib/replay/planView";
 import styles from "./panels.module.css";
@@ -35,11 +36,11 @@ export function PlanChecklist({
         {items.map((item) => (
           <li key={item.id} className={`${styles.row} ${item.action && onAddStop ? styles.wrap : ""}`} data-state={item.state}>
             <span className={styles.mark} data-state={item.state} aria-hidden="true">{MARK[item.state]}</span>
-            <span className={styles.srOnly}>{STATE_WORDS[item.state]}: </span>
+            <span className="sr-only">{STATE_WORDS[item.state]}: </span>
             <span className={styles.label}>{item.label}</span>
             <span className={styles.detail}>{item.detail}</span>
             {item.action === "add_stop" && onAddStop && (
-              <button type="button" className={`${styles.button} ${styles.nudge}`} onClick={onAddStop}>Add a stop note for this entry</button>
+              <Button size="sm" variant="primary" className={styles.nudge} onClick={onAddStop}>Add a stop note for this entry</Button>
             )}
           </li>
         ))}

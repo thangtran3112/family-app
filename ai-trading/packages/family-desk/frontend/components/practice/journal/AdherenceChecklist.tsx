@@ -27,7 +27,7 @@ export function AdherenceChecklist({ adherence, empty = "No plan rule applies to
               <span aria-hidden="true" className={`${styles.mark} ${check.passed ? styles.up : styles.down}`}>
                 {check.passed ? "✓" : "✗"}
               </span>
-              <span className={styles.srOnly}>{check.passed ? "Passed: " : "Not passed: "}</span>
+              <span className="sr-only">{check.passed ? "Passed: " : "Not passed: "}</span>
               <span className={styles.checkLabel}>{check.label}</span>
               <span className={styles.checkDetail}>{check.detail}</span>
             </li>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
+import { Button } from "@/components/ui/Button";
 import { Swatch } from "@/components/workspace/ChartLegend";
 import { OVERLAY_LOOK } from "@/lib/desk/workspace";
 import { useDismiss } from "@/lib/desk/useDismiss";
@@ -70,10 +71,9 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
 
   return (
     <div className={styles.chartMenu} ref={root}>
-      <button
+      <Button
         ref={button}
-        type="button"
-        className={styles.button}
+        size="md"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}
@@ -82,7 +82,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
         onClick={() => onOpenChange(!open)}
       >
         Chart ▾
-      </button>
+      </Button>
       {open && (
         <div id={popoverId} ref={popover} className={styles.chartPopover} role="dialog" aria-label="Chart settings" onKeyDown={onKeyDown}>
           <fieldset className={styles.setGroup}>
@@ -130,11 +130,11 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
 /** The Full screen button in the transport row: a text button that keeps its label and shows the mode with `aria-pressed`. */
 export function FullScreenButton({ full, onToggle }: { full: boolean; onToggle: () => void }) {
   return (
-    <button type="button" className={styles.button} aria-pressed={full} aria-keyshortcuts="F" title="Full screen (F)" onClick={onToggle}>
-      <svg className={styles.buttonIcon} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
+    <Button size="md" aria-pressed={full} aria-keyshortcuts="F" title="Full screen (F)" onClick={onToggle}>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true" focusable="false">
         <path d="M1 4.5V1h3.5M7.5 1H11v3.5M11 7.5V11H7.5M4.5 11H1V7.5" />
       </svg>
       Full screen
-    </button>
+    </Button>
   );
 }

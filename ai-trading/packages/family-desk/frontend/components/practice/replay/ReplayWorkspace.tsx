@@ -15,6 +15,7 @@ import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
+import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { currentValue } from "@/lib/chart-data";
 import { formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
@@ -400,9 +401,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   const quick = band === "1180" ? (
     <span className={styles.quick} role="group" aria-label="Practice buttons">
-      <button type="button" className={`${styles.button} ${styles.long}`} disabled={ended || behind} title="Practice long (B)" onClick={() => byLetter("b")}>Long</button>
-      <button type="button" className={`${styles.button} ${styles.short}`} disabled={ended || behind} title="Practice short (S)" onClick={() => byLetter("s")}>Short</button>
-      <button type="button" className={styles.button} disabled={ended || behind || side === "flat"} title="Exit (X)" onClick={() => byLetter("x")}>Exit</button>
+      <Button size="md" className={styles.long} disabled={ended || behind} title="Practice long (B)" onClick={() => byLetter("b")}>Long</Button>
+      <Button size="md" className={styles.short} disabled={ended || behind} title="Practice short (S)" onClick={() => byLetter("s")}>Short</Button>
+      <Button size="md" disabled={ended || behind || side === "flat"} title="Exit (X)" onClick={() => byLetter("x")}>Exit</Button>
     </span>
   ) : null;
 
@@ -473,7 +474,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       />
       {dayListId !== null && !full && (
         <p className={styles.endLine}>
-          <Link href={`/practice/day?id=${dayListId}`} className={`${styles.button} ${styles.buttonLink}`}>{PRACTICE_COPY.backToList}</Link>
+          <Button href={`/practice/day?id=${dayListId}`} client size="md">{PRACTICE_COPY.backToList}</Button>
         </p>
       )}
       {ended && swing ? (
