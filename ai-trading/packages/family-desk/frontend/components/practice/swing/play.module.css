@@ -31,11 +31,6 @@
 .stripRow[data-amber="true"] .stripSub { color: var(--color-amber); }
 
 /* Chart toggle: the same chips as the day workspace's interval chips */
-.toggle { display: inline-flex; align-items: center; gap: var(--space-1); }
-.toggleButton { display: inline-flex; min-width: 36px; min-height: 24px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-full); background: transparent; padding: 0 var(--space-2); color: var(--color-muted); font: inherit; font-size: var(--text-micro); font-weight: var(--weight-semibold); cursor: pointer; }
-.toggleButton:hover { background: var(--color-raised); color: var(--color-text); }
-.toggleButton[aria-pressed="true"] { border-color: var(--color-amber); color: var(--color-amber); }
-.toggleButton:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
 
 /* Daily chart note */
 .dailyNote { margin: 0; flex: 0 0 auto; padding: 2px var(--space-4); color: var(--color-muted); font-size: var(--text-micro); line-height: var(--line-micro); }

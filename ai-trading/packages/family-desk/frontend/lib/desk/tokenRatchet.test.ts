@@ -45,7 +45,7 @@ const BASELINE: Record<keyof typeof METRICS, number> = {
   "raw hex colours": 70,
   "raw font-size: Npx": 85,
   "raw border-radius: Npx": 31,
-  "outline: 2px solid restatements (use var(--focus-ring))": 45,
+  "outline: 2px solid restatements (use var(--focus-ring))": 43,
   "local .button rules (use components/ui Button)": 48,
   "local .chip rules (use components/ui Badge)": 14,
   "local .srOnly / .visuallyHidden rules (use .sr-only)": 10,
