@@ -324,6 +324,38 @@ test.describe("New plan modal redesign", () => {
     const listSize = (await dialog.getByLabel(PRACTICE_COPY.planListSize).boundingBox())!;
     expect(firstDay.width, "the date and the list size are one column wide").toBeCloseTo(listSize.width, 0);
     expect(firstDay.x).toBeCloseTo(listSize.x, 0);
+    // D-152: a segmented control is as wide as its column, so its edges meet the text controls' above and below it.
+    const group = async (name: string) => (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
+    const to = (await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).boundingBox())!;
+    for (const name of [PRACTICE_COPY.planDays, PRACTICE_COPY.planInterval]) {
+      expect((await group(name)).width, `${name}: as wide as the Window to box in its column`).toBeCloseTo(to.width, 0);
+      expect((await group(name)).x, `${name}: starts at the right column`).toBeCloseTo(to.x, 0);
+    }
+  });
+
+  // D-152: the swing settings sit on the same grid, so its segmented controls are as wide as the First day box.
+  test("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
+    const dialog = await openNewPlan(page);
+    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
+    const column = (await dialog.getByLabel("First day").boundingBox())!;
+    for (const name of [PRACTICE_COPY.swingHideDates, PRACTICE_COPY.swingInterval, PRACTICE_COPY.swingTape]) {
+      const box = (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
+      expect(box.width, `${name}: one column wide`).toBeCloseTo(column.width, 0);
+      expect(box.x, `${name}: in the left column`).toBeCloseTo(column.x, 0);
+    }
+  });
+
+  // D-153 (owner ruling 2026-10-31): practice does not arm strategies or ask for a risk plan, so a new plan is sent with an empty list.
+  test("a new plan asks for no strategies or risk plan and is sent with nothing armed", async ({ page, context }) => {
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    for (const gone of [/arm .*strateg/i, /risk plan/i, /alert strateg/i]) await expect(dialog.getByText(gone)).toHaveCount(0);
+    await fillNewPlan(dialog);
+    const sent = page.waitForRequest((request) => request.url().includes("/replay/daily/next") && request.method() === "POST");
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
+    const body = (await sent).postDataJSON() as { plan: { setup: { armed: unknown } } };
+    expect(body.plan.setup.armed, "the contract's field, always empty").toEqual([]);
+    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
   });
 
   // M-02: the disabled list time explains itself in view, the footer is a live region, a blocked button still takes focus.
