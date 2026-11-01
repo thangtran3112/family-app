@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
@@ -58,6 +59,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
+      <PracticeTabs threadId={thread.thread.id} active="journal" mode={mode} />
       <header className={styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>

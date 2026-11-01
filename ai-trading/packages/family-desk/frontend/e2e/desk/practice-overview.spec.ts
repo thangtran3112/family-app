@@ -89,13 +89,19 @@ test.describe("Practice thread overview", () => {
     await expect(rows(days).last()).toContainText(PRACTICE_COPY.overviewDayPracticed);
     await expect(rows(days).first()).toContainText(PRACTICE_COPY.overviewDaySkipped);
 
-    // Holds: the two holds carried out of Day 1 (S01 and S04), with their count; and the curve, the plan and the stats.
+    // Holds sit on the Portfolio tab, not in Summary: the two holds carried out of Day 1 (S01 and S04), with their count.
+    await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption })).toHaveCount(0);
+    await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
+    await expect(page).toHaveURL(`${overviewUrl(threadId)}&tab=portfolio`);
     const holds = page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption });
     await expect(rows(holds)).toHaveCount(2);
     await expect(rows(holds).filter({ hasText: "S04" })).toContainText("Long");
     await expect(rows(holds).filter({ hasText: "S01" })).toContainText("100");
     await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle })).toContainText("2 open");
     await expect(page.getByRole("link", { name: PRACTICE_COPY.overviewHoldsLink })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
+    // Summary again: the curve, the plan and the stats.
+    await page.getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
+    await expect(page).toHaveURL(overviewUrl(threadId));
     await expect(page.getByRole("img", { name: /^Balance and equity at the close of each day/ })).toBeVisible();
     const plan = page.getByRole("region", { name: PRACTICE_COPY.overviewPlanCaption });
     await expect(plan).toContainText("Swing · 12 names");
@@ -132,8 +138,11 @@ test.describe("Practice thread overview", () => {
     await expect(rows(weeks).nth(0)).toContainText(PRACTICE_COPY.overviewWeekCurrent);
     await expect(rows(weeks).nth(0).getByRole("link")).toHaveCount(0); // no day has ended, so no review to open
     await expect(page.getByText(PRACTICE_COPY.overviewDaysNone)).toBeVisible();
-    await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle }).getByText(PRACTICE_COPY.swingNoHoldsOpen)).toBeVisible();
+    await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle })).toHaveCount(0);
     await expect(page.getByText(HUB_SWING_COPY.noDaysYet)).toBeVisible();
+    await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
+    await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle }).getByText(PRACTICE_COPY.swingNoHoldsOpen)).toBeVisible();
+    await page.getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Week 1 of 3 · Day 1 of 15");
     await expectNoDates(page);
     await expectCleanScreen(page);
@@ -168,7 +177,6 @@ test.describe("Practice thread overview", () => {
     const threadId = await gatedSwingThread(context);
     await openDesk(page, overviewUrl(threadId));
     await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption })).toBeVisible();
-    await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption })).toBeVisible();
     const wide = page.viewportSize()!.width >= 1440;
     const place = (await page.getByRole("region", { name: "Thread balance" }).boundingBox())!;
     const stats = (await page.getByRole("region", { name: "Thread stats" }).boundingBox())!;
@@ -183,6 +191,10 @@ test.describe("Practice thread overview", () => {
       expect(stats.y).toBeGreaterThan(place.y + place.height);
       expect(planBox.y, "in the same order: the plan before the stats").toBeLessThan(stats.y);
     }
+    expect(await clipped(page)).toEqual([]);
+    // The holds are the Portfolio tab's table: it fits its region too.
+    await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
+    await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption })).toBeVisible();
     expect(await clipped(page)).toEqual([]);
   });
 
