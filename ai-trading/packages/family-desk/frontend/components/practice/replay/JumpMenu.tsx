@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { formatEtTimeZone } from "@/lib/desk/format";
 import { etHhMm } from "@/lib/replay/time";
 import styles from "./replay.module.css";
@@ -48,9 +49,9 @@ export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJum
 
   return (
     <div className={styles.jump} ref={root}>
-      <button type="button" className={styles.button} disabled={disabled} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => setOpen(!open)}>
+      <Button size="md" disabled={disabled} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => setOpen(!open)}>
         Jump ▾
-      </button>
+      </Button>
       {open && (
         <div id={menuId} className={styles.menu} role="menu" aria-label="Jump forward">
           <button type="button" role="menuitem" className={styles.menuItem} onClick={run(() => onJumpBy(5))}>+5 min</button>
@@ -67,7 +68,7 @@ export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJum
               To a time (ET)
               <input type="time" className={styles.control} value={time} min={min} max={max} onChange={(event) => setTime(event.target.value)} />
             </label>
-            <button type="submit" className={styles.button} disabled={!time || time <= min}>Go</button>
+            <Button type="submit" size="md" disabled={!time || time <= min}>Go</Button>
           </form>
           <button
             type="button"

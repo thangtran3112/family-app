@@ -52,7 +52,7 @@
 .sizerInputs input:focus-visible,
 .phaseSix button:focus-visible,
 .error button:focus-visible {
-  outline: 2px solid var(--color-amber);
+  outline: var(--focus-ring);
   outline-offset: 3px;
 }
 
@@ -150,7 +150,7 @@
 }
 
 .marketHeader h2 {
-  font-size: 20px;
+  font-size: var(--text-heading);
   font-weight: var(--weight-bold);
 }
 

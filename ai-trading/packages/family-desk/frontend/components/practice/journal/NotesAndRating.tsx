@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import styles from "./journal.module.css";
 
@@ -72,14 +73,13 @@ export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabe
         onChange={(event) => setDraft(event.target.value)}
       />
       <div className={styles.notesFooter}>
-        <button
-          type="button"
-          className={`${styles.button} ${styles.primary}`}
+        <Button
+          variant="primary"
           disabled={saving || !dirty}
           onClick={() => onSave({ notes: trimmed })}
         >
           Save notes
-        </button>
+        </Button>
         <p role="status" className={styles.status}>{status}</p>
       </div>
     </div>

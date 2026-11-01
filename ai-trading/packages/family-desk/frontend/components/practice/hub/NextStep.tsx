@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDayList } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -63,7 +64,7 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
         <>
           <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
           <div className={styles.dayActions}>
-            <Link href={`/practice/journal?thread=${thread.id}`} className={hub.primaryLink}>{PRACTICE_COPY.threadOpenJournal}</Link>
+            <Button client href={`/practice/journal?thread=${thread.id}`} variant="primary">{PRACTICE_COPY.threadOpenJournal}</Button>
             <Link href="/practice" className={styles.secondaryLink}>{PRACTICE_COPY.threadStartNew}</Link>
           </div>
         </>
@@ -72,7 +73,7 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
           <div className={styles.dayActions}>
             {gate ? (
               <div className={styles.resumeAction}>
-                <Link href={`/practice/week?thread=${thread.id}&week=${gate.weekNo}`} className={hub.primaryLink}>{gate.step}</Link>
+                <Button client href={`/practice/week?thread=${thread.id}&week=${gate.weekNo}`} variant="primary">{gate.step}</Button>
               </div>
             ) : (
               !finished && (
@@ -81,7 +82,7 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
                 </div>
               )
             )}
-            {canReplace && <button type="button" className={hub.button} disabled={preparing} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</button>}
+            {canReplace && <Button disabled={preparing} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</Button>}
           </div>
           {gate && <p className={hub.muted}>{gate.locked}</p>}
           {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
+import { Badge } from "@/components/ui/Badge";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { EMPTY_VALUE, formatPrice, formatSignedPct, signTone } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -61,7 +62,7 @@ export function PeekPanel({
     <div className={styles.peek}>
       <div className={styles.peekHead}>
         <h3 className={styles.peekTitle}>{peek.symbol}</h3>
-        {hideDates && <span className={styles.chip}>Dates hidden</span>}
+        {hideDates && <Badge tone="neutral">Dates hidden</Badge>}
         <div role="tablist" aria-label="Peek view" className={styles.tabs}>
           {(["today", "daily"] as const).map((tab) => (
             <button key={tab} type="button" role="tab" aria-selected={view === tab} className={styles.tab} onClick={() => setView(tab)}>

@@ -16,7 +16,7 @@ export function SummaryTiles({ tiles, hint }: SummaryTilesProps) {
       {tiles.map((tile) => (
         <li key={tile.id} role="listitem" className={styles.tile}>
           <span className={styles.tileLabel}>{tile.label}</span>
-          <span className={styles.srOnly}>{": "}</span>
+          <span className="sr-only">{": "}</span>
           <span className={styles.tileValue} data-tone={tile.tone}>
             {tile.value}
           </span>

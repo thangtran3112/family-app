@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { SwingEquityCurve } from "@/components/practice/journal/thread/SwingEquityCurve";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -87,7 +88,7 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
         <section className={`${styles.panel} ${o.tablePanel}`} aria-label={HUB_SWING_COPY.holdsTitle}>
           <div className={o.sectionHead}>
             <h2 className={styles.panelTitle}>{HUB_SWING_COPY.holdsTitle}</h2>
-            <span className={hub.chip}>{practiceText("overviewHoldsCount", { n: state.holds_open })}</span>
+            <Badge tone="neutral">{practiceText("overviewHoldsCount", { n: state.holds_open })}</Badge>
           </div>
           <p className={hub.hint}>{HUB_SWING_COPY.holdsHint}</p>
           {holds.loading ? (

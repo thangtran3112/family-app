@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
+import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -57,7 +58,7 @@ export function HoldsTable({ holds, caption = PRACTICE_COPY.swingBoardHolds, tap
     },
     { key: "r", label: "R", align: "right", render: ({ view }) => view.r },
     ...(anyClosed ? [{ key: "exit", label: "Exit", render: ({ view }: Row) => view.exit ?? "—" }] : []),
-    ...(anyEarnings ? [{ key: "earnings", label: "Earnings", render: ({ view }: Row) => (view.earnings ? <span className={`${styles.chip} ${styles.chipAmber}`}>{view.earnings}</span> : "—") }] : []),
+    ...(anyEarnings ? [{ key: "earnings", label: "Earnings", render: ({ view }: Row) => (view.earnings ? <Badge tone="warn">{view.earnings}</Badge> : "—") }] : []),
     ...(anySplit ? [{ key: "split", label: "Split", render: ({ view }: Row) => (view.splitNote ? <span className={styles.note}>{view.splitNote}</span> : "—") }] : []),
   ];
 

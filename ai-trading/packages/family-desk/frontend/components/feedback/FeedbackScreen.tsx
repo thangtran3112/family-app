@@ -83,7 +83,7 @@ export function FeedbackScreen() {
             <h1 className={styles.title}>Feedback</h1>
             {counts && <p className={styles.counts}>{countsText(counts)}</p>}
           </div>
-          <Button href={reportUrl("/feedback")} variant="primary">New report</Button>
+          <Button client href={reportUrl("/feedback")} variant="primary">New report</Button>
         </div>
         <FeedbackFilters key={resets} value={filters} onChange={setFilters} items={list.data?.items ?? []} disabled={empty} />
       </div>

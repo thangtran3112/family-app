@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
 import { ChipToggleGroup } from "@/components/ui/ChipToggleGroup";
 import type { Speed } from "@/lib/replay/clock";
 import { KEY_LEGEND } from "@/lib/replay/keys";
@@ -48,10 +49,10 @@ export function TransportBar(props: TransportBarProps) {
   return (
     <div className={styles.transport}>
       <div className={styles.transportRow}>
-        <button type="button" className={`${styles.button} ${styles.primary}`} disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} title="Space" onClick={props.onToggle}>
+        <Button size="md" variant="primary" disabled={locked} aria-label={status === "playing" ? "Pause" : "Play"} title="Space" onClick={props.onToggle}>
           {status === "playing" ? "Pause" : "Play"}
-        </button>
-        <button type="button" className={styles.button} disabled={locked || props.busy} title="Step one bar (→)" onClick={props.onStep}>Step</button>
+        </Button>
+        <Button size="md" disabled={locked || props.busy} title="Step one bar (→)" onClick={props.onStep}>Step</Button>
         <SpeedChips speed={speed} onSpeed={props.onSpeed} />
         <JumpMenu
           revealedThrough={revealedThrough}

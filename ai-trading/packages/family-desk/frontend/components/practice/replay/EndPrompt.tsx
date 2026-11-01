@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { sessionOverText } from "@/lib/replay/journalView";
@@ -39,9 +40,9 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
           End Day {swing.dayNo}
           {hint && <> · <span className={styles.muted}>{hint}</span></>}
         </p>
-        <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
+        <Button size="md" variant="primary" disabled={busy} onClick={onEnd}>
           {endLabel}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -55,9 +56,9 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
           {lead}
           {tail && <> · <span className={styles.muted}>{tail}</span></>}
         </p>
-        <button type="button" className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={onEnd}>
+        <Button size="md" variant="primary" disabled={busy} onClick={onEnd}>
           {endLabel}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -65,9 +66,9 @@ export function EndPrompt({ tradeCount, atEnd, busy, onEnd, day = false, swing, 
   if (!confirming) {
     return (
       <div className={styles.endBlock}>
-        <button ref={endRef} type="button" className={styles.button} disabled={busy} onClick={() => setConfirming(true)}>
+        <Button ref={endRef} size="md" disabled={busy} onClick={() => setConfirming(true)}>
           {asDay ? "End day…" : "End session…"}
-        </button>
+        </Button>
         {hint && <span className={styles.muted}>{hint}</span>}
       </div>
     );

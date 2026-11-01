@@ -18,7 +18,7 @@ export function ImprovementPanel({ weeks }: { weeks: Week[] }) {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th scope="col"><span className={styles.srOnly}>Measure</span></th>
+                <th scope="col"><span className="sr-only">Measure</span></th>
                 <th scope="col" className={styles.num}>{`Week ${compared.first.n}`}</th>
                 <th scope="col" className={styles.num}>Latest</th>
               </tr>
