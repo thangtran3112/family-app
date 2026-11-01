@@ -303,6 +303,10 @@ test("D-018: a list built before the open fills Prev RVOL and Prev change % from
   assert.equal(dayCellText(byKey.prev_rvol!, smci), "1.10×");
   assert.equal(dayCellText(byKey.prev_change_pct!, smci), "+1.20%");
   assert.equal(dayCellTone(byKey.prev_change_pct!, smci), "up");
+  // The cell prints two decimals: a move that prints 0.00% is flat, not red or green (D-148).
+  const tiny = (value: number) => ({ ...smci, metrics: { ...smci.metrics, change_pct: value } });
+  assert.deepEqual([dayCellText(byKey.prev_change_pct!, tiny(-0.004)), dayCellTone(byKey.prev_change_pct!, tiny(-0.004))], ["0.00%", "flat"]);
+  assert.deepEqual([dayCellText(byKey.prev_change_pct!, tiny(0.01)), dayCellTone(byKey.prev_change_pct!, tiny(0.01))], ["+0.01%", "up"]);
   assert.equal(dayCellText(byKey.prev_rvol!, dayList.candidates[1]!), "—");
   assert.equal(byKey.prev_rvol!.missing, false);
   assert.equal(dayCellText(byKey.earnings!, smci), "Reported before the open");

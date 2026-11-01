@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, changeTone, formatPrice, formatSignedPct, type Tone } from "../desk/format.ts";
+import { EMPTY_VALUE, changeToneAt, formatPrice, formatSignedPct, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { ordinal, syntheticDays } from "./dayView.ts";
 import { formatR } from "./journalView.ts";
@@ -23,7 +23,7 @@ export function signedPts(value: number | null | undefined): string {
   return text === "0.0" ? "0.0 pts" : `${value > 0 ? "+" : MINUS}${text} pts`;
 }
 
-const ptsTone = (value: number | null | undefined): Tone => (value == null ? "flat" : changeTone(Number(Math.abs(value).toFixed(1)) === 0 ? 0 : value));
+const ptsTone = (value: number | null | undefined): Tone => changeToneAt(value, 1);
 
 // -- heading ---------------------------------------------------------------------------------------------------
 
@@ -99,13 +99,13 @@ export function weekTiles(review: Pick<WeekReview, "tiles">, toDate = false): We
     { id: "adherence", label: "Adherence", value: t.adherence_pct == null ? EMPTY_VALUE : `${Math.round(t.adherence_pct)}%`, sub: PRACTICE_COPY.swingTileAdherence, tone: "flat" },
     { id: "selection", label: "Selection", value: signedPts(t.selection_pts), sub: PRACTICE_COPY.swingTileSelection, tone: ptsTone(t.selection_pts) },
     { id: "timing", label: "Timing", value: signedPts(t.timing_pts), sub: PRACTICE_COPY.swingTileTiming, tone: ptsTone(t.timing_pts) },
-    { id: "spy", label: "SPY", value: pct(t.spy_return_pct), sub: PRACTICE_COPY.swingTileSpy, tone: changeTone(t.spy_return_pct) },
+    { id: "spy", label: "SPY", value: pct(t.spy_return_pct), sub: PRACTICE_COPY.swingTileSpy, tone: changeToneAt(t.spy_return_pct, 1) },
     {
       id: "universe",
       label: "Universe, equal weight",
       value: pct(t.universe_mean_return_pct),
       sub: practiceText("swingTileMedian", { median: pct(t.universe_median_return_pct) }),
-      tone: changeTone(t.universe_mean_return_pct),
+      tone: changeToneAt(t.universe_mean_return_pct, 1),
     },
   ];
 }
@@ -293,7 +293,7 @@ export function heatStrip(review: Pick<WeekReview, "heat">): HeatItem[] {
         source: item.source,
         sourceLabel: item.source === null ? EMPTY_VALUE : sourceLabel(item.source),
         returnText,
-        tone: changeTone(item.return_pct),
+        tone: changeToneAt(item.return_pct, 1),
         kind,
         label: [item.symbol, returnText, role].filter((part) => part !== null).join(", "),
       };

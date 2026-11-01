@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachPinchZoom, chartTime, candlestickData, currentValue, lineData, pinchFactor, zoomedRange } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, currentValue, lineData, pinchFactor, pinnedRange, zoomedRange } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -259,4 +259,12 @@ test("a pinch on a chart with no visible range yet is swallowed without a zoom",
   target.dispatchEvent(event);
   assert.equal(event.defaultPrevented, true);
   assert.equal(calls.length, 0);
+});
+
+test("a followed replay chart opens on the session's first bar while the revealed bars fit, then scrolls with the newest bar (D-099)", () => {
+  // 40 lookback bars, the session opens at index 40; the view is 35 slots (26 bars and a pad of 10) wide.
+  assert.deepEqual(pinnedRange(40, 40, 35, 10), { from: 40, to: 75 }, "before the open: the view waits at the first session bar");
+  assert.deepEqual(pinnedRange(45, 40, 35, 10), { from: 40, to: 75 }, "5 bars in: still the session's first bar at the left edge");
+  assert.deepEqual(pinnedRange(66, 40, 35, 10), { from: 40, to: 75 }, "26 bars in: the newest bar and its pad still fit");
+  assert.equal(pinnedRange(67, 40, 35, 10), null, "27 bars in: the pad no longer fits, so the chart follows the newest bar");
 });

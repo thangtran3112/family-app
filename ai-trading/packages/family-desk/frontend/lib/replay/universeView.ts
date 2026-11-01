@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, changeTone, formatCompact, formatPct, formatPrice, formatSignedPct, type Tone } from "../desk/format.ts";
+import { EMPTY_VALUE, changeToneAt, formatCompact, formatPct, formatPrice, formatSignedPct, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingSource, UniverseExcluded, UniversePreview, UniverseRow } from "./swingApi.ts";
 
@@ -100,7 +100,7 @@ export function universeRowView(row: UniverseRow): UniverseRowView {
     chip: sourceChip(row),
     priorClose: formatPrice(row.prior_close),
     chg20d: formatSignedPct(row.chg_20d_pct, 1),
-    chg20dTone: changeTone(row.chg_20d_pct),
+    chg20dTone: changeToneAt(row.chg_20d_pct, 1),
     dollarVolume: row.avg_dollar_volume_20d > 0 ? `$${formatCompact(row.avg_dollar_volume_20d)}` : EMPTY_VALUE,
     atr: formatPct(row.atr_pct_14, 1),
     matched: row.matched.length === 0 ? null : row.matched.join(" · "),

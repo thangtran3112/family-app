@@ -233,6 +233,15 @@ export function zoomedRange(range: LogicalRange, x: number, width: number, facto
   return { from: to - width / zoomed + 1, to };
 }
 
+/**
+ * Where a followed replay chart sits while the session so far still fits: from `anchor` (the session's first bar) over `span`
+ * slots. The axis then starts at the open, not in the pre-open lookback (D-099). Null once the newest bar and its `pad` no
+ * longer fit, and the chart scrolls with the newest bar instead.
+ */
+export function pinnedRange(count: number, anchor: number, span: number, pad: number): LogicalRange | null {
+  return count - 1 + pad <= anchor + span ? { from: anchor, to: anchor + span } : null;
+}
+
 type PinchChart = {
   timeScale(): {
     width(): number;
