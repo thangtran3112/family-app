@@ -1,0 +1,368 @@
+# infrastructure/apps/ai-trading/Caddyfile
+# The "gateway" service. Every reverse-proxy and WebSocket-upgrade concern
+# lives here, declaratively -- there is no hand-written Node proxy anywhere
+# in this plan (see Global Constraints). "auth" (ai-trading/auth) is the only
+# upstream this file ever calls for a verification decision.
+{
+	admin off
+	auto_https off
+}
+
+# Task 4 (01g): the private app-control helper's own availability probe,
+# reused by every gated app route below. `{args[0]}` is the app's fixed
+# catalog ID (ai-trading/control/state.py APP_IDS) -- never caller-supplied.
+# Inserted AFTER each route's existing app auth and BEFORE its own
+# proxy/rewrite, so an unauthenticated request still gets a plain 401 (the
+# existing forward_auth above denies it first) and never reaches this gate.
+# Strips Authorization/Cookie first: the helper's /gate/{id} is a read-only,
+# peer-checked probe that never needs or trusts either.
+(availability_gate) {
+	forward_auth unix//run/family-app/ai-trading-control/control.sock {
+		# Explicit trailing `?` with nothing after it: per Caddy's `uri`/
+		# `rewrite` semantics, a bare path token with no `?` leaves the
+		# query string untouched (the bug -- a query-bearing app request,
+		# e.g. research pagination, got forwarded verbatim onto this
+		# fixed internal probe path, so control/server.py's strict,
+		# unchanged path router saw "tradingagents?limit=25&offset=0" as
+		# an unknown app and 404'd the whole request). An explicit `?`
+		# makes everything after it (here, nothing) the new query, so
+		# this private probe always goes out clean while the real
+		# downstream app request below (a separate, unrelated proxy call)
+		# keeps its original path AND query untouched.
+		uri /gate/{args[0]}?
+		header_up -Authorization
+		header_up -Cookie
+		transport http {
+			dial_timeout 1s
+			response_header_timeout 7s
+		}
+	}
+}
+
+# A genuine Caddy transport error (dial/timeout against the control socket --
+# e.g. the helper is not running) becomes this fixed, generic body -- never
+# the raw 502. A *deliberate* 503 the helper itself returns (app stopped) is
+# a normal response, copied back by forward_auth/reverse_proxy as-is (its own
+# actionable "app_unavailable" body), so it is never rewritten here; neither
+# is a deliberately returned 401/403 or login redirect.
+(availability_errors) {
+	handle_errors 502 503 {
+		header Content-Type application/json
+		header Cache-Control no-store
+		respond `{"error":"service_unavailable","message":"Trading service unavailable. Open Trading Hub Settings or try again."}` 503
+	}
+}
+
+# Hub login origin for the signed-out redirects below, chosen from the request
+# host so a laptop staging host (`staging.` or `staging-*.`) sends the browser
+# to the staging hub, never the production one. Production hosts keep the
+# production hub. The staging tunnel passes the public Host through unchanged.
+(hub_origin) {
+	map {host} {hub_origin} {hub_origin_enc} {
+		~^staging[.-] https://staging.tobytran.dev https%3A%2F%2Fstaging.tobytran.dev
+		default https://trading-hub.tobytran.dev https%3A%2F%2Ftrading-hub.tobytran.dev
+	}
+}
+
+# Vibe's own hostname is not allowed around the Clerk gateway. Use a
+# host-specific HTTP site before the catch-all routes so /api/* also reaches
+# Vibe rather than the separate MiroFish backend.
+http://vibe-trading.tobytran.dev:8080 {
+	@private_deploy path /internal/deploy/*
+	@vibe_paused {
+		method POST
+		path_regexp ^/sessions/[^/]+/messages$
+		file {
+			root /run/family-app/ai-trading-control
+			try_files vibe-admission-paused
+		}
+	}
+	route {
+		request_header -Cf-Access-Authenticated-User-Email
+		forward_auth auth:8181 {
+			uri /__auth/check
+			copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+		}
+		import availability_gate vibe-trading
+		respond @private_deploy 404
+		header @vibe_paused Retry-After "30"
+		header @vibe_paused Cache-Control "no-store"
+		respond @vibe_paused `{"error":"research_paused","message":"Research is paused for deployment; retry shortly."}` 503
+		reverse_proxy vibe-trading:8899 {
+			# TLS ends at Cloudflare; Vibe's same-site API check needs https.
+			header_up X-Forwarded-Proto https
+			# Clerk already verified this user, so supply Vibe's API key here
+			# (replacing any browser value); unset key -> "Bearer " -> Vibe 401s.
+			header_up Authorization "Bearer {env.VIBE_API_AUTH_KEY}"
+		}
+	}
+	import availability_errors
+}
+
+# Terminal hostnames (01l). Same gate as the /u/* routes below; `/` is
+# rewritten onto ttyd's --base-path (ttyd builds its token and ws URLs from
+# location.pathname), so the terminal opens at the hostname root. A signed-out
+# top-level navigation is sent to the hub login with a fixed returnTo; every
+# other unauthenticated request (token, ws) keeps the plain 401.
+http://tradingagents.tobytran.dev:8080, http://staging-tradingagents.tobytran.dev:8080 {
+	import hub_origin
+	# Research (06) is reached unprefixed at this dedicated host -- exact
+	# root + slash-descendant matchers, same anti-sibling-wildcard reasoning
+	# as @tradingagents/@aihedgefund below -- handled ahead of the terminal's
+	# catch-all `handle`/rewrite so it never reaches ta-terminal. Any
+	# browser-supplied X-Family-App-Prefix is stripped before forward_auth so
+	# only this site establishes the (here, empty) prefix the app trusts.
+	# Review round 1 (Important): a signed-out top-level navigation to the
+	# research root or a canonical UUID descendant gets the same fixed-hub-
+	# login redirect as the terminal below, preserving only that validated
+	# path -- not a plain 401 (APIs/assets still 401, same as everywhere else).
+	@ta_research_host path /research /research/* /api/research /api/research/*
+	handle @ta_research_host {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			request_header -X-Family-App-Prefix
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+				@denied status 401
+				handle_response @denied {
+					@research_return {
+						header Sec-Fetch-Mode navigate
+						# re-review 1 (Important): canonical UUID4 only -- the
+						# prior [0-9a-f-]+ class accepted malformed values like
+						# "----" or a partial/non-v4 id, broader than the
+						# backend's own canonical-UUID4-only contract
+						# (ta_web/store.py's _validate_run_id).
+						path_regexp research_return ^/research(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$
+					}
+					redir @research_return {hub_origin}/login?returnTo=https%3A%2F%2F{host}%2Fresearch{re.research_return.1} 302
+					respond 401
+				}
+			}
+			import availability_gate tradingagents
+			reverse_proxy ta-research:8182 {
+				header_up X-Forwarded-Proto https
+				header_up Host {host}
+			}
+		}
+	}
+
+	handle {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+				@denied status 401
+				handle_response @denied {
+					@navigate header Sec-Fetch-Mode navigate
+					redir @navigate {hub_origin}/login?returnTo=https%3A%2F%2F{host}%2F 302
+					respond 401
+				}
+			}
+			import availability_gate tradingagents
+			rewrite * /u/tradingagents{uri}
+			reverse_proxy ta-terminal:7681
+		}
+	}
+	import availability_errors
+}
+
+http://ai-hedge-fund.tobytran.dev:8080, http://staging-ai-hedge-fund.tobytran.dev:8080 {
+	import hub_origin
+	route {
+		request_header -Cf-Access-Authenticated-User-Email
+		forward_auth auth:8181 {
+			uri /__auth/check
+			copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			@denied status 401
+			handle_response @denied {
+				@navigate header Sec-Fetch-Mode navigate
+				redir @navigate {hub_origin}/login?returnTo=https%3A%2F%2F{host}%2F 302
+				respond 401
+			}
+		}
+		import availability_gate ai-hedge-fund
+		rewrite * /u/ai-hedge-fund{uri}
+		reverse_proxy ahf-terminal:7681
+	}
+	import availability_errors
+}
+
+:8080 {
+	import hub_origin
+	# Exact root + slash-descendant matchers, not a bare `/u/tradingagents*`
+	# prefix wildcard: a prefix wildcard also matches an unrelated sibling
+	# path like `/u/tradingagents-evil` (no `/` boundary required), which
+	# would wrongly route it through forward_auth to this terminal instead
+	# of 404ing it. A bare path token after `handle` only accepts a single
+	# pattern, so each pair of exact-root/slash-descendant patterns is a
+	# named matcher (`@name path ...`) instead. Confirmed with a real-Caddy
+	# RED/GREEN check: the old `*` matcher returned 401 (treated as
+	# protected) for `/u/tradingagents-evil`; this matcher 404s it while
+	# leaving the real routes (bare path and any `/slash/descendant`)
+	# unchanged.
+	@tradingagents path /u/tradingagents /u/tradingagents/*
+	@aihedgefund path /u/ai-hedge-fund /u/ai-hedge-fund/*
+	# Exact root + slash-descendant matchers for research (06), same reasoning
+	# as @tradingagents/@aihedgefund -- a bare /u/tradingagents/research*
+	# prefix wildcard would also match an unrelated sibling like
+	# /u/tradingagents/research-evil. These four paths are also matched by
+	# @tradingagents's own /u/tradingagents/* wildcard, so this `handle` must
+	# run before `handle @tradingagents` below (handle blocks are mutually
+	# exclusive; first match wins) or they would reach the terminal instead.
+	@ta_research path /u/tradingagents/research /u/tradingagents/research/* /u/tradingagents/api/research /u/tradingagents/api/research/*
+
+	# Exact public auth-path matcher (Task 4), not a broad /__auth/* prefix:
+	# /__auth/control-check is an internal-only endpoint that Caddy's own
+	# forward_auth blocks reach by connecting directly to auth:8181 -- never
+	# through this site's public routing. A broad prefix match would make it
+	# externally reachable too; this leaves it falling through to the 404
+	# catch-all below, same as any other unknown path.
+	@auth_public path /__auth/session /__auth/check /__auth/logout
+	handle @auth_public {
+		reverse_proxy auth:8181
+	}
+
+	handle @ta_research {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			request_header -X-Family-App-Prefix
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+				@denied status 401
+				handle_response @denied {
+					# Only a top-level navigation to the research root or a
+					# canonical lowercase UUID4 descendant is redirected --
+					# never an API/asset fetch under the same matcher (those
+					# stay a plain 401, same as every other unauthenticated
+					# request). The captured group matches exactly the
+					# backend's own canonical-UUID4-only shape (no other hex/
+					# hyphen string), so no query or path-injection value can
+					# ever reach the redirect target; any query string on the
+					# original request is never referenced here at all, so it
+					# is always discarded.
+					@research_return {
+						header Sec-Fetch-Mode navigate
+						# re-review 1 (Important): canonical UUID4 only, same
+						# fix and reasoning as the dedicated host's matcher
+						# above -- updated together for one consistent
+						# binding/redirect contract rather than leaving this
+						# copy on the old, broader class.
+						path_regexp research_return ^/u/tradingagents/research(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?$
+					}
+					redir @research_return {hub_origin}/login?returnTo={hub_origin_enc}%2Fu%2Ftradingagents%2Fresearch{re.research_return.1} 302
+					respond 401
+				}
+			}
+			import availability_gate tradingagents
+			uri strip_prefix /u/tradingagents
+			reverse_proxy ta-research:8182 {
+				header_up X-Family-App-Prefix /u/tradingagents
+				header_up X-Forwarded-Proto https
+				header_up Host {host}
+			}
+		}
+	}
+
+	# A bare sequence of directives inside `handle` is NOT executed in the
+	# order written: Caddy sorts directives by its own fixed global default
+	# order, which runs `forward_auth` before `request_header` -- verified
+	# empirically with `caddy adapt` and the real-Caddy integration test
+	# below, which caught this exact miscompile (the strip ran *after*
+	# `copy_headers`, deleting the just-verified header entirely, so the
+	# upstream saw no identity header at all instead of the forged one or
+	# the verified one). `route` forces literal, as-written execution order.
+	handle @tradingagents {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			import availability_gate tradingagents
+			reverse_proxy ta-terminal:7681
+		}
+	}
+
+	handle @aihedgefund {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			import availability_gate ai-hedge-fund
+			reverse_proxy ahf-terminal:7681
+		}
+	}
+
+	handle /__healthz {
+		respond 200
+	}
+
+	# Family Desk API: exact root + slash descendants, before MiroFish's generic
+	# /api/* route. `route` preserves the security-sensitive order: remove any
+	# caller identity, authenticate, copy only auth's verified identity, proxy.
+	@desk_api path /api/desk /api/desk/*
+	handle @desk_api {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			reverse_proxy api:8000
+		}
+	}
+
+	# MiroFish (01i): same `route { }` wrapper as the /u/* blocks above, for
+	# the same reason -- a bare sequence would run `forward_auth` before
+	# `request_header`, leaking the just-verified header unstripped if a
+	# caller supplied its own value instead of the one Caddy just set.
+	# Flask backend joins the "mirofish" compose network, defined in the
+	# sibling docker-compose.mirofish.yml; gateway joins the same network
+	# in docker-compose.yml so this hostname resolves.
+	handle /api/* {
+		route {
+			request_header -Cf-Access-Authenticated-User-Email
+			forward_auth auth:8181 {
+				uri /__auth/check
+				copy_headers X-Verified-Email>Cf-Access-Authenticated-User-Email
+			}
+			import availability_gate mirofish
+			reverse_proxy mirofish:5001
+		}
+	}
+
+	# Public app-control API (Task 4/01g): every GET/PUT requires a FRESH
+	# Clerk bearer, verified by /__auth/control-check -- the gateway cookie
+	# alone is never sufficient. `route` forces literal order (strip the
+	# client's own actor header, then only ever set our own from the
+	# verified subject), same reasoning as the handle blocks below.
+	@controls path /__control/apps /__control/apps/*
+	handle @controls {
+		route {
+			request_header -X-Verified-Actor
+			forward_auth auth:8181 {
+				uri /__auth/control-check
+				copy_headers X-Verified-Actor
+			}
+			uri strip_prefix /__control
+			reverse_proxy unix//run/family-app/ai-trading-control/control.sock {
+				header_up -Authorization
+				header_up -Cookie
+				transport http {
+					dial_timeout 1s
+					response_header_timeout 7s
+				}
+			}
+		}
+	}
+
+	handle {
+		respond 404
+	}
+	import availability_errors
+}
