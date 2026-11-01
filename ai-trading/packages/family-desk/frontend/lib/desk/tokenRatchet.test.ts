@@ -41,10 +41,10 @@ const BASELINE: Record<keyof typeof METRICS, number> = {
   "raw hex colours": 70,
   "raw font-size: Npx": 105,
   "raw border-radius: Npx": 32,
-  "outline: 2px solid restatements (use var(--focus-ring))": 68,
-  "local .button rules (use components/ui Button)": 64,
-  "local .chip rules (use components/ui Badge)": 21,
-  "local .srOnly / .visuallyHidden rules (use .sr-only)": 13,
+  "outline: 2px solid restatements (use var(--focus-ring))": 67,
+  "local .button rules (use components/ui Button)": 59,
+  "local .chip rules (use components/ui Badge)": 19,
+  "local .srOnly / .visuallyHidden rules (use .sr-only)": 12,
 };
 
 const files = stylesheets();

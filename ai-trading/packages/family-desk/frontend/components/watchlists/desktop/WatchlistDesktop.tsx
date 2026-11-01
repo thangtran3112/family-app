@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useDeskStatus, useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { RightRail } from "@/components/shell/desktop/RightRail";
+import { Button } from "@/components/ui/Button";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
 import { Freshness, useFreshness } from "@/components/ui/Freshness";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
@@ -75,7 +76,7 @@ export function WatchlistDesktop() {
   } else if (active === null) {
     body = (
       <EmptyBlock title="Add symbols to start watching">
-        <button type="button" className={`${styles.button} ${styles.primary}`} onClick={() => setManage(true)}>Create a list</button>
+        <Button variant="primary" onClick={() => setManage(true)}>Create a list</Button>
       </EmptyBlock>
     );
   } else if (table.data === null) {
@@ -107,7 +108,7 @@ export function WatchlistDesktop() {
           {active && <Freshness stamp={table.data?.stamp ?? null} connection={table.connection} />}
         </div>
         <div className={styles.actions}>
-          <button type="button" className={styles.button} aria-pressed={manage} onClick={() => setManage(!manage)}>Manage</button>
+          <Button aria-pressed={manage} onClick={() => setManage(!manage)}>Manage</Button>
           <span className={styles.slots}>Quote slots: {slotsText(slots)}</span>
         </div>
       </header>
