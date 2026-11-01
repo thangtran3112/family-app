@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { ScreenerFilter, ScreenerFilterDetail } from "@/lib/api/schemas";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import type { ScreenerFilter, ScreenerFilterDetail } from "@/lib/api/schemas";
 import { COPY } from "@/lib/desk/freshness";
 import { createFilter, deleteFilter } from "@/lib/desk/screener";
 import { describeSpec } from "@/lib/spec/describe";
@@ -11,15 +14,6 @@ import { parseFilterSpec } from "@/lib/spec/parse";
 import styles from "./screener.module.css";
 
 type Action = "save" | "delete";
-
-function LockGlyph() {
-  return (
-    <svg className={styles.lock} viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <rect x="2.5" y="5.5" width="7" height="5" rx="1" />
-      <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" />
-    </svg>
-  );
-}
 
 /** The filter's session is part of its rule ("during regular hours"): there is no toggle, because the API runs the
  * filter's own session and nothing else (V-SCR-04). Changing it is an edit of her own copy. */
@@ -70,22 +64,22 @@ export function FilterHeader({
       <div className={styles.titleBlock}>
         <div className={styles.titleRow}>
           <h1 className={styles.title} title={filter.name}>
-            {filter.read_only && <LockGlyph />}
+            {filter.read_only && <Icon name="lock" size={12} className={styles.lock} />}
             {filter.name}
-            {filter.read_only && <span className={styles.srOnly}> Read-only</span>}
+            {filter.read_only && <span className="sr-only"> Read-only</span>}
           </h1>
-          {delayed && <span className={styles.pill}>{COPY.scanDelayed}</span>}
+          {delayed && <Badge>{COPY.scanDelayed}</Badge>}
         </div>
         {rule && <p className={styles.rule}>{describeSpec(rule)}</p>}
       </div>
       <div className={styles.controls}>
         {/* A default opens read-only, so it is a view, not an edit (A-SCR-15). */}
-        <a href={`/screener/filters?id=${filter.id}`} className={styles.button}>{filter.read_only ? "View rule" : "Edit"}</a>
+        <Button href={`/screener/filters?id=${filter.id}`}>{filter.read_only ? "View rule" : "Edit"}</Button>
         {filter.read_only ? (
           <>
-            <button type="button" className={`${styles.button} ${styles.accent}`} disabled={pending !== null} onClick={saveCopy}>
+            <Button variant="primary" loading={pending === "save"} disabled={pending !== null} onClick={saveCopy}>
               {pending === "save" ? "Saving…" : "Save as my filter"}
-            </button>
+            </Button>
             {failed === "save" && (
               <span role="alert" className={styles.error}>
                 {"Couldn't save the copy · "}
@@ -96,10 +90,10 @@ export function FilterHeader({
         ) : confirming ? (
           <span className={styles.confirm}>
             Delete this filter?
-            <button type="button" className={`${styles.button} ${styles.danger}`} disabled={pending !== null} onClick={remove}>
+            <Button variant="danger" loading={pending === "delete"} disabled={pending !== null} onClick={remove}>
               {pending === "delete" ? "Deleting…" : "Delete"}
-            </button>
-            <button type="button" className={styles.button} onClick={() => setConfirming(false)}>Keep</button>
+            </Button>
+            <Button onClick={() => setConfirming(false)}>Keep</Button>
             {failed === "delete" && (
               <span role="alert" className={styles.error}>
                 {"Couldn't delete this filter · "}
@@ -108,7 +102,7 @@ export function FilterHeader({
             )}
           </span>
         ) : (
-          <button type="button" className={styles.button} onClick={() => setConfirming(true)}>Delete</button>
+          <Button onClick={() => setConfirming(true)}>Delete</Button>
         )}
         <a href={`/alerts/new?from=filter:${filter.id}`} className={styles.link}>Alert on this filter</a>
       </div>

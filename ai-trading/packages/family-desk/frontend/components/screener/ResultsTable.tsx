@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Delta } from "@/components/ui/Delta";
 import type { ScreenerResults } from "@/lib/api/schemas";
 import { columnFromSpec } from "@/lib/desk/columns";
 import { cellValue, matchCaption, resultColumns } from "@/lib/desk/screenerView";
@@ -30,7 +31,7 @@ export function ResultsTable({
     () => [
       { key: "symbol", label: "Symbol", align: "left", render: (match) => <strong>{match.symbol}</strong>, sortValue: (match) => match.symbol },
       ...resultColumns(results.table_columns).map((column): DenseColumn<Match> =>
-        columnFromSpec(column, (match) => cellValue(match, column.key), (text, tone) => <span className={styles[tone]}>{text}</span>),
+        columnFromSpec(column, (match) => cellValue(match, column.key), (text, tone) => <Delta tone={tone}>{text}</Delta>),
       ),
     ],
     [results.table_columns],

@@ -23,7 +23,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 | `ai-trading/` | Trading Hub (open-source apps) and the Family Desk | `ai-trading/AGENTS.md` |
 | `expense-tax-management/` | Expense and tax apps | `expense-tax-management/AGENTS.md` |
 | `infrastructure/` | Terraform, VPS bootstrap, shared compose, backups | `infrastructure/README.md` |
-| `infrastructure/tailscale/` | Tailnet policy for admin and CI SSH | `infrastructure/tailscale/README.md` |
+| `infrastructure/tailscale/` | Tailnet policy for CI/CD deploys and break-glass admin (operator SSH is Cloudflare Access) | `infrastructure/tailscale/README.md` |
 | `common/config/` | Firestore `family-config` CLI | `common/config/README.md` |
 | `docs/superpowers/` | Cross-app specs and plans | n/a |
 
@@ -31,7 +31,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 
 `AGENTS.md` is the always-loaded baseline. Everything else is lazy-loaded from `.claude/`, one markdown file per area (`tailscale.md`, `deploy.md`, …), so it costs a session nothing until it is relevant.
 
-- **Shared rules and skills live at the repository root**: `.claude/rules/*.md` and `.claude/skills/<name>/SKILL.md`. A rule or procedure that applies to more than one package belongs there and exists once. `.claude/rules/tailscale.md` and the `manage-family-tailscale` skill are the first of these. A package `AGENTS.md` keeps a pointer to it, not a copy.
+- **Shared rules and skills live at the repository root**: `.claude/rules/*.md` and `.claude/skills/<name>/SKILL.md`. A rule or procedure that applies to more than one package belongs there and exists once. `.claude/rules/tailscale.md` and the `manage-family-tailscale` and `manage-cloudflare-tunnel` skills are the first of these. A package `AGENTS.md` keeps a pointer to it, not a copy.
 - A `.claude/rules/` inside a package is only for that package's own rules. When a package gains one, it also needs the OpenCode wiring below; a package with no rules has no `opencode.json` glob.
 - **Claude Code** loads `.claude/rules/*.md` natively: the ones in the working directory and above it at launch, and a subdirectory's own rules on demand. An optional `paths:` list in the frontmatter scopes a file to matching globs; omit it when the rule covers the whole component. Only `paths` is read, and the frontmatter is stripped before the rule enters context. Skills at the root are found from a package directory too; this is checked, not assumed.
 - **OpenCode** has no native support for these paths: the root `opencode.json` lists `"instructions": ["AGENTS.md", ".claude/rules/*.md"]` once for the whole repository, and a package `opencode.json` lists its own `AGENTS.md` plus any package rule glob it has. OpenCode resolves the root config and the package config separately, so both apply from inside a package. A package that adds a rule without adding the glob will not load it in OpenCode.
@@ -42,6 +42,7 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 - Public repo: never commit or print secrets, email addresses, account numbers, or VPS addresses.
 - All secrets and env values live in Firestore `family-config`, read and written only through `common/config/family_config.py`. No `.env` or key files in the repo.
 - Infrastructure is code under `infrastructure/`; no console edits. GCP commands use `CLOUDSDK_ACTIVE_CONFIG_NAME=personal`. One shared Cloudflare token (`shared/cloudflare`): never create another.
+- The family-app tailnet is for CI/CD deployment only (the deploy runners join as `tag:ci`). Operator and admin SSH to the host goes through the Cloudflare tunnel behind Cloudflare Access: skill `manage-cloudflare-tunnel`. Tailnet details: skill `manage-family-tailscale`.
 - The family-app tailnet is separate from any other tailnet the owner belongs to. Nothing in this repo may name, reference, or read another tailnet. Tailnet ID, MagicDNS names, device names, and IPs live in Firestore `shared/tailscale`, never in the repo.
 - One shared VPS: touch only your own app's containers, images, and volumes; never run a global `docker system prune`.
 - Never commit to or force-push `dev` or `main`; work reaches `dev` by pull request; `main` releases carry only the owning package's paths. Delivery authorization is per package.

@@ -22,7 +22,9 @@ provider "tailscale" {
   oauth_client_secret = var.tailscale_oauth_client_secret
 }
 
-# Tailscale is for admin and CI SSH only. Public traffic stays on the
+# The tailnet is for CI/CD deployment only (tag:ci). The autogroup:admin
+# grant is break-glass for a device already in this tailnet; operator SSH goes
+# through the Cloudflare tunnel behind Access. Public traffic stays on the
 # Cloudflare tunnels and never touches the tailnet, so the policy is
 # default-deny and holds exactly the two flows below. There is no `ssh`
 # section either: the host runs a plain sshd on a TCP port, not Tailscale SSH.

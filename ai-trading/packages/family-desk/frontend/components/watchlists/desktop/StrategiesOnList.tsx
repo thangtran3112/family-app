@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelHeader } from "@/components/ui/Panel";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { formatEtStamp } from "@/lib/desk/format";
@@ -34,7 +35,7 @@ export function StrategiesOnList({ listId, listName }: { listId: number; listNam
 
   return (
     <div className={styles.strategies}>
-      <h3 className={styles.heading}>Strategies on {listName}</h3>
+      <PanelHeader variant="label" level={3} title={`Strategies on ${listName}`} />
       <div className={styles.links}>
         <a href={`/strategies/library?watchlist=${listId}`} className={styles.link}>Add preset</a>
         <a href={`/alerts/new?source=watchlist:${listId}`} className={styles.link}>New alert strategy</a>
