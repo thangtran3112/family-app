@@ -8,6 +8,7 @@ import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChro
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
@@ -17,7 +18,6 @@ import { formatClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
-import { openRailTab } from "@/lib/desk/rail";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList, Rescan } from "@/lib/replay/daily";
@@ -172,9 +172,11 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   const endRef = useRef<HTMLButtonElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const endedHere = useRef(false);
-  // At the 1180 band the right rail is a tab strip: a row click opens the Peek drawer and the others stay as they are (D-020).
+  // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
+  // Peek is its own wide drawer on both bands, so the chart and its level legend have room; the rail keeps the portfolio and the plan.
+  const [peeking, setPeeking] = useState(false);
 
   // The risk plan is the thread's (D-007): read it from the thread, not from the day's plan.
   const threadId = list.thread?.id ?? null;
@@ -231,7 +233,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   };
   const peekAt = (symbol: string) => {
     setSelected(symbol);
-    if (band === "1180") setRailOpen((open) => openRailTab(open, "peek"));
+    setPeeking(true);
   };
 
   // Ending is safe to ask twice (the server answers an ended day the same), so a gateway cut waits and asks again, as the replay does (F-08).
@@ -480,6 +482,24 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
       <DayLeftPanel list={list} />
+      {peeking && selected !== null && !ended && (
+        <Dialog
+          title={PRACTICE_COPY.dayPeek}
+          size="drawer"
+          onClose={() => setPeeking(false)}
+          headerActions={<Button onClick={() => setPeeking(false)}>{PRACTICE_COPY.dayPeekClose}</Button>}
+        >
+          <PeekPanel
+            symbol={selected}
+            row={list.candidates.find((candidate) => candidate.symbol === selected) ?? null}
+            peek={peek.data?.peek ?? null}
+            loading={peek.loading}
+            failed={peek.data === null && peek.error !== null}
+            onRetry={peek.refresh}
+            hideDates={datesHidden(list.plan.spec)}
+          />
+        </Dialog>
+      )}
       {changing && thread.data !== null && (
         <NewPlanModal thread={thread.data.thread} onClose={() => setChanging(false)} onSaved={(id) => router.push(`/practice/thread?id=${id}`)} />
       )}
@@ -489,25 +509,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         openIds={railOpen}
         onOpenIdsChange={setRailOpen}
         sections={[
-          ...(ended
-            ? []
-            : [
-                {
-                  id: "peek",
-                  label: PRACTICE_COPY.dayPeek,
-                  node: (
-                    <PeekPanel
-                      symbol={selected}
-                      row={list.candidates.find((candidate) => candidate.symbol === selected) ?? null}
-                      peek={peek.data?.peek ?? null}
-                      loading={peek.loading}
-                      failed={peek.data === null && peek.error !== null}
-                      onRetry={peek.refresh}
-                      hideDates={datesHidden(list.plan.spec)}
-                    />
-                  ),
-                },
-              ]),
           {
             id: "plan",
             label: list.thread ? PRACTICE_COPY.threadPlanTitle : "Plan",

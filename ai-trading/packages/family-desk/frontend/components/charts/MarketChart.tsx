@@ -73,6 +73,8 @@ export type MarketChartLevel = {
   color?: string;
   /** Dashed by default; pivots and prior-day levels are dotted (02l §b5). */
   style?: "dashed" | "dotted";
+  /** The line only: no title and no price pill on the chart. The caller names it in a `ChartLegend` (in normal flow, so levels close in price never print over each other or the candles). */
+  plain?: boolean;
 };
 
 export type MarketChartProps = {
@@ -484,15 +486,15 @@ export function MarketChart({
     setPaneTops((current) => (sameTops(current, tops) ? current : tops));
 
     for (const line of priceLines.current) mainSeries.removePriceLine(line);
-    priceLines.current = levels.flatMap(({ label, price, color, style }) => {
+    priceLines.current = levels.flatMap(({ label, price, color, style, plain }) => {
       if (price === null || !Number.isFinite(price)) return [];
       return [mainSeries.createPriceLine({
         price,
-        title: label,
+        title: plain ? "" : label,
         color: color ?? chartPalette.muted,
         lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
         lineWidth: 1,
-        axisLabelVisible: true,
+        axisLabelVisible: !plain,
       })];
     });
 
