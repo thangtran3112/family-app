@@ -1,0 +1,187 @@
+name: ai-trading-ci
+
+# ADR-0015 re-enables the unit and contract gates that ADR-0013 moved to local
+# runs. Pull requests to dev and pushes to dev only: main stays deploy-only
+# (ai-trading-deploy.yml), so a release never waits on or reruns these.
+# Recovered from 97baa1b4^ (the file ADR-0013 deleted) and narrowed to the
+# Verification gates in ai-trading/AGENTS.md; the image, E2E, shellcheck and
+# buf jobs of the old file are not restored.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - "ai-trading/**"
+      - "!ai-trading/plans/**"
+      - "!ai-trading/**/*.md"
+      - ".gitmodules"
+      - ".github/workflows/ai-trading-ci.yml"
+  push:
+    branches: [dev]
+    paths:
+      - "ai-trading/**"
+      - "!ai-trading/plans/**"
+      - "!ai-trading/**/*.md"
+      - ".gitmodules"
+      - ".github/workflows/ai-trading-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ai-trading-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  desk-backend:
+    name: Desk backend (ruff, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # the DB-backed suite takes about 14 minutes
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: desk
+          POSTGRES_PASSWORD: desk
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U desk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DESK_TEST_DATABASE_URL: postgresql+psycopg://desk:desk@localhost:5432/postgres
+      DESK_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0  # no floating major tag; Dependabot bumps it
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            ai-trading/packages/family-desk/backend/uv.lock
+            ai-trading/common/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  desk-contracts:
+    name: Desk contracts (typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/contracts
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  desk-frontend:
+    name: Desk frontend (typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/packages/family-desk/frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            ai-trading/packages/family-desk/contracts/pnpm-lock.yaml
+            ai-trading/packages/family-desk/frontend/pnpm-lock.yaml
+      - name: Install linked contracts dependencies
+        run: pnpm --dir ../contracts install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  hub-frontend:
+    name: Hub frontend (test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ai-trading/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  bridge:
+    name: Market-data bridge (go vet, go test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/packages/market-data/bridge
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: ai-trading/packages/market-data/bridge/go.mod
+          cache-dependency-path: ai-trading/packages/market-data/bridge/go.sum
+      - run: go vet ./...
+      - name: Tests (offline fakes and contract goldens)
+        run: go test -race -count=1 ./...
+      # The Alpaca live smoke test (internal/providers/alpaca/live_smoke_test.go)
+      # is already inside `./...` above and skips when ALPACA_API_KEY_ID is
+      # unset. CI has no provider keys by design (they live in Firestore), so
+      # this step only makes the SKIP visible in the log. Run it with a real
+      # key locally; see the file header.
+      - name: Alpaca live smoke (skips without provider keys)
+        run: go test -v -count=1 -run 'TestLive' ./internal/providers/alpaca/
+
+  common:
+    name: Common (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-trading/common
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0  # no floating major tag; Dependabot bumps it
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai-trading/common/uv.lock
+      - run: uv sync --locked
+      - run: uv run pytest -q
