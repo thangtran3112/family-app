@@ -12,8 +12,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_trading.db.models import PracticeLedger, ReplaySession
-from ai_trading.replay.journal import Trade, trade_pnl
+from ai_trading.db.models import PracticeLedger, PracticeMark, ReplaySession
+from ai_trading.replay.journal import Trade, fill_split, trade_pnl
+from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS
 
 R_LIMIT = 1000  # the contract's bound on `r`; a tighter-than-a-tick stop is served without one
 
@@ -81,3 +82,70 @@ def entry_out(row: PracticeLedger) -> dict[str, Any]:
     if row.r is not None and abs(row.r) <= R_LIMIT:
         out["r"] = float(row.r)
     return out
+
+
+# -- the executions: every Buy and Sell of a thread ----------------------------------------------------------
+
+
+def fills_of(rows: list[PracticeMark]) -> list[dict[str, Any]]:
+    """The executions of one session's marks (in `seq` order): `action` buy or sell, `shares`, `price`, `at`, and how
+    many of the shares closed the name's position (`closes`) and opened or added to one (`opens`). A Close position
+    mark stores no shares; it sells (or covers) the whole position, so the count is the position at that time, walked
+    here the way `journal.assemble` walks it. Notes and stop notes are not executions."""
+    held_side: str | None = None
+    held = 0
+    out: list[dict[str, Any]] = []
+    for mark in sorted(rows, key=lambda m: m.seq):
+        if mark.kind in ENTRY_KINDS:
+            side = "long" if mark.kind == "long_entry" else "short"
+            take, rest = fill_split(held_side, held, side, mark.shares or 0)
+            shares = mark.shares or 0
+            held -= take
+            if rest:
+                held_side, held = side, held + rest
+            elif held == 0:
+                held_side = None
+        elif mark.kind in EXIT_KINDS and held_side is not None:
+            shares, take, rest = held, held, 0
+            held_side, held = None, 0
+        else:
+            continue
+        out.append(
+            {
+                "id": mark.id,
+                "session_id": mark.session_id,
+                "action": "buy" if mark.kind in ("long_entry", "short_exit") else "sell",
+                "shares": shares,
+                "price": float(mark.price),
+                "at": mark.at,
+                "closes": take,
+                "opens": rest,
+                "trade_no": mark.trade_no,
+                "source": mark.source,
+            }
+        )
+    return out
+
+
+def fills_page(db: Session, thread_id: int, *, limit: int) -> dict[str, Any]:
+    """The `limit` most recent executions of a day thread, newest booking first, each with the symbol and the replayed
+    day of its session, and the total count. Computed on the server from the marks, so the screen never rebuilds a
+    trade from memory; the realized side of the same marks is the thread's ledger (`entry_out`)."""
+    sessions = {
+        s.id: s for s in db.execute(select(ReplaySession).where(ReplaySession.thread_id == thread_id)).scalars()
+    }
+    marks: dict[int, list[PracticeMark]] = {}
+    if sessions:
+        for mark in db.execute(
+            select(PracticeMark)
+            .where(PracticeMark.session_id.in_(sessions), PracticeMark.kind != "stop", PracticeMark.kind != "note")
+            .order_by(PracticeMark.session_id, PracticeMark.seq)
+        ).scalars():
+            marks.setdefault(mark.session_id, []).append(mark)
+    fills = [
+        {**fill, "symbol": sessions[sid].symbol, "day": sessions[sid].day}
+        for sid, rows in marks.items()
+        for fill in fills_of(rows)
+    ]
+    fills.sort(key=lambda f: f["id"], reverse=True)
+    return {"thread_id": thread_id, "total": len(fills), "fills": fills[:limit]}

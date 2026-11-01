@@ -15,6 +15,7 @@ import type { Paused, ReplayInterval, ReplaySession } from "./schemas.ts";
 import type { TicketAction } from "./ticket.ts";
 import { problemMessage } from "./setup.ts";
 import { filterById, tapeQuery, type SizeFilterId } from "./tape.ts";
+import { POLL_MS } from "./useThreadClock.ts";
 import { etWallToUtcIso, ms } from "./time.ts";
 
 // The Replay workspace's data hook (02o §d `useReplayPlayer`): idle -> playing <-> paused -> at_end, any error to
@@ -52,6 +53,8 @@ export type ReplaySessionApi = {
   jumpToEnd: () => void;
   /** Moves a name that is behind the day clock up to it (02o-b2). */
   catchUp: () => void;
+  /** This session follows the day thread's server-side clock (ADR-0018): it has no clock of its own to play, step or jump. */
+  follows: boolean;
   /** Resolves true when the server accepted the mark. */
   mark: (kind: EntryOrExit, draft: MarkDraft) => Promise<boolean>;
   /** Sends what the order ticket built: a market entry mark, or a limit, stop or stop-limit order. Resolves true when accepted. `refused` hears the field the server named, so the message sits at that field. */
@@ -147,11 +150,14 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         if (controller.signal.aborted) return;
         let shown = viewFromFeed(feed, loaded.spec.interval);
         let atEnd = feed.at_end || loaded.status === "ended";
-        if (loaded.thread?.mode === "swing" && loaded.status === "active") {
+        const followsClock = loaded.day_list_id !== null && loaded.thread?.mode !== "swing" && loaded.status === "active";
+        if ((loaded.thread?.mode === "swing" && loaded.status === "active") || followsClock) {
           // The day clock is shared: a name left behind it is lifted to it by its next advance (and cannot be marked
           // before). An advance to where it already is does exactly that, so a name opened from the strip or the board
-          // shows the clock the strip shows.
-          const delta = await advanceReplay(id, { to: feed.revealed_through }, { interval: loaded.spec.interval }, { signal: controller.signal }).catch(() => null);
+          // shows the clock the strip shows. A day thread's clock runs on the server (ADR-0018): `sync` brings it to now
+          // and reveals this name through it, so a chart opened at any moment shows the market as it is at that moment.
+          const target: AdvanceTarget = followsClock ? { sync: true } : { to: feed.revealed_through };
+          const delta = await advanceReplay(id, target, { interval: loaded.spec.interval }, { signal: controller.signal }).catch(() => null);
           if (controller.signal.aborted) return;
           if (delta) {
             shown = applyAdvance(shown, delta);
@@ -216,7 +222,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
 
   /** Moves the playhead. Failures: a 422 (for example no more signals) is a message; anything else stops playback. */
   const advance = useCallback(
-    async (target: AdvanceTarget): Promise<boolean> => {
+    async (target: AdvanceTarget, quiet = false): Promise<boolean> => {
       if (id === null) return false;
       try {
         const delta = await advanceReplay(id, target, tape());
@@ -237,6 +243,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         return true;
       } catch (error) {
         if (!alive.current) return false;
+        if (quiet) return false; // a follow poll that failed: the next one tries again, nothing is dimmed or said
         if (error instanceof DeskApiError && error.status === 422) {
           dispatch({ type: "settled", atEnd: false });
           say("info", problemMessage(error, PRACTICE_COPY.advanceError));
@@ -265,6 +272,23 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     }, delayUntilNextTick(lastStart.current, Date.now()));
     return () => clearTimeout(timer);
   }, [playStatus, playBusy, revealed, speed, session, exec, advance]);
+
+  // A name on a day thread follows the thread's clock, which runs on the server whether or not this screen is open (ADR-0018). Every
+  // POLL_MS the screen asks to be brought to it; `sync` settles the clock first, so the answer is the market as it is now. There is
+  // no Play here: leaving this screen and coming back finds the clock where the server has it, and the load above syncs once.
+  const follows = session !== null && session.day_list_id !== null && session.thread?.mode !== "swing" && session.status === "active";
+  const syncing = useRef(false);
+  useEffect(() => {
+    if (!follows) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || syncing.current || busy.current) return;
+      syncing.current = true;
+      void exec(() => advance({ sync: true }, true)).finally(() => {
+        syncing.current = false;
+      });
+    }, POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [follows, exec, advance]);
 
   /** Step, jump and next-signal work while paused or playing; not while loading or after the window end. */
   const guard = () => playerRef.current.status === "paused" || playerRef.current.status === "playing";
@@ -509,8 +533,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     () => ({
       session, view, loading: id !== null && !loadError && (session === null || view === null), loadError, player, toast, filterId, interval,
       paused: view?.paused ?? null, dismissPause,
-      reload, dismissToast, holdToast, releaseToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancelOrder: cancel, stopNote, note, undo, end, setFilter, setInterval,
+      reload, dismissToast, holdToast, releaseToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, follows, mark, ticket, cancelOrder: cancel, stopNote, note, undo, end, setFilter, setInterval,
     }),
-    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, holdToast, releaseToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
+    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, holdToast, releaseToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, follows, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
   );
 }

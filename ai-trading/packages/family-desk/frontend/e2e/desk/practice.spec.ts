@@ -4,6 +4,7 @@ import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
+import { stepBar } from "./clock-helpers";
 import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
 import { openNextDay, replayRail, send } from "./swing-helpers";
@@ -29,7 +30,7 @@ function watchReplayAnswers(page: Page) {
   return bodies;
 }
 
-const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's time: the bar of a standalone replay, read-only text on a day thread's chart
 const marksTab = (page: Page) => page.getByRole("tab", { name: "Marks" });
 /** Opens the Marks tab and hands the keyboard back to the replay: a focused tab owns the arrow keys (ui/Tabs), and → steps the replay. */
 const openMarks = async (page: Page) => {
@@ -380,12 +381,12 @@ test.describe("Practice", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice }), "one back link on the workspace, the one at the foot (D-146)").toHaveCount(0);
-    await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabTrade })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabOrder })).toHaveAttribute("aria-selected", "true");
     // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
     await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(DAY);
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
     await expect(playhead(page)).not.toContainText("9:30:00");
     await expectCleanScreen(page);
 
@@ -648,12 +649,12 @@ test.describe("Practice", () => {
     await page.getByRole("button", { name: "Open TSLA" }).first().click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
     await expect(playhead(page)).not.toContainText("9:30:00");
     await page.keyboard.press("b");
     await openMarks(page);
     await expect(page.getByRole("tabpanel")).toContainText("Practice buy");
-    for (let step = 0; step < 6; step += 1) await page.keyboard.press("ArrowRight");
+    await stepBar(page, 6);
     await page.keyboard.press("x");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
 
@@ -897,7 +898,7 @@ test.describe("Practice day list · fix wave 5S", () => {
         : page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
-    await page.keyboard.press("ArrowRight");
+    await stepBar(page);
     const flat = await portfolioOf();
     await expect(flat.locator('[data-symbol="TSLA"]')).toContainText("Flat");
     await page.keyboard.press("b");

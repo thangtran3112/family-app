@@ -25,6 +25,7 @@ const SCREENS: ReadonlyArray<readonly [prefix: string, label: string]> = [
   ["/practice/day", "Practice · Day list"],
   ["/practice/thread", "Practice · Thread"],
   ["/practice/journal", "Practice · Journal"],
+  ["/practice/order", "Practice · Order"],
   ["/practice/week", "Practice · Week"],
   ["/technicals", "Technicals"],
   ["/futures", "Futures"],

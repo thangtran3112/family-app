@@ -68,13 +68,23 @@ from ai_trading.api.schemas.swing import (
     WeekPatch,
     WeeksOut,
 )
-from ai_trading.api.schemas.threads import ThreadLedgerOut, ThreadOut, ThreadSummaryOut
+from ai_trading.api.schemas.threads import (
+    ClockIn,
+    SkipDayOut,
+    ThreadClockOut,
+    ThreadFillsOut,
+    ThreadLedgerOut,
+    ThreadOut,
+    ThreadSummaryOut,
+)
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1
 from ai_trading.contracts.replay_session import PracticeMarkV1, ReplaySessionV1
 from ai_trading.db.engine import session_scope
+from ai_trading.replay import clock as clock_mod
 from ai_trading.replay import days as days_mod
 from ai_trading.replay import fixture, swing_weeks
+from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as svc_mod
 from ai_trading.replay import swing as swing_mod
@@ -233,6 +243,7 @@ def get_session_state(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     row = _call(svc_mod.get_row, db, user.id, session_id)
+    _call(svc_mod.settle_day, db, services, row.day_list_id)  # a running thread clock has moved (ADR-0018)
     return _with_thread(
         db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
     )
@@ -279,6 +290,7 @@ def advance_session(
         services,
         to=body.to,
         step=body.step,
+        sync=body.sync,
         interval=body.interval,
         min_size=body.min_size,
         min_notional=body.min_notional,
@@ -774,6 +786,81 @@ def get_thread_ledger(
 ) -> dict[str, Any]:
     """The thread's realized practice trades (`PracticeLedgerEntryV1`), newest first: the rows its balance is of."""
     return threads_mod.ledger_page(db, _call(threads_mod.get_thread, db, user.id, thread_id), limit=limit)
+
+
+@router.get("/threads/{thread_id}/fills", response_model=ThreadFillsOut)
+def get_thread_fills(
+    thread_id: int,
+    limit: int = Query(default=100, ge=1, le=threads_mod.LEDGER_LIMIT),
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """The day thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how
+    many of the shares closed the name's position. The server keeps the book; the screen never rebuilds a trade from
+    memory. A swing thread keeps its positions as holds (`/holds`): 404 here."""
+    thread = _call(threads_mod.get_thread, db, user.id, thread_id)
+    if thread.mode != "day":
+        raise HTTPException(status_code=404, detail="day threads only")
+    return ledger_mod.fills_page(db, thread.id, limit=limit)
+
+
+@router.get("/threads/{thread_id}/clock", response_model=ThreadClockOut)
+def get_thread_clock(
+    thread_id: int,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the
+    simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the
+    answer whether or not anyone was looking in between. Poll it; it is idempotent."""
+    return _call(clock_mod.read, db, user.id, thread_id, services)
+
+
+@router.post("/threads/{thread_id}/clock", response_model=ThreadClockOut)
+def control_thread_clock(
+    thread_id: int,
+    body: ClockIn,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump
+    it to a time. Forward only; a step or jump stops at a crossed stop or the close like Play does. 409 before the day
+    has started or when Play is asked at the close. Time then runs on the server until she pauses it."""
+    return _call(
+        clock_mod.control,
+        db,
+        user.id,
+        thread_id,
+        services,
+        running=body.running,
+        speed=body.speed,
+        to=body.to,
+        step=body.step,
+    )
+
+
+@router.post("/threads/{thread_id}/skip-day", response_model=SkipDayOut)
+def skip_thread_day(
+    thread_id: int,
+    request: Request,
+    background: BackgroundTasks,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Skip to the next day: the clock runs to the window end, the day ends (every open position flattens at that close)
+    and the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then."""
+    ended, opened = _call(clock_mod.skip_day, db, user.id, thread_id, services)
+    if opened.restart_prep:
+        db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
+        background.add_task(_prep_in_background, request.app, services, opened.plan.id)
+    return {
+        "ended_day_list_id": ended.id,
+        "next_day_list_id": None if opened.day_list is None else opened.day_list.id,
+        "clock": _call(clock_mod.read, db, user.id, thread_id, services),
+    }
 
 
 # -- swing threads (02p): holds and weeks -----------------------------------------------------------------------

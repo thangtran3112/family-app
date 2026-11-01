@@ -7,8 +7,10 @@ import type { PracticePlan } from "@/lib/replay/daily";
 import { planCard } from "@/lib/replay/dayView";
 import type { Thread } from "@/lib/replay/threads";
 import { hasNoDays } from "@/lib/replay/threadView";
+import type { ThreadClockApi } from "@/lib/replay/useThreadClock";
 import { NextStep } from "./NextStep";
 import { DaysSection, PlaceStrip, StatsPanel } from "./OverviewParts";
+import { ThreadClockPanel } from "./ThreadClockPanel";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 import o from "./overview.module.css";
@@ -17,7 +19,7 @@ import o from "./overview.module.css";
  * The overview of a day thread (5R): the balance and the day it is on, Resume with the daily plan right beside it (so what is
  * armed is above the fold), the history of ended days, the balance curve, and the stats at the side. Every dollar is SIMULATED.
  */
-export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: Thread; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void }) {
+export function DayOverview({ summary, plan, onChanged, onNewPlan, clock }: { summary: Thread; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void; clock: ThreadClockApi }) {
   const { thread } = summary;
   const closed = thread.status === "closed";
   // The plan of this thread (a plan bound to another thread is not shown here), with its cursor: "Day 2 of 5 · next: Mon".
@@ -27,7 +29,8 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan }: { summary: 
   return (
     <div className={o.grid}>
       <div className={o.main}>
-        <PlaceStrip summary={summary} planFinished={planHere?.finished === true} />
+        <PlaceStrip summary={summary} planFinished={planHere?.finished === true} account={closed ? null : (clock.clock?.account ?? null)} />
+        {!closed && <ThreadClockPanel api={clock} onSkipped={onChanged} />}
         <div className={o.topRow}>
           <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (

@@ -30,15 +30,16 @@ const HOLD_COLUMNS: DenseColumn<HoldRow>[] = [
  * Exit on a held one), the same panel the day list and the replay carry. A swing thread: its equity and free cash, and the holds
  * carried between days. With no day open a day thread has nothing to show and says where to start one. All SIMULATED.
  */
-export function PortfolioTab({ summary }: { summary: Thread }) {
+export function PortfolioTab({ summary, clockRevision = 0 }: { summary: Thread; clockRevision?: number }) {
   const { thread, today, swing: state } = summary;
   if (thread.mode === "swing" && state) return <SwingPortfolio summary={summary} />;
   if (today === null) return <EmptyBlock title={PRACTICE_COPY.portfolioNoDay} />;
-  return <DayPortfolio dayListId={today.day_list_id} />;
+  return <DayPortfolio dayListId={today.day_list_id} clockRevision={clockRevision} />;
 }
 
-function DayPortfolio({ dayListId }: { dayListId: number }) {
-  const query = useDayPortfolio(dayListId);
+/** The names of the open day, priced at the thread clock: it is read again whenever the clock moves (ADR-0018). */
+function DayPortfolio({ dayListId, clockRevision }: { dayListId: number; clockRevision: number }) {
+  const query = useDayPortfolio(dayListId, clockRevision);
   return (
     <section className={styles.panel} aria-label={PRACTICE_COPY.dayPortfolio}>
       <h2 className={styles.panelTitle}>{PRACTICE_COPY.dayPortfolio}</h2>

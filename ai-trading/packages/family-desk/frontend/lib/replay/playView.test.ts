@@ -40,15 +40,15 @@ test("a swing session is one whose thread is a swing thread", () => {
   assert.equal(isSwingSession({ thread: null }), false);
 });
 
-test("the Daily chart is the rebased bars plus the forming candle, with her hold's marker and lines", () => {
+test("the Daily chart is the rebased bars plus the forming candle, with her hold's lines and no entry arrow or label", () => {
   const model = dailyChartModel(dailyBlock, false);
   assert.deepEqual(model.bars.map((bar) => bar.t), ["2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14"]);
   assert.equal(model.bars.at(-1)!.c, 191.4);
   assert.equal(model.offsets, null);
-  assert.deepEqual(model.markers, [{ time: "2026-07-10T12:00:00Z", kind: "practice_long", label: "Practice long 184.20" }]);
+  assert.equal("markers" in model, false, "no entry marker: the chart reads as a broker's, not a guided drill");
   assert.deepEqual(model.levels.map((level) => [level.label, level.price, level.style]), [
-    ["Practice entry", 184.2, "dotted"],
-    ["Practice stop", 178.5, "dashed"],
+    ["Entry", 184.2, "dotted"],
+    ["Stop", 178.5, "dashed"],
   ]);
   assert.equal(model.note, "Daily bars through the prior close · today's candle is still forming");
 });
@@ -57,28 +57,23 @@ test("without a forming candle the chart ends at the prior close, and a hold wit
   const model = dailyChartModel({ ...dailyBlock, forming: null, holds: [{ ...dailyBlock.holds[0]!, stop_price: null, side: "short" }] }, false);
   assert.equal(model.bars.length, 3);
   assert.equal(model.note, "Daily bars through the prior close");
-  assert.deepEqual(model.levels.map((level) => level.label), ["Practice entry"]);
-  assert.equal(model.markers[0]!.kind, "practice_short");
-  assert.deepEqual(dailyChartModel({ bars: dailyBlock.bars, forming: null, holds: [] }, false).markers, []);
+  assert.deepEqual(model.levels.map((level) => level.label), ["Entry"]);
+  assert.deepEqual(dailyChartModel({ bars: dailyBlock.bars, forming: null, holds: [] }, false).levels, []);
 });
 
-test("with dates hidden no real date reaches the chart and the marker follows the bar by index", () => {
+test("with dates hidden no real date reaches the chart", () => {
   const model = dailyChartModel(dailyBlock, true);
   const real = new Set([...dailyBlock.bars.map((bar) => bar.t), dailyBlock.forming!.t]);
   for (const bar of model.bars) assert.equal(real.has(bar.t), false, bar.t);
-  for (const marker of model.markers) assert.equal(real.has(marker.time.slice(0, 10)), false, marker.time);
-  // the hold entered on the second real bar: its marker sits on the second stand-in bar
-  assert.equal(model.markers[0]!.time.slice(0, 10), model.bars[1]!.t);
   assert.deepEqual(model.offsets, ["D-3", "D-2", "D-1", "Today"]);
   assert.equal(model.bars.length, dailyBlock.bars.length + 1);
 });
 
-test("a hold entered today puts its marker on the forming candle, and an entry older than the chart has no marker", () => {
-  const today = dailyChartModel({ ...dailyBlock, holds: [{ ...dailyBlock.holds[0]!, entry_t: "2026-07-14" }] }, true);
-  assert.equal(today.markers[0]!.time.slice(0, 10), today.bars.at(-1)!.t);
-  const old = dailyChartModel({ ...dailyBlock, holds: [{ ...dailyBlock.holds[0]!, entry_t: "2025-01-02" }] }, true);
-  assert.deepEqual(old.markers, []);
-  assert.equal(old.levels.length, 2);
+test("a hold's lines are prices: they draw whatever day it was entered, with no marker to place", () => {
+  for (const entry_t of ["2026-07-14", "2025-01-02"]) {
+    const model = dailyChartModel({ ...dailyBlock, holds: [{ ...dailyBlock.holds[0]!, entry_t }] }, true);
+    assert.equal(model.levels.length, 2, entry_t);
+  }
 });
 
 test("the hidden offsets before any price end at D-1", () => {
@@ -166,7 +161,6 @@ test("no workspace string says a banned word", () => {
     ...swingPlanItems({ holdsOpen: 2, maxTrades: 6, maxLossUsd: 500, week: { entries: 3, realizedUsd: -120 } }).flatMap((item) => [item.label, item.detail]),
     ...dailyChartModel(dailyBlock, true).offsets!,
     ...dailyChartModel(dailyBlock, true).levels.map((level) => level.label),
-    ...dailyChartModel(dailyBlock, true).markers.map((marker) => marker.label),
   ];
   for (const text of strings) assert.equal(containsPracticeBannedTerm(text), false, text);
 });

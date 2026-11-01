@@ -89,11 +89,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0018() -> None:
+def test_migration_chain_has_a_single_head_at_0019() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0018"]
+    assert script.get_heads() == ["0019"]
+    assert script.get_revision("0019").down_revision == "0018"
     assert script.get_revision("0018").down_revision == "0017"
     assert script.get_revision("0017").down_revision == "0016"
     assert script.get_revision("0016").down_revision == "0015"
@@ -199,7 +200,9 @@ def test_0018_adds_the_nullable_rescan_job_column_and_downgrade_drops_it(db_engi
     assert lists["rescan_job"]["nullable"] and lists["rescan_job"]["default"] is None
     try:
         command.downgrade(_alembic_config(url), "0017")
-        assert set(lists) - set(_columns(db_engine, "replay_day_lists")) == {"rescan_job"}
+        # 0019's thread clock columns come off on the way down, too
+        thread_clock = {"clock_running", "clock_speed", "clock_anchor_at", "clock_pause"}
+        assert set(lists) - set(_columns(db_engine, "replay_day_lists")) == {"rescan_job"} | thread_clock
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "replay_day_lists")) == set(lists)
     finally:
@@ -224,6 +227,27 @@ def test_0017_adds_the_position_columns_and_keeps_the_one_open_hold_per_name_ind
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "practice_marks")) == set(marks)
         assert set(_columns(db_engine, "practice_holds")) == set(holds)
+    finally:
+        command.upgrade(_alembic_config(url), "head")
+
+
+def test_0019_adds_the_thread_clock_columns_paused_for_every_existing_day(db_engine: Engine) -> None:
+    """Thread clock (0019, ADR-0018): `replay_day_lists.clock_running` (false), `clock_speed` (1; 1, 2, 5 or 10 by a
+    check), `clock_anchor_at` and `clock_pause` (both nullable). Every existing day reads as a paused clock at 1x."""
+    url = db_engine.url.render_as_string(hide_password=False)
+    days = _columns(db_engine, "replay_day_lists")
+    assert not days["clock_running"]["nullable"] and "false" in str(days["clock_running"]["default"]).lower()
+    assert not days["clock_speed"]["nullable"] and str(days["clock_speed"]["default"]) == "1"
+    assert days["clock_anchor_at"]["nullable"] and days["clock_anchor_at"]["type"].timezone is True
+    assert days["clock_pause"]["nullable"] and days["clock_pause"]["default"] is None
+    checks = {c["name"] for c in inspect(db_engine).get_check_constraints("replay_day_lists")}
+    assert "ck_replay_day_lists_clock_speed" in checks
+    try:
+        command.downgrade(_alembic_config(url), "0018")
+        gone = set(days) - set(_columns(db_engine, "replay_day_lists"))
+        assert gone == {"clock_running", "clock_speed", "clock_anchor_at", "clock_pause"}
+        command.upgrade(_alembic_config(url), "head")
+        assert set(_columns(db_engine, "replay_day_lists")) == set(days)
     finally:
         command.upgrade(_alembic_config(url), "head")
 
