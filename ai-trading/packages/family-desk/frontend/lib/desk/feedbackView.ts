@@ -1,3 +1,4 @@
+import type { Tone } from "../../components/ui/tone.ts";
 import { DeskApiError } from "../api/client.ts";
 import type {
   FeedbackActor,
@@ -22,9 +23,8 @@ export const STATUS_LABEL: Record<FeedbackStatus, string> = {
   wont_fix: "Won't fix",
   duplicate: "Duplicate",
 };
-/** Open, Won't fix and Duplicate are outlined chips; In progress is amber and Fixed is green (a word plus a colour). */
-export type StatusTone = "neutral" | "amber" | "up";
-export const statusTone = (status: FeedbackStatus): StatusTone => (status === "in_progress" ? "amber" : status === "fixed" ? "up" : "neutral");
+/** Open, Won't fix and Duplicate are quiet badges; In progress is `warn` and Fixed is `up` (a word plus a colour, never a colour name). */
+export const statusTone = (status: FeedbackStatus): Tone => (status === "in_progress" ? "warn" : status === "fixed" ? "up" : "neutral");
 
 export const KIND_LABEL: Record<FeedbackKind, string> = { bug: "Bug", request: "Request" };
 export const KIND_FILTER_LABEL: Record<FeedbackKind, string> = { bug: "Bug", request: "Feature request" };

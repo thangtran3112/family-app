@@ -96,7 +96,7 @@ test.describe("the dashboard", () => {
     await fileReports(page, FOUR);
     await openDesk(page, "/feedback");
     const main = page.locator("#main-content");
-    await expect(table(page).getByRole("columnheader")).toHaveText(["ID", "Type", "Title", "Where", "Area", "Reported by", "Updated", "Status"]);
+    await expect(table(page).getByRole("columnheader")).toHaveText(["ID", "Type", "Title", "Where", "Area", "Reported by", "Updated", "Status", "Actions"]);
     await expect(titles(page)).toHaveText([
       "Let me sort watchlists by name",
       "Alert list loses the Pattern filter",
