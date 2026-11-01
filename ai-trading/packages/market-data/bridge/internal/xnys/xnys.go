@@ -154,8 +154,12 @@ func (c *Calendar) Covers(t time.Time) bool {
 // IsSession reports whether the instant's ET date is a trading session. A date outside the
 // covered range is not a session: the calendar cannot say it is one, and the 2016 history floor
 // means nothing older is ever asked for.
-func (c *Calendar) IsSession(t time.Time) bool {
-	_, ok := c.sessions[c.SessionDate(t)]
+func (c *Calendar) IsSession(t time.Time) bool { return c.IsSessionDate(c.SessionDate(t)) }
+
+// IsSessionDate is IsSession for an ET date already in wire form (YYYY-MM-DD): one map lookup, no instant
+// to build and no string to format. A caller walking a date range uses it instead of IsSession.
+func (c *Calendar) IsSessionDate(day string) bool {
+	_, ok := c.sessions[day]
 	return ok
 }
 

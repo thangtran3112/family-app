@@ -89,11 +89,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0014() -> None:
+def test_migration_chain_has_a_single_head_at_0015() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0014"]
+    assert script.get_heads() == ["0015"]
+    assert script.get_revision("0015").down_revision == "0014"
     assert script.get_revision("0014").down_revision == "0013"
     assert script.get_revision("0013").down_revision == "0012"
     assert script.get_revision("0012").down_revision == "0011"
