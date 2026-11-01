@@ -6,23 +6,15 @@
 .pageTitle { margin: 0 auto 0 0; font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-bold); }
 .caption { color: var(--color-muted); font-size: var(--text-label); }
 .muted { margin: 0; color: var(--color-muted); font-size: var(--text-label); }
-.banner { margin: 0; border: 1px solid var(--color-amber); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-label); }
 .dim { opacity: 0.55; }
 .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.button { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); cursor: pointer; }
-.button:hover:not(:disabled) { background: var(--color-raised); }
-.button:disabled { color: var(--color-muted); cursor: default; }
-.button:focus-visible, .link:focus-visible, .tab:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.link:focus-visible, .tab:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-text); font-weight: var(--weight-semibold); }
 .link:hover { text-decoration: underline; }
 .inlineLink { color: var(--color-text); font-weight: var(--weight-semibold); text-decoration: underline; text-underline-offset: 2px; }
-.inlineLink:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.inlineLink:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
-.panel { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: var(--space-3) var(--space-4); }
-.panelTitle { margin: 0; font-size: var(--text-body); line-height: var(--line-body); font-weight: var(--weight-semibold); }
-.panelHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .row { display: flex; min-height: 28px; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--color-hairline); font-size: var(--text-label); }
 
