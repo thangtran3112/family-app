@@ -24,12 +24,15 @@ export function ChipToggleGroup<T extends string>({
   pressed,
   onToggle,
   label,
+  disabled = false,
   className,
 }: {
   options: ReadonlyArray<ChipOption<T>>;
   pressed: ReadonlyArray<T>;
   onToggle: (id: T) => void;
   label: string;
+  /** The whole group is off (nothing to filter yet): every chip is natively disabled. */
+  disabled?: boolean;
   /** Layout only (grid-area, margin, width); never colour, size or type. */
   className?: string;
 }): ReactNode {
@@ -43,6 +46,7 @@ export function ChipToggleGroup<T extends string>({
             type="button"
             className={styles.item}
             aria-pressed={option.mode ? undefined : on}
+            disabled={disabled || undefined}
             data-open={option.mode && on ? "true" : undefined}
             title={option.title}
             onClick={() => onToggle(option.id)}

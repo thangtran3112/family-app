@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/Badge";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import { loadFeedbackReport, screenshotUrl } from "@/lib/desk/feedback";
@@ -47,8 +48,8 @@ function ReportBody({ report, readAt }: { report: FeedbackDetail; readAt: Date }
     <div className={styles.rail}>
       <div className={styles.railHead}>
         <span className={styles.railId}>{report.ref}</span>
-        <span className={styles.kind} data-kind={report.kind}>{KIND_LABEL[report.kind]}</span>
-        <span className={styles.status} data-tone={statusTone(report.status)}>{STATUS_LABEL[report.status]}</span>
+        <Badge tone="neutral">{KIND_LABEL[report.kind]}</Badge>
+        <Badge tone={statusTone(report.status)}>{STATUS_LABEL[report.status]}</Badge>
       </div>
       <h3 className={styles.railTitle}>{report.title}</h3>
       {line && <p className={styles.agentLine} data-tone={line.tone}>{line.text}</p>}

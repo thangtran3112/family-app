@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { FeedbackKind } from "@/lib/feedback/schemas";
+import { ChipToggleGroup } from "@/components/ui/ChipToggleGroup";
+import { Segmented } from "@/components/ui/Segmented";
 import {
   areaLabel,
   areaOptions,
@@ -48,35 +50,20 @@ export function FeedbackFilters({
   return (
     <div className={styles.filters}>
       <div className={styles.filterRow}>
-        <div role="radiogroup" aria-label="Type" className={styles.segmented} data-tone="amber">
-          {KINDS.map((kind) => (
-            <button
-              key={kind.id || "all"}
-              type="button"
-              role="radio"
-              aria-checked={value.kind === kind.id}
-              disabled={disabled}
-              className={styles.seg}
-              onClick={() => onChange({ ...value, kind: kind.id })}
-            >
-              {kind.label}
-            </button>
-          ))}
-        </div>
-        <div role="group" aria-label="Status" className={styles.chips}>
-          {STATUSES.map((status) => (
-            <button
-              key={status}
-              type="button"
-              aria-pressed={value.statuses.includes(status)}
-              disabled={disabled}
-              className={styles.chip}
-              onClick={() => onChange({ ...value, statuses: toggleStatus(value.statuses, status) })}
-            >
-              {STATUS_LABEL[status]}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Type"
+          disabled={disabled}
+          value={value.kind}
+          options={KINDS.map((kind) => ({ value: kind.id, label: kind.label }))}
+          onChange={(kind) => onChange({ ...value, kind })}
+        />
+        <ChipToggleGroup
+          label="Status"
+          disabled={disabled}
+          options={STATUSES.map((status) => ({ id: status, label: STATUS_LABEL[status] }))}
+          pressed={value.statuses}
+          onToggle={(status) => onChange({ ...value, statuses: toggleStatus(value.statuses, status) })}
+        />
       </div>
       <div className={styles.filterRow}>
         <select
@@ -110,21 +97,13 @@ export function FeedbackFilters({
         </div>
         <span className={styles.spacer} />
         <span className={styles.sortLabel} id="feedback-sort-label">Sort</span>
-        <div role="radiogroup" aria-labelledby="feedback-sort-label" className={styles.segmented}>
-          {SORTS.map((sort) => (
-            <button
-              key={sort.id}
-              type="button"
-              role="radio"
-              aria-checked={value.sort === sort.id}
-              disabled={disabled}
-              className={styles.seg}
-              onClick={() => onChange({ ...value, sort: sort.id })}
-            >
-              {sort.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          labelledBy="feedback-sort-label"
+          disabled={disabled}
+          value={value.sort}
+          options={SORTS.map((sort) => ({ value: sort.id, label: sort.label }))}
+          onChange={(sort) => onChange({ ...value, sort })}
+        />
       </div>
       {disabled && <p className={styles.reason}>Reason: filters turn on once there is a report to filter.</p>}
     </div>
