@@ -19,9 +19,11 @@ paths are unchanged.
 **A day holds several open positions** (N names, one average-cost position each, no cap on how many names or fills).
 A Buy or Sell mark is a fill against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the
 walk is `journal.assemble`). The one size rule is the cash check (`holds.check_buying_power`), applied to the shares a
-fill OPENS. The positions share the day clock: `positions` prices each at the clock, never at its own name's stale
-playhead, `advance` pauses at the first stop crossed on ANY open name, and ending the day flattens every one of them
-at the clock.
+fill OPENS against the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). A name that
+catches up to the day clock does not fill, or score, an order the tape reached while she was elsewhere
+(`settle_away_orders`). The positions share the day clock: `positions` prices each at the clock, never at its own
+name's stale playhead (the name's own card is marked there too, `_marked`), `advance` pauses at the first stop crossed
+on ANY open name, and ending the day flattens every one of them at the clock.
 """
 
 import json
@@ -81,6 +83,7 @@ FEED_PRINTS = 200
 LOOKBACK_BARS_MAX = 6000  # the feed's warm-up bars (1-minute interval would otherwise carry about 9,600)
 RATING_RANGE = (1, 5)
 STAMP_SOURCE = "alpaca"
+BEHIND_CLOCK = "This name is behind the day clock · catch up before you {verb}"  # "Catch up" is the button's word
 STALE_PRINT_S = 30  # a mark priced off a print older than this carries a warning
 QUIET_PRINT_S = 60  # no eligible print for this long marks the tape quiet (a halt looks the same from here)
 
@@ -130,6 +133,7 @@ class Ctx:
     db: Session | None = field(default=None, repr=False)  # the request's session: a swing session reads its holds
     day_clock: pd.Timestamp | None = None  # the day list's shared clock; None for a standalone session
     away: list[Span] = field(default_factory=list)  # the spans she was on another name (02o-b2)
+    filling: int | None = None  # the working order being filled right now: its cash reserve is released as it fills
     _cache: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -459,6 +463,17 @@ def _age_s(found: tuple[float, pd.Timestamp] | None, through: pd.Timestamp) -> i
     return None if found is None else max(0, int((through - found[1]).total_seconds()))
 
 
+def _marked(ctx: Ctx, found: tuple[float, pd.Timestamp] | None) -> float | None:
+    """The price an open DAY trade is marked at: the name's last price at its playhead, except a name behind the day
+    clock, which is marked where the clock is. That is the price End day books for it and the Portfolio shows
+    (`positions`), so the number on the name's card is the number it exits at. The clock is the thread's revealed
+    boundary, so this reads nothing the day has not shown; a swing hold is marked by `swing_play`."""
+    if not ctx.swing and ctx.behind_clock:
+        assert ctx.day_clock is not None
+        found = last_price(ctx, ctx.day_clock) or found
+    return None if found is None else found[0]
+
+
 def _open_trade(ctx: Ctx, price: float | None) -> dict[str, Any] | None:
     if ctx.swing:  # the name's practice hold, not the marks of this one session
         return swing_play.open_trade(ctx, price)
@@ -492,7 +507,7 @@ def _journal(ctx: Ctx, price: float | None, *, final: bool) -> dict[str, Any]:
 def session_out(ctx: Ctx) -> dict[str, Any]:
     row = ctx.row
     ended = row.status == "ended"
-    price = None if ended else (last_price(ctx, ctx.through) or (None, None))[0]
+    price = None if ended else _marked(ctx, last_price(ctx, ctx.through))
     released = signals_mod.released(ctx.fires, ctx.through)
     counts: dict[tuple[str, int], int] = {}
     for fire in released:
@@ -816,7 +831,7 @@ def _frame(
         "quiet_s": (
             age if ctx.feed != "off" and (age := _age_s(price, through)) is not None and age >= QUIET_PRINT_S else None
         ),
-        "open_trade": _open_trade(ctx, None if price is None else price[0]),
+        "open_trade": _open_trade(ctx, _marked(ctx, price)),
         "orders": list(ctx.row.orders or []),
         "stamp": stamp(through),
     }
@@ -926,6 +941,7 @@ def advance(
             if previous < clock:
                 row.away = add_span(list(row.away or []), previous, clock)
                 ctx.away = spans_of(row.away)
+                settle_away_orders(db, svc, row, previous, clock, ctx)
             target = min(max(target, clock), ctx.window_end)
             scan_from = max(previous, clock)
         if ctx.swing:  # play stops at the first crossed stop (02p b5): never earlier, never later
@@ -1019,8 +1035,9 @@ def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: 
     ctx = context(db, svc, row)
     if ctx.behind_clock:
         # Revealed but not markable: the shared day clock is ahead of this name's playhead, so a mark here would be
-        # stamped at a time the day has already passed. `advance` catches the name up first.
-        raise ReplayProblem("This name is behind the day clock · advance to catch up before you mark", path="kind")
+        # stamped at a time the day has already passed. A catch-up (the screen's "Catch up") moves the name to the
+        # clock first. A note is refused too: it would be stamped before the clock the day is already past.
+        raise ReplayProblem(BEHIND_CLOCK.format(verb="mark"), path="kind")
     return _place(db, ctx, body, svc)
 
 
@@ -1068,7 +1085,7 @@ def _place(
         if stop_price is not None and stays is not None:
             _check_stop_side(stays == "long", stop_price, price)
         if rest:
-            _check_day_buying_power(db, row, rest, price, closing=open_ if take else None, take=take)
+            _check_day_buying_power(db, row, rest, price, closing=open_ if take else None, take=take, skip=ctx.filling)
     elif kind in EXIT_KINDS:
         wanted = "long" if kind == "long_exit" else "short"
         if open_ is None or open_.side != wanted:
@@ -1143,6 +1160,55 @@ def _close_order(
     order.update(status=status, closed_at=at.isoformat(), reason=reason, fill_price=price, mark_id=mark_id)
 
 
+AWAY_FILL = "The price reached it while you were on another name · it did not fill"
+
+
+def _tape_fill(
+    ctx: Ctx, order: dict[str, Any], since: pd.Timestamp, target: pd.Timestamp
+) -> tuple[orders_mod.Fill | None, pd.Timestamp | None]:
+    """`orders_mod.first_fill` for a stored order over the one-minute bars that close in `(since, target]`."""
+    return orders_mod.first_fill(
+        side=_side_of(order),
+        type_=order["type"],
+        limit=order["limit_price"],
+        trigger=order["stop_price"],
+        triggered_at=None if order["triggered_at"] is None else _ts(order["triggered_at"]),
+        bars_1m=ctx.inputs.bars_1m,
+        since=since,
+        target=target,
+    )
+
+
+def settle_away_orders(
+    db: Session,
+    svc: Services,
+    row: ReplaySession,
+    previous: pd.Timestamp,
+    clock: pd.Timestamp,
+    ctx: Ctx | None = None,
+) -> None:
+    """A name catching up to the day clock (an `advance`, or the lift of a resumed name) skips `(previous, clock]`: that
+    span was revealed while she was on another name and is history to her (`row.away`; the journal scores no signal
+    in it). A working order that the tape would have filled inside it is therefore not filled and not scored: it is
+    cancelled with that reason, so the order list agrees with the chart she lands on and no later touch fills it as a
+    different trade. A stop-limit whose stop leg triggered there keeps working, its trigger recorded. Everything after
+    `clock` is read normally by the fill pass, so no fill is ever stamped before the clock."""
+    if not any(o["status"] == "working" for o in row.orders or []):
+        return
+    ctx = ctx if ctx is not None else context(db, svc, row)
+    orders = [dict(o) for o in row.orders]
+    for order in orders:
+        if order["status"] != "working":
+            continue
+        fill, fired = _tape_fill(ctx, order, max(previous, _ts(order["placed_at"])), clock)
+        if fill is not None:
+            _close_order(order, "cancelled", clock, reason=AWAY_FILL)
+        elif fired is not None:
+            order["triggered_at"] = fired.isoformat()
+    row.orders, row.updated_at = orders, svc.now()
+    db.flush()
+
+
 def _fill_working_orders(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp) -> list[Mark]:
     """Fill the session's working orders from the one-minute bars that closed in `(previous, target]` (an order is
     read only from the moment it was placed). Each fill is an ordinary Buy or Sell mark stamped at its bar's close, in
@@ -1156,30 +1222,26 @@ def _fill_working_orders(db: Session, ctx: Ctx, previous: pd.Timestamp, target: 
     for order in orders:
         if order["status"] != "working":
             continue
-        fill, fired = orders_mod.first_fill(
-            side=_side_of(order),
-            type_=order["type"],
-            limit=order["limit_price"],
-            trigger=order["stop_price"],
-            triggered_at=None if order["triggered_at"] is None else _ts(order["triggered_at"]),
-            bars_1m=ctx.inputs.bars_1m,
-            since=max(previous, _ts(order["placed_at"])),
-            target=target,
-        )
+        fill, fired = _tape_fill(ctx, order, max(previous, _ts(order["placed_at"])), target)
         if fired is not None:
             order["triggered_at"] = fired.isoformat()
         if fill is not None:
             hits.append((fill, order))
     placed: list[Mark] = []
     for fill, order in sorted(hits, key=lambda hit: (hit[0].at, hit[1]["id"])):
+        ctx.filling = order["id"]  # its reserve is released as it fills; the other working orders still hold cash back
         try:
             with db.begin_nested():
                 out = _place(db, ctx, {"kind": _entry_kind_of(order), "shares": order["shares"]}, ctx.svc, fill=fill)
         except ReplayProblem as exc:
             _close_order(order, "cancelled", fill.at, reason=exc.message)
+            row.orders = [dict(o) for o in orders]  # a settled order no longer reserves cash for the next fill
             continue
+        finally:
+            ctx.filling = None
         mark = next(m for m in ctx.marks if m.id == out["mark"]["id"])
         _close_order(order, "filled", fill.at, price=fill.price, mark_id=mark.id)
+        row.orders = [dict(o) for o in orders]
         placed.append(mark)
     row.orders = orders
     row.updated_at = ctx.svc.now()
@@ -1197,7 +1259,7 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
         raise ReplayProblem("This session is over · start a new attempt", path="kind")
     ctx = context(db, svc, row)
     if ctx.behind_clock:
-        raise ReplayProblem("This name is behind the day clock · advance to catch up before you order", path="kind")
+        raise ReplayProblem(BEHIND_CLOCK.format(verb="order"), path="kind")
     side = "long" if body["side"] == "buy" else "short"
     shares = body.get("shares") or row.spec["shares"]
     found = last_price(ctx, ctx.through)
@@ -1265,7 +1327,7 @@ def _check_can_work(db: Session, ctx: Ctx, side: str, shares: int, reference: fl
                 holds_mod.check_buying_power(
                     shares=rest,
                     price=reference,
-                    free_cash_usd=_swing_free_cash(db, thread, rows, row.day, mine, take, reference),
+                    free_cash_usd=_swing_free_cash(db, row, thread, rows, mine, take, reference),
                 )
             except holds_mod.HoldProblem as exc:
                 raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
@@ -1305,22 +1367,57 @@ def _expire_orders(row: ReplaySession, at: pd.Timestamp) -> None:
         row.orders = orders
 
 
-def _day_free_cash(db: Session, row: ReplaySession) -> float:
+def _order_price(order: dict[str, Any]) -> float:
+    """What a working order is priced at for the cash rule: its limit, else its trigger."""
+    return order["limit_price"] if order["limit_price"] is not None else order["stop_price"]
+
+
+def _reserved_cash(
+    sessions: list[ReplaySession],
+    held_of: Callable[[ReplaySession], tuple[str | None, int]],
+    skip: tuple[int, int] | None = None,
+) -> float:
+    """The cash the WORKING orders of `sessions` hold back, like a broker's buying power: each reserves the entry
+    notional of the shares it would open or add to against its name's position as it stands now (`held_of`: side and
+    shares; the shares it would close need no cash), at its own price. `skip` is `(session id, order id)` of the order
+    being filled: it is turning into the position, not a reserve. A second affordable order that the first one leaves
+    no cash for is refused when it is placed, not cancelled when it fills."""
+    total = 0.0
+    for session in sessions:
+        side, shares = held_of(session)
+        for order in session.orders or []:
+            if order["status"] != "working" or (session.id, order["id"]) == skip:
+                continue
+            _, rest = journal_mod.fill_split(side, shares, _side_of(order), order["shares"])
+            total += rest * _order_price(order)
+    return total
+
+
+def _day_free_cash(db: Session, row: ReplaySession, skip: int | None = None) -> float:
     """A day session's buying power: its account's balance (the starting balance plus every booked trade; a day trade is
     booked when it exits) less the entry notional of the open positions, this name's included (what she already holds
-    in it is cash spent). Like the swing rule, a short's notional counts as a long's.
+    in it is cash spent), less the cash its working orders hold back (`_reserved_cash`; `skip` is the order of this
+    session that is filling now). Like the swing rule, a short's notional counts as a long's.
 
     A thread session's account is the thread's. A standalone session (no thread) has an account of its own, the default
     starting balance of a thread plus the session's own closed trades, so the same cash rule is the only size rule on
     every path; nothing is booked from it and each attempt starts from the same balance."""
+    skipped = None if skip is None else (row.id, skip)
     thread = None if row.thread_id is None or row.day_list_id is None else db.get(PracticeThread, row.thread_id)
     if thread is None:
         closed, open_ = journal_mod.assemble(_marks_of(_load_marks(db, row.id)))
         held = 0.0 if open_ is None else open_.entry_price * open_.shares
         realized = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed])
-        return round(DEFAULT_STARTING_BALANCE + realized - held, 2)
-    held = sum(t.entry_price * t.shares for _, t in open_positions(db, row.day_list_id))
-    return round(swing_play.balance(db, thread) - held, 2)
+        reserved = _reserved_cash([row], lambda _: (None, 0) if open_ is None else (open_.side, open_.shares), skipped)
+        return round(DEFAULT_STARTING_BALANCE + realized - held - reserved, 2)
+    opens = {sid: open_ for sid, (_, open_) in day_books(db, row.day_list_id).items() if open_ is not None}
+    held = sum(t.entry_price * t.shares for t in opens.values())
+    reserved = _reserved_cash(
+        _sessions_of_day(db, row.day_list_id),
+        lambda s: (None, 0) if s.id not in opens else (opens[s.id].side, opens[s.id].shares),
+        skipped,
+    )
+    return round(swing_play.balance(db, thread) - held - reserved, 2)
 
 
 def _check_day_buying_power(
@@ -1331,11 +1428,12 @@ def _check_day_buying_power(
     *,
     closing: journal_mod.Trade | None = None,
     take: int = 0,
+    skip: int | None = None,
 ) -> None:
     """The cash rule for the `shares` a fill opens or adds. A flip (`closing`, `take` shares of it closed first) closes
     the whole position before it opens the other way, so that notional comes back to the cash along with the closed
-    shares' P/L."""
-    free = _day_free_cash(db, row)
+    shares' P/L. `skip`: the working order of this session that is filling now (its reserve is released)."""
+    free = _day_free_cash(db, row, skip)
     if closing is not None and take:
         gain = journal_mod.pnl_usd(closing.sign, closing.entry_price, price, take)
         free = round(free + closing.entry_price * closing.shares + gain, 2)
@@ -1347,16 +1445,33 @@ def _check_day_buying_power(
 
 def _swing_free_cash(
     db: Session,
+    row: ReplaySession,
     thread: PracticeThread,
     rows: list[PracticeHold],
-    day: date,
     mine: PracticeHold | None,
     take: int,
     price: float,
+    skip: int | None = None,
 ) -> float:
-    """A swing fill's free cash for the shares it opens: the thread's free cash with this name's hold still open, plus,
-    when the fill flips it (`take` shares close the whole hold first), the hold's notional and the closed P/L."""
-    free = swing_play.free_cash(db, thread, rows, day)
+    """A swing fill's free cash for the shares it opens: the thread's free cash with this name's hold still open, less
+    the cash the day's working orders hold back (`_reserved_cash`; `skip` is the order of this session filling now),
+    plus, when the fill flips the hold (`take` shares close the whole hold first), the hold's notional and the closed
+    P/L."""
+    free = swing_play.free_cash(db, thread, rows, row.day)
+
+    def held_of(session: ReplaySession) -> tuple[str | None, int]:
+        hold = next((r for r in rows if r.symbol == session.symbol and r.status == "open"), None)
+        return (None, 0) if hold is None else (hold.side, hold.shares)
+
+    free = round(
+        free
+        - _reserved_cash(
+            [row] if row.day_list_id is None else _sessions_of_day(db, row.day_list_id),
+            held_of,
+            None if skip is None else (row.id, skip),
+        ),
+        2,
+    )
     if mine is not None and take:
         gain = journal_mod.pnl_usd(1 if mine.side == "long" else -1, float(mine.entry_price), price, take)
         free = round(free + float(mine.entry_price) * mine.shares + gain, 2)
@@ -1404,7 +1519,7 @@ def _place_swing_mark(
                 holds_mod.check_buying_power(
                     shares=rest,
                     price=price,
-                    free_cash_usd=_swing_free_cash(db, thread, rows, row.day, mine, take, price),
+                    free_cash_usd=_swing_free_cash(db, row, thread, rows, mine, take, price, ctx.filling),
                 )
             stays = side if rest else (mine.side if mine is not None and take < mine.shares else None)
             if stop_price is not None and stays is not None:
@@ -1636,14 +1751,17 @@ def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: b
     exit_at = ctx.window_end if ctx.day_clock is None else min(ctx.day_clock, ctx.window_end)
     found = None if ctx.swing else last_price(ctx, exit_at)
     _, open_ = journal_mod.assemble(ctx.marks)
-    if open_ is not None and found is not None:
+    if open_ is not None and not ctx.swing:
+        # No price at the clock (a provider outage with no revealed bar) must not leave the trade unbooked: the day's
+        # P/L would silently lose it. It exits flat at its entry, the way `positions` carries a name with no price.
+        exit_price = open_.entry_price if found is None else found[0]
         db.add(
             PracticeMark(
                 session_id=row.id,
                 seq=(ctx.marks[-1].seq if ctx.marks else 0) + 1,
                 kind="long_exit" if open_.side == "long" else "short_exit",
                 at=exit_at.to_pydatetime(),
-                price=found[0],
+                price=exit_price,
                 trade_no=open_.no,
                 source="auto",
                 created_at=svc.now(),
