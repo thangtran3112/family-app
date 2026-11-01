@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { metricLabel, ALL_METRICS } from "@/lib/desk/metricColumns";
 import { MAX_COLUMNS, type MetricKey } from "@/lib/settings/fundamental";
-import fund from "../fundamental.module.css";
 import styles from "./holdings.module.css";
 
 export type ColumnsSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -45,9 +45,9 @@ export function ColumnsMenu({
   const full = chosen.length >= MAX_COLUMNS;
   return (
     <div className={styles.menuWrap} ref={wrap}>
-      <button type="button" className={fund.button} aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} data-testid="fund-columns">
+      <Button size="md" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} data-testid="fund-columns">
         Columns · {chosen.length}
-      </button>
+      </Button>
       {open && (
         <div id={id} className={styles.menu} role="group" aria-label="Columns">
           <p className={styles.menuNote}>Choose up to {MAX_COLUMNS} columns</p>
@@ -72,7 +72,7 @@ export function ColumnsMenu({
             {status === "error" && (
               <>
                 Columns were not saved ·{" "}
-                <button type="button" className={styles.textButton} onClick={onRetry}>Try again</button>
+                <Button variant="ghost" size="sm" onClick={onRetry}>Try again</Button>
               </>
             )}
           </p>

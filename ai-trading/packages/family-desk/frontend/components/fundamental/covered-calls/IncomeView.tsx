@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
 import { AsOfLine } from "@/components/ui/AsOfLine";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import type { HoldingAccount, Income, ShortCall } from "@/lib/api/fundamentalSchemas";
 import { withPriorities } from "@/lib/desk/columns";
@@ -59,8 +60,8 @@ export function IncomeView({ accounts }: { accounts: readonly HoldingAccount[] }
 
   return (
     <>
-      <section className={styles.panel} aria-label="Open short calls">
-        <h2 className={styles.panelTitle}>Open short calls</h2>
+      <Panel aria-label="Open short calls">
+        <PanelHeader title="Open short calls" />
         {!calls.data ? (
           calls.error !== null ? <ErrorBlock subject="open calls" onRetry={calls.refresh} /> : <LoadingBlock label="Loading open calls…" height={120} />
         ) : (
@@ -75,7 +76,7 @@ export function IncomeView({ accounts }: { accounts: readonly HoldingAccount[] }
             empty={<EmptyBlock title="No open short calls" />}
           />
         )}
-      </section>
+      </Panel>
       {selected && <RollPane key={selected.id} call={selected} accounts={accounts} masked={masked} />}
       <IncomePanel query={income} masked={masked} />
     </>
@@ -86,37 +87,39 @@ function IncomePanel({ query, masked }: { query: DeskQueryResult<Income>; masked
   const data = query.data;
   const view = data ? incomeView(data, masked) : null;
   return (
-    <section className={styles.panel} aria-label="Premium by month" data-testid="fund-cc-income">
-      <h2 className={styles.panelTitle}>Premium by month</h2>
-      {!data || !view ? (
-        query.error !== null ? <ErrorBlock subject="premium income" onRetry={query.refresh} /> : <LoadingBlock label="Loading premium income…" height={120} />
-      ) : (
-        <>
-          {view.kind === "needs_trades" && <p className={styles.notice} role="status" data-testid="fund-cc-needs-trades">{NEEDS_TRADES_TEXT}</p>}
-          {view.kind === "empty" && <p className={styles.notice} role="status">{NO_INCOME_TEXT}</p>}
-          {view.kind === "ok" && (
-            <>
-              <IncomeChart chart={view.chart} masked={masked} />
-              <p className={local.total}>Year to date {maskedUsd(masked, data.ytd_premium)}</p>
-              {data.assignments.length > 0 && (
-                <>
-                  <h3 className={local.subTitle}>Assignments</h3>
-                  <ul className={local.assignments}>
-                    {data.assignments.map((assignment) => (
-                      <li key={`${assignment.date}:${assignment.symbol}:${assignment.strike}`}>
-                        <span>{assignment.date}</span>
-                        <strong className={local.strong}>{assignment.symbol}</strong>
-                        <span>{maskedQuantity(masked, assignment.contracts)} {assignment.contracts === 1 && !masked ? "contract" : "contracts"} at {formatUsdPrice(assignment.strike)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </>
-          )}
-          <AsOfLine stamp={data.source_stamp} />
-        </>
-      )}
-    </section>
+    <div data-testid="fund-cc-income">
+      <Panel aria-label="Premium by month">
+        <PanelHeader title="Premium by month" />
+        {!data || !view ? (
+          query.error !== null ? <ErrorBlock subject="premium income" onRetry={query.refresh} /> : <LoadingBlock label="Loading premium income…" height={120} />
+        ) : (
+          <>
+            {view.kind === "needs_trades" && <p className={styles.notice} role="status" data-testid="fund-cc-needs-trades">{NEEDS_TRADES_TEXT}</p>}
+            {view.kind === "empty" && <p className={styles.notice} role="status">{NO_INCOME_TEXT}</p>}
+            {view.kind === "ok" && (
+              <>
+                <IncomeChart chart={view.chart} masked={masked} />
+                <p className={local.total}>Year to date {maskedUsd(masked, data.ytd_premium)}</p>
+                {data.assignments.length > 0 && (
+                  <>
+                    <PanelHeader variant="label" level={3} title="Assignments" />
+                    <ul className={local.assignments}>
+                      {data.assignments.map((assignment) => (
+                        <li key={`${assignment.date}:${assignment.symbol}:${assignment.strike}`}>
+                          <span>{assignment.date}</span>
+                          <strong className={local.strong}>{assignment.symbol}</strong>
+                          <span>{maskedQuantity(masked, assignment.contracts)} {assignment.contracts === 1 && !masked ? "contract" : "contracts"} at {formatUsdPrice(assignment.strike)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
+            )}
+            <AsOfLine stamp={data.source_stamp} />
+          </>
+        )}
+      </Panel>
+    </div>
   );
 }
