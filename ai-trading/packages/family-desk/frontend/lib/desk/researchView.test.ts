@@ -85,6 +85,7 @@ test("consensus periods, surprises, revisions and next earnings", () => {
   assert.deepEqual(revisionCells(consensus.revisions).map((cell) => cell.text), ["+0.4%", "+1.4%", "+2.9%"]);
   // JNJ has no snapshot history yet: every revision says so in words, never a zero.
   assert.deepEqual(revisionCells(jnj.consensus!.revisions).map((cell) => cell.text), ["Needs more history", "Needs more history", "Needs more history"]);
+  assert.deepEqual(revisionCells(jnj.consensus!.revisions).map((cell) => cell.tone), ["neutral", "neutral", "neutral"], "no history carries the shared neutral tone");
   assert.equal(nextEarningsText(consensus.next_earnings), "Thu 2027-01-28 · after close");
   assert.equal(nextEarningsText(null), "—");
   assert.deepEqual(targetsView(aapl.targets!), { low: "$189.75", mean: "$259.17", high: "$312.39", counts: "24 Buy · 9 Hold · 2 Sell" });
