@@ -522,6 +522,8 @@ function columnsOf(list: DayList): DenseColumn<Candidate>[] {
       key: column.key,
       label: column.label,
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",
+      // No name reports before the open: the column would be a row of dashes to scroll past (D-136).
+      hideWhenEmpty: column.format === "earnings",
       render: (row) => {
         const text = dayCellText(column, row);
         if (column.format === "earnings") return text === "—" ? text : <Badge tone="warn">{text}</Badge>;

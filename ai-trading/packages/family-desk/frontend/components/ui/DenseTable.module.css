@@ -1,5 +1,6 @@
 .wrap { width: 100%; overflow-x: hidden; }
-.scrollX { overflow-x: auto; }
+/* Room under the last row for an overlay scrollbar, so it never draws over the row (D-136). */
+.scrollX { overflow-x: auto; padding-bottom: var(--space-3); }
 .table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-label); line-height: var(--line-label); font-variant-numeric: tabular-nums; }
 .table th, .table td { height: 28px; padding: 0 var(--space-3); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--color-hairline); }
 .wrap[data-density="compact"] .table th, .wrap[data-density="compact"] .table td { height: 24px; padding-inline: 6px; }
@@ -31,8 +32,7 @@ th.sticky { z-index: 2; }
 /* actions="hover" (the densest tables only): hidden until the row is hovered or holds focus. The default is visible, so touch and sight can reach them. */
 .wrap[data-actions="hover"] .actions > * { opacity: 0; }
 .wrap[data-actions="hover"] .row:hover .actions > *, .wrap[data-actions="hover"] .row:focus-within .actions > *, .wrap[data-actions="hover"] .actions > *:focus-visible { opacity: 1; }
-/* In a scrollX table the action cell is pinned to the scroller's right edge, so a 1590 px table keeps its action in view (D-090), with room under the last row for the overlay scrollbar (D-136). */
-.actionsPinned { padding-bottom: 12px; }
+/* In a scrollX table the action cell is pinned to the scroller's right edge, so a 1590 px table keeps its action in view (D-090). */
 .actionsPinned .actions, .actionsPinned .actionsHead { position: sticky; right: 0; background: var(--color-ground); box-shadow: -1px 0 0 var(--color-hairline); }
 .actionsPinned .actions { z-index: 1; }
 .actionsPinned .actionsHead { z-index: 2; }

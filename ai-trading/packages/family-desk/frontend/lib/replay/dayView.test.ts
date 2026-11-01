@@ -201,7 +201,7 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
   assert.equal(dayBalanceText(meta), "Balance $50,000.00 → $51,565.00");
   assert.equal(dayBalanceText({ balance_before: null, balance_after: null }), null);
   assert.deepEqual(tradeLineRows(meta), [
-    { key: "META-1-2026-07-01T14:15:00Z", symbol: "META", side: "Long", shares: "100", entry: "610.83", entryTime: "10:15 AM", exit: "626.48", exitTime: "11:10 AM", pnl: "+$1,565.00", tone: "up" },
+    { key: "META-1-2026-07-01T14:15:00Z", symbol: "META", side: "Long", shares: "100", entry: "610.83", entryTime: "10:15 AM", exit: "626.48", exitTime: "11:10 AM", held: "55m", pnl: "+$1,565.00", ret: "+2.56%", tone: "up" },
   ]);
   const auto = { ...meta, lines: [{ ...meta.lines[0]!, side: "short" as const, exit_source: "auto" as const, pnl_usd: -12.5 }] };
   assert.deepEqual([tradeLineRows(auto)[0]!.side, tradeLineRows(auto)[0]!.exitTime, tradeLineRows(auto)[0]!.pnl, tradeLineRows(auto)[0]!.tone], ["Short", "11:10 AM (auto, window end)", "−$12.50", "down"]);
@@ -578,6 +578,18 @@ test("the trade table ends on a total row, and the selection quotes the table's 
   const total = tradeTotalRow({ trades: 2, pnl_usd: 12.5 });
   assert.deepEqual([total.key, total.symbol, total.pnl], ["total", "Total", "+$12.50"]);
   assert.equal(selectionText(endedDayList.review!), "Your names moved +3.11% · list median +1.40% · ranked 1st of 2");
+});
+
+// D-142: hold time and return % per trade, and the return of the whole day on the total row.
+test("each trade row carries its hold time and its return on the position; the total row carries the day's return", () => {
+  const line = { no: 1, symbol: "TSLA", side: "long" as const, entry_at: "2026-07-01T14:00:00Z", entry_price: 100, exit_at: "2026-07-01T15:05:00Z", exit_price: 102, shares: 10, pnl_usd: 20, r: null, stop_price: null, on_signal: false, exit_source: "her" as const };
+  const short = { ...line, no: 2, side: "short" as const, entry_at: "2026-07-01T14:10:00Z", exit_at: "2026-07-01T14:10:00Z", exit_price: 101, pnl_usd: -10 };
+  const rows = tradeLineRows({ lines: [line, short] });
+  assert.deepEqual(rows.map((row) => [row.held, row.ret, row.tone]), [["1h 05m", "+2.00%", "up"], ["0m", "−1.00%", "down"]]);
+  assert.equal(tradeLineRows({ lines: [{ ...line, shares: 0, pnl_usd: 0 }] })[0]!.ret, "—", "no position size, no return");
+  const total = tradeTotalRow({ trades: 2, pnl_usd: 10, lines: [line, short] });
+  assert.deepEqual([total.held, total.ret], ["", "+0.50%"], "10 on the 2,000 put to work");
+  assert.equal(tradeTotalRow({ trades: 2, pnl_usd: 10 }).ret, "", "no lines, no return");
 });
 
 test("Resume belongs to the thread's day, never to one name: a name's button says Practice or Switch, and a day session resumes through its day", () => {

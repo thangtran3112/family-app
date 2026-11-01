@@ -14,7 +14,7 @@ import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Candidate, DayJournal, DayList, DayPnl, DayReview, DayTradeLine, ListColumn, PracticePlan, Rescan, ReviewRow } from "./daily.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade } from "./schemas.ts";
-import { etHhMm } from "./time.ts";
+import { etHhMm, ms } from "./time.ts";
 import { formatDayResult } from "./threadView.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
@@ -469,10 +469,19 @@ export function dayBalanceText(journal: Pick<DayJournal, "balance_before" | "bal
   return practiceText("reviewBalance", { before: money(before), after: money(after) });
 }
 
-export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; entryTime: string; exit: string; exitTime: string; pnl: string; tone: Tone };
+export type TradeLineRow = { key: string; symbol: string; side: string; shares: string; entry: string; entryTime: string; exit: string; exitTime: string; held: string; pnl: string; ret: string; tone: Tone };
 
-/** The last row of the trade table: the day's total P/L (the trades' own rows carry the rest). */
-export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd">): TradeLineRow => ({
+/** "55m", "1h 05m": how long a trade was open. */
+export function heldText(entryAt: string, exitAt: string): string {
+  const minutes = Math.max(0, Math.round((ms(exitAt) - ms(entryAt)) / 60_000));
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+/** The P/L as a share of the money put to work (entry price × shares); a dash with nothing put to work. */
+const returnText = (pnl: number, cost: number): string => (cost > 0 ? formatSignedPct((pnl / cost) * 100, 2) : EMPTY_VALUE);
+
+/** The last row of the trade table: the day's total P/L and its return on all the money put to work (the trades' own rows carry the rest). */
+export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd"> & { lines?: DayJournal["lines"] }): TradeLineRow => ({
   key: "total",
   symbol: "Total",
   side: "",
@@ -481,7 +490,9 @@ export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd">): 
   entryTime: "",
   exit: "",
   exitTime: "",
+  held: "",
   pnl: formatSignedUsd(journal.pnl_usd, { cents: true }),
+  ret: journal.lines ? returnText(journal.pnl_usd, journal.lines.reduce((sum, line) => sum + line.entry_price * line.shares, 0)) : "",
   tone: changeTone(journal.pnl_usd),
 });
 
@@ -503,7 +514,9 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
     entryTime: formatEtTime(line.entry_at),
     exit: formatPrice(line.exit_price),
     exitTime: `${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
+    held: heldText(line.entry_at, line.exit_at),
     pnl: formatSignedUsd(line.pnl_usd, { cents: true }),
+    ret: returnText(line.pnl_usd, line.entry_price * line.shares),
     tone: changeTone(line.pnl_usd),
   }));
 }

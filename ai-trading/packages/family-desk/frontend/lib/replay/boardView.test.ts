@@ -31,6 +31,7 @@ test("the columns are the API's, then Earnings; text columns read left, numbers 
   assert.deepEqual(dropped, ["avg_dollar_volume_20d", "vs_50d_avg_pct", "chg_5d_pct", "rsi_14"]);
   assert.equal(byKey.prior_close!.priority, undefined, "the price and the day's change are never dropped");
   assert.equal(byKey.matches!.priority, undefined);
+  assert.deepEqual(columns.filter((column) => column.hideWhenEmpty).map((column) => column.key), ["matches", "earnings"], "D-136: only the two columns that are often all dashes leave an empty board");
 });
 
 test("header clicks sort by the figure, the source order, the match count or the soonest report; a data gap goes last", () => {
