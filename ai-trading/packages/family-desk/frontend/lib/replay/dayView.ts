@@ -293,6 +293,14 @@ export type PortfolioRow = {
   unrealized: number | null;
   /** Realized plus unrealized: the name's P/L for the day. */
   dayPnl: number;
+  /** The open trade's cost, entry price × shares; null when flat. */
+  basis: number | null;
+  /** `dayPnl` as a percent of `basis`; null when flat (a closed trade keeps no cost on this read). */
+  dayPct: number | null;
+  /** The stock's move since entry, per share: last − entry. The market's direction, whichever side she is on; null when flat. */
+  priceChange: number | null;
+  /** `priceChange` as a percent of the entry price; null when flat. */
+  priceChangePct: number | null;
   behind: boolean;
   /** The name she is on in the replay. */
   current: boolean;
@@ -317,6 +325,8 @@ export function portfolioRows(
         : current && from.openTrade === null
           ? null
           : session.position;
+    const basis = position === null || position.entry_price * position.shares <= 0 ? null : position.entry_price * position.shares;
+    const dayPnl = session.realized_usd + (position?.unrealized_usd ?? 0);
     return {
       symbol: session.symbol,
       sessionId: session.id,
@@ -328,7 +338,11 @@ export function portfolioRows(
       trades: session.trades,
       realized: session.realized_usd,
       unrealized: position?.unrealized_usd ?? null,
-      dayPnl: session.realized_usd + (position?.unrealized_usd ?? 0),
+      dayPnl,
+      basis,
+      dayPct: basis === null ? null : (100 * dayPnl) / basis,
+      priceChange: position === null ? null : position.last_price - position.entry_price,
+      priceChangePct: position === null || position.entry_price <= 0 ? null : (100 * (position.last_price - position.entry_price)) / position.entry_price,
       behind:
         session.behind_clock ||
         (from !== undefined && !current && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
@@ -355,6 +369,45 @@ export function portfolioFooter(pnl: DayPnl): { total: number; split: string; op
     openOf: practiceText("dayPortfolioOpenOf", { open: pnl.open_count }),
     asOf: practiceText("dayPortfolioAsOf", { time: formatEtTimeZone(pnl.as_of) }),
   };
+}
+
+/** The Portfolio's unit switch: dollars or percent. It flips the price change and the P/L of every row together. */
+export type PortfolioUnit = "usd" | "pct";
+
+export type PortfolioCells = {
+  /** "$814.54"; null when flat. */
+  last: string | null;
+  /** The stock's move since entry in the unit: "+$2.14" or "+0.26%"; null when flat. */
+  change: string | null;
+  changeTone: Tone;
+  /** The name's day P/L in the unit; a dash for a percent with no cost to divide by (a flat name). */
+  pnl: string;
+  pnlTone: Tone;
+  /** The P/L's direction, the Robinhood arrow; null at zero or a dash. */
+  arrow: "up" | "down" | null;
+};
+
+/** A row's figures in dollars or percent. The signs and the arrow carry the direction; the tone is the second cue. */
+export function portfolioCells(row: PortfolioRow, unit: PortfolioUnit): PortfolioCells {
+  const usd = unit === "usd";
+  const pnl = usd ? row.dayPnl : row.dayPct;
+  const change = usd ? row.priceChange : row.priceChangePct;
+  const text = (value: number) => (usd ? formatSignedUsd(value, { cents: true }) : formatSignedPct(value));
+  const pnlTone = pnl === null ? "flat" : changeToneAt(pnl, 2);
+  return {
+    last: row.position === null ? null : `$${formatPrice(row.position.last_price)}`,
+    change: change === null ? null : text(change),
+    changeTone: change === null ? "flat" : changeToneAt(change, 2),
+    pnl: pnl === null ? EMPTY_VALUE : text(pnl),
+    pnlTone,
+    arrow: pnlTone === "flat" ? null : pnlTone,
+  };
+}
+
+/** "2 open positions" / "1 open position" / "No open positions": the Portfolio's head, counted from the rows she sees. */
+export function openPositionsText(rows: readonly Pick<PortfolioRow, "holding">[]): string {
+  const count = rows.filter((row) => row.holding).length;
+  return count === 0 ? PRACTICE_COPY.dayPortfolioPositionsNone : count === 1 ? PRACTICE_COPY.dayPortfolioPositionsOne : practiceText("dayPortfolioPositions", { count });
 }
 
 /** "Stop crossed 10:21": the row of a trade whose stop paused play. */
