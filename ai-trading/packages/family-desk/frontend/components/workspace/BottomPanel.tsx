@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import type { Signal, Technicals } from "@/lib/api/schemas";
 import { loadSignals } from "@/lib/desk/charts";
 import { formatEtStamp, formatNumber, formatPrice } from "@/lib/desk/format";
@@ -129,23 +130,19 @@ export function BottomPanel({
   return (
     <section className={styles.bottom} aria-label="Chart panels">
       <div className={styles.tabBar}>
-        <div role="tablist" aria-label="Panels" className={styles.tabs}>
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              className={styles.tab}
-              onClick={() => {
-                setTab(item.id);
-                if (collapsed) onToggle();
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          idBase="chart-panels"
+          label="Panels"
+          tabs={TABS}
+          value={tab}
+          size="md"
+          track={false}
+          panelMounted={!collapsed}
+          onChange={(id) => {
+            setTab(id);
+            if (collapsed) onToggle();
+          }}
+        />
         <button
           type="button"
           className={styles.collapse}
@@ -156,7 +153,7 @@ export function BottomPanel({
           {collapsed ? "▴" : "▾"}
         </button>
       </div>
-      {!collapsed && <div role="tabpanel" className={styles.bottomBody}>{body}</div>}
+      {!collapsed && <TabPanel idBase="chart-panels" id={tab} className={styles.bottomBody}>{body}</TabPanel>}
     </section>
   );
 }

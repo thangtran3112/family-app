@@ -8,6 +8,7 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { loadAlertStrategies } from "@/lib/desk/alerts";
 import { defaultAlertFilters, toQuery, type AlertFilterState, type AlertsTab } from "@/lib/desk/alertsView";
 import { alertsBanner, COPY } from "@/lib/desk/freshness";
@@ -72,21 +73,8 @@ export function AlertsScreen() {
         <h1 className={styles.title}>Alerts</h1>
         <Button variant="primary" href="/alerts/new" client>New alert strategy</Button>
       </header>
-      <div role="tablist" aria-label="Alerts views" className={styles.tabs}>
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            className={styles.tab}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className={styles.body}>
+      <Tabs idBase="alerts-views" label="Alerts views" tabs={TABS} value={tab} onChange={setTab} className={styles.tabs} />
+      <TabPanel idBase="alerts-views" id={tab} className={styles.body}>
         {banner && <Banner>{banner}</Banner>}
         {tab === "list" ? (
           <>
@@ -96,7 +84,7 @@ export function AlertsScreen() {
         ) : (
           <AlertLog />
         )}
-      </div>
+      </TabPanel>
       {tab === "list" && (
         <RightRail
           label="Alert details"
