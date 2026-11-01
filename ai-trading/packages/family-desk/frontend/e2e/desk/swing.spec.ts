@@ -3,7 +3,7 @@ import { expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk,
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { START_BUTTON, clickNewPlan, createThreadByApi, openNewPlan, openRow, THREAD_URL } from "./hub-helpers";
-import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
+import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, backToDayList, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, placeOrder, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
 
 const BOARD_URL = /\/practice\/day\?id=\d+/;
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
@@ -153,7 +153,7 @@ test.describe("Swing practice", () => {
 
     // Before the first bar nothing can be entered.
     await expect(playhead(page)).toContainText("9:30");
-    await page.keyboard.press("b");
+    await placeOrder(page, "Buy");
     await expect(page.getByRole("alert").filter({ hasText: PRACTICE_COPY.swingMarketNotOpen })).toBeVisible();
     await page.getByRole("button", { name: "Dismiss message" }).click();
     await page.getByRole("button", { name: "Step", exact: true }).click();
@@ -346,8 +346,8 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("alert").filter({ hasText: "opened below your stop" })).toHaveCount(0);
 
     // Play: the first advance runs into the gap and stops there.
-    await page.keyboard.press("4");
-    await page.keyboard.press("Space");
+    await page.getByRole("group", { name: "Replay speed" }).getByRole("button", { name: "10x" }).click();
+    await page.getByRole("button", { name: "Play" }).click();
     const toast = page.getByRole("alert").filter({ hasText: "opened below your stop" });
     await expect(toast).toBeVisible({ timeout: 20_000 }); // 10x: the first minute bar closes 6 seconds after the open
     await expect(toast).toContainText(/^S02 opened below your stop 86\.00 at 8\d\.\d\d/);
@@ -669,8 +669,8 @@ test.describe("Swing practice", () => {
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "S03", level: 1 })).toBeVisible();
 
-    await page.keyboard.press("4");
-    await page.keyboard.press("Space");
+    await page.getByRole("group", { name: "Replay speed" }).getByRole("button", { name: "10x" }).click();
+    await page.getByRole("button", { name: "Play" }).click();
     const toast = page.getByRole("alert").filter({ hasText: "opened below your stop" });
     await expect(toast).toBeVisible({ timeout: 20_000 });
     await expect(toast).toContainText("S02 opened below your stop 86.00");
@@ -722,7 +722,7 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("heading", { name: "S02", level: 1 })).toBeVisible();
     await jumpTo("12:00");
     await expect(playhead(page)).toContainText("12:00");
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await backToDayList(page, true);
     await page.waitForURL(BOARD_URL);
     await page.getByRole("button", { name: "Resume Day 1" }).click();
     await page.waitForURL(SESSION_URL);

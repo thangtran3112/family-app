@@ -57,9 +57,6 @@ export type PracticeControlsProps = {
   swing?: SwingControls;
 };
 
-/** A hotkey chip: shown, never read (the button names itself and `aria-keyshortcuts` carries the key). */
-const Key = ({ children }: { children: string }) => <kbd className={styles.key} aria-hidden="true">{children}</kbd>;
-
 const RECENT_ORDERS = 3;
 
 function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null; since: string | null; realized: number; pnl: number }) {
@@ -92,7 +89,7 @@ function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null
 /**
  * The stop or note form. It mounts when opened (key = which one), starts empty (a prefilled last price is a stop that no long can
  * hold), and stays open until the server answers: a refusal leaves what she typed and the toast says why. Escape closes it from
- * the field too (the workspace key map ignores keys typed into a text field).
+ * the field too.
  */
 function ComposerForm({ composer, onStop, onNote, onClose }: { composer: Exclude<Composer, null>; onStop: (price: string) => Promise<boolean>; onNote: (text: string) => Promise<boolean>; onClose: () => void }) {
   const [stopText, setStopText] = useState("");
@@ -118,7 +115,7 @@ function ComposerForm({ composer, onStop, onNote, onClose }: { composer: Exclude
   const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
     if (event.key !== "Escape") return;
     event.preventDefault();
-    // Only the form closes: the drawer it sits in (1180) and the workspace key map are on the document and must not also act on this Escape.
+    // Only the form closes: the drawer it sits in (1180) and full screen listen on the document and must not also act on this Escape.
     event.nativeEvent.stopImmediatePropagation();
     onClose();
   };
@@ -218,12 +215,10 @@ export function PracticeControls(props: PracticeControlsProps) {
           size="touch"
           className={styles.submit}
           disabled={disabled}
-          aria-keyshortcuts={buying ? "B" : "S"}
           aria-describedby={summaryId}
           onClick={() => props.onSubmit(ticket.side)}
         >
           {buying ? "Buy" : "Sell"}
-          <Key>{buying ? "B" : "S"}</Key>
         </Button>
       </section>
 
@@ -266,23 +261,14 @@ export function PracticeControls(props: PracticeControlsProps) {
         {swing ? <SwingOpenTradeCard trade={openTrade} tape={swing.tape} /> : <PositionCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />}
         {side !== "flat" && (
           <div className={styles.pair}>
-            <Button size="touch" disabled={disabled} aria-keyshortcuts="X" onClick={props.onExit}>
-              Close position
-              <Key>X</Key>
-            </Button>
-            <Button ref={stopOpener} size="touch" disabled={disabled} aria-keyshortcuts="T" onClick={() => onComposer("stop")}>
-              Set stop
-              <Key>T</Key>
-            </Button>
+            <Button size="touch" disabled={disabled} onClick={props.onExit}>Close position</Button>
+            <Button ref={stopOpener} size="touch" disabled={disabled} onClick={() => onComposer("stop")}>Set stop</Button>
           </div>
         )}
       </section>
       {composer && <ComposerForm key={composer} composer={composer} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}
       <div className={styles.footRow}>
-        <Button ref={noteOpener} variant="ghost" size="lg" disabled={disabled} aria-keyshortcuts="N" onClick={() => onComposer("note")}>
-          Add note
-          <Key>N</Key>
-        </Button>
+        <Button ref={noteOpener} variant="ghost" size="lg" disabled={disabled} onClick={() => onComposer("note")}>Add note</Button>
         <p className={styles.footnote}>{swing?.tape === "off" ? PRACTICE_COPY.swingTapeOffFootnote : PRACTICE_COPY.priceFootnote}</p>
       </div>
     </div>

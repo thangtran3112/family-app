@@ -74,10 +74,7 @@ export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJum
             </label>
             <Button type="submit" size="md" disabled={!time || time <= min}>Go</Button>
           </form>
-          <button type="button" className={styles.menuItem} aria-keyshortcuts="Shift+ArrowRight" onClick={() => choose(onNextSignal)}>
-            To the next signal
-            <span className={styles.menuKeys} aria-hidden="true">Shift →</span>
-          </button>
+          <button type="button" className={styles.menuItem} onClick={() => choose(onNextSignal)}>To the next signal</button>
           <p className={styles.menuNote}>{PRACTICE_COPY.jumpSignalNote}</p>
           <button type="button" className={styles.menuItem} onClick={() => choose(onJumpEnd)}>
             {swing ? `To the close · ${formatEtTimeZone(windowEnd)}` : `To the window end · ${formatEtTimeZone(windowEnd)}`}

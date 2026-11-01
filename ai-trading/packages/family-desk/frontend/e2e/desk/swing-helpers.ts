@@ -116,6 +116,28 @@ export async function replayRail(page: Page, section: string) {
   return drawer;
 }
 
+/**
+ * Buy, Sell or Close position by clicking, as she does (Practice has no keyboard shortcuts). At 1440 the order ticket is in the right
+ * rail: this picks the side, then presses the submit button of the same name. At 1180 the chart toolbar carries the same three buttons
+ * so they work with the drawer closed; they are used unless the Practice drawer is already open (opening it would change the layout
+ * a spec is measuring). Buy and Sell send the ticket as it stands.
+ */
+export async function placeOrder(page: Page, action: "Buy" | "Sell" | "Close position") {
+  if (test.info().project.name === "desktop-1180" && !(await page.getByRole("dialog", { name: "Practice" }).isVisible())) {
+    await page.getByRole("group", { name: "Practice buttons" }).getByRole("button", { name: action, exact: true }).click();
+    return;
+  }
+  const practice = await replayRail(page, "Practice");
+  if (action !== "Close position") await practice.getByRole("radio", { name: action }).click();
+  await practice.getByRole("button", { name: action, exact: true }).click();
+}
+
+/** A chart's way back to its day list (or a swing thread's board) is the tab strip above it: there is no Back link or foot bar any more. */
+export async function backToDayList(page: Page, swing = false) {
+  await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: swing ? PRACTICE_COPY.tabBoard : PRACTICE_COPY.tabDayList, exact: true }).click();
+  await page.waitForURL(/\/practice\/day\?id=\d+/);
+}
+
 /** A mark through the API on a name's session at the day clock (the session opens there; it is advanced first only when `clock` is given). */
 export async function markByApi(
   context: BrowserContext,
