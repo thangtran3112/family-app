@@ -63,8 +63,8 @@ resource "cloudflare_zero_trust_access_application" "laptop_ssh" {
   domain     = var.laptop_ssh_hostname
 
   # How long `cloudflared access ssh` keeps its token before the browser login
-  # repeats.
-  session_duration     = "24h"
+  # repeats. 7 days (168h) — the SSH key stays the hard gate underneath.
+  session_duration     = "168h"
   app_launcher_visible = false
 
   policies = concat(
