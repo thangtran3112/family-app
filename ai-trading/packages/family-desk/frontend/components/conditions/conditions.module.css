@@ -1,6 +1,13 @@
-/* The condition kit's own layout (ConditionRows, JsonPanel). The controls come from components/ui/Field. Tokens only. */
+/* The condition kit's own layout (ConditionRows, ConditionTree, JsonPanel). The controls come from components/ui/Field. Tokens only. */
 .condition { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--color-hairline); padding-top: var(--space-2); }
 .controls { align-items: flex-end; }
+
+/* The tree: one column of nodes, each nested list indented one step behind a hairline rail. */
+.tree { display: flex; flex-direction: column; gap: var(--space-3); }
+.node { display: flex; flex-direction: column; gap: var(--space-2); }
+.children { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; border-left: 1px solid var(--color-hairline); padding-left: var(--space-3); list-style: none; }
+.child { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-width: 0; }
+.actions { justify-content: flex-start; }
 
 .panel { display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-label); }
 .summary { color: var(--color-text); font-weight: var(--weight-semibold); cursor: pointer; }

@@ -33,13 +33,14 @@ export function plainMessage(message: string, path = ""): string {
 export function fieldLabel(path: string): string {
   const parts = path.split(".");
   if (parts[0] === "when") {
-    let index: number | null = null;
+    const positions: number[] = [];
     const rest: string[] = [];
     for (const part of parts.slice(1)) {
-      if (/^\d+$/.test(part)) index = Number(part) + 1; // ponytail: nested groups keep only the innermost number
+      if (/^\d+$/.test(part)) positions.push(Number(part) + 1);
       else if (!["all", "any", "not"].includes(part)) rest.push(paramLabel(part));
     }
-    return ["Condition" + (index === null ? "" : ` ${index}`), ...rest].join(" · ");
+    const position = positions.length ? ` ${positions.join(".")}` : "";
+    return [`Condition${position}`, ...rest].join(" · ");
   }
   if (parts[0] === "then" && parts[1] === "paperOrder") {
     const rest = parts.slice(2);

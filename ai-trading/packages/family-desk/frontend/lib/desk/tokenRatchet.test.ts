@@ -32,6 +32,7 @@ const DIALOG_CLASSES = ["dialog", "dialogForm", "dialogHead", "dialogBody", "dia
 const METRICS = {
   "raw hex colours": (text: string) => count(text, /#[0-9a-fA-F]{3,8}\b/g),
   "raw font-size: Npx": (text: string) => count(text, /font-size:\s*\d+(\.\d+)?px/g),
+  "raw font shorthand (font: Npx)": (text: string) => count(text, /font:\s*\d+(\.\d+)?px/g),
   "raw border-radius: Npx": (text: string) => count(text, /border-radius:\s*\d+(\.\d+)?px/g),
   "outline: 2px solid restatements (use var(--focus-ring))": (text: string) => count(text, /outline:\s*2px solid/g),
   "local .button rules (use components/ui Button)": (text: string) => selectorRules(text, "button"),
@@ -44,9 +45,10 @@ const METRICS = {
 const BASELINE: Record<keyof typeof METRICS, number> = {
   "raw hex colours": 70,
   "raw font-size: Npx": 81,
+  "raw font shorthand (font: Npx)": 0,
   "raw border-radius: Npx": 30,
   "outline: 2px solid restatements (use var(--focus-ring))": 40,
-  "local .button rules (use components/ui Button)": 42,
+  "local .button rules (use components/ui Button)": 37,
   "local .chip rules (use components/ui Badge)": 9,
   "local .srOnly / .visuallyHidden rules (use .sr-only)": 9,
   "local modal / confirm rules (use components/ui Dialog, ConfirmDialog, InlineConfirm)": 0,

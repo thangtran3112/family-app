@@ -12,16 +12,19 @@ export const shown = (value: number | undefined) => (value !== undefined && Numb
 export const parse = (text: string) => (text.trim() === "" ? Number.NaN : Number(text));
 
 /**
- * Metric select grouped by the catalog's groups, with its choice parameters as selects and its number parameters as inputs. Shared by the screener editor, the alert setup and RankFields.
+ * Metric select grouped by the catalog's groups, with its choice parameters as selects and its number parameters as inputs. Shared by the
+ * screener editor, the alert setup, RankFields and the builder's condition tree.
  * The metric is looked up in `defs`, not the global catalog, so a picker given the strategy catalog offers all 43 metrics.
- * `scope` words each parameter after the picker ("Metric length", "Compared with fast length") for a row that holds two pickers; off, a parameter reads "Length".
+ * `scope` words each parameter after the picker ("Metric length", "Compared with fast length") for a row that holds two pickers;
+ * off, a parameter reads "Length".
  */
-export function OperandPicker({ label, operand, defs, allowNumber = false, scope = false, onChange }: {
+export function OperandPicker({ label, operand, defs, allowNumber = false, scope = false, disabled = false, onChange }: {
   label: string;
   operand: Operand;
   defs: readonly OperandDef[];
   allowNumber?: boolean;
   scope?: boolean;
+  disabled?: boolean;
   onChange: (next: Operand) => void;
 }) {
   const uid = useId();
@@ -32,10 +35,7 @@ export function OperandPicker({ label, operand, defs, allowNumber = false, scope
   return (
     <>
       <Field id={`${uid}-metric`} label={label}>
-        <Select
-          value={choice?.id ?? ""}
-          onChange={(event) => onChange(operandFor(event.target.value === "value" ? { id: "value", value: 0 } : { id: event.target.value, params: {} }, defs))}
-        >
+        <Select disabled={disabled} value={choice?.id ?? ""} onChange={(event) => onChange(operandFor(event.target.value === "value" ? { id: "value", value: 0 } : { id: event.target.value, params: {} }, defs))}>
           {choice === null && <option value="">Choose</option>}
           {GROUPS.map((group) => (
             <optgroup key={group} label={group}>
@@ -47,15 +47,12 @@ export function OperandPicker({ label, operand, defs, allowNumber = false, scope
       </Field>
       {choice !== null && "value" in choice && (
         <Field id={`${uid}-value`} label="Value">
-          <NumberInput step="any" value={shown(choice.value)} onChange={(event) => onChange(operandFor({ id: "value", value: parse(event.target.value) }, defs))} />
+          <NumberInput disabled={disabled} step="any" value={shown(choice.value)} onChange={(event) => onChange(operandFor({ id: "value", value: parse(event.target.value) }, defs))} />
         </Field>
       )}
       {metric && def?.picks?.map((item) => (
         <Field key={item.key} id={`${uid}-${item.key}`} label={scope ? subLabel(label, item.key) : item.label}>
-          <Select
-            value={metric.picks?.[item.key] ?? item.defaultValue}
-            onChange={(event) => onChange(operandFor({ id: metric.id, params: metric.params, picks: { ...metric.picks, [item.key]: event.target.value } }, defs))}
-          >
+          <Select disabled={disabled} value={metric.picks?.[item.key] ?? item.defaultValue} onChange={(event) => onChange(operandFor({ id: metric.id, params: metric.params, picks: { ...metric.picks, [item.key]: event.target.value } }, defs))}>
             {item.options.map((option) => <option key={option} value={option}>{optionLabel(option)}</option>)}
           </Select>
         </Field>
@@ -63,6 +60,7 @@ export function OperandPicker({ label, operand, defs, allowNumber = false, scope
       {metric && def?.params.map((param) => (
         <Field key={param.key} id={`${uid}-${param.key}`} label={scope ? subLabel(label, param.key) : param.label}>
           <NumberInput
+            disabled={disabled}
             min={param.min}
             max={param.max}
             value={shown(metric.params[param.key] ?? param.defaultValue)}

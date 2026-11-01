@@ -27,8 +27,7 @@
 .detailHeader,
 .detailActions,
 .blockHeading,
-.stageOptions,
-.inlineFields {
+.stageOptions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -59,13 +58,11 @@
 }
 
 .backLink,
-.button,
 .secondaryButton,
 .versionButton,
 .selectedVersion,
 .currentStage,
-.stageButton,
-.removeButton {
+.stageButton {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -80,18 +77,14 @@
 }
 
 .backLink,
-.button,
-.secondaryButton,
-.removeButton {
+.secondaryButton {
   text-decoration: none;
 }
 
 .backLink:hover,
-.button:hover,
 .secondaryButton:hover,
 .versionButton:not(:disabled):hover,
-.stageButton:not(:disabled):hover,
-.removeButton:not(:disabled):hover {
+.stageButton:not(:disabled):hover {
   border-color: var(--color-amber);
 }
 
@@ -146,10 +139,8 @@
 }
 
 .versionButton:disabled,
-.button:disabled,
 .secondaryButton:disabled,
-.stageButton:disabled,
-.removeButton:disabled {
+.stageButton:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
@@ -165,43 +156,6 @@
   padding-left: 12px;
   color: var(--color-text);
   font-size: var(--text-body);
-}
-
-.jsonView {
-  position: relative;
-}
-
-.jsonView summary {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-full);
-  background: var(--color-raised);
-  cursor: pointer;
-  list-style: none;
-  padding: 6px 14px;
-}
-
-.jsonView summary::-webkit-details-marker {
-  display: none;
-}
-
-.jsonView pre {
-  position: absolute;
-  z-index: 2;
-  top: 42px;
-  right: 0;
-  width: min(680px, calc(100vw - 40px));
-  max-height: min(65vh, 620px);
-  overflow: auto;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-md);
-  background: var(--color-panel);
-  color: var(--color-text);
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
-  padding: 16px;
-  white-space: pre;
 }
 
 .stageControl {
@@ -318,14 +272,11 @@
 
 .field input:focus-visible,
 .field select:focus-visible,
-.jsonView summary:focus-visible,
-.button:focus-visible,
 .secondaryButton:focus-visible,
 .versionButton:focus-visible,
 .selectedVersion:focus-visible,
 .stageButton:focus-visible,
-.currentStage:focus-visible,
-.removeButton:focus-visible {
+.currentStage:focus-visible {
   outline: 2px solid var(--color-amber);
   outline-offset: 2px;
 }
@@ -336,53 +287,9 @@
   opacity: 0.8;
 }
 
-.inlineFields,
-.operand,
-.condition,
-.nestedCondition,
 .actionFields,
 .channels {
   min-width: 0;
-}
-
-.inlineFields,
-.operand,
-.condition,
-.nestedCondition {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.condition,
-.nestedCondition {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.operand {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
-  align-items: start;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-}
-
-.nestedConditions {
-  display: grid;
-  gap: 10px;
-  margin-left: 10px;
-  border-left: 2px solid var(--color-hairline);
-  padding-left: 12px;
-}
-
-.removeButton {
-  align-self: flex-start;
-  min-height: 36px;
-  color: var(--color-muted);
-  font-size: var(--text-label);
 }
 
 .help {

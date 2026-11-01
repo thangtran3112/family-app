@@ -14,7 +14,7 @@ Applies to `components/**`, `app/globals.css` and `lib/desk/**`. Paths are relat
 - A labelled control is a `Field` (`components/ui/Field.tsx`) around `Input`, `NumberInput`, `Select`, `Textarea`, `Checkbox`/`Radio` in a `ChoiceGroup`, or `Switch`. Never hand-write `aria-describedby`, `aria-invalid` or an error id: the field wires one id to the label and one message line. Error words come from `lib/desk/problems.ts` (`fieldError`, `formProblems`) and `ui/ErrorSummary`; never print a schema path.
 - A form's save bar is `FormActionBar`, with `ui/Button`s. Pass `dirty`: it reports to the shell guard and the browser's leave prompt, so a form carries no `setDirty` or `beforeunload` code of its own.
 - Run-on ids and labels (`RUN_ONS`, `runOnLabel`) and comparison operators (`COMPARE_OPERATORS`, `operatorLabel`) live in `lib/spec/labels.ts` only. `lib/desk/singleSource.test.ts` fails if a component spells a run-on id.
-- `components/conditions/` is the shared condition kit (`ConditionRows`, `OperandPicker`, `JsonPanel`); the builder's recursive editor is not part of it.
+- `components/conditions/` is the shared condition kit (`ConditionRows`, `ConditionTree`, `ConditionLeaf`, `OperandPicker`, `PatternFields`, `TimeWindowFields`, `JsonPanel`).
 
 ## Dialogs and confirms
 
