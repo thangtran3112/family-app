@@ -723,15 +723,20 @@ def _peek(db: Session, svc: Services, row: ReplayDayList, symbol: str) -> dict[s
     through = pd.Timestamp(row.data_through)
     daily = screen.asof_loader(svc.history, store, row.day)(symbol)
     minutes = screen.minutes_loader(svc.history, store, row.day)(symbol)
+    # D-145: a name with nothing to draw answers "no data", never a 500.
+    no_data = {"symbol": symbol, "data_through": through, "daily": [], "minutes": [], "levels": {}}
     if daily is None:
-        return {"symbol": symbol, "data_through": through, "daily": [], "minutes": [], "levels": {}}
+        return no_data
     cut = cut_frames(SymbolBars(daily, minutes), through)
+    if cut.daily.empty:
+        return no_data
     found = trading_session("stock", row.day)
     assert found is not None
+    # No minute bars through the cut: the empty frame keeps a time index (a RangeIndex cannot compare to a Timestamp).
     today = (
         cut.minutes[(cut.minutes.index >= found.extended_open)]
         if cut.minutes is not None
-        else pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+        else pd.DataFrame(columns=["open", "high", "low", "close", "volume"], index=pd.DatetimeIndex([], tz="UTC"))
     )
     last = cut.daily.iloc[-1]
     levels: dict[str, float | None] = {
