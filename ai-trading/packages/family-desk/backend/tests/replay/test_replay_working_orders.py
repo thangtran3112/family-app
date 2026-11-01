@@ -280,7 +280,7 @@ def test_each_fill_releases_its_own_reserve_so_two_affordable_orders_both_fill(d
     assert [o["status"] for o in out["orders"]] == ["filled", "filled"]  # the second was not counted twice
 
 
-# -- no order fills in a span she was on another name ----------------------------------------------------------------
+# -- an order the tape reaches while she is on another name fills like a watched one --------------------------------
 
 
 def _away_flat(db_session, user_id, svc, world, *, balance=50_000):
@@ -291,25 +291,39 @@ def _away_flat(db_session, user_id, svc, world, *, balance=50_000):
     return row, gapper, flat
 
 
-def test_an_order_the_tape_filled_while_she_was_on_another_name_is_cancelled_not_filled(
+def test_an_order_the_tape_filled_while_she_was_on_another_name_fills_at_its_bar(
     db_session, user_id, svc, world
 ) -> None:
     _bend(world, "FLAT", "10:20", "10:21", low=49.0)  # inside 09:35..11:00, a span she never watched on FLAT
     _, _, flat = _away_flat(db_session, user_id, svc, world)
     out = _advance(db_session, user_id, svc, flat.id, "11:00")  # catch up to the clock
-    assert out["fills"] is None and out["open_trade"] is None
+    (fill,) = out["fills"]
+    assert (fill["kind"], fill["price"], fill["shares"], fill["at"]) == ("long_entry", 49.5, 10, et(DAYS[0], "10:21"))
+    assert fill["at"] <= out["day_clock"]  # stamped at its bar inside the span, never past the clock
+    assert out["open_trade"]["entry_price"] == 49.5 and out["open_trade"]["shares"] == 10
     (order,) = out["orders"]
-    assert (order["status"], order["reason"]) == ("cancelled", session_mod.AWAY_FILL)
-    assert (order["fill_price"], order["mark_id"]) == (None, None)
-    assert session_mod._load_marks(db_session, flat.id) == []  # no trade to score
-    assert _advance(db_session, user_id, svc, flat.id, "11:30")["fills"] is None  # and no later phantom fill
+    assert (order["status"], order["fill_price"], order["mark_id"]) == ("filled", 49.5, fill["id"])
+    assert order["closed_at"] == et(DAYS[0], "10:21").isoformat()
+    assert len(session_mod._load_marks(db_session, flat.id)) == 1
+    assert _advance(db_session, user_id, svc, flat.id, "11:30")["fills"] is None  # filled once, not again
+
+
+def test_a_buy_stop_the_tape_crossed_while_away_fills_at_its_trigger(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", high=51.5)
+    _, gapper, flat = _flat(db_session, user_id, svc)
+    _order(db_session, user_id, svc, flat.id, side="buy", orderType="stop", stopPrice=51.0, shares=4)
+    _advance(db_session, user_id, svc, gapper.id, "11:00")
+    out = _advance(db_session, user_id, svc, flat.id, "11:00")
+    (fill,) = out["fills"]
+    assert (fill["kind"], fill["price"], fill["at"]) == ("long_entry", 51.0, et(DAYS[0], "10:21"))
+    assert out["orders"][0]["status"] == "filled"
 
 
 def test_an_order_not_reached_while_away_still_fills_after_the_catch_up(db_session, user_id, svc, world) -> None:
-    _bend(world, "FLAT", "11:10", "11:11", low=49.0)  # after the clock (11:00): in front of her
+    _bend(world, "FLAT", "11:10", "11:11", low=49.0)  # after the clock (11:00): not revealed yet, so not a fill
     _, _, flat = _away_flat(db_session, user_id, svc, world)
     out = _advance(db_session, user_id, svc, flat.id, "11:00")
-    assert out["fills"] is None and out["orders"][0]["status"] == "working"
+    assert out["fills"] is None and out["orders"][0]["status"] == "working"  # no lookahead past the clock
     out = _advance(db_session, user_id, svc, flat.id, "11:30")
     (fill,) = out["fills"]
     assert (fill["price"], fill["at"]) == (49.5, et(DAYS[0], "11:11"))
@@ -335,15 +349,29 @@ def test_a_stop_limit_triggered_while_away_keeps_working_with_its_trigger_record
     assert out["fills"][0]["price"] == 49.5
 
 
-def test_a_resumed_name_lifted_to_the_clock_settles_its_orders_the_same_way(db_session, user_id, svc, world) -> None:
+def test_a_stop_limit_whose_two_legs_both_fall_in_the_away_span_fills_there(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", high=51.5)  # the 51.0 stop leg triggers
+    _bend(world, "FLAT", "10:40", "10:41", low=49.4)  # then the 49.5 limit leg is reached, still before the clock
+    _, gapper, flat = _flat(db_session, user_id, svc)
+    _order(
+        db_session, user_id, svc, flat.id, side="buy", orderType="stop_limit", stopPrice=51.0, limitPrice=49.5, shares=2
+    )
+    _advance(db_session, user_id, svc, gapper.id, "11:00")
+    out = _advance(db_session, user_id, svc, flat.id, "11:00")
+    (fill,) = out["fills"]
+    assert (fill["price"], fill["at"]) == (49.5, et(DAYS[0], "10:41"))
+
+
+def test_a_resumed_name_lifted_to_the_clock_fills_its_orders_the_same_way(db_session, user_id, svc, world) -> None:
     _bend(world, "FLAT", "10:20", "10:21", low=49.0)
     row, _, flat = _away_flat(db_session, user_id, svc, world)
     resumed = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)  # the Portfolio's row: lifts to 11:00
     db_session.commit()
     assert resumed.id == flat.id and resumed.revealed_through == et(DAYS[0], "11:00")
     (order,) = _orders(db_session, flat.id)
-    assert (order["status"], order["reason"]) == ("cancelled", session_mod.AWAY_FILL)
-    assert session_mod._load_marks(db_session, flat.id) == []
+    assert (order["status"], order["fill_price"], order["reason"]) == ("filled", 49.5, None)
+    (mark,) = session_mod._load_marks(db_session, flat.id)
+    assert (mark.kind, mark.price, mark.at) == ("long_entry", 49.5, et(DAYS[0], "10:21"))
 
 
 def test_a_filled_order_cannot_be_undone_but_its_trade_can_be_exited(db_session, user_id, svc, world) -> None:
@@ -368,3 +396,30 @@ def test_what_still_waits_when_the_day_ends_is_cancelled(db_session, user_id, sv
     db_session.commit()
     (order,) = _orders(db_session, flat.id)
     assert (order["status"], order["reason"]) == ("cancelled", "The day ended")
+
+
+# -- the day ends while she is on another name ------------------------------------------------------------------------
+
+
+def test_ending_the_day_fills_what_the_tape_reached_while_away_and_flattens_it_at_the_clock(
+    db_session, user_id, svc, world
+) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", low=49.0)
+    row, _, flat = _away_flat(db_session, user_id, svc, world)  # the clock is at 11:00; FLAT was never revisited
+    plan_mod.end_day(db_session, user_id, row.id, svc)
+    db_session.commit()
+    (order,) = _orders(db_session, flat.id)
+    assert (order["status"], order["fill_price"], order["reason"]) == ("filled", 49.5, None)
+    entry, exit_ = session_mod._load_marks(db_session, flat.id)
+    assert (entry.kind, entry.price, entry.at) == ("long_entry", 49.5, et(DAYS[0], "10:21"))
+    assert (exit_.kind, exit_.price, exit_.at, exit_.source) == ("long_exit", 50.0, et(DAYS[0], "11:00"), "auto")
+
+
+def test_ending_the_day_cancels_only_an_order_the_clock_never_reached(db_session, user_id, svc, world) -> None:
+    _bend(world, "FLAT", "11:10", "11:11", low=49.0)  # the day ends at 11:00: this bar is not revealed
+    row, _, flat = _away_flat(db_session, user_id, svc, world)
+    plan_mod.end_day(db_session, user_id, row.id, svc)
+    db_session.commit()
+    (order,) = _orders(db_session, flat.id)
+    assert (order["status"], order["reason"]) == ("cancelled", "The day ended")
+    assert session_mod._load_marks(db_session, flat.id) == []  # no lookahead into the unrevealed part of the day

@@ -141,6 +141,32 @@ def test_a_crossed_stop_stops_the_clock_while_she_is_away_and_play_continues_pas
     assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("11:30")  # the flagged stop does not pause twice
 
 
+def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_is_booked_at_the_day_end(
+    db_session, user_id, svc, wall, world
+) -> None:
+    _bend(world, "FLAT", "10:20", "10:21", low=49.0)  # the tape dips through a 49.5 limit at 10:21
+    thread_id, row, _ = _started(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    session_mod.place_order(
+        db_session, user_id, flat.id, svc, {"side": "buy", "orderType": "limit", "limitPrice": 49.5, "shares": 10}
+    )
+    db_session.commit()
+    _control(db_session, user_id, svc, thread_id, running=True, speed=10)
+    wall[0] += timedelta(hours=1)  # logged out: nobody syncs FLAT while the market runs to the close
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("11:30")
+
+    ended, _ = clock_mod.skip_day(db_session, user_id, thread_id, svc)
+    db_session.commit()
+    assert ended.status == "ended"
+    order = _row(db_session, flat.id).orders[0]
+    assert (order["status"], order["fill_price"], order["reason"]) == ("filled", 49.5, None)  # not "The day ended"
+    (entry, exit_) = session_mod._load_marks(db_session, flat.id)
+    assert (entry.kind, entry.price, entry.at) == ("long_entry", 49.5, _at("10:21"))  # at its bar, inside the span
+    assert (exit_.kind, exit_.price, exit_.at) == ("long_exit", 50.0, _at("11:30"))  # flattened at the close
+    (booked,) = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
+    assert (booked.shares, float(booked.pnl_usd)) == (10, 5.0)  # the balance moved without her
+
+
 # -- the account at the clock -------------------------------------------------------------------------------------
 
 

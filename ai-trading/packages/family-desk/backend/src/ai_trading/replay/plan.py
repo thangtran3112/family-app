@@ -1322,8 +1322,8 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         # to the clock, as an `advance` does: what lies between is revealed but was never in front of her (an away
         # span), and every advance scanned all open trades' stops, so nothing is skipped by the lift.
         created.away = add_span(list(created.away or []), _utc(created.revealed_through), _utc(row.revealed_through))
-        # A working order the tape would have filled inside that span is cancelled, not filled behind her back.
-        session_mod.settle_away_orders(db, svc, created, _utc(created.revealed_through), _utc(row.revealed_through))
+        # A working order the tape reached inside that span fills at its bar, like a watched one (ADR-0019).
+        session_mod.fill_away_orders(db, svc, created, _utc(created.revealed_through), _utc(row.revealed_through))
         created.revealed_through, created.updated_at = row.revealed_through, svc.now()
     db.flush()
     return created
