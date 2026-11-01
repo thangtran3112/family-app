@@ -68,7 +68,7 @@ test.describe("Practice: switching names", () => {
     await prepareDesk(context);
   });
 
-  test("a click opens a name at the day clock, a name left behind catches up, one trade is open at a time, and every list name opens", async ({ page, context }) => {
+  test("a click opens a name at the day clock, a name left behind catches up, and every list name opens", async ({ page, context }) => {
     test.setTimeout(240_000);
     await startEveryNamePlan(page, context);
     const dayUrl = page.url();
@@ -95,14 +95,7 @@ test.describe("Practice: switching names", () => {
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayOnNow);
 
-    // One open trade a day: opening LRCX from the list is refused in plain words while TSLA is open, with a way to TSLA.
-    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
-    await page.waitForURL(dayUrl);
-    await table.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Open LRCX" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Close your open TSLA practice trade before you switch to LRCX" })).toBeVisible();
-    await page.getByRole("link", { name: "Go to TSLA" }).click();
-    await page.waitForURL(SESSION_URL);
-    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    // Exit TSLA here; the next section opens LRCX at the clock TSLA reached. Holding several names at once has its own test below.
     await page.keyboard.press("x");
     await expect(await marks(page)).toContainText("Practice exit");
 
@@ -120,38 +113,31 @@ test.describe("Practice: switching names", () => {
     const clock = (await playhead(page).textContent()) ?? "";
     await expectCleanScreen(page);
 
-    // A new Long on LRCX joins the portfolio, and TSLA's row says why it cannot be switched to until LRCX is closed.
+    // A new Long on LRCX joins the portfolio; TSLA's row stays a plain switch (no "Close LRCX first").
     await page.keyboard.press("b");
     portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
-    const tslaRow = portfolio.locator('[data-symbol="TSLA"] button');
-    await expect(tslaRow).toHaveAttribute("aria-disabled", "true");
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Close LRCX first");
+    const tslaRow = portfolio.getByRole("button", { name: "Switch to TSLA" });
+    await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText(/Close LRCX first/);
     await page.keyboard.press("x");
     await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText("Flat");
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
 
-    // TSLA stayed at 9:33 while the clock moved on: it is behind, says so, and cannot be marked until it catches up.
+    // TSLA stayed at 9:33 while the clock moved on: its row says it is behind. Switching to it lifts it to the day clock (the
+    // server adds the away span), so it can be marked at once.
     portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayBehind);
     await expect(portfolio.locator("li")).toHaveCount(2);
     await portfolio.getByRole("button", { name: "Switch to TSLA" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-    await expect(playhead(page)).toHaveText(tslaPlayhead);
-    const banner = page.getByTestId("behind-clock");
-    await expect(banner).toContainText("TSLA is behind the day clock");
-    await expect(page.getByRole("button", { name: /^Long/ }).first()).toBeDisabled();
-    await page.keyboard.press("b");
-    await expect((await marks(page)).getByText("Practice long")).toHaveCount(1); // still only the first trade
-    await expectCleanScreen(page);
-
-    // Catch up: the playhead lands on the clock and the banner goes. Then it can be marked again.
-    await banner.getByRole("button", { name: PRACTICE_COPY.replayCatchUp }).click();
-    await expect(page.getByTestId("behind-clock")).toHaveCount(0);
     await expect(playhead(page)).toHaveText(clock);
+    await expect(page.getByTestId("behind-clock")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Long/ }).first()).toBeEnabled();
+    await expectCleanScreen(page);
     await page.keyboard.press("b");
-    await expect((await marks(page)).getByText("Practice long")).toHaveCount(2); // the first trade and the one after catching up
+    await expect((await marks(page)).getByText("Practice long")).toHaveCount(2); // the first trade and the one after the lift
     await page.keyboard.press("x");
 
     // Past the old two-name limit: a third and a fourth name open, and a name in hand switches back.
@@ -181,6 +167,167 @@ test.describe("Practice: switching names", () => {
     await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  /** Money in a text as numbers: "+$1,204.50" is 1204.5 and "−$310.00" is -310. */
+  const amounts = (text: string | null) =>
+    [...(text ?? "").matchAll(/([+−-])?\$([\d,]+\.\d{2})/g)].map((found) => (found[1] === "+" || found[1] === undefined ? 1 : -1) * Number(found[2]!.replace(/,/g, "")));
+
+  /** Opens a name from the day list's table and lands on its replay. */
+  async function openName(page: Page, dayUrl: string, symbol: string) {
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: new RegExp(symbol) }).getByText(symbol, { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: symbol, level: 1 })).toBeVisible();
+  }
+
+  test("two names hold open trades at once: the Portfolio shows 2 open and their combined total, a held name exits from the other chart, and End day names what it exits", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await startEveryNamePlan(page, context);
+    const dayUrl = page.url();
+
+    // Long TSLA three bars in, Back, open LRCX at the same clock and go Short: both trades stay open.
+    await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:33");
+    await page.keyboard.press("b");
+    await expect(await marks(page)).toContainText("Practice long");
+    await openName(page, dayUrl, "LRCX");
+    await expect(page.getByTestId("behind-clock")).toHaveCount(0);
+    await page.keyboard.press("s");
+    await expect(await marks(page)).toContainText("Practice short");
+    // Move the clock so both trades have a P/L worth adding up.
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:35");
+
+    // The Portfolio holds both names, each with its side, and its footer says how many are open and the combined total.
+    let portfolio = await portfolioPanel(page);
+    const tsla = portfolio.locator('[data-symbol="TSLA"]');
+    const lrcx = portfolio.locator('[data-symbol="LRCX"]');
+    await expect(tsla).toContainText(/Long \d+ @ \$/);
+    await expect(lrcx).toContainText(/Short \d+ @ \$/);
+    await expect(tsla.getByRole("button", { name: "Exit TSLA" })).toBeVisible();
+    await expect(lrcx.getByRole("button", { name: "Exit LRCX" })).toBeVisible();
+    const total = portfolio.getByTestId("portfolio-total");
+    await expect(total).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(total).toContainText("2 open of 5");
+    await expect(total).toContainText("as of");
+    await expect(portfolio.getByTestId("portfolio-row-total")).toHaveCount(2);
+    // The footer is read from the server after the clock settles, so it can trail the rows by one read: wait for it to agree.
+    await expect
+      .poll(async () => {
+        const rows = await portfolio.getByTestId("portfolio-row-total").allTextContents();
+        const [headline] = amounts(await total.textContent());
+        return Math.round(((headline ?? NaN) - rows.flatMap((text) => amounts(text)).reduce((sum, value) => sum + value, 0)) * 100);
+      }, { message: "the Day P/L is the two rows added up" })
+      .toBe(0);
+    await expect(portfolio.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
+    await expectCleanScreen(page);
+
+    // The hub's Today line adds the open trades, with the same open figure and its SIMULATED badge.
+    const [, , open] = amounts(await total.textContent());
+    await page.getByRole("link", { name: `← ${PRACTICE_COPY.backToPractice}` }).click();
+    await page.waitForURL(THREAD_URL);
+    const todayOpen = page.getByRole("region", { name: "Practice day" }).getByTestId("today-open");
+    await expect(todayOpen).toContainText("2 open");
+    expect(amounts(await todayOpen.textContent())[0]).toBeCloseTo(open!, 2);
+    await expect(page.getByRole("region", { name: "Practice day" }).getByText(PRACTICE_COPY.threadSimulated)).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
+    portfolio = await portfolioPanel(page);
+
+    // Exit TSLA without leaving LRCX's chart: the row goes flat, books its trade, and one trade is left open.
+    await portfolio.locator('[data-symbol="TSLA"]').getByRole("button", { name: "Exit TSLA" }).click();
+    portfolio = await portfolioPanel(page);
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("1 trade");
+    await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open of 5");
+    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
+
+    // The day page asks before it exits what is still open, and names it.
+    await page.getByRole("link", { name: PRACTICE_COPY.backToList }).click();
+    await page.waitForURL(dayUrl);
+    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    const confirm = page.getByRole("group", { name: "Confirm ending the day" });
+    await expect(confirm).toContainText("Ending the day exits 1 open practice trade at the price you see now: LRCX");
+    await confirm.getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    await expectCleanScreen(page);
+  });
+
+  /** LRCX long (no stop), then TSLA long with a stop 3 dollars under the entry, then back on LRCX one bar on: TSLA's stop is crossed while she is on LRCX. */
+  async function crossTslaStop(page: Page, context: BrowserContext) {
+    await startEveryNamePlan(page, context);
+    const dayUrl = page.url();
+    await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /LRCX/ }).getByText("LRCX", { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
+    for (let bar = 0; bar < 3; bar += 1) await page.keyboard.press("ArrowRight");
+    await expect(playhead(page)).toContainText("9:33");
+    await page.keyboard.press("b");
+    await expect(await marks(page)).toContainText("Practice long");
+    await openName(page, dayUrl, "TSLA");
+    await page.keyboard.press("b");
+    await expect(await marks(page)).toContainText("Practice long");
+    await page.keyboard.press("t");
+    const stop = page.getByRole("form", { name: "Stop note" });
+    await stop.getByRole("textbox").fill("372");
+    await stop.getByRole("button", { name: "Save" }).click();
+    await expect(await marks(page)).toContainText("Practice stop");
+    await openName(page, dayUrl, "LRCX");
+    await page.keyboard.press("ArrowRight");
+    return dayUrl;
+  }
+
+  test("a stop crossed on another name pauses play, floats its row to the top as Stop crossed · Exit, and the row's Exit books the exit", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await crossTslaStop(page, context);
+
+    // Play paused on LRCX's chart, and the toast names TSLA's stop.
+    const toast = page.getByRole("alert").filter({ hasText: "TSLA crossed your stop 372.00" });
+    await expect(toast).toBeVisible();
+    await expect(toast.getByRole("button", { name: "Exit TSLA" })).toBeVisible();
+
+    // TSLA opened after LRCX, but a crossed stop comes first.
+    let portfolio = await portfolioPanel(page);
+    const rows = portfolio.locator("li[data-symbol]");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toHaveAttribute("data-symbol", "TSLA");
+    await expect(rows.first()).toContainText(/Stop crossed \d{2}:\d{2}/);
+    await expect(rows.last()).toHaveAttribute("data-symbol", "LRCX");
+    await expect(rows.last()).not.toContainText("Stop crossed");
+
+    // Exit from the row: she stays on LRCX, TSLA goes flat, and the pause is answered.
+    await rows.first().getByRole("button", { name: "Exit TSLA" }).click();
+    portfolio = await portfolioPanel(page);
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText("Stop crossed");
+    await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open of 5");
+    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
+    await expect(toast).toHaveCount(0);
+    await expectCleanScreen(page);
+  });
+
+  test("the day's stop-pause toast exits the paused name through its own session, and the exit counts as honoring the stop", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await crossTslaStop(page, context);
+
+    const toast = page.getByRole("alert").filter({ hasText: "TSLA crossed your stop 372.00" });
+    await expect(toast).toBeVisible();
+    await toast.getByRole("button", { name: "Exit TSLA" }).click();
+    // Exit opens TSLA's session at the clock and books the exit there.
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await expect(await marks(page)).toContainText("Practice exit");
+    await expect(page.getByRole("alert").filter({ hasText: "TSLA crossed your stop" })).toHaveCount(0);
+    const portfolio = await portfolioPanel(page);
+    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
+    await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
     await expectCleanScreen(page);
   });
 

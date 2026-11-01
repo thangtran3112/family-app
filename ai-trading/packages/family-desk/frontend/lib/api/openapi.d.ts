@@ -4424,6 +4424,8 @@ export interface components {
         OpenTradeOut: {
             /** Days Held */
             days_held?: number | null;
+            /** Entry At */
+            entry_at?: string | null;
             /** Entry Price */
             entry_price: number;
             /** Gap Usd */

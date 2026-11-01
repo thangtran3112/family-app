@@ -1300,7 +1300,7 @@ describe("0001b-2 deploy workflow: target, dark, image_tag", () => {
     expect(join?.uses).toMatch(/^tailscale\/github-action@[0-9a-f]{40}( #.*)?$/);
     expect(join?.with).toEqual({
       "oauth-client-id": "${{ secrets.TS_CI_OAUTH_CLIENT_ID }}",
-      "oauth-secret": "${{ secrets.TS_CI_OAUTH_SECRET }}",
+      "oauth-secret": "${{ secrets.TS_CI_OAUTH_CLIENT_SECRET }}",
       tags: "tag:ci",
     });
     expect(workflow.jobs.deploy.permissions?.["id-token"]).toBeUndefined();

@@ -54,7 +54,7 @@ test("columnFromSpec renders through formatMetric and sorts by the raw value", (
   assert.equal("firstSort" in column, false, "the table's own number-first-descending default stands");
 });
 
-test("columnFromSpec keeps text left, honours align, priority and firstSort, and paints the sign with changeTone", () => {
+test("columnFromSpec keeps text left, honours align, priority and firstSort, and paints the sign with signTone", () => {
   const time = columnFromSpec<Row>(spec({ key: "t", label: "Since", format: "time", priority: 2, firstSort: "asc" }), () => "2026-10-23T14:00:00Z");
   assert.deepEqual([time.kind, time.align, time.priority, time.firstSort], ["text", "left", 2, "asc"]);
   assert.equal(columnFromSpec<Row>(spec({ format: "text", align: "right" }), (row) => row.label).align, "right", "an explicit align wins");
@@ -62,7 +62,7 @@ test("columnFromSpec keeps text left, honours align, priority and firstSort, and
   const signed = columnFromSpec<Row>(spec(), (row) => row.chg, paint);
   assert.equal(signed.render({ chg: 2, label: "" }), "up:+2.00%");
   assert.equal(signed.render({ chg: -2, label: "" }), "down:−2.00%");
-  assert.equal(signed.render({ chg: null, label: "" }), "flat:—");
+  assert.equal(signed.render({ chg: null, label: "" }), "neutral:—");
   const plain = columnFromSpec<Row>(spec({ format: "price" }), (row) => row.chg, paint);
   assert.equal(plain.render({ chg: 2, label: "" }), "2.00", "only pct_signed carries a tone");
 });

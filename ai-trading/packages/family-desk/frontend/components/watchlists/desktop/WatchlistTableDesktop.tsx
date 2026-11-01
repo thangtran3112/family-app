@@ -1,17 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
+import { Badge } from "@/components/ui/Badge";
+import { Delta } from "@/components/ui/Delta";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
+import type { Tone } from "@/components/ui/tone";
 import type { WatchlistTable } from "@/lib/api/schemas";
 import { withPriorities } from "@/lib/desk/columns";
-import { changeTone, formatPrice, formatRatio, formatSignedPct } from "@/lib/desk/format";
+import { formatPrice, formatRatio } from "@/lib/desk/format";
 import { SYMBOL_HREF } from "@/lib/lanes";
-import { biasTone } from "@/lib/desk/workspace";
+import { biasUiTone } from "@/lib/desk/workspace";
 import { strategyChips } from "@/lib/desk/watchlistView";
 import styles from "./watchlistDesktop.module.css";
 
 type Row = WatchlistTable["rows"][number];
+
+/** A Badge that ellipsizes inside its slot (150 px, 220 px when alone: see the CSS), so two chips and a "+N" fit the table. */
+function ChipSlot({ tone, title, children }: { tone: Tone; title: string; children: ReactNode }) {
+  return (
+    <span className={styles.chipSlot}>
+      <Badge tone={tone} title={title}><span className={styles.chipText}>{children}</span></Badge>
+    </span>
+  );
+}
 
 // 1180 drops RVOL, then the bias label (lib/desk/columns.ts, BOARD_PRIORITIES.watchlist).
 const COLUMNS = withPriorities<DenseColumn<Row>>(
@@ -33,7 +46,7 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
       label: "Chg %",
       align: "right",
       sortValue: (row) => row.change_pct,
-      render: (row) => <span className={styles[changeTone(row.change_pct)]}>{formatSignedPct(row.change_pct)}</span>,
+      render: (row) => <Delta value={row.change_pct} />,
     },
     {
       key: "rvol_10d",
@@ -45,7 +58,7 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
     {
       key: "bias_label",
       label: "Bias",
-      render: (row) => <span className={styles[biasTone(row.bias_label)]}>{row.bias_label}</span>,
+      render: (row) => <Delta tone={biasUiTone(row.bias_label)}>{row.bias_label}</Delta>,
     },
     {
       key: "tags",
@@ -56,13 +69,13 @@ const COLUMNS = withPriorities<DenseColumn<Row>>(
         return (
           <>
             {shown.map((chip, index) => (
-              <span key={index} className={chip.armed ? styles.armedChip : styles.chip} title={chip.text}>{chip.text}</span>
+              <ChipSlot key={index} tone={chip.tone} title={chip.text}>{chip.text}</ChipSlot>
             ))}
             {hidden.length > 0 && (
-              <span className={styles.chip} title={rest}>
+              <ChipSlot tone="neutral" title={rest}>
                 +{hidden.length}
-                <span className={styles.srOnly}> more: {rest}</span>
-              </span>
+                <span className="sr-only"> more: {rest}</span>
+              </ChipSlot>
             )}
           </>
         );

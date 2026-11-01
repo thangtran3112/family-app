@@ -5,11 +5,11 @@ description: Use for the family-app Tailscale tailnet - checking tailnet or devi
 
 # Manage the family-app tailnet
 
-Rule: `.claude/rules/tailscale.md` (this package). Terraform and console steps: `infrastructure/tailscale/README.md`; do not restate them. Paths are relative to the repository root.
+Rule: `.claude/rules/tailscale.md` (repository root, shared by both packages). Terraform and console steps: `infrastructure/tailscale/README.md`; do not restate them. Paths are relative to the repository root.
 
 ## This tailnet in one screen
 
-- Admin and CI SSH only: `autogroup:admin` and `tag:ci` reach `tag:family-host` on `tcp:2222`. Default deny. Public traffic uses the Cloudflare tunnels and never the tailnet.
+- CI/CD deployment is its production consumer: the GitHub deploy runners join as `tag:ci` and reach `tag:family-host` on `tcp:2222`. Default deny. The `autogroup:admin` grant is break-glass for a device already in this tailnet. Public traffic uses the Cloudflare tunnels and never the tailnet. Operator SSH is the Cloudflare Access path in skill `manage-cloudflare-tunnel`.
 - Code: `infrastructure/tailscale/` (`main.tf`, `run-terraform.sh`, `mint-authkey.sh`). The operator applies it; CI never does.
 - Credentials: Firestore `shared/tailscale` (`TAILSCALE_TAILNET`, `TAILSCALE_TF_OAUTH_CLIENT_*`, `TAILSCALE_ENROLL_OAUTH_CLIENT_*`), read only through `common/config/family_config.py`. Names only, never values.
 
@@ -66,7 +66,7 @@ a=get("/acl"); print(json.dumps({k:a.get(k) for k in ("tagOwners","grants")}))
 | `plan` wants to replace or destroy the policy on a tailnet that already has state | Wrong `TAILSCALE_TAILNET`, wrong state prefix, or `overwrite_existing_content` removed from `main.tf` | Do not apply. Read `git diff` on `main.tf`, then tell the operator. A first plan showing 1 to add is normal |
 | `tag:family-host` not offered when creating the enrollment credential | The policy was never applied, so `tagOwners` does not declare it | Operator applies it, confirms the readback, then retries |
 | Auth key rejected, `tailscale up` fails | Key older than one hour, or already used once | Operator reruns `mint-authkey.sh` and pipes it immediately |
-| SSH to the host times out | Default deny drops it: the client is not in this tailnet, or the source is not `autogroup:admin` or `tag:ci` | Check `grants` in the readback, and ask the operator which tailnet the client is in |
+| SSH to the host times out | Default deny drops it: the client is not in this tailnet, or the source is not `autogroup:admin` or `tag:ci` | Expected for any client that is not `tag:ci` or an existing member: the owner's machine is not in this tailnet and must not join it. Operator access is the Cloudflare Access SSH path in skill `manage-cloudflare-tunnel`, not a device enrolment. For CI, check `grants` in the readback |
 | SSH refused on 2222 | The packet arrives but the host is untagged, or sshd does not listen on `2222` | Check the device tags in the readback. Re-enroll with `--advertise-tags`. Check sshd |
 | CI cannot join | `tag:ci` missing from `tagOwners`, or the CI OAuth client lacks `auth_keys` for `tag:ci` | Fix `main.tf`, `plan`, and hand `apply` to the operator. The CI client is the operator's (README console steps) |
 | A device never appears in the inventory | It is signed into another tailnet (one tailnet per tailscaled), or the key came from another tailnet | Ask the operator to check on the machine. Never look at the other tailnet from here |
@@ -79,6 +79,22 @@ a=get("/acl"); print(json.dumps({k:a.get(k) for k in ("tagOwners","grants")}))
 - Never run `terraform` directly, export `TAILSCALE_*` by hand, or pass a credential on a command line.
 - `apply`, `tailscale up`, `login`, `logout`, credential revocation or rotation, and enrollment are operator actions. Run `mint-authkey.sh` only when the operator asks.
 
-## Coexistence
+## Break-glass: switching this Mac onto this tailnet
 
-The host belongs to the employer tailnet until cutover, and a machine is in one tailnet per tailscaled instance. Moving it, or running a second tailscaled, is decided by the migration plan, not by this skill. Until that plan says otherwise, deploys keep their current SSH and Cloudflare path.
+A `tailscaled` is signed in to **one tailnet at a time**. Simultaneous membership is an open request upstream (tailscale/tailscale#183), and Tailscale's position there is that account *switching* is the supported path. The owner's Mac belongs to another tailnet whose own work depends on it, so switching is the exception, not the routine: the Cloudflare Access path in `manage-cloudflare-tunnel` is the normal way in.
+
+Switch, in this order, and switch back when done:
+
+```bash
+ts-switch                       # list the signed-in tailnets; shows the active one
+ts-switch family                # the owner's personal tailnet (the one this repo uses)
+ssh <host>                      # MagicDNS name; the host is tag:family-host
+ts-switch chartflow             # back to the other tailnet when finished
+```
+
+`ts-switch` is a shell function in the owner's `~/.zshrc`: it picks the profile by account, runs `tailscale switch` (alpha, present in 1.104.2), re-applies the macOS resolver fix, and prints the tailnet it landed on. It also refuses politely when the target profile was never signed in on that machine — a first switch to this tailnet needs one interactive `tailscale login` on it, which is the operator's action.
+
+- The other tailnet is unreachable for as long as the switch lasts; anything on the Mac that rides it stops working. Say so before switching on a machine that someone is using.
+- The family host answers on its MagicDNS name only while the Mac is on this tailnet, and only for `autogroup:admin` (the grant in `main.tf`). A timeout after a successful switch is a policy or tag problem, not a DNS one.
+- **Never** enrol the other tailnet's device into this one, log it out of its own tailnet to test this one, or run a second `tailscaled` on it without a written decision in the migration plan. Switching is reversible in one command; enrolment is not.
+- Switching is also what CI does not do: the runners join as `tag:ci` through their own OAuth credential and never touch a human's machine.

@@ -182,7 +182,7 @@ amends `ai-trading/AGENTS.md` ("Application deployment artifacts ... live in
    - `workflow_dispatch` with `target: vps|laptop`, `dark`, and `image_tag` (reuse a pushed tag;
      skip the build);
    - the `target=laptop` path uses the Tailscale step with GitHub env secret copies
-     `TS_CI_OAUTH_CLIENT_ID` and `TS_CI_OAUTH_SECRET`, plus a second set of copies for the laptop
+     `TS_CI_OAUTH_CLIENT_ID` and `TS_CI_OAUTH_CLIENT_SECRET`, plus a second set of copies for the laptop
      host (`LAPTOP_HOST`, `LAPTOP_PORT`, `LAPTOP_USER` vars; `LAPTOP_DEPLOY_SSH_KEY` and
      `LAPTOP_DEPLOY_KNOWN_HOSTS` secrets), set with `gh secret set` / `gh variable set` from
      `shared/laptop`. The VPS copies stay until 0001f.

@@ -1,10 +1,11 @@
 "use client";
 
-import { Portfolio } from "@/components/practice/replay/Portfolio";
+import { PortfolioPanel } from "@/components/practice/replay/Portfolio";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { useShellBand } from "@/lib/desk/useViewportBand";
+import type { DeskQueryResult } from "@/lib/desk/useDeskQuery";
 import type { DayList } from "@/lib/replay/daily";
 import { blockLadder, blockOpenByDefault, riskPlanText } from "@/lib/replay/dayView";
 import { dayResultTone, formatBalance, formatDayResult, threadName } from "@/lib/replay/threadView";
@@ -15,13 +16,13 @@ export type DayLeftPanelProps = {
   list: DayList;
   /** The thread's full payload (its risk plan); null while it loads or when the day has no thread. */
   thread: Thread | null;
-  /** Bump to re-read the portfolio (the day page changed). */
-  revision: number;
+  /** The day list as the Portfolio reads it (the day page owns the read, so End day names the same open trades). */
+  portfolio: DeskQueryResult<DayList>;
 };
 
 /** The day list's left rail (P7): the day's portfolio, the thread box with its risk plan, and the block's days. At 1180 the
  *  portfolio is the right rail's tab instead. */
-export function DayLeftPanel({ list, thread, revision }: DayLeftPanelProps) {
+export function DayLeftPanel({ list, thread, portfolio }: DayLeftPanelProps) {
   const brief = list.thread;
   const band = useShellBand();
   return (
@@ -30,7 +31,7 @@ export function DayLeftPanel({ list, thread, revision }: DayLeftPanelProps) {
         {band === "1440" && (
           <section className={styles.sideSection} aria-label={PRACTICE_COPY.dayPortfolio}>
             <h2 className={styles.sideTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
-            <Portfolio dayListId={list.id} revision={revision} />
+            <PortfolioPanel dayListId={list.id} query={portfolio} />
           </section>
         )}
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/Button";
+import { PanelHeader } from "@/components/ui/Panel";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
 import { createWatchlist, deleteWatchlist, removeWatchlistItem, renameWatchlist, reorderWatchlist } from "@/lib/desk/watchlists";
 import { manageErrorMessage, moveSymbol, orderChange, validateListName } from "@/lib/desk/watchlistView";
@@ -128,84 +130,68 @@ export function ManageMode({
       {list && (
         <>
           <form className={styles.section} onSubmit={saveName}>
-            <h2 className={styles.sectionTitle}>Rename list</h2>
+            <PanelHeader variant="label" level={2} title="Rename list" />
             <div className={styles.row}>
               <label className={styles.field}>
                 <span>List name</span>
                 <input autoComplete="off" value={name} onChange={(event) => setName(event.currentTarget.value)} />
               </label>
-              <button
-                type="submit"
-                className={`${styles.button} ${styles.primary}`}
-                disabled={rename.pending || renameProblem !== null || name === list.name}
-              >
+              <Button type="submit" variant="primary" loading={rename.pending} disabled={renameProblem !== null || name === list.name}>
                 {rename.pending ? "Saving…" : "Save name"}
-              </button>
+              </Button>
             </div>
             {renameProblem && <p className={styles.muted}>{renameProblem}</p>}
             <Status request={rename} />
           </form>
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Symbols</h2>
+            <PanelHeader variant="label" level={2} title="Symbols" />
             {order.length === 0 ? <p className={styles.muted}>No symbols yet</p> : (
               <ol className={styles.rows}>
                 {order.map((symbol, index) => (
                   <li key={symbol} className={styles.symbolRow}>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
                       aria-label={`Move ${symbol} up`}
                       disabled={index === 0 || symbols.pending}
                       onClick={() => setDraft(moveSymbol(order, index, -1))}
                     >
                       ▲
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
                       aria-label={`Move ${symbol} down`}
                       disabled={index === order.length - 1 || symbols.pending}
                       onClick={() => setDraft(moveSymbol(order, index, 1))}
                     >
                       ▼
-                    </button>
+                    </Button>
                     <span className={styles.symbol}>{symbol}</span>
                     {backfilling.has(symbol) && <span className={styles.pending}>Backfilling history</span>}
                     <span className={styles.grow} />
                     {confirmRemove === symbol ? (
                       <span className={styles.confirm}>
                         Remove {symbol}?
-                        <button
-                          type="button"
-                          className={`${styles.button} ${styles.danger} ${styles.small}`}
-                          disabled={symbols.pending}
-                          onClick={() => removeSymbol(symbol)}
-                        >
+                        <Button variant="danger" size="sm" loading={symbols.pending} onClick={() => removeSymbol(symbol)}>
                           {symbols.pending ? "Removing…" : "Yes, remove"}
-                        </button>
-                        <button type="button" className={`${styles.button} ${styles.small}`} onClick={() => setConfirmRemove(null)}>
-                          Cancel
-                        </button>
+                        </Button>
+                        <Button size="sm" onClick={() => setConfirmRemove(null)}>Cancel</Button>
                       </span>
                     ) : (
-                      <button
-                        type="button"
-                        className={`${styles.button} ${styles.small}`}
-                        aria-label={`Remove ${symbol}`}
-                        onClick={() => setConfirmRemove(symbol)}
-                      >
-                        Remove
-                      </button>
+                      <Button size="sm" aria-label={`Remove ${symbol}`} onClick={() => setConfirmRemove(symbol)}>Remove</Button>
                     )}
                   </li>
                 ))}
               </ol>
             )}
             <div className={styles.row}>
-              <button type="button" className={`${styles.button} ${styles.primary}`} disabled={change === null || symbols.pending} onClick={saveOrder}>
+              <Button variant="primary" loading={symbols.pending} disabled={change === null} onClick={saveOrder}>
                 {symbols.pending ? "Saving…" : "Save order"}
-              </button>
+              </Button>
             </div>
             <Status request={symbols} />
             <AddSymbol watchlistId={list.id} onAdded={symbolsChanged} />
@@ -214,7 +200,7 @@ export function ManageMode({
       )}
 
       <form className={styles.section} onSubmit={createList}>
-        <h2 className={styles.sectionTitle}>New list</h2>
+        <PanelHeader variant="label" level={2} title="New list" />
         <div className={styles.row}>
           <label className={styles.field}>
             <span>Name</span>
@@ -226,13 +212,9 @@ export function ManageMode({
               {HORIZONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
-          <button
-            type="submit"
-            className={`${styles.button} ${styles.primary}`}
-            disabled={!newName.trim() || createProblem !== null || create.pending}
-          >
+          <Button type="submit" variant="primary" loading={create.pending} disabled={!newName.trim() || createProblem !== null}>
             {create.pending ? "Saving…" : "Create list"}
-          </button>
+          </Button>
         </div>
         {createProblem && <p className={styles.muted}>{createProblem}</p>}
         <Status request={create} />
@@ -240,20 +222,18 @@ export function ManageMode({
 
       {list && (
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Delete this list</h2>
+          <PanelHeader variant="label" level={2} title="Delete this list" />
           <div className={styles.row}>
             {confirmDelete ? (
               <>
                 <span className={styles.confirm}>Delete {list.name}?</span>
-                <button type="button" className={`${styles.button} ${styles.danger}`} disabled={remove.pending} onClick={deleteList}>
+                <Button variant="danger" loading={remove.pending} onClick={deleteList}>
                   {remove.pending ? "Deleting…" : "Yes, delete list"}
-                </button>
-                <button type="button" className={styles.button} onClick={() => setConfirmDelete(false)}>Cancel</button>
+                </Button>
+                <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
               </>
             ) : (
-              <button type="button" className={`${styles.button} ${styles.danger}`} onClick={() => setConfirmDelete(true)}>
-                Delete list
-              </button>
+              <Button variant="danger" onClick={() => setConfirmDelete(true)}>Delete list</Button>
             )}
           </div>
           <Status request={remove} />

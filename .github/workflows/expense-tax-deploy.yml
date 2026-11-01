@@ -141,14 +141,14 @@ jobs:
           LAPTOP_DEPLOY_SSH_KEY: ${{ secrets.LAPTOP_DEPLOY_SSH_KEY }}
           LAPTOP_DEPLOY_KNOWN_HOSTS: ${{ secrets.LAPTOP_DEPLOY_KNOWN_HOSTS }}
           TS_CI_OAUTH_CLIENT_ID: ${{ secrets.TS_CI_OAUTH_CLIENT_ID }}
-          TS_CI_OAUTH_SECRET: ${{ secrets.TS_CI_OAUTH_SECRET }}
+          TS_CI_OAUTH_CLIENT_SECRET: ${{ secrets.TS_CI_OAUTH_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           case "$TARGET" in vps | laptop) ;; *) echo "target must be vps or laptop" >&2; exit 1 ;; esac
           # Fail closed: an unset laptop value stops the deploy. The VPS is stopped,
           # so never fall back to it.
           if [[ "$TARGET" == "laptop" ]]; then
-            for name in LAPTOP_HOST LAPTOP_PORT LAPTOP_USER LAPTOP_DEPLOY_SSH_KEY LAPTOP_DEPLOY_KNOWN_HOSTS TS_CI_OAUTH_CLIENT_ID TS_CI_OAUTH_SECRET; do
+            for name in LAPTOP_HOST LAPTOP_PORT LAPTOP_USER LAPTOP_DEPLOY_SSH_KEY LAPTOP_DEPLOY_KNOWN_HOSTS TS_CI_OAUTH_CLIENT_ID TS_CI_OAUTH_CLIENT_SECRET; do
               if [[ -z "${!name}" ]]; then
                 echo "target=laptop needs $name (GitHub copy of Firestore shared/laptop or shared/tailscale)" >&2
                 exit 1
@@ -177,7 +177,7 @@ jobs:
         uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
         with:
           oauth-client-id: ${{ secrets.TS_CI_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_CI_OAUTH_SECRET }}
+          oauth-secret: ${{ secrets.TS_CI_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
       # Production env is not read here: the VPS loads it from Firestore

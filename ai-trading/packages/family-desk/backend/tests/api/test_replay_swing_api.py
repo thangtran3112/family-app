@@ -789,8 +789,16 @@ def test_a_day_threads_responses_carry_no_swing_shapes(client: TestClient, db_se
     entered = MarkResultOut.model_validate(entry)
     assert entered.hold is None and entered.open_trade is not None and "hold" not in entry
     assert set(entry["open_trade"]) == {
-        "trade_no", "side", "shares", "entry_price", "stop_price", "last_price", "unrealized_usd", "r"
-    }  # fmt: skip
+        "trade_no",
+        "side",
+        "shares",
+        "entry_price",
+        "entry_at",
+        "stop_price",
+        "last_price",
+        "unrealized_usd",
+        "r",
+    }  # fmt: skip  (a day trade says when it was entered; a swing hold leaves entry_at out)
     undo_json = client.delete(f"{BASE}/sessions/{sid}/marks/{entered.mark.id}", headers=auth_headers()).json()
     assert MarkUndoOut.model_validate(undo_json).hold is None and "hold" not in undo_json
     thread = client.get(f"{BASE}/threads", headers=auth_headers()).json()[0]

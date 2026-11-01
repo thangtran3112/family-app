@@ -9,20 +9,8 @@
 .muted { font-size: var(--text-label); }
 .feedback { color: var(--color-text); }
 .error { margin: 0; color: var(--color-down); font-size: var(--text-label); }
-.up { color: var(--color-up); }
-.down { color: var(--color-down); }
-.flat { color: var(--color-muted); }
 
-.button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-3); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; }
-.button:hover:not(:disabled) { background: var(--color-raised); }
-.button:disabled { color: var(--color-muted); cursor: default; opacity: 0.6; }
-.button[aria-pressed="true"], .primary { border-color: var(--color-amber); color: var(--color-amber); }
-.danger { border-color: var(--color-down); color: var(--color-down); }
-.small { min-height: 24px; padding: 0 var(--space-2); }
-.iconButton { display: inline-flex; width: 24px; height: 24px; flex: 0 0 auto; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0; color: var(--color-muted); font-size: var(--text-micro); cursor: pointer; }
-.iconButton:hover:not(:disabled) { background: var(--color-raised); color: var(--color-text); }
-.iconButton:disabled { opacity: 0.35; cursor: default; }
-.button:focus-visible, .iconButton:focus-visible, .field input:focus-visible, .field select:focus-visible, .link:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+.field input:focus-visible, .field select:focus-visible, .link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 .link { display: inline-flex; min-height: 24px; align-items: center; color: var(--color-amber); font-size: var(--text-label); font-weight: var(--weight-semibold); white-space: nowrap; }
 .link:hover { text-decoration: underline; }
@@ -30,15 +18,13 @@
 /* Table cells (DenseTable 28 px rows) */
 .symbol { display: block; font-weight: var(--weight-bold); }
 .name { display: block; max-width: 180px; overflow: hidden; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-regular); text-overflow: ellipsis; }
-/* Two chips and a "+N" must fit the 808 px table at 1440 (150 each); a lone chip keeps room for a fire time ("Hammer 15m near S1 · 3:15 PM"). */
-.chip, .armedChip { display: inline-block; max-width: 150px; overflow: hidden; vertical-align: middle; margin-right: var(--space-1); border: 1px solid var(--color-hairline); border-radius: var(--radius-full); padding: 0 var(--space-2); color: var(--color-text); font-size: var(--text-micro); line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
-.chip:first-child:last-child, .armedChip:first-child:last-child { max-width: 220px; }
-.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.armedChip { border-color: var(--color-amber); color: var(--color-amber); }
+/* A Badge in a slot. Two chips and a "+N" must fit the 808 px table at 1440 (150 each); a lone chip keeps room for a fire time ("Hammer 15m near S1 · 3:15 PM"). */
+.chipSlot { display: inline-block; max-width: 150px; vertical-align: middle; margin-right: var(--space-1); }
+.chipSlot:first-child:last-child { max-width: 220px; }
+.chipText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* Manage mode */
 .section { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding-bottom: var(--space-3); }
-.sectionTitle, .heading { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .field { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--color-muted); font-size: var(--text-micro); }
 .field input, .field select { min-height: 32px; min-width: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); background: var(--color-panel); padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); }
 .field select { cursor: pointer; }
