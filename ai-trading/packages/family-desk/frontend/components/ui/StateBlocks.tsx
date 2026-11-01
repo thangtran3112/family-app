@@ -37,13 +37,17 @@ export function ErrorBlock({ subject, message, onRetry, retrying = false }: { su
   );
 }
 
-/** A reason and, when there is a next step, an `action` link ("Open Settings"). `children` carry anything more (a list, a hint). */
-export function EmptyBlock({ title, children, action }: { title: ReactNode; children?: ReactNode; action?: { label: string; href: string } }) {
+/** What an empty block offers: a link (`href`) or a button (`onClick`, for a step that opens a dialog), `primary` when it is the screen's one main action. */
+export type EmptyAction = { label: string; primary?: boolean } & ({ href: string; onClick?: undefined } | { onClick: () => void; href?: undefined });
+
+/** A reason and, when there is a next step, an `action` ("Open Settings"). `children` carry anything more (a list, a hint). `framed` draws it as one centred card, for a page that has nothing else on it. */
+export function EmptyBlock({ title, children, action, framed = false }: { title: ReactNode; children?: ReactNode; action?: EmptyAction; framed?: boolean }) {
+  const variant = action?.primary ? "primary" : "secondary";
   return (
-    <div className={styles.empty}>
+    <div className={styles.empty} data-framed={framed || undefined}>
       <p className={styles.emptyTitle}>{title}</p>
       {children && <div className={styles.emptyBody}>{children}</div>}
-      {action && <Button href={action.href}>{action.label}</Button>}
+      {action && (action.href !== undefined ? <Button href={action.href} variant={variant}>{action.label}</Button> : <Button onClick={action.onClick} variant={variant}>{action.label}</Button>)}
     </div>
   );
 }

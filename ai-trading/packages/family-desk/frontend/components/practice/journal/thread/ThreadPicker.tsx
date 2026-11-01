@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadThreads } from "@/lib/desk/replay";
@@ -18,12 +17,13 @@ export function ThreadPicker() {
           const rows = [...threads].sort((a, b) => Number(b.thread.status === "active") - Number(a.thread.status === "active"));
           return (
             // With no thread there is one statement, not "no thread selected" over "no thread yet" (D-117).
-            <EmptyBlock title={rows.length === 0 ? PRACTICE_COPY.threadPickNone : PRACTICE_COPY.threadPickTitle}>
-              <div className={styles.stack}>
-                {rows.length > 0 && <p className={styles.muted}>{PRACTICE_COPY.threadPickHint}</p>}
-                {rows.length > 0 && <ThreadList rows={rows} label="Your threads" />}
-                <Link href="/practice" className={styles.link}>Open Practice</Link>
-              </div>
+            <EmptyBlock framed={rows.length === 0} title={rows.length === 0 ? PRACTICE_COPY.threadPickNone : PRACTICE_COPY.threadPickTitle} action={{ label: PRACTICE_COPY.openPractice, href: "/practice", primary: rows.length === 0 }}>
+              {rows.length > 0 && (
+                <div className={styles.stack}>
+                  <p className={styles.muted}>{PRACTICE_COPY.threadPickHint}</p>
+                  <ThreadList rows={rows} label="Your threads" />
+                </div>
+              )}
             </EmptyBlock>
           );
         }}
