@@ -305,8 +305,10 @@ test("aborting after a signal page prevents the next page request", async () => 
   const fetcher = createDeskApiClient(
     async (_input, init) => {
       calls += 1;
-      assert.equal(init?.signal, controller.signal);
+      // The request's signal is the caller's joined with the client's read timeout: the caller's abort must reach it.
+      assert.equal(init?.signal?.aborted, false);
       controller.abort();
+      assert.equal(init?.signal?.aborted, true);
       return Response.json(Array.from({ length: 200 }, (_, index) => ({
         id: index + 1,
         strategy_version_id: 10,

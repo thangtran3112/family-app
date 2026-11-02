@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
 import { curveLayout, dayTickStep, type Box } from "@/lib/replay/threadChart";
 import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
@@ -27,14 +27,17 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   const lowRight = lowest !== null && lowest.x > plot.x + plot.width - 80;
   // When the newest point is also the lowest, "Now" already says it: a second label on the same spot would print over it.
   const lowIsNow = lowest !== null && now !== null && lowest.x === now.x && lowest.y === now.y;
+  // The newest point is the last ended day's close, not "now": the header balance also counts what today has realized.
+  const lastDay = points.at(-1)?.n ?? 0;
+  const nowText = now ? practiceText("curveAfterDay", { n: lastDay, balance: formatBalance(now.balance) }) : "";
   const lowText = lowest ? `lowest ${formatBalance(lowest.balance)}` : "never below the start";
   // The start note moves off the "Now" and "Lowest" labels, as on the swing curve (it printed over them on a live thread).
   const others: CurveLabel[] = [
-    ...(now ? [{ x: now.x - 8, y: now.y - 8, text: `Now ${formatBalance(now.balance)}`, anchor: "end" as const }] : []),
+    ...(now ? [{ x: now.x - 8, y: now.y - 8, text: nowText, anchor: "end" as const }] : []),
     ...(lowest && !lowIsNow ? [{ x: lowest.x, y: lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8, text: `Lowest ${formatBalance(lowest.balance)}`, anchor: lowRight ? ("end" as const) : ("start" as const) }] : []),
   ];
   const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, others);
-  const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, now ${formatBalance(stats.balance)}, ${lowText}.`;
+  const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, ${now ? `after day ${lastDay} ${formatBalance(now.balance)}` : `now ${formatBalance(stats.balance)}`}, ${lowText}.`;
 
   return (
     <MiniChartFrame
@@ -68,7 +71,7 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
         ) : null,
       )}
       {now && (
-        <text x={now.x - 8} y={now.y - 8} textAnchor="end" className={styles.nowLabel}>{`Now ${formatBalance(now.balance)}`}</text>
+        <text x={now.x - 8} y={now.y - 8} textAnchor="end" className={styles.nowLabel}>{nowText}</text>
       )}
       {lowest && !lowIsNow && (
         <text

@@ -42,3 +42,13 @@ test("a new key drops the previous key's data", () => {
   // A late answer for the old key replaces nothing useful: the reducer follows the action's key.
   assert.equal(late.key, "a");
 });
+
+test("failures count the failed reads in a row and a success starts the count again", () => {
+  let state: QueryState<number> = queryReducer(initialQueryState<number>("a"), { type: "success", key: "a", data: 1, at: 10 });
+  for (const expected of [1, 2, 3]) {
+    state = queryReducer(queryReducer(state, { type: "start", key: "a" }), { type: "failure", key: "a", error: new Error("down") });
+    assert.equal(state.failures, expected);
+  }
+  assert.equal(queryReducer(state, { type: "success", key: "a", data: 2, at: 20 }).failures, 0);
+  assert.equal(queryReducer(initialQueryState<number>("a"), { type: "failure", key: "a", error: new Error("x") }).failures, 1);
+});

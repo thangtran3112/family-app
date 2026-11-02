@@ -71,7 +71,7 @@ test.describe("Practice: the thread clock", () => {
     // Portfolio, and back to the chart through the TSLA row: the clock did not stop, and nobody pressed Play again.
     await page.getByRole("tab", { name: "Portfolio" }).click();
     await page.waitForTimeout(3000);
-    await page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true }).getByRole("button", { name: "Switch to TSLA" }).click();
+    await page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true }).getByRole("button", { name: "Open TSLA" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(readoutLine).toHaveAttribute("data-running", "true");
     const onChart = await clockOf(page);

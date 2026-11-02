@@ -171,3 +171,30 @@ test("a 422 keeps the spec problems and a 409 keeps its plain detail", async () 
     return true;
   });
 });
+
+const hangsUntilAborted: typeof fetch = (_target, init) =>
+  new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+  });
+
+test("a read with no answer in time fails as a timeout; the caller's own abort stays an abort; a write is not bounded", async () => {
+  const location = () => ({ href: "https://trading.tobytran.dev/" });
+  const client = createDeskApiClient(hangsUntilAborted, location, 20);
+
+  await assert.rejects(client("/api/desk/test", responseSchema), (error: unknown) => error instanceof DeskApiError && error.kind === "timeout");
+
+  const caller = new AbortController();
+  const aborted = client("/api/desk/test", responseSchema, { signal: caller.signal });
+  caller.abort();
+  await assert.rejects(aborted, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+
+  // A POST (Skip day, a day open) may run for a minute: it gets the caller's signal as it is and no timer.
+  let seen: AbortSignal | null | undefined;
+  const writer = createDeskApiClient(async (_target, init) => {
+    seen = init?.signal;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    return Response.json({ value: 1 });
+  }, location, 20);
+  assert.deepEqual(await writer("/api/desk/test", responseSchema, { method: "POST" }), { value: 1 });
+  assert.equal(seen, undefined);
+});

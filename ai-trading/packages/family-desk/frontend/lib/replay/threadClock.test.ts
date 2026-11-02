@@ -10,6 +10,7 @@ import {
   clockStateText,
   commandThreadClock,
   extrapolate,
+  shownClock,
   focusProgress,
   loadThreadClock,
   rolledText,
@@ -33,7 +34,7 @@ const clock = (over: Partial<ThreadClock> = {}): ThreadClock => ({
   focus_end: "2026-09-28T15:30:00Z",
   next_start: "2026-09-29T13:30:00Z",
   server_now: "2026-11-01T20:00:00Z",
-  account: { balance: 50000, open_pnl_usd: 12.5, equity_usd: 50012.5, day_pnl_usd: 12.5, positions: 1, as_of: "2026-09-28T13:30:00Z" },
+  account: { balance: 50000, open_pnl_usd: 12.5, equity_usd: 50012.5, buying_power_usd: 49000, day_pnl_usd: 12.5, positions: 1, as_of: "2026-09-28T13:30:00Z" },
   label: "Simulated money · practice only, never a real account",
   ...over,
 });
@@ -60,6 +61,12 @@ test("a running clock label moves with wall time at the chosen speed and never s
   assert.equal(extrapolate(clock({ speed: 1, clock: "2026-10-02T20:00:00Z" }), 48 * 3_600_000), "2026-10-04T20:00:00.000Z"); // and so does the weekend
   assert.equal(extrapolate(clock({ state: "paused", running: false }), 60_000), "2026-09-28T13:30:00Z");
   assert.equal(extrapolate(clock({ clock: null, state: "no_day", running: false }), 60_000), null);
+});
+
+test("while a clock read is failing the label is held at the last confirmed time instead of running on", () => {
+  assert.equal(shownClock(clock(), 60_000, false), extrapolate(clock(), 60_000)); // confirmed: it moves
+  assert.equal(shownClock(clock(), 60_000, true), "2026-09-28T13:30:00Z"); // failing: held at what the server last said
+  assert.equal(shownClock(clock({ clock: null, state: "no_day", running: false }), 60_000, true), null);
 });
 
 test("the state pill and what the board may do: it is always there for an open day and nothing but Pause stops the clock", () => {

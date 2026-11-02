@@ -7,7 +7,7 @@ import styles from "./panels.module.css";
 export function LevelsList({ rows }: { rows: LevelRow[] }) {
   if (rows.length === 0) return <p className={styles.muted}>Levels appear as the day unfolds</p>;
   return (
-    <ul className={styles.list}>
+    <ul className={`${styles.list} ${styles.levels}`}>
       {rows.map((row) => (
         <li key={row.label} className={styles.row}>
           <span className={styles.label}>{row.label}</span>

@@ -7,6 +7,7 @@ import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { TabPanel } from "@/components/ui/Tabs";
 import { DeskApiError } from "@/lib/api/client";
+import { backoffMs } from "@/lib/desk/backoff";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -57,11 +58,13 @@ export function ThreadOverview() {
     seenDay.current = clockDay;
   }, [clockDay, changed]);
   const preparing = plan?.prep.state === "running" && query.data !== null && planOpensIn(plan, query.data.thread);
+  // While the plan's data is prepared the page asks again every POLL_MS; each read that failed in a row doubles the wait (up to a minute).
+  const failures = query.failures + daily.failures;
   useEffect(() => {
     if (!preparing) return;
-    const timer = setInterval(changed, POLL_MS);
-    return () => clearInterval(timer);
-  }, [preparing, changed]);
+    const timer = setTimeout(changed, backoffMs(POLL_MS, failures));
+    return () => clearTimeout(timer);
+  }, [preparing, changed, failures, revision]);
 
   if (id === null) {
     return (
@@ -97,7 +100,7 @@ export function ThreadOverview() {
     >
       <TabPanel idBase={PRACTICE_TABS_ID} id={tab}>
         {tab === "portfolio" ? (
-          <PortfolioTab summary={summary} clockRevision={clock.revision} />
+          <PortfolioTab summary={summary} clockRevision={clock.revision} account={clock.clock?.account ?? null} />
         ) : thread.mode === "swing" && summary.swing ? (
           <SwingOverview summary={summary} plan={plan} onChanged={changed} />
         ) : (

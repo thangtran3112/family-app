@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
+import { backoffMs } from "@/lib/desk/backoff";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadDaily } from "@/lib/desk/replay";
@@ -140,9 +141,19 @@ function ThreadRow({
   const progress = threadProgress(summary, dayActive && plan !== null && plan.thread_id === thread.id && plan.finished);
   const preparing = plan?.prep.state === "running";
   const { refresh } = daily;
+  // Asked again every POLL_MS while the plan's data is prepared; each read that failed in a row doubles the wait (up to a minute).
+  const failuresRef = useRef(daily.failures);
+  const lastPoll = useRef(0);
+  useEffect(() => {
+    failuresRef.current = daily.failures;
+  });
   useEffect(() => {
     if (!preparing) return;
-    const timer = setInterval(refresh, POLL_MS);
+    const timer = setInterval(() => {
+      if (failuresRef.current > 0 && Date.now() - lastPoll.current < backoffMs(POLL_MS, failuresRef.current)) return;
+      lastPoll.current = Date.now();
+      refresh();
+    }, POLL_MS);
     return () => clearInterval(timer);
   }, [preparing, refresh]);
   return (

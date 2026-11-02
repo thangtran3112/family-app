@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SHARES_TOO_BIG } from "./markInput.ts";
-import { buildTicket, initialTicket, orderLine, orderStatusText, ticketSummary, TICKET_TYPES, typeOption, type TicketDraft } from "./ticket.ts";
+import { buildTicket, buyingPowerMessage, initialTicket, orderLine, orderStatusText, ticketSummary, TICKET_TYPES, typeOption, type PowerBasis, type TicketDraft } from "./ticket.ts";
 import type { PracticeOrder } from "./schemas.ts";
 
 const base: TicketDraft = { side: "buy", type: "market", shares: "100", limitPrice: "", stopPrice: "" };
@@ -86,4 +86,48 @@ test("limit and stop prices are plain decimals, and a quantity over the column n
   assert.ok(buildTicket({ ...base, type: "limit", limitPrice: "49.50" }).ok);
   const big = buildTicket({ ...base, type: "limit", limitPrice: "49.5", shares: "2147483648" });
   assert.ok(!big.ok && big.field === "shares" && big.message === SHARES_TOO_BIG);
+});
+
+// -- buying power: the one size rule, said in the ticket before anything is sent ------------------------------------------
+
+const day: PowerBasis = { balance: 50_000, freeCash: null, trade: null, last: 11.98 };
+
+test("an order that costs more than the balance is refused with its cost and the buying power, and one that fits is not", () => {
+  // 5,000 CNH at 11.98 is $59,900 against $50,000
+  assert.equal(buyingPowerMessage({ ...base, shares: "5000" }, day), "Exceeds buying power · this order costs $59,900, buying power is $50,000");
+  assert.equal(buyingPowerMessage({ ...base, shares: "4000" }, day), null); // $47,920
+  assert.equal(buyingPowerMessage({ ...base, shares: "5000", side: "sell" }, day), "Exceeds buying power · this order costs $59,900, buying power is $50,000"); // a short is cash-secured the same
+});
+
+test("a limit costs its limit, a stop its trigger, and a draft without its price says nothing yet", () => {
+  assert.equal(buyingPowerMessage({ ...base, type: "limit", shares: "1000", limitPrice: "60" }, day), "Exceeds buying power · this order costs $60,000, buying power is $50,000");
+  assert.equal(buyingPowerMessage({ ...base, type: "limit", shares: "1000", limitPrice: "49" }, day), null);
+  assert.equal(buyingPowerMessage({ ...base, type: "stop", shares: "1000", stopPrice: "50.01" }, day), "Exceeds buying power · this order costs $50,010, buying power is $50,000");
+  assert.equal(buyingPowerMessage({ ...base, type: "stop_limit", shares: "1000", stopPrice: "99", limitPrice: "50" }, day), null); // the limit prices it, as the server does
+  assert.equal(buyingPowerMessage({ ...base, type: "limit", shares: "1000" }, day), null);
+  assert.equal(buyingPowerMessage({ ...base, shares: "5000" }, { ...day, last: null }), null); // no print yet
+  assert.equal(buyingPowerMessage({ ...base, shares: "abc" }, day), null); // the field's own message, not this one
+  assert.equal(buyingPowerMessage({ ...base, shares: "5000" }, null), null); // no thread: the server's own account decides
+});
+
+test("there is no share cap: the cost to the cent is the only limit, and an exact fit is taken", () => {
+  assert.equal(buyingPowerMessage({ ...base, shares: "50000" }, { ...day, last: 1 }), null); // exactly $50,000
+  assert.equal(buyingPowerMessage({ ...base, shares: "50001" }, { ...day, last: 1 }), "Exceeds buying power · this order costs $50,001, buying power is $50,000");
+  assert.equal(buyingPowerMessage({ ...base, shares: "46" }, { ...day, balance: 450.6, last: 10 }), "Exceeds buying power · this order costs $460, buying power is $450"); // free cash reads rounded down, as the server says it
+});
+
+test("shares that close the position need no cash; a flip pays only for the shares it opens, with the closed position's cash back", () => {
+  const long100 = { side: "long", shares: 100, entry_price: 100 } as const;
+  const held: PowerBasis = { balance: 40_000, freeCash: null, trade: long100, last: 110 }; // day: $10,000 of the balance is this position
+  assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "100" }, held), null); // exit
+  assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "300" }, held), null); // flip: opens 200 short at 110 = $22,000; free is 40,000 plus the 1,000 gain
+  assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "400" }, held), null); // opens 300 at 110 = $33,000, fits
+  assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "500" }, held), "Exceeds buying power · this order costs $44,000, buying power is $41,000"); // opens 400
+});
+
+test("a swing thread's free cash is already net of its holds", () => {
+  const swing: PowerBasis = { balance: 50_000, freeCash: 8_240, trade: { side: "long", shares: 100, entry_price: 100 }, last: 100 };
+  assert.equal(buyingPowerMessage({ ...base, shares: "82" }, swing), null); // $8,200
+  assert.equal(buyingPowerMessage({ ...base, shares: "83" }, swing), "Exceeds buying power · this order costs $8,300, buying power is $8,240");
+  assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "150" }, swing), null); // opens 50 = $5,000; the closed 100 gives back $10,000
 });

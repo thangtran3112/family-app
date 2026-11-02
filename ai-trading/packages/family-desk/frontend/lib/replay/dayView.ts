@@ -478,10 +478,6 @@ export const positionText = (row: Pick<PortfolioRow, "position">): string => {
   return `${trade.side === "long" ? "Long" : "Short"} ${trade.shares} @ $${formatPrice(trade.entry_price)}${entered}`;
 };
 
-/** A name's button on the day list: "Open" opens a name at the day clock, "Switch" goes back to one she opened. Resume
- *  belongs to the thread's day (one shared clock for every name), never to a single name. */
-export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Open");
-
 /** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Open Day N" reopens the
  *  day at the shared clock); only a standalone session, which has no day, opens on its own. */
 export const sessionResumeHref = (session: { id: number; day_list_id: number | null }): string =>

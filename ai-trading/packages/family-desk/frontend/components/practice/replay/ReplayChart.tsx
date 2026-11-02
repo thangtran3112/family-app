@@ -35,7 +35,7 @@ export type ReplayChartProps = {
   /** Swing session only (02p d2): `daily` plots the rebased daily bars and today's forming candle in place of the intraday bars. */
   swing?: { mode: ChartMode };
   /** Click-to-order on the intraday chart: the ticket's quantity and the way an order goes in. Absent while she cannot order (the session ended, or the name is behind the day clock). */
-  order?: { shares: string; place: (side: TicketSide, price: number) => Promise<boolean> };
+  order?: { shares: string; place: (side: TicketSide, price: number) => Promise<boolean>; error: string | null };
 };
 
 /**
@@ -123,7 +123,7 @@ function IntradayChart({ symbol, view, bars, series, hideDates, focus, dimmed, p
         panes={series.panes}
         levels={levels}
         levelTips
-        renderPick={order && last !== null ? (price, close) => <ChartOrder symbol={symbol} price={price} last={last} shares={order.shares} onPlace={order.place} onClose={close} /> : undefined}
+        renderPick={order && last !== null ? (price, close) => <ChartOrder symbol={symbol} price={price} last={last} shares={order.shares} onPlace={order.place} error={order.error} onClose={close} /> : undefined}
         chartType={prefs.type}
         markers={markers}
         volume={series.volume && prefs.on.volume}

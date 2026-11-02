@@ -12,7 +12,6 @@ import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { nameActionLabel } from "@/lib/replay/dayView";
 import { practiceTabLabel, threadPageHref } from "@/lib/replay/practiceTabs";
 import { orderNames, type OrderName } from "@/lib/replay/orderView";
 import { problemMessage } from "@/lib/replay/setup";
@@ -117,7 +116,6 @@ function NamePicker({ dayListId }: { dayListId: number }) {
   return (
     <QueryBoundary query={query} loading="Loading today's names…" height={96} message={PRACTICE_COPY.dayLoadError}>
       {(list) => {
-        const sessions = new Set(list.sessions.map((session) => session.symbol));
         const rows = orderNames(list, find);
         if (list.candidates.length === 0) return <EmptyBlock title={PRACTICE_COPY.orderNoNames} />;
         return (
@@ -141,10 +139,10 @@ function NamePicker({ dayListId }: { dayListId: number }) {
                     variant="primary"
                     disabled={opening !== null}
                     loading={here}
-                    aria-label={here ? undefined : practiceText(sessions.has(row.symbol) ? "daySwitch" : "dayOpen", { symbol: row.symbol })}
+                    aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
                     onClick={() => void open(row.symbol)}
                   >
-                    {here ? practiceText("dayOpening", { symbol: row.symbol }) : nameActionLabel(sessions.has(row.symbol))}
+                    {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
                   </Button>
                 );
               }}

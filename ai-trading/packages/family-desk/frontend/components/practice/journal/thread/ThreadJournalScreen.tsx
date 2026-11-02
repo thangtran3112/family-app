@@ -16,7 +16,7 @@ import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { journalStatusLine } from "@/lib/replay/statusLine";
-import { formatBalance, hasNoDays, startedWithText, summaryHintText, threadModeLabel, threadName, threadTiles, weeksInText, weeksOf } from "@/lib/replay/threadView";
+import { formatBalance, formatDayResult, hasNoDays, realizedToday, startedWithText, summaryHintText, threadModeLabel, threadName, threadTiles, weeksInText, weeksOf } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
 import { BalanceCurve } from "./BalanceCurve";
 import { DayBars } from "./DayBars";
@@ -57,6 +57,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
   const empty = hasNoDays(thread);
   const closed = status === "closed";
   const balance = formatBalance(stats.balance);
+  const todayGap = realizedToday(thread);
   const name = threadName(thread.thread);
   // At the 1180 band the right rail is a tab strip: each tab opens its own drawer, and the screen leaves room for them (D-038, D-040).
   const band = useShellBand();
@@ -73,7 +74,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
             <Badge tone="neutral">{threadModeLabel(mode)}</Badge>
           </div>
           <p className={styles.sub}>
-            {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} passed `}
+            {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} passed${todayGap === null ? "" : ` · ${practiceText("balanceIncludesToday", { amount: formatDayResult(todayGap) })}`} `}
             <SimulatedBadge />
           </p>
         </div>
