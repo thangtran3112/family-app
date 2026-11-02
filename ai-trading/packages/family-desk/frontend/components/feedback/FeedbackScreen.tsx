@@ -90,7 +90,7 @@ export function FeedbackScreen() {
       <div className={list.data !== null && !empty && list.data.items.length > 0 ? undefined : styles.stateBody}>{body}</div>
       <RightRail
         label="Report details"
-        sections={[{ id: "detail", label: "Report", node: <FeedbackDetailRail id={selectedId} /> }]}
+        sections={[{ id: "detail", label: "Report", node: <FeedbackDetailRail id={selectedId} nothingToSelect={empty} /> }]}
         openId={drawerOpen ? "detail" : null}
         onOpenChange={(id) => setDrawerOpen(id === "detail")}
       />

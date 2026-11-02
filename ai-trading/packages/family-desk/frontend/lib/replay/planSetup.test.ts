@@ -68,7 +68,7 @@ test("a good draft validates; the window may not begin before the list time", ()
   assert.equal(validatePlanDraft(ready()).ok, true);
   const early = validatePlanDraft(ready({ listAt: "10:00" }));
   assert.equal(early.ok, false);
-  assert.equal(!early.ok && early.problems.window, "window.from must be at or after screen.listAt");
+  assert.equal(!early.ok && early.problems.window, "Start at must be at or after List time");
   const moved = withListTime(ready(), "10:00");
   assert.deepEqual([moved.setup.from, moved.setup.to], ["10:00", "11:30"]);
   assert.equal(validatePlanDraft(moved).ok, true);

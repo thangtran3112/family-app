@@ -61,7 +61,8 @@ export function FeedbackFilters({
           label="Status"
           disabled={disabled}
           options={STATUSES.map((status) => ({ id: status, label: STATUS_LABEL[status] }))}
-          pressed={value.statuses}
+          // Nothing to filter: no chip reads as on (the default is all five on).
+          pressed={disabled ? [] : value.statuses}
           onToggle={(status) => onChange({ ...value, statuses: toggleStatus(value.statuses, status) })}
         />
       </div>

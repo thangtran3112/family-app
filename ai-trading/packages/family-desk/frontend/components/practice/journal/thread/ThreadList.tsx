@@ -15,11 +15,10 @@ export function ThreadList({ rows, current, label }: { rows: ThreadSummary[]; cu
         href: `/practice/journal?thread=${row.thread.id}`,
         selected: row.thread.id === current,
         label: threadName(row.thread),
-        sub: `${row.thread.status === "active" ? PRACTICE_COPY.threadActive : PRACTICE_COPY.threadClosedBadge} · ${threadModeLabel(row.thread.mode)}`,
-        value: (
+        // The name keeps the row to itself: the balance and the mark sit on the line under it.
+        sub: (
           <>
-            <span>{formatBalance(row.thread.stats.balance)}</span>
-            <SimulatedBadge />
+            <span>{formatBalance(row.thread.stats.balance)}</span> <SimulatedBadge /> · {row.thread.status === "active" ? PRACTICE_COPY.threadActive : PRACTICE_COPY.threadClosedBadge} · {threadModeLabel(row.thread.mode)}
           </>
         ),
       }))}
