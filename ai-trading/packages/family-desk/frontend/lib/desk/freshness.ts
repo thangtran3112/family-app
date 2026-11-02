@@ -698,6 +698,7 @@ export const PRACTICE_COPY = {
   swingAsOfPriorClose: "as of the prior close",
   swingDayOver: "Day over",
   swingCardNames: "Swing · {n} names",
+  swingLineNames: "{n} names",
   swingCardWeek: "Week {week} of {weeks}",
   swingFinished: "Finished · Day {days} of {days}",
   swingNoHoldsOpen: "No holds open",
