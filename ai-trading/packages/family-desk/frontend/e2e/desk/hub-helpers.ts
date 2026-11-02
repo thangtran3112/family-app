@@ -13,9 +13,9 @@ export const DAY = "2026-09-25";
 export const START_BUTTON = /^Start (\d+-day )?(swing )?practice$/;
 export const THREAD_URL = /\/practice\/thread\?id=\d+/;
 export const DAY_URL = /\/practice\/day\?id=\d+/;
-/** A day thread's one action says what it does (D-078): the button that opens the next day starts it, the link to a listed day opens it, and a day in progress resumes. */
+/** A day thread's one action says what it does (D-078): the button that opens the next day starts it, and the link to an open day opens it, started or not (the thread clock's Play is the only Resume). */
 export const START_DAY = /^Start Day \d+$/;
-export const OPEN_DAY = /^(Open|Resume) Day \d+$/;
+export const OPEN_DAY = /^Open Day \d+$/;
 
 /** A saved filter that lists the stub's TSLA only (the fixture's stand-in names trade below $200). */
 export const ANY_CLOSE = {

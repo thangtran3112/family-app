@@ -82,7 +82,8 @@ RESCAN_TICK_S = 0.4  # a running re-scan writes its progress at most this often
 RESCAN_DIED = "The re-scan stopped before it finished · run it again"
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
-DAY_SESSION_SHARES = 100  # a day session's default entry size; she sizes each entry herself (`PracticeMarkV1.shares`)
+# A day session's entry size unless the thread sets one (D-042); each entry may still differ (`PracticeMarkV1.shares`).
+DAY_SESSION_SHARES = 100
 FEW_NAMES = 20
 UNIVERSE_LABEL = (
     "Practice universe · {size} symbols the Desk has scanned · the live screener that morning may have scanned others"
@@ -897,8 +898,24 @@ def _ended_review(plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | No
     return {**review_mod.normalized(row.review), "day": row.day, "dates_hidden": plan.spec["hideDates"] == "yes"}
 
 
+def _live_candidates(svc: Services, db: Session, row: ReplayDayList, clock: pd.Timestamp) -> list[dict[str, Any]]:
+    """The list's names, each with a `live` block: the name as of the day clock (`screen.live_quote`). The stored
+    `candidates` stay the list-time snapshot; this only adds what the clock has shown since. A name whose bars are
+    unavailable gets `live: None`, never a stand-in. ponytail: one cached-bars read and one metric row per name on every
+    read (a few dozen names at most); cache per (symbol, clock) if a list ever holds hundreds."""
+    store = svc.store_factory(db)
+    daily_of = screen.asof_loader(svc.history, store, row.day)
+    minutes_of = screen.minutes_loader(svc.history, store, row.day)
+    out = []
+    for candidate in row.candidates:
+        daily = daily_of(candidate["symbol"])
+        live = None if daily is None else screen.live_quote(daily, minutes_of(candidate["symbol"]), row.day, clock)
+        out.append({**candidate, "live": jsonable(live)})
+    return out
+
+
 def day_list_out(
-    db: Session, user_id: int, day_list_id: int, svc: Services, *, peek: str | None = None
+    db: Session, user_id: int, day_list_id: int, svc: Services, *, peek: str | None = None, live: bool = False
 ) -> dict[str, Any]:
     row = get_day_list(db, user_id, day_list_id)
     plan = db.get(PracticePlan, row.plan_id)
@@ -933,7 +950,11 @@ def day_list_out(
         },
         "universe": universe,
         "columns": row.columns,
-        "candidates": row.candidates,
+        # `live`: the names priced at the day clock (nothing past it), asked for by the day list's table. Off, or before
+        # the first name is practised (no clock yet), or once the day has ended, the names are the list-time snapshot.
+        "candidates": _live_candidates(svc, db, row, clock)
+        if live and clock is not None and not ended
+        else row.candidates,
         "watch": row.watch,
         "clock": row.revealed_through,
         # ponytail: `positions` loads one context per open position; batch the bar loads if
@@ -1266,7 +1287,7 @@ def _job_out(job: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None
 def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeThread) -> ReplaySessionV1:
     """The day's session from the plan's setup (window, interval, armed names) and the thread's risk plan. The plan is
     snapshotted here: editing the thread later never rescores a session already started. A plan saved before 0007
-    still carries `setup.plan` and `setup.shares`; they are never read."""
+    still carries `setup.plan` and `setup.shares`; they are never read here (0020 lifted the size into the thread)."""
     setup = plan.spec["setup"]
     return ReplaySessionV1.model_validate(
         {
@@ -1276,7 +1297,7 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
             "window": setup["window"],
             "session": setup["session"],
             "interval": setup["interval"],
-            "shares": DAY_SESSION_SHARES,
+            "shares": thread.shares or DAY_SESSION_SHARES,
             "armed": setup["armed"],
             "plan": threads_mod.session_plan(thread),
             "hideDate": plan.spec["hideDates"],

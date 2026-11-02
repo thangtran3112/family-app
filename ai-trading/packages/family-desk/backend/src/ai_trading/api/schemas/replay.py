@@ -672,6 +672,18 @@ class ListColumnOut(BaseModel):
     format: str
 
 
+class CandidateLiveOut(BaseModel):
+    """A listed name as of the day clock `at`, from bars closed by it. `price`: the last closed 1-minute bar of the day
+    (null before the first); `change_pct`: its move from the prior close; `metrics`: the metric block cut at the clock,
+    which is today's when `today` and the previous session's while no regular-session bar has closed."""
+
+    at: datetime
+    price: FiniteFloat | None
+    change_pct: FiniteFloat | None
+    today: bool
+    metrics: dict[str, FiniteFloat | None]
+
+
 class CandidateOut(BaseModel):
     """One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut."""
 
@@ -684,6 +696,10 @@ class CandidateOut(BaseModel):
     list_price: FiniteFloat
     price_at: datetime
     prior_close: FiniteFloat | None
+    # The previous session's own RVOL (10-session daily) and close-to-close change %, read from the same cut daily bars
+    # whether the list was built before or after the open (D-018). Null on a list stored before they existed.
+    prev_rvol: FiniteFloat | None = None
+    prev_change_pct: FiniteFloat | None = None
     reported_before_open: bool  # an explicit before-the-open report (or yesterday's after-close one); never directional
     metrics: dict[str, FiniteFloat | None]
     # A re-scan repopulates the list (2026-11-01). `new_since_list`: the scan added it, the list before did not hold it.
@@ -691,6 +707,9 @@ class CandidateOut(BaseModel):
     # no re-scan has touched (and on days stored before they existed).
     new_since_list: bool = False
     held_over: bool = False
+    # Only on a read with `?live=true` while the day clock runs: the name at the clock (the fields above stay the
+    # list's).
+    live: CandidateLiveOut | None = None
 
 
 class RescanOut(BaseModel):

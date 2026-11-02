@@ -238,8 +238,20 @@ export function zoomedRange(range: LogicalRange, x: number, width: number, facto
  * slots. The axis then starts at the open, not in the pre-open lookback (D-099). Null once the newest bar and its `pad` no
  * longer fit, and the chart scrolls with the newest bar instead.
  */
-export function pinnedRange(count: number, anchor: number, span: number, pad: number): LogicalRange | null {
+export function pinnedRange(count: number, anchor: number, span: number, pad: number, from: number = anchor): LogicalRange | null {
+  // `from` is where the view starts now. Before `anchor` it already shows the lookback (she zoomed out or scrolled back to read
+  // the past days): pinning would take that away on the next bar, so the view is hers and the chart only follows the newest bar.
+  if (from < anchor - 0.5) return null;
   return count - 1 + pad <= anchor + span ? { from: anchor, to: anchor + span } : null;
+}
+
+/**
+ * The `rightOffset` to send to the time scale: nothing when it is already in force. The library moves the view to the offset
+ * every time the option is set, even to the value it already has, so sending it with each data update snapped a chart she had
+ * scrolled back (to read last week) to the newest bar the moment the next bar or refresh arrived.
+ */
+export function rightOffsetOption(applied: number | null, wanted: number): { rightOffset?: number } {
+  return applied === wanted ? {} : { rightOffset: wanted };
 }
 
 type PinchChart = {

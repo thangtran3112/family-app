@@ -81,8 +81,6 @@ export const lateStarsText = (names: readonly string[]): string | null =>
 
 // -- the primary button and Pass ----------------------------------------------------------------------------------
 
-export const resumeDayLabel = (dayNo: number): string => `Resume Day ${dayNo}`;
-
 export type BoardStart =
   /**
    * The day is under way: reopen the name's session at the day clock (the first focus name's, else a hold's, else any open

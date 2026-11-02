@@ -69,6 +69,8 @@
   --z-popover: 30;
   --z-modal: 40;
   --rail-right: 320px;
+  /* A screen's side inset: the Practice header, body and table text edges share it, so the page title, New plan and the first column line up (D-111). */
+  --inset-page: var(--space-4);
   --color-amber-tint: color-mix(in srgb, var(--color-amber) 12%, transparent);
   --color-down-tint: color-mix(in srgb, var(--color-down) 12%, transparent);
   --color-up-tint: color-mix(in srgb, var(--color-up) 12%, transparent);

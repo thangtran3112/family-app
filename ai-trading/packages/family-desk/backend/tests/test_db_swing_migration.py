@@ -87,8 +87,9 @@ def _user(db: Session, email: str = "owner@example.test") -> int:
     return user_id
 
 
-def _thread(db: Session, user_id: int, mode: str = "swing", status: str = "active") -> int:
-    """An owner may have several active threads of a mode (Alembic 0011 dropped the one-active index)."""
+def _thread(db: Session, user_id: int, mode: str = "swing", status: str = "active", *, named: bool = True) -> int:
+    """An owner may have several active threads of a mode (Alembic 0011 dropped the one-active index). `named=False`
+    is for a database downgraded below 0020, which has no `name` column."""
     values: dict[str, Any] = {
         "owner_user_id": user_id,
         "mode": mode,
@@ -100,6 +101,8 @@ def _thread(db: Session, user_id: int, mode: str = "swing", status: str = "activ
         "updated_at": NOW,
         "closed_at": NOW if status == "closed" else None,
     }
+    if named:
+        values["name"] = f"{mode.title()} thread · test"  # 0020: every thread has a name
     thread_id = db.execute(insert(PracticeThread).values(**values).returning(PracticeThread.id)).scalar_one()
     db.commit()
     return thread_id
@@ -563,7 +566,7 @@ def test_0011_allows_several_active_threads_per_mode_and_its_downgrade_keeps_onl
             newer_plan: "active",
         }
         with pytest.raises(IntegrityError):  # one active thread per owner and mode again
-            _thread(db, user_id, "day")
+            _thread(db, user_id, "day", named=False)
         db.rollback()
 
     command.upgrade(config, "head")

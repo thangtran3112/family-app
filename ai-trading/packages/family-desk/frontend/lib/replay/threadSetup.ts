@@ -23,6 +23,8 @@ export type ThreadDraft = {
   maxLossUsd: string;
   maxTrades: string;
   planNote: string;
+  /** The entry size tickets open at, as typed (D-042): empty means not set. Only the Edit plan form of a day thread reads it. */
+  shares: string;
 };
 
 export const defaultThreadDraft = (): ThreadDraft => ({
@@ -34,6 +36,7 @@ export const defaultThreadDraft = (): ThreadDraft => ({
   maxLossUsd: "",
   maxTrades: "",
   planNote: "",
+  shares: "",
 });
 
 /** The starting balance as shown once she leaves the box: "50000" reads "50,000". Anything that is not a whole number stays as typed, so its error can name it. */
@@ -64,7 +67,7 @@ export const threadDraftToSpec = (draft: ThreadDraft): unknown => ({
 });
 
 /** A thread's plan as a draft, for the "Edit plan" form. */
-export const planToDraft = (plan: ThreadPlan, startingBalance: number): ThreadDraft => ({
+export const planToDraft = (plan: ThreadPlan, startingBalance: number, shares?: number): ThreadDraft => ({
   startingBalance: String(startingBalance),
   mode: "day",
   stopNoteOnEntry: plan.stopNoteOnEntry === "yes",
@@ -72,11 +75,17 @@ export const planToDraft = (plan: ThreadPlan, startingBalance: number): ThreadDr
   maxLossUsd: plan.maxLossUsd === undefined ? "" : String(plan.maxLossUsd),
   maxTrades: plan.maxTrades === undefined ? "" : String(plan.maxTrades),
   planNote: plan.planNote ?? "",
+  shares: shares === undefined ? "" : String(shares),
 });
 
-export const threadPatchToSpec = (draft: ThreadDraft): unknown => ({ schemaVersion: 1, plan: threadPlanToSpec(draft) });
+/** The Edit plan body: the plan and the entry size, which is left out when empty (the server clears what is left out). */
+export const threadPatchToSpec = (draft: ThreadDraft): unknown => ({
+  schemaVersion: 1,
+  plan: threadPlanToSpec(draft),
+  ...(draft.shares.trim() === "" ? {} : { shares: numberOrNaN(draft.shares) }),
+});
 
-export type ThreadField = "startingBalance" | "mode" | "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote" | "form";
+export type ThreadField = "startingBalance" | "mode" | "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote" | "shares" | "form";
 export type ThreadProblems = Partial<Record<ThreadField, string>>;
 
 const FIELD_MESSAGE: Record<ThreadField, string> = {
@@ -87,6 +96,7 @@ const FIELD_MESSAGE: Record<ThreadField, string> = {
   maxLossUsd: "Max loss: whole dollars from 1 to 100,000",
   maxTrades: "Max trades: a whole number from 1 to 50",
   planNote: "Plan note: up to 500 plain characters",
+  shares: "Shares: a whole number of 1 or more",
   form: "Check the thread and try again",
 };
 
@@ -95,7 +105,7 @@ export function threadFieldOfPath(path: string): ThreadField {
   const parts = path.split(".");
   const last = parts[parts.length - 1] ?? "";
   switch (last) {
-    case "startingBalance": case "mode": case "stopNoteOnEntry": case "tradeOnlyOnSignal": case "maxLossUsd": case "maxTrades": case "planNote":
+    case "startingBalance": case "mode": case "stopNoteOnEntry": case "tradeOnlyOnSignal": case "maxLossUsd": case "maxTrades": case "planNote": case "shares":
       return last;
     default:
       return "form";

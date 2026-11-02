@@ -143,7 +143,8 @@ test.describe("Practice thread overview", () => {
     await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
     await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle }).getByText(PRACTICE_COPY.swingNoHoldsOpen)).toBeVisible();
     await page.getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
-    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Week 1 of 3 · Day 1 of 15");
+    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Week 1 of 3 · No holds open"); // D-112: the place line has names, week and holds
+    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Day 1 of 15");
     await expectNoDates(page);
     await expectCleanScreen(page);
   });
@@ -253,7 +254,7 @@ test.describe("Practice thread overview", () => {
       });
       if (here) order.push(`${here.tag} ${here.text}`.trim());
     }
-    expect(order).toEqual([expect.stringMatching(/^A .*thread #\d+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
+    expect(order).toEqual([expect.stringMatching(/^A (Day|Swing) thread · .+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
     await link.focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");

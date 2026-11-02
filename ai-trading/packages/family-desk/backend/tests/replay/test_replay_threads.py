@@ -21,6 +21,7 @@ from ai_trading.contracts.practice_thread import (
     PracticeThreadPatchV1,
     PracticeThreadV1,
 )
+from ai_trading.core.calendar import ET as et_zone
 from ai_trading.core.calendar import et
 from ai_trading.db.models import (
     PracticeLedger,
@@ -55,8 +56,10 @@ def _create(mode="day", balance=None, **plan):
     return PracticeThreadCreateV1.model_validate(body)
 
 
-def _patch(**plan):
+def _patch(shares=None, **plan):
     body = {"schemaVersion": 1, "plan": {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no", **plan}}
+    if shares is not None:
+        body["shares"] = shares
     return PracticeThreadPatchV1.model_validate(body)
 
 
@@ -129,6 +132,81 @@ def test_patch_replaces_the_plan_clears_what_is_left_out_and_never_touches_the_b
     )
     assert threads_mod.plan_dict(thread) == {"stopNoteOnEntry": "yes", "tradeOnlyOnSignal": "yes", "maxTrades": 2}
     assert int(thread.starting_balance) == 20_000
+
+
+# -- the thread's own name (D-069) and entry size (D-042) -----------------------------------------------------------
+
+
+def test_each_new_thread_gets_a_name_of_its_own_by_mode_and_et_day(db_session, user_id) -> None:
+    day_names = [threads_mod.create_thread(db_session, user_id, _create(), NOW).name for _ in range(3)]
+    stamp = f"{NOW.astimezone(et_zone):%b} {NOW.astimezone(et_zone).day}"
+    assert day_names == [f"Day thread · {stamp}", f"Day thread · {stamp} (2)", f"Day thread · {stamp} (3)"]
+    assert len(set(day_names)) == 3
+    # a thread started on another ET day is a different name again, and the mode is in the words
+    later = threads_mod.create_thread(db_session, user_id, _create(), NOW + timedelta(days=2))
+    assert later.name != day_names[0] and later.name.startswith("Day thread · ")
+    swing = threads_mod.add_thread(
+        db_session, user_id, {**_create(mode="swing").model_dump(mode="json"), "mode": "swing"}, NOW
+    )
+    assert swing.name == f"Swing thread · {stamp}"
+
+
+def test_the_name_counts_per_owner_and_a_deleted_threads_name_comes_free(db_session, user_id) -> None:
+    other = User(email="spouse@example.com", settings={})
+    db_session.add(other)
+    db_session.flush()
+    mine = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    theirs = threads_mod.create_thread(db_session, other.id, _create(), NOW)
+    assert mine.name == theirs.name  # one owner's names never count against another's
+    second = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    first_name = mine.name
+    assert second.name == f"{first_name} (2)"
+    threads_mod.delete_thread(db_session, user_id, mine.id)
+    third = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    assert third.name == first_name  # the first name is free again; the second is still taken
+
+
+def test_the_contract_reads_back_the_name_and_the_entry_size(db_session, user_id) -> None:
+    thread = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    unset = threads_mod.detail(db_session, thread)["thread"]
+    assert unset.name == thread.name and unset.shares is None  # not set: absent, never a default of 100
+    threads_mod.patch_thread(db_session, user_id, thread.id, _patch(shares=250), NOW)
+    contract = threads_mod.summary(db_session, thread)["thread"]
+    assert contract.shares == 250 and contract.name == thread.name  # the name never moves
+    assert contract.model_dump(mode="json", by_alias=True, exclude_none=True)["shares"] == 250
+
+
+def test_a_patch_replaces_the_entry_size_and_one_left_out_is_cleared(db_session, user_id) -> None:
+    thread = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    threads_mod.patch_thread(db_session, user_id, thread.id, _patch(shares=250), NOW)
+    assert thread.shares == 250
+    threads_mod.patch_thread(db_session, user_id, thread.id, _patch(maxTrades=2), NOW)
+    assert thread.shares is None
+
+
+def test_a_swing_thread_takes_no_share_count_and_a_closed_thread_keeps_its_size(db_session, user_id) -> None:
+    swing = threads_mod.add_thread(
+        db_session, user_id, {**_create(mode="swing").model_dump(mode="json"), "mode": "swing"}, NOW
+    )
+    with pytest.raises(ReplayProblem) as refused:
+        threads_mod.patch_thread(db_session, user_id, swing.id, _patch(shares=100), NOW)
+    assert (refused.value.status, refused.value.path) == (422, "shares")
+    day = threads_mod.create_thread(db_session, user_id, _create(), NOW)
+    threads_mod.patch_thread(db_session, user_id, day.id, _patch(shares=40), NOW)
+    threads_mod.close_thread(db_session, user_id, day.id, NOW)
+    with pytest.raises(ReplayProblem) as closed:
+        threads_mod.patch_thread(db_session, user_id, day.id, _patch(), NOW)
+    assert closed.value.status == 409 and day.shares == 40
+
+
+def test_a_session_opens_at_the_threads_entry_size_else_the_day_default(db_session, user_id, svc) -> None:
+    thread = make_thread(db_session, user_id)
+    _ready(db_session, user_id, svc)
+    row = _open(db_session, user_id, svc).day_list
+    plan = db_session.get(PracticePlan, row.plan_id)
+    assert plan_mod._session_spec(plan, DAYS[0], "GAPPER", thread).shares == plan_mod.DAY_SESSION_SHARES
+    threads_mod.patch_thread(db_session, user_id, thread.id, _patch(shares=250), NOW)
+    assert plan_mod._session_spec(plan, DAYS[0], "GAPPER", thread).shares == 250
 
 
 def test_a_stranger_cannot_read_or_change_a_thread(db_session, user_id) -> None:
@@ -612,7 +690,7 @@ def _advance_day(db_session, user_id, svc, session_id, day, hhmm):
 
 
 def test_a_day_entry_without_a_stop_is_accepted_and_scored_not_refused(db_session, user_id, svc) -> None:
-    """"Stop on every entry" is a score, never a refusal: an entry without a stop is placed, the stop_set check
+    """ "Stop on every entry" is a score, never a refusal: an entry without a stop is placed, the stop_set check
     fails for it, and a stop typed later (the Stop key) still moves the line."""
     make_thread(db_session, user_id, stopNoteOnEntry="yes")
     _, session, _ = _day_one(db_session, user_id, svc)
