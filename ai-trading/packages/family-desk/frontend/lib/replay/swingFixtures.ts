@@ -357,6 +357,7 @@ export const swingDayList: SwingDayList = {
   holds: [nvdaHold, amdHold],
   free_cash_usd: 24720,
   sessions: [],
+  held_elsewhere: [],
   universe: {
     source: "swing",
     size: 50,

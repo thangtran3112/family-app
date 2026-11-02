@@ -1340,6 +1340,7 @@ def day_list_out(db: Session, user_id: int, day_list_id: int, svc: Services, pee
         "holds": holds_block,
         "free_cash_usd": free_cash,
         "sessions": [plan_mod._session_brief(s, row, set()) for s in sessions],  # no one-open-trade rule in swing
+        "held_elsewhere": session_mod.held_elsewhere(db, user_id, row.day, row.id),
         "universe": row.universe,
         "label": row.universe["label"],
         "peek": None if peek is None else _peek(db, svc, row, peek),

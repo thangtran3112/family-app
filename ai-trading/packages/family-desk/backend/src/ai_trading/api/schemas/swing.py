@@ -18,6 +18,7 @@ from ai_trading.api.schemas.replay import (
     DayListStatus,
     DaySessionOut,
     EarningsChipOut,
+    HeldElsewhereOut,
     HoldOut,
     ListColumnOut,
     PeekDailyBarOut,
@@ -216,6 +217,7 @@ class SwingDayListOut(BaseModel):
     holds: list[HoldOut]
     free_cash_usd: FiniteFloat | None
     sessions: list[DaySessionOut]
+    held_elsewhere: list[HeldElsewhereOut]
     universe: SwingUniverseOut
     label: str  # the survivorship text
     peek: SwingPeekOut | None
