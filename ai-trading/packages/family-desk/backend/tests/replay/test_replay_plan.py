@@ -490,7 +490,8 @@ def test_the_session_follows_the_plan_and_the_clock_moves_with_it(db_session, us
     assert caught.value.message == "FLAT is not on today's list"
     started = plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
     assert started.day_list_id == row.id and started.day == DAYS[0] and started.spec["interval"] == "5m"
-    assert started.spec["hideDate"] == "yes" and started.spec["window"] == {"from": "09:30", "to": "11:30"}
+    # the plan says hideDates "yes": it is accepted and ignored, so the session is written with "no"
+    assert started.spec["hideDate"] == "no" and started.spec["window"] == {"from": "09:30", "to": "11:30"}
     db_session.refresh(row)
     assert row.status == "practicing" and row.revealed_through == et(DAYS[0], "09:30")
 

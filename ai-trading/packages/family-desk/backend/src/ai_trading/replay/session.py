@@ -570,7 +570,6 @@ def summary_out(db: Session, row: ReplaySession, marks: list[PracticeMark] | Non
         "day": row.day,
         "attempt": row.attempt,
         "status": row.status,
-        "hide_date": row.spec["hideDate"],
         "revealed_through": row.revealed_through,
         "window_end": window_end_of(row, day_thread=_is_day_thread(db, row)),
         "trades": trades,

@@ -153,12 +153,13 @@ def test_a_losing_and_a_winning_trade_count_as_a_loss_and_a_win_in_entry_order(d
     assert journal["pnl_usd"] == -40.0 and journal["balance_after"] == 49_960.0
 
 
-def test_the_finished_day_carries_its_date_and_whether_the_plan_hid_it(db_session, user_id, svc) -> None:
+def test_the_finished_day_carries_its_date_and_no_hide_flag(db_session, user_id, svc) -> None:
     row = _first_list(db_session, user_id, svc)
     assert plan_mod.day_list_out(db_session, user_id, row.id, svc)["review"] is None  # nothing while the day runs
     plan_mod.end_day(db_session, user_id, row.id, svc)
     review = plan_mod.day_list_out(db_session, user_id, row.id, svc)["review"]
-    assert review["day"] == DAYS[0] and review["dates_hidden"] is True  # the plan hid it; the review states it
+    # the plan's hideDates is "yes" and is ignored: the date is always shown and the review carries no flag for it
+    assert review["day"] == DAYS[0] and "dates_hidden" not in review
 
 
 def test_the_day_balances_are_the_series_the_journal_draws(db_session, user_id, svc) -> None:
@@ -171,10 +172,11 @@ def test_the_day_balances_are_the_series_the_journal_draws(db_session, user_id, 
 
 
 @pytest.mark.parametrize("hide", ["yes", "no"])
-def test_dates_hidden_follows_the_plan(db_session, user_id, svc, hide) -> None:
+def test_a_plan_stored_with_hide_dates_yes_behaves_as_no(db_session, user_id, svc, hide) -> None:
     plan = _plan(db_session, user_id, svc, hideDates=hide)
     plan_mod.run_prep(db_session, svc, plan.id)
     day = _open(db_session, user_id, svc).day_list
     plan_mod.end_day(db_session, user_id, day.id, svc)
     db_session.commit()
-    assert plan_mod.day_list_out(db_session, user_id, day.id, svc)["review"]["dates_hidden"] is (hide == "yes")
+    review = plan_mod.day_list_out(db_session, user_id, day.id, svc)["review"]
+    assert review["day"] == DAYS[0] and "dates_hidden" not in review  # either value loads and reads the same

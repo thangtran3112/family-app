@@ -960,12 +960,12 @@ def _ended_journal(
     return {**_day_journal(sessions), "balance_before": before, "balance_after": after}
 
 
-def _ended_review(plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | None:
-    """The stored review ranked the current way (see `review.normalized`), with the day's date and whether the plan
-    hid it while the day was running: the finished day shows its date (D-029)."""
+def _ended_review(row: ReplayDayList) -> dict[str, Any] | None:
+    """The stored review ranked the current way (see `review.normalized`), with the day's date. The plan's `hideDates`
+    is no longer read: a date is always shown (a plan stored with "yes" behaves as "no")."""
     if row.review is None:
         return None
-    return {**review_mod.normalized(row.review), "day": row.day, "dates_hidden": plan.spec["hideDates"] == "yes"}
+    return {**review_mod.normalized(row.review), "day": row.day}
 
 
 def _live_candidates(
@@ -1083,7 +1083,7 @@ def day_list_out(
         "rescan_job": _job_out(row.rescan_job, svc.now()),
         "peek": None if peek is None else _peek(db, svc, row, peek),
         "journal": _ended_journal(db, plan, row, sessions) if ended else None,
-        "review": _ended_review(plan, row) if ended else None,
+        "review": _ended_review(row) if ended else None,
         "notes": row.notes,
         "rating": row.rating,
         "created_at": row.created_at,
@@ -1430,7 +1430,7 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
             "shares": thread.shares or DAY_SESSION_SHARES,
             "armed": setup["armed"],
             "plan": threads_mod.session_plan(thread),
-            "hideDate": plan.spec["hideDates"],
+            "hideDate": "no",  # the plan's `hideDates` is accepted and ignored: a date is always shown
         }
     )
 

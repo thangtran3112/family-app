@@ -155,7 +155,7 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == 3.77
     assert review["selection"]["picks"][0]["kind"] == "traded"
     assert review["selection"]["median_move_pct"] == 3.77 and review["selection"]["picks_avg_move_pct"] == 3.77
-    assert review["day"] == "2026-09-28" and review["dates_hidden"] is True  # the finished day shows its date (D-029)
+    assert review["day"] == "2026-09-28" and "dates_hidden" not in review  # a date is always shown (hideDates ignored)
     journal = ended.json()["journal"]
     assert journal["trades"] == 1 and ended.json()["status"] == "ended"
     (line,) = journal["lines"]  # a scratch: entered and exited at 110.00 (D-032)
@@ -532,3 +532,15 @@ def test_opening_a_day_and_switching_the_chart_interval_start_a_background_warm(
     assert started == []
     client.get(f"{BASE}/sessions/{session_id}/feed?interval=1m", headers=auth_headers())
     assert started == [("_warm_in_background", day, "1m")], started
+
+
+def test_no_response_schema_carries_a_hide_flag_and_the_request_contracts_still_accept_one() -> None:
+    """A8: `hide_date` and `dates_hidden` are gone from the responses (a date is always shown); `hideDates` and
+    `hideDate` stay in the stored specs and the request contracts, accepted and ignored."""
+    schemas = app.openapi()["components"]["schemas"]
+    assert "hide_date" not in schemas["ReplaySessionSummaryOut"]["properties"]
+    assert "dates_hidden" not in schemas["ReviewOut"]["properties"]
+    from ai_trading.contracts.practice_block import PracticeBlockV1
+    from ai_trading.contracts.replay_session import ReplaySessionV1
+
+    assert "hideDates" in PracticeBlockV1.model_fields and "hideDate" in ReplaySessionV1.model_fields

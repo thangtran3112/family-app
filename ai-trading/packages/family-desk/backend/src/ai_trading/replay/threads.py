@@ -111,9 +111,13 @@ def plan_dict(thread: PracticeThread) -> dict[str, Any]:
 
 
 def session_plan(thread: PracticeThread) -> dict[str, Any]:
-    """The thread's plan as a `ReplaySessionV1.plan`, which is what the journal scores a session against."""
+    """The thread's plan as a `ReplaySessionV1.plan`, which is what the journal scores a session against. A day thread
+    has no stop rule (owner ruling, 2026-11-02: a stop is optional): its sessions are written with `stopRequired:
+    "no"`, so the "Stop note on every entry" item is never applicable to them, whatever a client sent. A session
+    already started keeps the plan it began with; a swing thread's column is read as it was saved (a legacy "yes"
+    still scores)."""
     plan: dict[str, Any] = {
-        "stopRequired": thread.stop_note_on_entry,
+        "stopRequired": "no" if thread.mode == "day" else thread.stop_note_on_entry,
         "signalOnly": thread.trade_only_on_signal,
     }
     for key, value in (

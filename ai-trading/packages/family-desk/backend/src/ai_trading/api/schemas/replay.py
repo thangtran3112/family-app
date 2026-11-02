@@ -351,7 +351,6 @@ class ReplaySessionSummaryOut(BaseModel):
     day: date
     attempt: int
     status: SessionStatus
-    hide_date: Literal["yes", "no"]
     revealed_through: datetime
     window_end: datetime
     trades: int
@@ -924,11 +923,10 @@ class SelectionOut(BaseModel):
 
 class ReviewOut(BaseModel):
     """Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
-    window end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen
-    hid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029)."""
+    window end, biggest gain first. Only present once the day ended. `day` is the finished day's date, always shown
+    (a plan's `hideDates` is accepted and ignored)."""
 
     day: date
-    dates_hidden: bool
     window_end: datetime
     of: int  # candidates with a move
     rows: list[ReviewRowOut]
