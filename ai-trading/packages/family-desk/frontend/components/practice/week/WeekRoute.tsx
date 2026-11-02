@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { ThreadPicker } from "@/components/practice/journal/thread/ThreadPicker";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -24,10 +25,7 @@ export function WeekRoute() {
   if (ids === null) {
     return (
       <div className={styles.center}>
-        <EmptyBlock title={WEEK_TEXT.none}>
-          <p className={styles.muted}>{WEEK_TEXT.noneHint}</p>
-          <Link href="/practice" className={styles.link}>{WEEK_TEXT.openPractice}</Link>
-        </EmptyBlock>
+        <ThreadPicker />
       </div>
     );
   }

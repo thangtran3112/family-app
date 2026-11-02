@@ -29,6 +29,8 @@ export type ReplaySessionApi = {
   view: ReplayView | null;
   loading: boolean;
   loadError: boolean;
+  /** The server does not know this session (404): "not found", not a failed load, so no retry. */
+  notFound: boolean;
   player: ReturnType<typeof initialPlayer>;
   toast: Toast | null;
   filterId: SizeFilterId;
@@ -88,6 +90,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   const [session, setSession] = useState<ReplaySession | null>(null);
   const [view, setView] = useState<ReplayView | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const [player, dispatch] = useReducer(playerReducer, undefined, () => initialPlayer(rememberedSpeed));
   const [toast, setToast] = useState<Toast | null>(null);
   const [filterId, setFilterId] = useState<SizeFilterId>("all");
@@ -168,8 +171,10 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         setIntervalState(loaded.spec.interval);
         setView(shown);
         dispatch({ type: "loaded", atEnd });
-      } catch {
-        if (!controller.signal.aborted) setLoadError(true);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof DeskApiError && error.status === 404) setNotFound(true);
+        else setLoadError(true);
       }
     })();
     return () => {
@@ -531,10 +536,10 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
 
   return useMemo(
     () => ({
-      session, view, loading: id !== null && !loadError && (session === null || view === null), loadError, player, toast, filterId, interval,
+      session, view, loading: id !== null && !loadError && !notFound && (session === null || view === null), loadError, notFound, player, toast, filterId, interval,
       paused: view?.paused ?? null, dismissPause,
       reload, dismissToast, holdToast, releaseToast, notify: say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, follows, mark, ticket, cancelOrder: cancel, stopNote, note, undo, end, setFilter, setInterval,
     }),
-    [session, view, id, loadError, player, toast, filterId, interval, dismissPause, reload, dismissToast, holdToast, releaseToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, follows, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
+    [session, view, id, loadError, notFound, player, toast, filterId, interval, dismissPause, reload, dismissToast, holdToast, releaseToast, say, togglePlay, setSpeed, step, nextSignal, jumpBy, jumpToTime, jumpToEnd, catchUp, follows, mark, ticket, cancel, stopNote, note, undo, end, setFilter, setInterval],
   );
 }

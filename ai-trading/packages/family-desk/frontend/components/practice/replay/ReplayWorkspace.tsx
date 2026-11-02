@@ -15,7 +15,9 @@ import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail, type RailSection } from "@/components/shell/desktop/RightRail";
 import { Button } from "@/components/ui/Button";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { ThreadPicker } from "@/components/practice/journal/thread/ThreadPicker";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
 import { threadClock } from "@/lib/replay/clock";
@@ -83,9 +85,7 @@ export function ReplayWorkspace() {
   if (id === null) {
     return (
       <div className={styles.page}>
-        <EmptyBlock title="No practice session selected">
-          <Link href="/practice" className={styles.link}>Open Practice</Link>
-        </EmptyBlock>
+        <ThreadPicker />
       </div>
     );
   }
@@ -95,6 +95,7 @@ export function ReplayWorkspace() {
 
 function ReplayById({ id }: { id: number }) {
   const api = useReplaySession(id);
+  if (api.notFound) return <div className={styles.page}><PracticeNotice title={PRACTICE_COPY.sessionNotFound} /></div>;
   if (api.loadError) return <div className={styles.page}><ErrorBlock message={PRACTICE_COPY.loadError} onRetry={api.reload} /></div>;
   if (api.loading || !api.session || !api.view) return <div className={styles.page}><LoadingBlock label={PRACTICE_COPY.loadingReplay} height={420} /></div>;
   return <ReplayLoaded api={api} session={api.session} view={api.view} />;

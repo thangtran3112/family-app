@@ -2,6 +2,7 @@ import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { DeskApiProblem } from "../api/client.ts";
 import { formatEtDay } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
+import { plainMessage } from "../desk/problems.ts";
 import { defaultDraft, draftToSpec, fieldOfPath, lastWeekday, latestReplayDay, type SetupDraft, type SetupField } from "./setup.ts";
 
 // The hub's daily-list plan form (02o-b v1): the draft the form edits, its conversion to a `PracticeBlockV1`, and live
@@ -181,7 +182,7 @@ export function planProblems(problems: readonly DeskApiProblem[]): PlanProblems 
   const result: PlanProblems = {};
   for (const problem of problems) {
     const field = planFieldOfPath(problem.path);
-    result[field] ??= problem.message || FIELD_MESSAGE[field];
+    result[field] ??= problem.message ? plainMessage(problem.message, problem.path) : FIELD_MESSAGE[field];
   }
   return result;
 }
@@ -209,7 +210,7 @@ export function validatePlanDraft(draft: PlanDraft, now?: Date): PlanValidation 
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       const field = planFieldOfPath(issue.path.join("."));
-      problems[field] ??= issue.code === "custom" ? issue.message : FIELD_MESSAGE[field];
+      problems[field] ??= issue.code === "custom" ? plainMessage(issue.message, issue.path.join(".")) : FIELD_MESSAGE[field];
     }
   }
   if (Object.keys(problems).length > 0) return { ok: false, problems };
