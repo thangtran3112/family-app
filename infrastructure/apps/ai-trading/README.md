@@ -11,6 +11,7 @@ Release 1 runs the Trading Hub and three unmodified upstream apps on one host be
 | `ahf-terminal` | `https://ai-hedge-fund.tobytran.dev/` | ai-hedge-fund in ttyd + tmux; also `/u/ai-hedge-fund/` on the hub |
 | `market-data` | internal only (`ahf` network, port 8000) | Financial Datasets-shaped API for ai-hedge-fund: Alpaca free daily bars + SEC EDGAR fundamentals (01m). Missing Alpaca or SEC values return 502, never empty data |
 | `market-data-bridge` | internal only (`marketdata` network, port 8080; no host port) | The Go gRPC market-data bridge (02t B0), deployed dark: no consumer until B2. Serves gRPC, gRPC-Web, and Connect on one port; `GET /healthz` reports the process only. Optional Firestore profile `ai-trading/market-data-bridge` (`MARKET_DATA_BRIDGE_TOKEN`, `MARKET_DATA_BRIDGE_ADMIN_TOKEN`, plus `ALPACA_API_KEY_ID`/`ALPACA_API_SECRET_KEY` linked from `shared/alpaca`; optional `BRIDGE_LADDER_*`). A missing profile never fails the deploy: the bridge boots healthy, rejects every call (no token), and serves no data (no keys) |
+| `market-data-cache` | internal only (own `mdcache` network, `internal: true`; joined by the bridge only; port 6379) | The bridge's Redis hot tier: quotes and bars cache with TTLs, 128 MB `maxmemory` (`allkeys-lru`) in a 192 MB container, no volume and no RDB/AOF (a restart is a cold cache). Optional Firestore profile `ai-trading/market-data-cache` holding `REDIS_PASSWORD` (16-128 characters of `A-Za-z0-9_-`). `deploy.sh` renders it into `market-data-cache.env` and derives `market-data-bridge-cache.env` (`CACHE_ENABLED=1`, `CACHE_REDIS_URL`) for the bridge. A missing or malformed profile never fails the deploy: Redis starts on a random throwaway password nobody knows and the bridge boots with the cache off. Rollback: delete the profile and redeploy. See "Market-data hot tier (Redis)" below |
 | `vibe-trading` | `https://vibe-trading.tobytran.dev/` | Caddy-verified hub session, then upstream API key and hardening |
 | `vibe-consensus` | internal only (`vibe` network, port 8000) | Authenticated free Finnhub recommendation counts; missing optional key yields analysis-only without stopping Vibe |
 | Desk `api` | authenticated `/api/desk` and `/api/desk/*` | Caddy/Clerk only; internal `gateway` + `database` networks, no host port |
@@ -158,7 +159,7 @@ Both static-upload jobs are fully independent of `build`/`deploy` and of each ot
 Either approved family user can open `/settings` on the hub and turn one of
 four groups on/off to save VPS RAM. A switch affects both users; the Hub
 itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`), the Family Desk's
-`api` and `scheduler`, and the `market-data-bridge` are never controllable and stay always-on.
+`api` and `scheduler`, and the `market-data-bridge` and its `market-data-cache` are never controllable and stay always-on.
 
 | App ID | Controlled services |
 |---|---|
@@ -272,3 +273,34 @@ App data in the Docker volumes is trial data and is not copied. Release 2 adds b
 ## Local development
 
 See `ai-trading/deploy/local/README.md`.
+
+## Market-data hot tier (Redis) and the history archive
+
+The bridge has two storage tiers, deliberately separate:
+
+| Tier | What it holds | Switch |
+|---|---|---|
+| Postgres archive (H1, `market_archive` schema) | Durable, write-once RAW `DAY_1`/`MINUTE_1` bars of finished sessions | `ARCHIVE_ENABLED=1` in the bridge env |
+| Redis hot tier (`market-data-cache`) | Disposable: quotes, open-session bars, adjusted bars, `HOUR_1` | The Firestore profile `ai-trading/market-data-cache` |
+
+**Enabling the hot tier.** Create the Firestore profile `ai-trading/market-data-cache` with one name,
+`REDIS_PASSWORD`, set through `common/config/family_config.py` (a random 32+ character value of
+`A-Za-z0-9_-`; never put it in the repository), then redeploy. Compose recreates the Redis container
+when the password changes. Verify: `docker logs <bridge> | jq 'select(.msg=="cache enabled")'`, and a
+non-zero `cache_stats` line after a `refresh_15m` pass. Rollback: delete the profile (or set
+`CACHE_ENABLED=0` in the bridge profile) and redeploy: the bridge returns to direct provider calls,
+and there is nothing to migrate. Enabling it in production is the owner's call.
+
+**Enabling the archive (a flag, not code; owner's call, not done by this change).** The archive is
+gated by `cfg.ArchiveEnabled` in `bridge/cmd/bridge/main.go`, which reads `ARCHIVE_ENABLED` from the
+bridge's env. That env is rendered from the Firestore profile `ai-trading/market-data-bridge`, so
+the knob is two names in that profile: `ARCHIVE_ENABLED=1` and `ARCHIVE_DATABASE_URL` (a Postgres
+URL for the archive's own database and role in the shared cluster, 02u ruling 3). Order: provision
+the database and role, run `docker exec <bridge> /bridge migrate`, then set the two names and
+redeploy. Two prerequisites are **not** in the compose file today and the archive cannot connect
+without them: the bridge is only on `marketdata` (and `mdcache`), so it needs the `database`
+network (`postgres_default`) added to its `networks:` before the archive can reach Postgres; and the
+database and role must exist (and be covered by `infrastructure/host/steps/40-backup.sh`, which
+02u ruling 3 requires, with a restore drill). When the archive is on the bridge tells the hot tier
+(`ArchiveOn`), and finished RAW `DAY_1`/`MINUTE_1` windows then get a 10-minute TTL instead of 30
+days: the archive owns that history, Redis only covers a Postgres outage.

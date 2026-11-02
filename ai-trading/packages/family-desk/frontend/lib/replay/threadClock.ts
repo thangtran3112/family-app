@@ -1,10 +1,11 @@
 import { z } from "zod";
 import type { components } from "../api/openapi.js";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "../desk/api.ts";
+import { formatEtDateClock } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { SPEEDS, type Speed } from "./clock.ts";
 import { MarketSchema } from "./schemas.ts";
-import { ms } from "./time.ts";
+import { etWallToUtcIso, ms } from "./time.ts";
 
 // The day-trade thread's clock as the Summary sees it (ADR-0018). The clock, the positions and the balance live on the server; this
 // file only reads them and asks for changes. The clock is real time, shifted: it runs through the close, the night and the weekend and
@@ -37,6 +38,7 @@ export const ThreadClockSchema = z.object({
   window_end: timestamp.nullable(),
   focus_end: timestamp.nullable(),
   next_start: timestamp.nullable(),
+  jump_limit: timestamp.nullable(),
   server_now: timestamp,
   market: MarketSchema.nullish(),
   account: ClockAccountSchema.nullable(),
@@ -96,6 +98,23 @@ export function clockStateText(clock: Pick<ThreadClock, "state" | "speed">): str
 export function clockControls(clock: Pick<ThreadClock, "state"> | null) {
   const open = clock !== null && clock.state !== "no_day";
   return { play: open, started: open, skip: open };
+}
+
+/** The plan's last day: the open that ends it is also where the plan ends, so nothing opens after it. */
+export const isLastDay = (clock: Pick<ThreadClock, "next_start" | "jump_limit">): boolean =>
+  clock.next_start !== null && clock.jump_limit !== null && ms(clock.next_start) >= ms(clock.jump_limit);
+
+/**
+ * The Jump boxes (an ET date and an ET time, as typed) as the instant the server is asked for, or why they cannot be sent. Empty or half-typed
+ * boxes are no target and no problem. A time at or before the clock is no jump (forward only), and one past the plan's end is refused here
+ * as the server would (`jump_limit`; null: the server alone bounds it).
+ */
+export function checkJump(clock: Pick<ThreadClock, "jump_limit">, shown: string | null, date: string, time: string): { to: string | null; problem: string | null } {
+  const to = etWallToUtcIso(date, time);
+  if (to === null) return { to: null, problem: null };
+  if (clock.jump_limit !== null && ms(to) > ms(clock.jump_limit)) return { to: null, problem: practiceText("clockJumpPastLimit", { limit: formatEtDateClock(clock.jump_limit, { seconds: false }) }) };
+  if (shown !== null && ms(to) <= ms(shown)) return { to: null, problem: PRACTICE_COPY.clockJumpBack };
+  return { to, problem: null };
 }
 
 /** How far through the current day's tape the clock is, 0 to 1: 1 once it is past the extended session's end (the night, the weekend). */

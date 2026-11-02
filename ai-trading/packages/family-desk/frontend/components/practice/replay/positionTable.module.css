@@ -1,0 +1,9 @@
+/* The Portfolio tab's position table: sign colours for a cell, the ticker button pulled back to the header's left edge. Tokens only. */
+.up { color: var(--color-up); }
+.down { color: var(--color-down); }
+.flat { color: var(--color-muted); }
+.strong { font-weight: var(--weight-semibold); }
+/* The ghost button's own padding would indent the ticker from its header; pull it back so the ticker column lines up (layout only). */
+.ticker { margin-left: calc(-1 * var(--space-2)); font-weight: var(--weight-semibold); }
+.symbol { font-weight: var(--weight-semibold); }
+.flags { display: inline-flex; align-items: center; gap: var(--space-1); }

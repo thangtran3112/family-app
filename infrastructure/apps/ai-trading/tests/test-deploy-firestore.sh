@@ -194,6 +194,9 @@ for target in "${targets[@]}"; do
     printf 'ZEP_API_KEY=fake-zep-not-real\nLLM_API_KEY=fake-llm-not-real\n' >"$tmp"
   elif [[ "$profile" == vibe-trading && "${FAKE_FC_VIBE_NO_API_KEY:-}" != 1 ]]; then
     printf 'ANTHROPIC_API_KEY=fake-provider-not-real\nAPI_AUTH_KEY=fake-vibe-key-not-real\nFAKE_VALUE=fake-not-real-vibe-trading\n' >"$tmp"
+  elif [[ "$profile" == market-data-cache ]]; then
+    # FAKE_FC_REDIS_PASSWORD overrides the (fake, valid-shaped) password; set-but-empty gives none.
+    printf 'REDIS_PASSWORD=%s\n' "${FAKE_FC_REDIS_PASSWORD-fake-redis-pw-not-real-0123456789}" >"$tmp"
   elif [[ "$profile" == consensus ]]; then
     [[ "${FAKE_FC_FINNHUB_KEY:-}" == 1 ]] || exit 2
     printf 'FINNHUB_API_KEY=fake-test-value\n' >"$tmp"
@@ -424,7 +427,7 @@ if [[ "$status" != 0 ]]; then
   fail "case1: expected exit 0, got $status"
 else
   # GNU stat -f prints filesystem data before failing; try -c first, then BSD -f.
-  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env cloudflared.env; do
+  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env market-data-bridge-cache.env market-data-cache.env cloudflared.env; do
     f="$s1/secrets/$name"
     [[ -f "$f" ]] || { fail "case1: missing $f"; continue; }
     [[ "$(stat -c '%a' "$f" 2>/dev/null || stat -f '%Lp' "$f" 2>/dev/null)" == 600 ]] || fail "case1: $f not mode 600"
@@ -433,6 +436,10 @@ else
   [[ -f "$s1/secrets/gateway.env" ]] && fail "case1: gateway.env should have been renamed to auth.env, not left behind"
   grep -q 'fake-tunnel-token' "$s1/secrets/cloudflared.env" 2>/dev/null || fail "case1: cloudflared.env content mismatch"
   grep -q 'fake-not-real-market-data-bridge' "$s1/secrets/market-data-bridge.env" 2>/dev/null || fail "case1: market-data-bridge.env missing its rendered profile"
+  # The Redis hot tier: the container gets only the password; the bridge gets the switch and the URL derived from it.
+  [[ "$(cat "$s1/secrets/market-data-cache.env" 2>/dev/null)" == 'REDIS_PASSWORD=fake-redis-pw-not-real-0123456789' ]] || fail "case1: market-data-cache.env must hold exactly REDIS_PASSWORD"
+  [[ "$(cat "$s1/secrets/market-data-bridge-cache.env" 2>/dev/null)" == $'CACHE_ENABLED=1\nCACHE_REDIS_URL=redis://:fake-redis-pw-not-real-0123456789@market-data-cache:6379/0' ]] || fail "case1: market-data-bridge-cache.env must hold CACHE_ENABLED=1 and the derived CACHE_REDIS_URL"
+  ! grep -q 'REDIS_PASSWORD' "$s1/secrets/market-data-bridge.env" "$s1/secrets/market-data-bridge-cache.env" || fail "case1: the password name leaked into a bridge env file"
   # The gateway (Caddy) gets only Vibe's API key, never Vibe's provider keys.
   [[ "$(cat "$s1/secrets/vibe-gateway.env" 2>/dev/null)" == 'VIBE_API_AUTH_KEY=fake-vibe-key-not-real' ]] || fail "case1: vibe-gateway.env must hold exactly VIBE_API_AUTH_KEY"
   ! grep -q '^FINNHUB_API_KEY=' "$s1/secrets/vibe-consensus.env" || fail "case1: optional Finnhub key should be absent"
@@ -488,6 +495,54 @@ done
 [[ "$(stat -c '%a' "$s_bridge/secrets/market-data-bridge.env" 2>/dev/null || stat -f '%Lp' "$s_bridge/secrets/market-data-bridge.env" 2>/dev/null)" == 600 ]] || fail "case1d: bridge env mode is not 0600"
 # The bridge's names never reach another app's env file.
 ! grep -rEq 'MARKET_DATA_BRIDGE' "$s_bridge/secrets" || fail "case1d: bridge token names leaked into another env file"
+
+echo "=== Case 1e (GREEN): missing optional market-data-cache profile never fails the deploy; the cache stays off ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s_cache_missing="$(new_scratch case_cache_missing)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_cache_missing/ci-staging/cloudflared.env"
+status="$(FAKE_FC_MISSING_PROFILE=ai-trading/market-data-cache run_scenario "$s_cache_missing" 2>"$s_cache_missing/stderr.out")"
+[[ "$status" == 0 ]] || fail "case1e: missing cache profile must not fail the deploy, got $status"
+for name in market-data-cache.env market-data-bridge-cache.env; do
+  [[ -f "$s_cache_missing/secrets/$name" ]] || fail "case1e: placeholder $name not installed"
+  ! grep -Eq 'REDIS_PASSWORD|CACHE_ENABLED|CACHE_REDIS_URL|FAKE_VALUE|redis://' "$s_cache_missing/secrets/$name" || fail "case1e: placeholder $name must hold no value or switch"
+  [[ "$(stat -c '%a' "$s_cache_missing/secrets/$name" 2>/dev/null || stat -f '%Lp' "$s_cache_missing/secrets/$name" 2>/dev/null)" == 600 ]] || fail "case1e: $name is not mode 0600"
+done
+grep -q 'ai-trading/market-data-cache profile not available' "$s_cache_missing/stderr.out" || fail "case1e: the missing profile must be logged"
+grep -q 'fake-not-real-market-data-bridge' "$s_cache_missing/secrets/market-data-bridge.env" || fail "case1e: the bridge profile must still be rendered"
+
+echo "=== Case 1f (GREEN): a malformed REDIS_PASSWORD keeps the cache off, fails nothing, and is never printed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+for bad in 'short' 'has space in it 0123456789' 'quote"in-it-0123456789abcdef' ''; do
+  s_cache_bad="$(new_scratch case_cache_bad)"
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_cache_bad/ci-staging/cloudflared.env"
+  status="$(FAKE_FC_REDIS_PASSWORD="$bad" run_scenario "$s_cache_bad" 2>"$s_cache_bad/stderr.out")"
+  [[ "$status" == 0 ]] || fail "case1f: a malformed password must not fail the deploy, got $status"
+  ! grep -Eq 'CACHE_ENABLED|CACHE_REDIS_URL|REDIS_PASSWORD' "$s_cache_bad/secrets/market-data-bridge-cache.env" "$s_cache_bad/secrets/market-data-cache.env" || fail "case1f: a malformed password reached an env file"
+  grep -q 'no valid REDIS_PASSWORD' "$s_cache_bad/stderr.out" || fail "case1f: the malformed password must be logged by name"
+  if [[ -n "$bad" ]]; then ! grep -qF -- "$bad" "$s_cache_bad/stderr.out" || fail "case1f: the malformed value was printed"; fi
+done
+
+echo "=== Case 1g (GREEN): with the profile present, the password and the URL are never printed ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s_cache_quiet="$(new_scratch case_cache_quiet)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_cache_quiet/ci-staging/cloudflared.env"
+status="$(run_scenario "$s_cache_quiet" 2>"$s_cache_quiet/stderr.out")"
+[[ "$status" == 0 ]] || fail "case1g: expected exit 0, got $status"
+! grep -q 'fake-redis-pw-not-real' "$s_cache_quiet/stderr.out" || fail "case1g: the Redis password reached the deploy output"
+! grep -q 'redis://' "$s_cache_quiet/stderr.out" || fail "case1g: the Redis URL reached the deploy output"
+
+echo "=== Case 1h (RED->rollback): the new cache env files roll back like every other secret ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s_cache_rb="$(new_scratch case_cache_rollback)"
+printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$s_cache_rb/ci-staging/cloudflared.env"
+printf 'REDIS_PASSWORD=old-redis-password-0123456789\n' >"$s_cache_rb/secrets/market-data-cache.env"
+chmod 0600 "$s_cache_rb/secrets/market-data-cache.env"
+export DEPLOY_SH_FAIL_AFTER=market-data-cache.env
+status="$(run_scenario "$s_cache_rb")"
+unset DEPLOY_SH_FAIL_AFTER
+[[ "$status" != 0 ]] || fail "case1h: rollback injection unexpectedly passed"
+grep -qx 'REDIS_PASSWORD=old-redis-password-0123456789' "$s_cache_rb/secrets/market-data-cache.env" || fail "case1h: the prior Redis password was not restored"
+[[ ! -e "$s_cache_rb/secrets/market-data-bridge-cache.env" ]] || fail "case1h: a first-time bridge cache env survived rollback"
 
 echo "=== Case 2 (GREEN): redeploy over existing secrets -- new content wins, old content backed up to .previous/ ==="
 CASE_COUNT=$((CASE_COUNT + 1))
@@ -3390,7 +3445,7 @@ status74=0
 run_fake_deploy_dark "$s74" 1 || status74=$?
 [[ "$status74" == 0 ]] || fail "case74: a dark deploy must succeed, got $status74: $(cat "$s74/stderr.log" 2>/dev/null)"
 up74="$(grep 'up -d' "$s74/app/docker.log" 2>/dev/null)" || fail "case74: no compose up call"
-for svc in web gateway auth market-data api market-data-bridge; do
+for svc in web gateway auth market-data api market-data-bridge market-data-cache; do
   [[ " $up74 " == *" $svc "* ]] || fail "case74: a dark deploy must still start $svc: $up74"
 done
 for svc in cloudflared scheduler; do

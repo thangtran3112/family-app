@@ -42,6 +42,18 @@ type Provider interface {
 	Probe(ctx context.Context) error
 }
 
+type pinnedKey struct{}
+
+// WithPinned marks a provider call as a pinned one (`pin_provider`): a diagnostic or shadow
+// request that must reach the vendor. The router sets it when it calls a pinned rung, so a
+// caching decorator can bypass its store without knowing the request type (quotes carry no pin).
+func WithPinned(ctx context.Context) context.Context {
+	return context.WithValue(ctx, pinnedKey{}, true)
+}
+
+// Pinned reports whether the call carries the WithPinned mark.
+func Pinned(ctx context.Context) bool { v, _ := ctx.Value(pinnedKey{}).(bool); return v }
+
 type QuoteProvider interface {
 	Provider
 	Quotes(ctx context.Context, symbols []string) ([]*pb.Quote, error)

@@ -294,6 +294,7 @@ def advance_session(
         to=body.to,
         step=body.step,
         sync=body.sync,
+        since=body.since,
         interval=body.interval,
         min_size=body.min_size,
         min_notional=body.min_notional,

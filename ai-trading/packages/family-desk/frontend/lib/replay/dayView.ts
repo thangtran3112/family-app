@@ -137,20 +137,15 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   return practiceText("planArmed", { names: names.join(" · ") });
 }
 
-/** The label of a day thread's one action (D-078): the day that is open starts trading ("Start Trading": the day is the thread clock's, never one
- *  ahead of it or behind it, so it carries no number), and opening the next day starts it ("Start Day 7"). It never says "Resume":
- *  the button only goes to the day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control).
- *  `today` is the thread's open day; the number of a next day is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
+/** The label of a day thread's one action (D-078): "Start Trading", whether it goes to the day that is open or opens the next one. The day is the
+ *  thread clock's, never one ahead of it or behind it, so the label carries no day number. It never says "Resume": the button only goes to the
+ *  day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control). `today` is the thread's open day.
+ *  Null when nothing can be pressed (preparing, or no plan). */
 export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
   if (today !== null) return PRACTICE_COPY.planStartTrading;
   if (plan === null) return null;
-  const card = planCard(plan);
-  if (card.action === "none" || card.action === "new") return null;
-  const current = plan.current;
-  if (current !== null && current.status !== "ended") {
-    return PRACTICE_COPY.planStartTrading;
-  }
-  return practiceText("planStartDayN", { n: threadDayNo(plan, plan.next_day_no ?? plan.days_opened + 1) });
+  const action = planCard(plan).action;
+  return action === "none" || action === "new" ? null : PRACTICE_COPY.planStartTrading;
 }
 
 export type PlanCardAction = "new" | "start" | "continue" | "none";
@@ -354,14 +349,8 @@ export type PortfolioRow = {
   unrealized: number | null;
   /** Realized plus unrealized: the name's P/L for the day. */
   dayPnl: number;
-  /** The open trade's cost, entry price × shares; null when flat. */
-  basis: number | null;
-  /** `dayPnl` as a percent of `basis`; null when flat (a closed trade keeps no cost on this read). */
-  dayPct: number | null;
-  /** The stock's move since entry, per share: last − entry. The market's direction, whichever side she is on; null when flat. */
-  priceChange: number | null;
-  /** `priceChange` as a percent of the entry price; null when flat. */
-  priceChangePct: number | null;
+  /** The name's prior close, from the day list's candidates (the same read); null when the name is not on the list or the list holds no close. */
+  priorClose: number | null;
   behind: boolean;
   /** The name she is on in the replay. */
   current: boolean;
@@ -374,9 +363,10 @@ const at = (iso: string | null): number => (iso === null ? Number.POSITIVE_INFIN
  *  the replay with the thread's clock (`threadClock`, not that name's own older playhead) and live open trade (null when she just
  *  exited, undefined on the day page): another name whose playhead is earlier than that clock is behind it, which the list read may not know yet. */
 export function portfolioRows(
-  list: Pick<DayList, "sessions">,
+  list: Pick<DayList, "sessions"> & { candidates?: DayList["candidates"] },
   from?: { symbol: string; playhead: string; openTrade?: OpenTrade | null },
 ): PortfolioRow[] {
+  const closes = new Map((list.candidates ?? []).map((candidate) => [candidate.symbol, candidate.prior_close]));
   const rows = list.sessions.map((session): PortfolioRow => {
     const current = from !== undefined && session.symbol === from.symbol;
     // The live view knows the price; the list read knows when the stop was crossed (and when older payloads lack the entry time).
@@ -386,7 +376,6 @@ export function portfolioRows(
         : current && from.openTrade === null
           ? null
           : session.position;
-    const basis = position === null || position.entry_price * position.shares <= 0 ? null : position.entry_price * position.shares;
     const dayPnl = session.realized_usd + (position?.unrealized_usd ?? 0);
     return {
       symbol: session.symbol,
@@ -400,10 +389,7 @@ export function portfolioRows(
       realized: session.realized_usd,
       unrealized: position?.unrealized_usd ?? null,
       dayPnl,
-      basis,
-      dayPct: basis === null ? null : (100 * dayPnl) / basis,
-      priceChange: position === null ? null : position.last_price - position.entry_price,
-      priceChangePct: position === null || position.entry_price <= 0 ? null : (100 * (position.last_price - position.entry_price)) / position.entry_price,
+      priorClose: closes.get(session.symbol) ?? null,
       behind:
         session.behind_clock ||
         (from !== undefined && !current && session.status === "active" && Date.parse(session.revealed_through) < Date.parse(from.playhead)),
@@ -432,39 +418,6 @@ export function portfolioFooter(pnl: DayPnl): { total: number; split: string; op
   };
 }
 
-/** The Portfolio's unit switch: dollars or percent. It flips the price change and the P/L of every row together. */
-export type PortfolioUnit = "usd" | "pct";
-
-export type PortfolioCells = {
-  /** "$814.54"; null when flat. */
-  last: string | null;
-  /** The stock's move since entry in the unit: "+$2.14" or "+0.26%"; null when flat. */
-  change: string | null;
-  changeTone: Tone;
-  /** The name's day P/L in the unit; a dash for a percent with no cost to divide by (a flat name). */
-  pnl: string;
-  pnlTone: Tone;
-  /** The P/L's direction, the Robinhood arrow; null at zero or a dash. */
-  arrow: "up" | "down" | null;
-};
-
-/** A row's figures in dollars or percent. The signs and the arrow carry the direction; the tone is the second cue. */
-export function portfolioCells(row: PortfolioRow, unit: PortfolioUnit): PortfolioCells {
-  const usd = unit === "usd";
-  const pnl = usd ? row.dayPnl : row.dayPct;
-  const change = usd ? row.priceChange : row.priceChangePct;
-  const text = (value: number) => (usd ? formatSignedUsd(value, { cents: true }) : formatSignedPct(value));
-  const pnlTone = pnl === null ? "flat" : changeToneAt(pnl, 2);
-  return {
-    last: row.position === null ? null : `$${formatPrice(row.position.last_price)}`,
-    change: change === null ? null : text(change),
-    changeTone: change === null ? "flat" : changeToneAt(change, 2),
-    pnl: pnl === null ? EMPTY_VALUE : text(pnl),
-    pnlTone,
-    arrow: pnlTone === "flat" ? null : pnlTone,
-  };
-}
-
 /** "2 open positions" / "1 open position" / "No open positions": the Portfolio's head, counted from the rows she sees. */
 export function openPositionsText(rows: readonly Pick<PortfolioRow, "holding">[]): string {
   const count = rows.filter((row) => row.holding).length;
@@ -473,18 +426,6 @@ export function openPositionsText(rows: readonly Pick<PortfolioRow, "holding">[]
 
 /** "Stop crossed 10:21": the row of a trade whose stop paused play. */
 export const stopCrossedText = (iso: string): string => practiceText("dayStopCrossed", { time: etHhMm(iso) });
-
-/**
- * "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", or null with none open. A held name that
- * is behind the day clock shows its own older price, but the exit books at the clock (F-06): with a clock and such a name the
- * sentence says so instead of promising the price on the chart.
- */
-export function endDayExitText(rows: readonly (Pick<PortfolioRow, "symbol" | "holding"> & { behind?: boolean })[], clock?: string | null): string | null {
-  const held = rows.filter((row) => row.holding);
-  if (held.length === 0) return null;
-  const key = clock && held.some((row) => row.behind) ? "dayEndExitsClock" : "dayEndExits";
-  return practiceText(key, { count: held.length, trades: held.length === 1 ? "trade" : "trades", clock: clock ? formatEtTimeZone(clock) : "", names: held.map((row) => row.symbol).join(", ") });
-}
 
 /** "2 open +$200.00": the hub's Today line, after the realized result; null with no open trade. */
 export const openTodayText = (pnl: Pick<DayPnl, "open_count" | "open_usd">): string | null =>
