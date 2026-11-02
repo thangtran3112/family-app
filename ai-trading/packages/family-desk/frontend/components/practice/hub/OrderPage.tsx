@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { Field, Input } from "@/components/ui/Field";
+import { ThreadPicker } from "@/components/practice/journal/thread/ThreadPicker";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { EmptyBlock, ErrorBlock, LoadingBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -35,10 +37,17 @@ export function OrderPage() {
   }, []);
   const query = useDeskQuery(`practice-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null });
 
-  if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
+  if (id === null) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
-        <EmptyBlock title={PRACTICE_COPY.threadPageNotFound} />
+        <ThreadPicker />
+      </OverviewShell>
+    );
+  }
+  if (query.error instanceof DeskApiError && query.error.status === 404) {
+    return (
+      <OverviewShell title="Practice thread" titleRef={titleRef}>
+        <PracticeNotice title={PRACTICE_COPY.threadPageNotFound} />
       </OverviewShell>
     );
   }

@@ -2,7 +2,9 @@
 
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
+import { ThreadPicker } from "@/components/practice/journal/thread/ThreadPicker";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
+import { ErrorBlock } from "@/components/ui/StateBlocks";
 import { TabPanel } from "@/components/ui/Tabs";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -61,10 +63,17 @@ export function ThreadOverview() {
     return () => clearInterval(timer);
   }, [preparing, changed]);
 
-  if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
+  if (id === null) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
-        <EmptyBlock title={PRACTICE_COPY.threadPageNotFound} />
+        <ThreadPicker />
+      </OverviewShell>
+    );
+  }
+  if (query.error instanceof DeskApiError && query.error.status === 404) {
+    return (
+      <OverviewShell title="Practice thread" titleRef={titleRef}>
+        <PracticeNotice title={PRACTICE_COPY.threadPageNotFound} />
       </OverviewShell>
     );
   }

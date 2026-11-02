@@ -7,9 +7,17 @@ const NOUNS: Record<string, string> = { "watch.universe.symbols": "symbol", "the
 const noun = (path: string) => NOUNS[path] ?? "item";
 const group = (text: string, pattern: RegExp) => pattern.exec(text)?.[1];
 
+/** Contract sentences that name a schema path, as plain words. Matched whole, after pydantic's "Value error, " prefix. */
+const PATH_SENTENCES: Readonly<Record<string, string>> = {
+  "window.from must be before window.to": "Focus until must be after Start at",
+  "window.from must be at or after screen.listAt": "Start at must be at or after List time",
+  "screen.listAt must be between 04:30 and 15:30 ET": "List time must be between 4:30 AM and 3:30 PM",
+};
+
 /** Pydantic (server) and Zod (client) wording for the same mistake maps to one sentence. Anything else is already English and passes through. */
 export function plainMessage(message: string, path = ""): string {
-  const text = message.trim();
+  const text = message.trim().replace(/^Value error, /, "");
+  if (Object.hasOwn(PATH_SENTENCES, text)) return PATH_SENTENCES[text]!;
   const items = group(text, /^List should have at least (\d+) items?\b/) ?? group(text, /^Too small: expected array to have >=(\d+) items?/);
   if (items) return `Add at least ${items} ${noun(path)}${items === "1" ? "" : "s"}.`;
   const chars = group(text, /^Too small: expected string to have >=(\d+) characters?/) ?? group(text, /^String should have at least (\d+) characters?/);
