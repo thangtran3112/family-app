@@ -49,7 +49,6 @@ import {
   endDayExitText,
   portfolioRows,
 } from "@/lib/replay/dayView";
-import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
@@ -341,7 +340,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
         </div>
         <div className={`${styles.actions} ${styles.endWrap}`}>
           {practicing && !ended && (
-            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Button>
+            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{practiceText("planOpenDay", { n: threadDayNo(list.plan, list.day_no) })}</Button>
           )}
           {ended ? (
             finishHref !== null ? (
