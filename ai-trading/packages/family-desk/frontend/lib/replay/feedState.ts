@@ -156,6 +156,13 @@ export function viewFromFeed(feed: ReplayFeed, interval: ReplayInterval): Replay
   };
 }
 
+/**
+ * The follow poll of a window: bring the session to the thread clock, and say where this window's view ends. The server has one playhead per session,
+ * so a second window on the same name finds it already moved; the answer starts at `since` instead, and the merge below is by bar start, so a bar
+ * that arrives twice is one bar (D-198).
+ */
+export const syncTarget = (view: Pick<ReplayView, "revealedThrough"> | null) => ({ sync: true as const, ...(view === null ? {} : { since: view.revealedThrough }) });
+
 /** Folds one `advance` answer into the view. The playhead only moves forward, even if an answer arrives late. */
 export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
   const previous = ms(view.revealedThrough);

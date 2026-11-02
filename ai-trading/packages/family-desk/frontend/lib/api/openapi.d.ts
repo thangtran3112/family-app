@@ -1964,7 +1964,10 @@ export interface components {
          *     the window end is clamped and `at_end` is true. `step: "next_signal"` reveals through the next would-fire bar
          *     close (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422. `sync: true` is
          *     the day-trade screen following the thread's server-side clock (ADR-0018): it brings a running clock to now, then
-         *     reveals this name through that clock, wherever it is; it moves nothing itself.
+         *     reveals this name through that clock, wherever it is; it moves nothing itself. `since` (with `sync` only) is the
+         *     playhead the caller last read: the answer carries what closed after it, so a second window on the same name, whose
+         *     session playhead the first window already moved, still gets every bar (D-198). Without it, the answer starts at
+         *     the session's own playhead.
          */
         AdvanceIn: {
             /** Interval */
@@ -1984,6 +1987,8 @@ export interface components {
              * @default 0
              */
             min_size: number;
+            /** Since */
+            since?: string | null;
             /** Step */
             step?: ("bar" | "next_signal") | null;
             /**
