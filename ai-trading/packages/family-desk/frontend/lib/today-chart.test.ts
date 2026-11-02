@@ -112,12 +112,15 @@ test("SMA and EMA overlays align to actual bars and re-warm after null close gap
   assert.ok(sma && ema);
   assert.equal(sma.length, bars.length);
   assert.equal(ema.length, bars.length);
+  // The EMA is seeded with the first close of its segment (the backend's convention), so a ramp lags by (period - 1) / 2
+  // bars once warm: EMA_t = x_t - 9.5 * (1 - (19/21)^t) for an EMA 20 over a ramp that rises by 1 a bar.
+  const warm = (lastClose: number) => lastClose - 9.5 * (1 - (19 / 21) ** 19);
   assert.equal(sma[19], 10.5);
-  assert.equal(ema[19], 10.5);
+  assert.ok(Math.abs(ema[19]! - warm(20)) < 1e-9);
   assert.equal(sma[20], null);
   assert.equal(ema[20], null);
   assert.equal(sma[39], null);
   assert.equal(ema[39], null);
   assert.equal(sma[40], 31.5);
-  assert.equal(ema[40], 31.5);
+  assert.ok(Math.abs(ema[40]! - warm(41)) < 1e-9);
 });
