@@ -58,7 +58,7 @@ export type NullableVwapBar = { t: string; h: number | null; l: number | null; c
  * VWAP over bars that may have gaps. A gap bar reads as unknown and contributes nothing; it does not
  * restart the session sum (VWAP only resets at the New York trading day, unlike the warm-up indicators).
  */
-export function calcVWAPWithGaps(bars: NullableVwapBar[]): NullableValues {
+export function calcVWAPWithGaps(bars: NullableVwapBar[], asset: "stock" | "future" = "stock"): NullableValues {
   const output = new Array<number | null>(bars.length).fill(null);
   const known: number[] = [];
   const complete: Array<{ t: string; h: number; l: number; c: number; v: number; ext?: boolean }> = [];
@@ -68,7 +68,7 @@ export function calcVWAPWithGaps(bars: NullableVwapBar[]): NullableValues {
     known.push(index);
     complete.push({ t: bar.t, h, l, c, v, ext: bar.ext });
   });
-  calcVWAP(complete).forEach((value, position) => {
+  calcVWAP(complete, asset).forEach((value, position) => {
     output[known[position]!] = value !== null && Number.isFinite(value) ? value : null;
   });
   return output;
