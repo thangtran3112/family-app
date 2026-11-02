@@ -24,9 +24,9 @@ import type { FeedbackDetail } from "@/lib/feedback/schemas";
 import { StatusTimeline } from "./StatusTimeline";
 import styles from "./feedback.module.css";
 
-/** The right rail of `/feedback`: the report named by `?id=`, or a hint to pick one. */
-export function FeedbackDetailRail({ id }: { id: number | null }) {
-  if (id === null) return <p className={styles.muted}>Select a report to see its details</p>;
+/** The right rail of `/feedback`: the report named by `?id=`, or a hint to pick one. With no reports there is nothing to pick, so no hint. */
+export function FeedbackDetailRail({ id, nothingToSelect = false }: { id: number | null; nothingToSelect?: boolean }) {
+  if (id === null) return nothingToSelect ? null : <p className={styles.muted}>Select a report to see its details</p>;
   return <ReportDetail key={id} id={id} />;
 }
 
