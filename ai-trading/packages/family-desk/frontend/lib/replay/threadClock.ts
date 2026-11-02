@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { components } from "../api/openapi.js";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "../desk/api.ts";
-import { formatPrice } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { SPEEDS, type Speed } from "./clock.ts";
 import { ms } from "./time.ts";
@@ -15,16 +14,6 @@ const finite = z.number().finite();
 const timestamp = z.iso.datetime({ offset: true });
 const speed = z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]);
 
-export const ClockPauseSchema = z.object({
-  kind: z.enum(["stop", "close"]),
-  at: timestamp,
-  symbol: z.string().nullish(),
-  stop_price: finite.nullish(),
-  price: finite.nullish(),
-  crossing: z.enum(["cross", "gap"]).nullish(),
-  also: z.array(z.string()).default([]),
-}) satisfies z.ZodType<components["schemas"]["ClockPauseOut"]>;
-
 export const ClockAccountSchema = z.object({
   balance: finite,
   open_pnl_usd: finite,
@@ -36,7 +25,7 @@ export const ClockAccountSchema = z.object({
 
 export const ThreadClockSchema = z.object({
   thread_id: finite.int(),
-  state: z.enum(["no_day", "listed", "paused", "running", "at_close"]),
+  state: z.enum(["no_day", "listed", "paused", "running"]),
   day_list_id: finite.int().nullable(),
   day_no: finite.int().nullable(),
   running: z.boolean(),
@@ -44,8 +33,8 @@ export const ThreadClockSchema = z.object({
   clock: timestamp.nullable(),
   window_start: timestamp.nullable(),
   window_end: timestamp.nullable(),
+  focus_end: timestamp.nullable(),
   server_now: timestamp,
-  pause: ClockPauseSchema.nullable(),
   account: ClockAccountSchema.nullable(),
   label: z.string(),
 }) satisfies z.ZodType<components["schemas"]["ThreadClockOut"]>;
@@ -57,7 +46,6 @@ export const SkipDaySchema = z.object({
 }) satisfies z.ZodType<components["schemas"]["SkipDayOut"]>;
 
 export type ThreadClock = z.infer<typeof ThreadClockSchema>;
-export type ClockPause = z.infer<typeof ClockPauseSchema>;
 export type ClockAccount = z.infer<typeof ClockAccountSchema>;
 export type SkipDay = z.infer<typeof SkipDaySchema>;
 /** What the Play bar can ask: any mix of these (the server settles the time that passed first). */
@@ -89,23 +77,15 @@ export function extrapolate(clock: Pick<ThreadClock, "clock" | "running" | "spee
 export function clockStateText(clock: Pick<ThreadClock, "state" | "speed">): string {
   switch (clock.state) {
     case "running": return practiceText("clockStateRunning", { speed: clock.speed });
-    case "at_close": return PRACTICE_COPY.clockStateClose;
     case "listed": return PRACTICE_COPY.clockStateListed;
     case "paused": return PRACTICE_COPY.clockStatePaused;
     case "no_day": return "";
   }
 }
 
-/** The sentence under the controls when a clock that was running stopped, or null while there is nothing to explain. */
-export function pauseText(pause: ClockPause | null): string | null {
-  if (pause === null) return null;
-  if (pause.kind === "close") return PRACTICE_COPY.clockPausedClose;
-  return practiceText("clockPausedStop", { symbol: pause.symbol ?? "A name", price: pause.stop_price == null ? "its stop" : formatPrice(pause.stop_price) });
-}
-
-/** What the controls may do now: Play needs a started day that is not at the close; Step, Jump need a started day; Skip needs any open day. */
+/** What the controls may do now: Play, Step and Jump need a started day; Skip needs any open day. The clock has no other stop than Pause. */
 export function clockControls(clock: Pick<ThreadClock, "state"> | null) {
-  const started = clock !== null && (clock.state === "running" || clock.state === "paused" || clock.state === "at_close");
+  const started = clock !== null && (clock.state === "running" || clock.state === "paused");
   return {
     play: clock !== null && (clock.state === "paused" || clock.state === "running"),
     jump: clock !== null && (clock.state === "paused" || clock.state === "running"),
@@ -114,12 +94,23 @@ export function clockControls(clock: Pick<ThreadClock, "state"> | null) {
   };
 }
 
-/** How far through the window the clock is, 0 to 1 (0 before the day starts). */
+/** How far through the market's day the clock is, 0 to 1 (0 before the day starts). */
 export function clockProgress(clock: Pick<ThreadClock, "clock" | "window_start" | "window_end">, shown: string | null): number {
   if (shown === null || clock.window_start === null || clock.window_end === null) return 0;
   const span = ms(clock.window_end) - ms(clock.window_start);
   return span <= 0 ? 0 : Math.min(1, Math.max(0, (ms(shown) - ms(clock.window_start)) / span));
 }
+
+/** Where her practice window ends along the day, 0 to 1, or null without one. A mark on the track and nothing more: it stops no clock. */
+export function focusProgress(clock: Pick<ThreadClock, "window_start" | "window_end" | "focus_end">): number | null {
+  if (clock.focus_end === null || clock.window_start === null || clock.window_end === null) return null;
+  const span = ms(clock.window_end) - ms(clock.window_start);
+  return span <= 0 ? null : Math.min(1, Math.max(0, (ms(clock.focus_end) - ms(clock.window_start)) / span));
+}
+
+/** The line after the market closed on its own: the day that ended and where the next one stands. */
+export const rolledText = (from: number | null, next: { day_no: number | null }): string =>
+  next.day_no !== null ? practiceText("clockRolled", { from: from ?? "", next: next.day_no }) : practiceText("clockRolledDone", { from: from ?? "" });
 
 /** The line after Skip day: where the next day stands. */
 export const skippedText = (result: SkipDay): string =>

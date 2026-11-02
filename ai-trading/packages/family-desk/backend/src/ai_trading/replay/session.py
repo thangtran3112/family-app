@@ -59,7 +59,6 @@ from ai_trading.replay.cache import BlobStore, DbBlobStore
 from ai_trading.replay.data import (
     DayInputs,
     History,
-    ReplayDayError,
     check_day,
     check_window,
     window_bounds,
@@ -169,6 +168,21 @@ class Ctx:
 def _ts(value: datetime | pd.Timestamp) -> pd.Timestamp:
     stamp = pd.Timestamp(value)
     return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+
+
+def market_close(day: date, kind: str) -> pd.Timestamp:
+    """The exchange's close for a session of `kind` ("regular" 16:00 ET, 13:00 on a half day; "extended" four hours
+    after). The only time the replayed market stops on its own: a real day has no earlier end."""
+    found = trading_session("stock", day)
+    assert found is not None
+    return found.regular_close if kind == "regular" else found.extended_close
+
+
+def window_end_of(row: ReplaySession) -> pd.Timestamp:
+    """Where the market's day ends for this session. The plan's `window.to` is her own focus mark and never a stop, so
+    a session that is still open runs to the exchange close (also the sessions saved before that rule, whose stored
+    end is her old mark). An ended session keeps the time it was ended at: its exits and journal were booked there."""
+    return _ts(row.window_end) if row.status == "ended" else market_close(row.day, row.spec["session"])
 
 
 def jsonable(value: Any) -> Any:
@@ -346,7 +360,7 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         plan=_plan_of(row.spec),
         interval=row.spec["interval"],
         window_start=_ts(row.window_start),
-        window_end=_ts(row.window_end),
+        window_end=window_end_of(row),
         through=_ts(row.revealed_through),
         day_trades=[] if swing else _day_trades(db, row),  # a swing journal is scored weekly, not by day rules
         swing=swing,
@@ -570,7 +584,7 @@ def summary_out(db: Session, row: ReplaySession, marks: list[PracticeMark] | Non
         "status": row.status,
         "hide_date": row.spec["hideDate"],
         "revealed_through": row.revealed_through,
-        "window_end": row.window_end,
+        "window_end": window_end_of(row),
         "trades": trades,
         "pnl_usd": pnl,
         "adherence_pct": adherence,
@@ -623,12 +637,9 @@ def create(
     symbol, day = dumped["symbol"], date.fromisoformat(dumped["day"])
     now = svc.now()
     check_day(day, now)
-    start, end = window_bounds(day, dumped["window"]["from"], dumped["window"]["to"])
-    found = trading_session("stock", day)
-    assert found is not None
-    limit = found.regular_close if dumped["session"] == "regular" else found.extended_close
-    if end > limit:
-        raise ReplayDayError("The window runs past the close", path="window")
+    # Her `window.to` is a focus mark kept in the spec; the session itself runs to the exchange close.
+    start, _focus = window_bounds(day, dumped["window"]["from"], dumped["window"]["to"])
+    end = market_close(day, dumped["session"])
     check_window(day, end, now)
 
     existing = db.execute(
@@ -865,91 +876,75 @@ def _frame(
     }
 
 
-def _stop_pause(
-    db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp
-) -> tuple[dict[str, Any] | None, pd.Timestamp]:
-    """`swing_play.stop_pause` for a day: scan the stop of every open trade of the day list (not just this name) over
-    the one-minute bars closing in `(previous, target]`. With a crossing, `target` is clamped to that bar's close,
-    `stop_hit_at` is set on the crossed session and on every other one crossed in the same minute, and `paused` is the
-    wire shape; a stop never exits. `previous` is the later of the playhead and the day clock: minutes already
-    revealed were scanned by the advance that revealed them. ponytail: one bars load per open trade."""
+def _flag_stops(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp) -> None:
+    """Mark `stop_hit_at` on every open trade of the day list (not just this name) whose stop the one-minute bars
+    closing in `(previous, target]` crossed, each at the bar it crossed on. It is information for the Portfolio and the
+    journal, never a control: the clock does not stop for a stop and a stop never exits. `previous` is the later of
+    the playhead and the day clock: minutes already revealed were scanned by the advance that revealed them.
+    ponytail: one bars load per open trade."""
     if previous >= target:
-        return None, target
+        return
     live = [
         (row, trade) for row, trade in open_positions(db, ctx.row.day_list_id) if trade.stops and not row.stop_hit_at
     ]
     if not live:
-        return None, target
+        return
     minutes = {
         row.symbol: ctx.inputs.bars_1m
         if row.id == ctx.row.id
         else ctx.svc.history.day_inputs(ctx.store, row.symbol, row.day).bars_1m
         for row, _ in live
     }
-    crossing = holds_mod.first_stop_crossing(
-        [
-            holds_mod.Hold(
-                id=None,
-                symbol=row.symbol,
-                side=trade.side,  # type: ignore[arg-type]
-                shares=trade.shares,
-                entry_day=row.day,
-                entry_at=trade.entry_at,
-                entry_price=trade.entry_price,
-                stop_at_entry=trade.stop_price,
-                stop_price=trade.stops[-1][1],
-                stop_hit_at=None,
-            )
-            for row, trade in live
-        ],
-        minutes,
-        previous,
-        target,
-    )
-    if crossing is None:
-        return None, target
-    for row, _ in live:
-        if row.symbol == crossing.symbol or row.symbol in crossing.also:
-            row.stop_hit_at, row.updated_at = crossing.at.to_pydatetime(), ctx.svc.now()
+    while live:
+        crossing = holds_mod.first_stop_crossing(
+            [
+                holds_mod.Hold(
+                    id=None,
+                    symbol=row.symbol,
+                    side=trade.side,  # type: ignore[arg-type]
+                    shares=trade.shares,
+                    entry_day=row.day,
+                    entry_at=trade.entry_at,
+                    entry_price=trade.entry_price,
+                    stop_at_entry=trade.stop_price,
+                    stop_price=trade.stops[-1][1],
+                    stop_hit_at=None,
+                )
+                for row, trade in live
+            ],
+            minutes,
+            previous,
+            target,
+        )
+        if crossing is None:
+            break
+        hit = {crossing.symbol, *crossing.also}
+        for row, _ in live:
+            if row.symbol in hit:
+                row.stop_hit_at, row.updated_at = crossing.at.to_pydatetime(), ctx.svc.now()
+        live = [(row, trade) for row, trade in live if row.symbol not in hit]
+        previous = crossing.at
     db.flush()
-    paused = {
-        "symbol": crossing.symbol,
-        "stop_price": crossing.stop_price,
-        "at": crossing.at,
-        "price": journal_mod.fill_price(crossing.price),  # the price an Exit books: whole cents (D-033)
-        "kind": crossing.kind,
-        "also": list(crossing.also),
-    }
-    return paused, crossing.at
 
 
-def move_clock(
-    db: Session, svc: Services, day_list: ReplayDayList, target: pd.Timestamp, *, stop_pause: bool = True
-) -> tuple[pd.Timestamp, dict[str, Any] | None]:
-    """Move the thread's day clock forward to `target`, clamped to the window end (the caller holds the day-list lock).
-    The same cut as `advance` makes for a day: with `stop_pause` the move ends at the first stop crossed on ANY open
-    name (a stop never exits), and a move that reaches the window end stops there. Either one stops a running clock and
-    is kept on the row (`clock_pause`) for her to read. Returns the new clock and the pause, if any. No session's
-    playhead moves here: a name is lifted to the clock when she is on it (`advance`), never written while she is not."""
+def move_clock(db: Session, svc: Services, day_list: ReplayDayList, target: pd.Timestamp) -> pd.Timestamp:
+    """Move the thread's day clock forward to `target`, clamped to the exchange close (the caller holds the day-list
+    lock). Nothing but the close ends a move: a crossed stop is flagged on its position (`_flag_stops`) and the clock
+    goes on. Reaching the close stops the run (`clock.roll` takes the day over, not her). No session's playhead moves
+    here: a name is lifted to the clock when she is on it (`advance`), never written while she is not."""
     sessions = _sessions_of_day(db, day_list.id)
     if not sessions or day_list.revealed_through is None or day_list.status == "ended":
-        return (_ts(day_list.revealed_through) if day_list.revealed_through is not None else _ts(svc.now())), None
-    window_end = _ts(sessions[0].window_end)
+        return _ts(day_list.revealed_through) if day_list.revealed_through is not None else _ts(svc.now())
+    window_end = window_end_of(sessions[0])
     previous = _ts(day_list.revealed_through)
     target = min(max(_ts(target), previous), window_end)
-    pause: dict[str, Any] | None = None
-    if stop_pause and target > previous:
-        paused, target = _stop_pause(db, context(db, svc, sessions[0]), previous, target)
-        if paused is not None:
-            pause = {**paused, "crossing": paused["kind"], "kind": "stop"}
-    if pause is None and target >= window_end:
-        pause = {"kind": "close", "at": window_end}
+    if target > previous:
+        _flag_stops(db, context(db, svc, sessions[0]), previous, target)
     day_list.revealed_through, day_list.updated_at = target.to_pydatetime(), svc.now()
-    if pause is not None:
+    if target >= window_end:
         day_list.clock_running, day_list.clock_anchor_at = False, None
-        day_list.clock_pause = jsonable(pause)
     db.flush()
-    return target, pause
+    return target
 
 
 def settle_locked(db: Session, svc: Services, day_list: ReplayDayList) -> None:
@@ -1041,8 +1036,8 @@ def advance(
             scan_from = max(previous, clock)
         if ctx.swing:  # play stops at the first crossed stop (02p b5): never earlier, never later
             paused, target = swing_play.stop_pause(ctx, scan_from, target)
-        else:  # the same for a day: the first stop crossed on ANY open name, this one included
-            paused, target = _stop_pause(db, ctx, scan_from, target)
+        else:  # a day's clock never stops for a stop: every open name's crossing is flagged, the time goes on
+            _flag_stops(db, ctx, scan_from, target)
         if clock is None or target > clock:
             day_list.revealed_through = target.to_pydatetime()
             ctx.day_clock = target
@@ -1069,24 +1064,7 @@ def advance(
     )
     fresh = [f for f in ctx.fires if previous < f.bar_close <= target]
     frame = _frame(ctx, bars=_bar_rows(new_bars), through=target, width=width, prints=prints, signals=fresh)
-    stop = (day_list.clock_pause or {}) if day_list is not None else {}
-    if (
-        sync
-        and paused is None
-        and stop.get("kind") == "stop"
-        and any(s.symbol == stop["symbol"] and s.stop_hit_at is not None for s in _sessions_of_day(db, day_list.id))
-    ):
-        # The thread clock stopped at a crossed stop and the position is still open and flagged (she has not exited it):
-        # say so on the chart she follows the clock to, until she resumes the clock or closes the position.
-        paused = {
-            "symbol": stop["symbol"],
-            "stop_price": stop["stop_price"],
-            "at": _ts(stop["at"]),
-            "price": stop["price"],
-            "kind": stop["crossing"],
-            "also": stop.get("also", []),
-        }
-    frame["paused"] = paused  # None unless a stop was crossed: the response leaves it out then
+    frame["paused"] = paused  # a swing day only (play stops at its first crossed stop); the response leaves None out
     frame["fills"] = [mark_out(m) for m in fills] or None  # working orders the tape filled inside this advance
     if ctx.swing:
         frame |= {"strip": swing_play.strip(ctx, target), "daily_forming": swing_play.forming_daily(ctx, target)}
@@ -1884,7 +1862,8 @@ def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: b
             row.revealed_through = clock.to_pydatetime()
             _fill_working_orders(db, ctx, previous, clock)
     ctx.through = ctx.window_end
-    row.revealed_through = ctx.window_end.to_pydatetime()
+    # An ended session keeps the end it revealed to (a session saved before the close rule had her old mark stored).
+    row.revealed_through = row.window_end = ctx.window_end.to_pydatetime()
     _expire_orders(row, ctx.window_end)
     # A swing day never auto-exits (a hold rides overnight) and books nothing here: the day's end credits the holds
     # that exited on it (02p b3), and a swing session may have no tape to price an exit from.

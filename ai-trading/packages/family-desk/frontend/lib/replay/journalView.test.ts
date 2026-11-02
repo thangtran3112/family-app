@@ -63,11 +63,11 @@ test("a journal with no trades shows dashes, not zeros, for the trade-based tile
   assert.equal(adherenceHint(journal), null, "a score means no hint");
 });
 
-test("trade rows show ET times, prices, P/L and R, and mark an auto exit at window end", () => {
+test("trade rows show ET times, prices, P/L and R, and mark an auto exit at day end", () => {
   assert.deepEqual(tradeRows(journal.trades), [
     { no: 1, side: "Long", entry: "9:47 AM · 187.42", exit: "10:02 AM · 188.05", shares: "100", pnl: "+$63.00", pnlTone: "up", r: "+1.21R", stop: "186.90", onSignal: "Yes" },
     { no: 2, side: "Short", entry: "10:20 AM · 188.40", exit: "10:31 AM · 189.10", shares: "100", pnl: "−$70.00", pnlTone: "down", r: "−1.00R", stop: "189.10", onSignal: "No" },
-    { no: 3, side: "Long", entry: "11:10 AM · 189.50", exit: "4:00 PM · 189.45 (auto, window end)", shares: "100", pnl: "−$5.00", pnlTone: "down", r: "—", stop: "none", onSignal: "No" },
+    { no: 3, side: "Long", entry: "11:10 AM · 189.50", exit: "4:00 PM · 189.45 (auto, day end)", shares: "100", pnl: "−$5.00", pnlTone: "down", r: "—", stop: "none", onSignal: "No" },
   ]);
 });
 

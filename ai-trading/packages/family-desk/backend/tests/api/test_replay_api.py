@@ -27,6 +27,7 @@ OTHER = {"Cf-Access-Authenticated-User-Email": "spouse@example.com"}
 NOW = datetime(2026, 10, 24, 16, 0, tzinfo=UTC)
 OPEN = pd.Timestamp("2026-09-25T13:30:00Z")  # 09:30 ET on the fixture day (EDT)
 BASE = "/api/desk/replay"
+CLOSE = 6.5 * 3600  # seconds from the 09:30 open to the 16:00 close: where a session ends, whatever window she chose
 SPEC: dict[str, Any] = {
     "schemaVersion": 1,
     "symbol": "TSLA",
@@ -86,7 +87,7 @@ def mark(client: TestClient, session_id: int, body: dict[str, Any]):
 def test_create_starts_at_the_window_open_and_is_idempotent(replay: TestClient) -> None:
     first = start(replay)
     assert first["status"] == "active" and first["attempt"] == 1
-    assert first["revealed_through"] == iso(0) and first["window_end"] == iso(3600)
+    assert first["revealed_through"] == iso(0) and first["window_end"] == iso(CLOSE)
     assert first["spec"]["window"] == {"from": "09:30", "to": "10:30"}
     assert first["tape_feed"] == "sip" and first["stamp"]["freshness"] == "replay"
     assert first["marks"] == [] and first["open_trade"] is None
@@ -154,13 +155,13 @@ def test_advance_reveals_only_what_the_playhead_passed(replay: TestClient) -> No
     assert pd.Timestamp(later["bars"][0]["t"]) + pd.Timedelta(minutes=5) <= pd.Timestamp(later["revealed_through"])
 
 
-def test_the_playhead_never_moves_back_and_clamps_to_the_window_end(replay: TestClient) -> None:
+def test_the_playhead_never_moves_back_and_clamps_to_the_close(replay: TestClient) -> None:
     session = start(replay)
     advance(replay, session["id"], 600)
     back = advance(replay, session["id"], 120)
     assert back["revealed_through"] == iso(600) and back["bars"] == [] and back["prints"]["rows"] == []
     past = advance(replay, session["id"], 99999)
-    assert past["revealed_through"] == iso(3600) and past["at_end"] is True
+    assert past["revealed_through"] == iso(CLOSE) and past["at_end"] is True
 
 
 def test_advance_needs_exactly_one_of_to_and_step(replay: TestClient) -> None:
@@ -459,17 +460,17 @@ def test_end_auto_exits_an_open_trade_and_unseals_the_journal(replay: TestClient
     ended = replay.post(f"{BASE}/sessions/{sid}/end", headers=OWNER)
     assert ended.status_code == 200, ended.text
     body = ended.json()
-    assert body["status"] == "ended" and body["revealed_through"] == iso(3600) and body["open_trade"] is None
+    assert body["status"] == "ended" and body["revealed_through"] == iso(CLOSE) and body["open_trade"] is None
     assert [m["source"] for m in body["marks"]] == ["her", "auto"] and body["marks"][1]["kind"] == "long_exit"
     assert body["journal"]["trades"][0]["exit_source"] == "auto"
     assert body["journal"]["totals"]["trades"] == 1 and body["ended_at"]
     assert replay.post(f"{BASE}/sessions/{sid}/end", headers=OWNER).json() == body  # idempotent
     assert mark(replay, sid, {"kind": "note", "note": "late"}).status_code == 422  # any mark needs an active session
     after = advance(replay, sid, 10)
-    assert after["at_end"] is True and after["revealed_through"] == iso(3600)
+    assert after["at_end"] is True and after["revealed_through"] == iso(CLOSE)
     full = replay.get(f"{BASE}/sessions/{sid}/feed", headers=OWNER).json()
-    assert full["revealed_through"] == iso(3600) and pd.Timestamp(full["bars"][-1]["t"]) == OPEN + pd.Timedelta(
-        minutes=55
+    assert full["revealed_through"] == iso(CLOSE) and pd.Timestamp(full["bars"][-1]["t"]) == OPEN + pd.Timedelta(
+        seconds=CLOSE - 300  # the last 5-minute bar of the day, 15:55
     )
 
 
@@ -521,7 +522,7 @@ def test_sessions_list_has_the_resume_and_recent_fields(replay: TestClient) -> N
         "status": "active",
         "hide_date": "no",
         "revealed_through": iso(300),
-        "window_end": iso(3600),
+        "window_end": iso(CLOSE),
         "trades": 1,
         "pnl_usd": rows[0]["pnl_usd"],
         "adherence_pct": None,
