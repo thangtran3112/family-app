@@ -544,7 +544,6 @@ function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColu
       render: (row) => {
         const text = dayCellText(column, row);
         if (column.format === "earnings") return text === "—" ? text : <Badge tone="warn">{text}</Badge>;
-        if (column.missing) return <span title={PRACTICE_COPY.dayNoValue}>{text}</span>;
         const tone = dayCellTone(column, row);
         return <span className={tone ? styles[tone] : undefined}>{text}</span>;
       },

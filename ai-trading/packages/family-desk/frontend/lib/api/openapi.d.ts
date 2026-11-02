@@ -2617,6 +2617,10 @@ export interface components {
             operands: {
                 [key: string]: number | null;
             };
+            /** Prev Change Pct */
+            prev_change_pct?: number | null;
+            /** Prev Rvol */
+            prev_rvol?: number | null;
             /**
              * Price At
              * Format: date-time

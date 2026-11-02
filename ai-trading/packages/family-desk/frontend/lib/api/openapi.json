@@ -2232,6 +2232,28 @@
             "title": "Operands",
             "type": "object"
           },
+          "prev_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Change Pct"
+          },
+          "prev_rvol": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Rvol"
+          },
           "price_at": {
             "format": "date-time",
             "title": "Price At",
