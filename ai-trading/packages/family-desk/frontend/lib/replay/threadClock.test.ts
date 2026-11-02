@@ -3,14 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDeskApiClient } from "../api/client.ts";
 import { formatEtClock } from "../desk/format.ts";
-import { replayBadgeText } from "../desk/freshness.ts";
+import { PRACTICE_COPY, replayBadgeText } from "../desk/freshness.ts";
 import { replayStatusLine } from "./statusLine.ts";
 import {
+  checkJump,
   clockControls,
   clockProgress,
   clockStateText,
   commandThreadClock,
   extrapolate,
+  isLastDay,
   shownClock,
   loadThreadClock,
   rolledText,
@@ -33,6 +35,7 @@ const clock = (over: Partial<ThreadClock> = {}): ThreadClock => ({
   window_end: "2026-09-28T20:00:00Z",
   focus_end: "2026-09-28T15:30:00Z",
   next_start: "2026-09-29T13:30:00Z",
+  jump_limit: "2026-10-02T13:30:00Z",
   server_now: "2026-11-01T20:00:00Z",
   account: { balance: 50000, open_pnl_usd: 12.5, equity_usd: 50012.5, buying_power_usd: 49000, day_pnl_usd: 12.5, positions: 1, as_of: "2026-09-28T13:30:00Z" },
   label: "Simulated money · practice only, never a real account",
@@ -91,6 +94,29 @@ test("the clock reaching the next session is told once as a hand-over to the nex
   assert.equal(rolledText(2, { day_no: null }), "The clock reached the next session. Day 2 ended and every open position closed with it.");
 });
 
+test("Jump: a date and a time in New York time become the instant sent, forward only and no later than the plan's end (ADR-0023)", () => {
+  const c = clock();
+  const now = "2026-09-28T13:30:00Z";
+  assert.deepEqual(checkJump(c, now, "2026-09-29", "11:15"), { to: "2026-09-29T15:15:00.000Z", problem: null }, "EDT: 11:15 ET is 15:15 UTC");
+  assert.equal(checkJump(c, now, "2026-10-02", "09:30").to, "2026-10-02T13:30:00.000Z", "the plan's end itself is allowed");
+  const late = checkJump(c, now, "2026-10-02", "09:31");
+  assert.equal(late.to, null);
+  assert.match(late.problem ?? "", /^The plan ends Fri 2026-10-02 · 9:30 AM ET · pick an earlier time$/);
+  assert.equal(checkJump(c, now, "2026-09-28", "09:30").problem, PRACTICE_COPY.clockJumpBack, "the same minute is not ahead");
+  assert.equal(checkJump(c, now, "2026-09-28", "09:00").to, null, "a past time is no target");
+  // Half-typed or empty boxes are no target and no problem; no limit leaves the bound to the server.
+  assert.deepEqual(checkJump(c, now, "", ""), { to: null, problem: null });
+  assert.deepEqual(checkJump(c, now, "2026-09-29", ""), { to: null, problem: null });
+  assert.equal(checkJump({ jump_limit: null }, now, "2027-01-04", "10:00").to, "2027-01-04T15:00:00.000Z", "EST in January");
+  assert.equal(checkJump(c, null, "2026-09-29", "10:00").problem, null, "no confirmed time yet: only the limit applies");
+});
+
+test("the last day of the plan is the one whose next open is also where the plan ends", () => {
+  assert.equal(isLastDay(clock()), false);
+  assert.equal(isLastDay(clock({ next_start: "2026-10-02T13:30:00Z" })), true);
+  assert.equal(isLastDay(clock({ next_start: null })), false);
+});
+
 test("the clock answer parses and a wrong speed or state is a plain error", () => {
   assert.equal(ThreadClockSchema.parse(clock()).account?.equity_usd, 50012.5);
   assert.equal(ThreadClockSchema.safeParse({ ...clock(), speed: 3 }).success, false);
@@ -106,6 +132,9 @@ test("the loaders hit the thread clock and skip routes with the body the server 
   const play = fakeDesk(clock());
   await commandThreadClock(7, { running: true, speed: 10 }, { client: play.client });
   assert.deepEqual(play.calls.map((c) => [c.method, c.path, JSON.parse(c.body ?? "{}")]), [["POST", "/api/desk/replay/threads/7/clock", { running: true, speed: 10 }]]);
+  const jump = fakeDesk(clock());
+  await commandThreadClock(7, { to: "2026-09-29T15:15:00.000Z" }, { client: jump.client });
+  assert.deepEqual(jump.calls.map((c) => [c.method, c.path, JSON.parse(c.body ?? "{}")]), [["POST", "/api/desk/replay/threads/7/clock", { to: "2026-09-29T15:15:00.000Z" }]]);
   const skip = fakeDesk({ ended_day_list_id: 12, next_day_list_id: 13, clock: clock({ state: "paused", running: false }) });
   const result = await skipThreadDay(7, { client: skip.client });
   assert.deepEqual(skip.calls.map((c) => [c.method, c.path]), [["POST", "/api/desk/replay/threads/7/skip-day"]]);

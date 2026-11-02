@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyAdvance, applyFeedSwing, chartBars, dailyBlock, dismissPause, isQuietTape, mergeBars, paceOf, TAPE_CAP, viewClock, viewFromFeed, withHoldMarker } from "./feedState.ts";
+import { applyAdvance, applyFeedSwing, chartBars, dailyBlock, dismissPause, isQuietTape, mergeBars, paceOf, syncTarget, TAPE_CAP, viewClock, viewFromFeed, withHoldMarker } from "./feedState.ts";
 import { delta, feed, overnightDelta, overnightFeed } from "./fixtures.ts";
 import { ReplayDeltaSchema, ReplayFeedSchema } from "./schemas.ts";
 import { amdHold, closedHold, nvdaHold, pausedCross, stripRows, swingDelta, swingDeltaQuiet, swingFeed } from "./swingFixtures.ts";
@@ -23,6 +23,21 @@ test("advance merges bars by start time and the playhead only moves forward", ()
   const late = applyAdvance(again, next({ revealed_through: "2026-04-07T14:07:05Z" }));
   assert.equal(late, again);
   assert.equal(late.revealedThrough, "2026-04-07T14:07:13Z");
+});
+
+test("a follow poll sends the playhead the window holds, and a catch-up answer fills every bar the other window took (D-198)", () => {
+  const bar = (minute: number) => ({ t: `2026-04-07T14:${String(minute).padStart(2, "0")}:00Z`, o: 1, h: 2, l: 1, c: 2, v: 10, ext: false });
+  const window = applyAdvance(base(), next({ revealed_through: "2026-04-07T14:11:00Z", bars: [bar(10)] }));
+  assert.deepEqual(syncTarget(window), { sync: true, since: "2026-04-07T14:11:00Z" });
+  assert.deepEqual(syncTarget(null), { sync: true }, "a screen with no view yet has nothing to send");
+  // The other window took the 14:11 to 14:13 bars: this window's answer starts at its own `since` and carries all three, and the one it already had.
+  const caughtUp = applyAdvance(window, next({ revealed_through: "2026-04-07T14:14:00Z", bars: [bar(10), bar(11), bar(12), bar(13)] }));
+  assert.deepEqual(caughtUp.bars.map((item) => item.t.slice(11, 16)), ["14:10", "14:11", "14:12", "14:13"]);
+  assert.equal(caughtUp.revealedThrough, "2026-04-07T14:14:00Z");
+  // The next poll starts from the new playhead, and an answer with nothing new changes no bar.
+  assert.deepEqual(syncTarget(caughtUp), { sync: true, since: "2026-04-07T14:14:00Z" });
+  const quiet = applyAdvance(caughtUp, next({ revealed_through: "2026-04-07T14:14:00Z", bars: [] }));
+  assert.equal(quiet.bars, caughtUp.bars);
 });
 
 test("signals dedupe and stay in bar-close order; levels, last and the open trade follow the newest answer", () => {

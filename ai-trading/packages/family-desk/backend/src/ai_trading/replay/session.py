@@ -1058,9 +1058,12 @@ def advance(
     min_notional: int,
     max_prints: int,
     sync: bool = False,
+    since: datetime | None = None,
 ) -> dict[str, Any]:
     if [to is not None, step is not None, sync].count(True) != 1:
         raise ReplayProblem("Send exactly one of to, step and sync", path="to")
+    if since is not None and (not sync or pd.Timestamp(since).tzinfo is None):
+        raise ReplayProblem("`since` is a time with its UTC offset, sent with sync", path="since")
     day_list = _lock_and_settle(db, svc, user_id, session_id)  # the day list row first, then the session row
     if day_list is None and sync:
         raise ReplayProblem("Only a session of a practice day follows the thread clock", path="sync")
@@ -1118,11 +1121,14 @@ def advance(
         if row.status != "ended":
             fills = _fill_working_orders(db, ctx, previous, target)
 
-    new_bars = _series(ctx, width).bars_between(previous, target)
+    # The answer starts where the caller's view ends, not only where the session's one playhead was: a second window on
+    # this name has a playhead the first one already moved (D-198). Never before the session's window, never past it.
+    shown_from = previous if since is None else min(previous, max(_ts(since), ctx.window_start))
+    new_bars = _series(ctx, width).bars_between(shown_from, target)
     prints = _prints_block(
-        ctx, previous, target, min_size=min_size, min_notional=min_notional, max_prints=max_prints, pace_too=True
+        ctx, shown_from, target, min_size=min_size, min_notional=min_notional, max_prints=max_prints, pace_too=True
     )
-    fresh = [f for f in ctx.fires if previous < f.bar_close <= target]
+    fresh = [f for f in ctx.fires if shown_from < f.bar_close <= target]
     frame = _frame(
         ctx,
         bars=_bar_rows(new_bars),

@@ -101,7 +101,7 @@ test.describe("Practice replay: indicators on the left, no shortcuts, no Back or
     await expectCleanScreen(page);
   });
 
-  test("a day thread's chart has no Back to the day list link and no End day; the Day list tab leads back, and the Day list has no End day either (the Summary ends the day)", async ({ page, context }) => {
+  test("a day thread's chart has no Back to the day list link and no End day; the Day list tab leads back, and the Day list has no End day either (a day ends at the next open: ADR-0023)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     await openFirstDay(page);
@@ -111,13 +111,12 @@ test.describe("Practice replay: indicators on the left, no shortcuts, no Back or
 
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^End day/ })).toHaveCount(0);
-    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toHaveCount(0);
     await expect(indicators(page).getByRole("list", { name: "Momentum" })).toBeVisible();
     await expect(indicators(page).getByRole("list", { name: "Trend" })).toBeVisible();
     await expectCleanScreen(page);
 
     await backToDayList(page);
     await expect(page.getByRole("table", { name: "Candidates" })).toBeVisible();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }), "End day is on the Summary").toHaveCount(0);
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }), "no End day on the Day list either").toHaveCount(0);
   });
 });

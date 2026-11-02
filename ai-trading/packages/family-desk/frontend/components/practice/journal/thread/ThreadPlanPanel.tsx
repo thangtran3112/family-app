@@ -139,7 +139,7 @@ export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChan
     <div className={styles.stack}>
       <Button ref={closeRef} variant="danger" onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</Button>
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
-      {mode === "swing" && <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p>}
+      {mode === "swing" ? <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p> : <p className={styles.muted}>{PRACTICE_COPY.threadCloseEndsDay}</p>}
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>
       {confirming && (
         <InlineConfirm

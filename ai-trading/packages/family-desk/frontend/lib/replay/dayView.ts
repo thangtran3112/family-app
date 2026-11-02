@@ -137,20 +137,15 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   return practiceText("planArmed", { names: names.join(" · ") });
 }
 
-/** The label of a day thread's one action (D-078): the day that is open starts trading ("Start Trading": the day is the thread clock's, never one
- *  ahead of it or behind it, so it carries no number), and opening the next day starts it ("Start Day 7"). It never says "Resume":
- *  the button only goes to the day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control).
- *  `today` is the thread's open day; the number of a next day is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
+/** The label of a day thread's one action (D-078): "Start Trading", whether it goes to the day that is open or opens the next one. The day is the
+ *  thread clock's, never one ahead of it or behind it, so the label carries no day number. It never says "Resume": the button only goes to the
+ *  day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control). `today` is the thread's open day.
+ *  Null when nothing can be pressed (preparing, or no plan). */
 export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
   if (today !== null) return PRACTICE_COPY.planStartTrading;
   if (plan === null) return null;
-  const card = planCard(plan);
-  if (card.action === "none" || card.action === "new") return null;
-  const current = plan.current;
-  if (current !== null && current.status !== "ended") {
-    return PRACTICE_COPY.planStartTrading;
-  }
-  return practiceText("planStartDayN", { n: threadDayNo(plan, plan.next_day_no ?? plan.days_opened + 1) });
+  const action = planCard(plan).action;
+  return action === "none" || action === "new" ? null : PRACTICE_COPY.planStartTrading;
 }
 
 export type PlanCardAction = "new" | "start" | "continue" | "none";
@@ -431,18 +426,6 @@ export function openPositionsText(rows: readonly Pick<PortfolioRow, "holding">[]
 
 /** "Stop crossed 10:21": the row of a trade whose stop paused play. */
 export const stopCrossedText = (iso: string): string => practiceText("dayStopCrossed", { time: etHhMm(iso) });
-
-/**
- * "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", or null with none open. A held name that
- * is behind the day clock shows its own older price, but the exit books at the clock (F-06): with a clock and such a name the
- * sentence says so instead of promising the price on the chart.
- */
-export function endDayExitText(rows: readonly (Pick<PortfolioRow, "symbol" | "holding"> & { behind?: boolean })[], clock?: string | null): string | null {
-  const held = rows.filter((row) => row.holding);
-  if (held.length === 0) return null;
-  const key = clock && held.some((row) => row.behind) ? "dayEndExitsClock" : "dayEndExits";
-  return practiceText(key, { count: held.length, trades: held.length === 1 ? "trade" : "trades", clock: clock ? formatEtTimeZone(clock) : "", names: held.map((row) => row.symbol).join(", ") });
-}
 
 /** "2 open +$200.00": the hub's Today line, after the realized result; null with no open trade. */
 export const openTodayText = (pnl: Pick<DayPnl, "open_count" | "open_usd">): string | null =>
