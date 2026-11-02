@@ -8,7 +8,7 @@ export type RailRow = {
   id: string;
   /** The name. One line with an ellipsis (its full text in `title`), so a long name never pushes the value out. */
   label: ReactNode;
-  /** Under the label: one muted line (a status, a mode). */
+  /** Under the label: a muted line (a status, a mode). It wraps to a second line rather than being cut. */
   sub?: ReactNode;
   /** At the end of the row, never clipped. Wrap parts in `RailValue` to give each its tone. */
   value?: ReactNode;

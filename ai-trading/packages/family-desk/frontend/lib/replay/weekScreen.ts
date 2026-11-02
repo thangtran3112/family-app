@@ -27,6 +27,8 @@ export const WEEK_TEXT = {
   saveError: "Couldn't save your week notes",
   daysCaption: "Days this week",
   holdsCaption: "Holds this week",
+  // The hold's result runs from its entry to the week's last close, so a hold carried in from an earlier week includes that week. The tiles above are this week's change (D-178).
+  holdPnl: "P/L since entry",
   byDayTitle: "Balance and equity by day",
   notesTitle: "Notes and rating",
   heatLabel: "Universe names by week return, best first",

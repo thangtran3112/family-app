@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY, practiceBandText, replayBadgeText } from "@/lib/desk/freshness";
 import type { PracticeStatusLine } from "@/lib/replay/statusLine";
@@ -25,26 +25,31 @@ export type PracticeChromeState = {
   onShowDate?: (() => void) | null;
 };
 
-type PracticeChromeValue = {
-  state: PracticeChromeState | null;
-  setState: (state: PracticeChromeState | null) => void;
-};
-
-const Context = createContext<PracticeChromeValue | null>(null);
+// The state and its setter are two contexts. A screen that reports (`useReportPracticeChrome`) only needs the setter, which never changes:
+// if it read the state too, every report would re-render the whole screen again (D-172).
+const StateContext = createContext<PracticeChromeState | null | undefined>(undefined);
+const SetterContext = createContext<((state: PracticeChromeState | null) => void) | null>(null);
 
 export function PracticeChromeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PracticeChromeState | null>(null);
-  const value = useMemo<PracticeChromeValue>(() => ({ state, setState }), [state]);
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return (
+    <SetterContext.Provider value={setState}>
+      <StateContext.Provider value={state}>{children}</StateContext.Provider>
+    </SetterContext.Provider>
+  );
 }
 
-function useValue(): PracticeChromeValue {
-  const value = useContext(Context);
-  if (!value) throw new Error("Practice chrome must be used inside the desktop shell");
-  return value;
+function useSetter(): (state: PracticeChromeState | null) => void {
+  const setState = useContext(SetterContext);
+  if (!setState) throw new Error("Practice chrome must be used inside the desktop shell");
+  return setState;
 }
 
-export const usePracticeChrome = (): PracticeChromeState | null => useValue().state;
+export function usePracticeChrome(): PracticeChromeState | null {
+  const state = useContext(StateContext);
+  if (state === undefined) throw new Error("Practice chrome must be used inside the desktop shell");
+  return state;
+}
 
 /** The top-bar badge text during a replay, or null when the normal freshness badge applies. */
 export function useReplayBadge(): string | null {
@@ -52,9 +57,13 @@ export function useReplayBadge(): string | null {
   return state?.day && state.playhead ? replayBadgeText(state.day, state.playhead, state.hidden) : null;
 }
 
-/** A Practice screen reports its day and playhead; the shell clears it when the screen unmounts. */
+/**
+ * A Practice screen reports its day and playhead; the shell clears it when the screen unmounts. The report is made in a layout effect, in the same
+ * commit that drew the screen's own clock readout, so the status bar and the top-bar chip repaint with it, never one tick behind (D-172): a passive
+ * effect ran only after the chart's own effects and the paint, and the screen's own re-render for the report doubled that.
+ */
 export function useReportPracticeChrome(next: PracticeChromeState | null): void {
-  const { setState } = useValue();
+  const setState = useSetter();
   const day = next?.day ?? null;
   const hidden = next?.hidden ?? false;
   const playhead = next?.playhead ?? null;
@@ -64,15 +73,16 @@ export function useReportPracticeChrome(next: PracticeChromeState | null): void 
   const statusKey = next?.status ? `${next.status.left.join("\u0000")}\u0001${next.status.right.join("\u0000")}` : null;
   const canReveal = Boolean(next?.onShowDate);
   const latest = useRef(next);
-  useEffect(() => {
+  useLayoutEffect(() => {
     latest.current = next;
   });
-  useEffect(() => {
+  useLayoutEffect(() => {
     const status = latest.current?.status ?? null;
     setState(present ? { day, hidden, playhead, scope, status, onShowDate: canReveal ? () => latest.current?.onShowDate?.() : null } : null);
     // `statusKey` stands for the status line's content.
   }, [setState, present, day, hidden, playhead, scope, statusKey, canReveal]);
-  useEffect(() => () => setState(null), [setState]);
+  // A layout cleanup, like the report: when one Practice screen replaces another, its clear must run before the next screen's report.
+  useLayoutEffect(() => () => setState(null), [setState]);
 }
 
 /** The 28 px band under the top bar on every Practice page. A hidden session says why, and offers to show the date (D-023). */
