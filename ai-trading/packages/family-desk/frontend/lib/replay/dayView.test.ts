@@ -216,14 +216,14 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
     { key: "META-1-2026-07-01T14:15:00Z", symbol: "META", side: "Long", shares: "100", entry: "610.83", entryTime: "10:15 AM", exit: "626.48", exitTime: "11:10 AM", held: "55m", pnl: "+$1,565.00", ret: "+2.56%", tone: "up" },
   ]);
   const auto = { ...meta, lines: [{ ...meta.lines[0]!, side: "short" as const, exit_source: "auto" as const, pnl_usd: -12.5 }] };
-  assert.deepEqual([tradeLineRows(auto)[0]!.side, tradeLineRows(auto)[0]!.exitTime, tradeLineRows(auto)[0]!.pnl, tradeLineRows(auto)[0]!.tone], ["Short", "11:10 AM (auto, window end)", "−$12.50", "down"]);
+  assert.deepEqual([tradeLineRows(auto)[0]!.side, tradeLineRows(auto)[0]!.exitTime, tradeLineRows(auto)[0]!.pnl, tradeLineRows(auto)[0]!.tone], ["Short", "11:10 AM (auto, day end)", "−$12.50", "down"]);
   assert.deepEqual(tradeLineRows({ lines: [] }), []);
 });
 
 test("the review says the day is finished when the plan hid its date, and says nothing otherwise (D-029)", () => {
   assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished");
   assert.equal(dayFinishedLine({ dates_hidden: false }), null);
-  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to window end, biggest gain first");
+  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to the end of your practice window, biggest gain first");
 });
 
 test("the strings the day screens build contain no banned term", () => {

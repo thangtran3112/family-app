@@ -2533,7 +2533,7 @@
       },
       "ClockIn": {
         "additionalProperties": false,
-        "description": "Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with\nits UTC offset). Any mix, at least one; a step or jump is forward only and stops at a crossed stop or the close.",
+        "description": "Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with\nits UTC offset). Any mix, at least one; a step or jump is forward only and stops at the close.",
         "properties": {
           "running": {
             "anyOf": [
@@ -2592,86 +2592,6 @@
           }
         },
         "title": "ClockIn",
-        "type": "object"
-      },
-      "ClockPauseOut": {
-        "description": "Why a running clock stopped: a stop crossed on an open name (`kind: \"stop\"`, with the name, the stop, the price\nan Exit would book and `crossing` \"cross\" or \"gap\") or the window end (`kind: \"close\"`).",
-        "properties": {
-          "also": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Also",
-            "type": "array"
-          },
-          "at": {
-            "format": "date-time",
-            "title": "At",
-            "type": "string"
-          },
-          "crossing": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cross",
-                  "gap"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Crossing"
-          },
-          "kind": {
-            "enum": [
-              "stop",
-              "close"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price"
-          },
-          "stop_price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stop Price"
-          },
-          "symbol": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Symbol"
-          }
-        },
-        "required": [
-          "kind",
-          "at"
-        ],
-        "title": "ClockPauseOut",
         "type": "object"
       },
       "ConsensusOut": {
@@ -14903,19 +14823,21 @@
             ],
             "title": "Day No"
           },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "pause": {
+          "focus_end": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ClockPauseOut"
+                "format": "date-time",
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Focus End"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
           },
           "running": {
             "title": "Running",
@@ -14941,8 +14863,7 @@
               "no_day",
               "listed",
               "paused",
-              "running",
-              "at_close"
+              "running"
             ],
             "title": "State",
             "type": "string"
@@ -14986,8 +14907,8 @@
           "clock",
           "window_start",
           "window_end",
+          "focus_end",
           "server_now",
-          "pause",
           "account",
           "label"
         ],
@@ -21102,7 +21023,7 @@
     },
     "/api/desk/replay/threads/{thread_id}/clock": {
       "get": {
-        "description": "The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the\nsimulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the\nanswer whether or not anyone was looking in between. Poll it; it is idempotent.",
+        "description": "The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the\nsimulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the\nanswer whether or not anyone was looking in between. A clock that reached the close rolls the day over first (the\nanswer is then the next day's). Poll it; it is idempotent.",
         "operationId": "get_thread_clock_api_desk_replay_threads__thread_id__clock_get",
         "parameters": [
           {
@@ -21143,7 +21064,7 @@
         ]
       },
       "post": {
-        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump\nit to a time. Forward only; a step or jump stops at a crossed stop or the close like Play does. 409 before the day\nhas started or when Play is asked at the close. Time then runs on the server until she pauses it.",
+        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump\nit to a time. Forward only; a step or jump stops at the close like Play does. 409 before the day\nhas started. Time then runs on the server until she pauses it, and the day rolls over at the close.",
         "operationId": "control_thread_clock_api_desk_replay_threads__thread_id__clock_post",
         "parameters": [
           {
@@ -21407,7 +21328,7 @@
     },
     "/api/desk/replay/threads/{thread_id}/skip-day": {
       "post": {
-        "description": "Skip to the next day: the clock runs to the window end, the day ends (every open position flattens at that close)\nand the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.",
+        "description": "Skip to the next day: the clock runs to the close, the day ends (every open position flattens at that close)\nand the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.",
         "operationId": "skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post",
         "parameters": [
           {

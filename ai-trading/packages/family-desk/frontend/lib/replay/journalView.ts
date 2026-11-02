@@ -57,7 +57,7 @@ export function tradeRows(trades: readonly JournalTrade[]): TradeRow[] {
     no: trade.no,
     side: trade.side === "long" ? "Long" : "Short",
     entry: `${formatEtTime(trade.entry_at)} · ${formatPrice(trade.entry_price)}`,
-    exit: `${formatEtTime(trade.exit_at)} · ${formatPrice(trade.exit_price)}${trade.exit_source === "auto" ? " (auto, window end)" : ""}`,
+    exit: `${formatEtTime(trade.exit_at)} · ${formatPrice(trade.exit_price)}${trade.exit_source === "auto" ? " (auto, day end)" : ""}`,
     shares: formatNumber(trade.shares, 0),
     pnl: formatSignedUsd(trade.pnl_usd, { cents: true }),
     pnlTone: moneyTone(trade.pnl_usd),

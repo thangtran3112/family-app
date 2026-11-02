@@ -658,7 +658,14 @@ def relist(db: Session, user_id: int, day_list_id: int, list_at: str, svc: Servi
     spec = plan.spec
     window = spec["setup"]["window"]
     moved = {**spec, "screen": {**spec["screen"], "listAt": list_at}}
-    moved["setup"] = {**spec["setup"], "window": {**window, "from": max(window["from"], list_at)}}
+    # A re-list past her focus mark moves the mark out to the session's end: the mark never limits the list.
+    moved["setup"] = {
+        **spec["setup"],
+        "window": {
+            "from": (start := max(window["from"], list_at)),
+            "to": window["to"] if window["to"] > start else _session_end_hhmm(spec["setup"]),
+        },
+    }
     try:
         PracticeBlockV1.model_validate(without_legacy_plan_fields(moved))
     except ValidationError as exc:
@@ -801,6 +808,11 @@ def _early_filters(db: Session, row: ReplayDayList) -> list[tuple[str, str]]:
     return early
 
 
+def _session_end_hhmm(setup: dict[str, Any]) -> str:
+    """The latest time a plan's window can name: the regular close, or the extended session's end."""
+    return "16:00" if setup["session"] == "regular" else "20:00"
+
+
 LIST_TIMES = ("08:30", "10:00", "10:45")  # the list times the plan form offers (frontend `LIST_TIMES`)
 
 
@@ -816,7 +828,7 @@ def _relist_offer(db: Session, plan: PracticePlan, row: ReplayDayList) -> dict[s
         # D-054: an empty list at a time every filter can read is still a dead end (End day is the only other button).
         # Later, more bars of the day have closed: offer the next list time the form offers.
         need = next((time for time in LIST_TIMES if time > row.screen["listAt"]), None)
-    if need is None or need >= window["to"]:
+    if need is None or need >= _session_end_hhmm(plan.spec["setup"]):  # her focus mark does not limit a re-list
         return None
     return {
         "list_at": need,
@@ -1395,7 +1407,7 @@ def _day_journal(sessions: list[ReplaySession]) -> dict[str, Any]:
 
 
 def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayList:
-    """Ends the day: every open practice trade exits at the price at the day clock (`source=auto`), then the window
+    """Ends the day: every open practice trade exits at the price at the day clock (`source=auto`), then the day
     unseals and the list review is stored. Idempotent."""
     row = get_day_list(db, user_id, day_list_id, lock=True)
     if row.status == "ended":
@@ -1415,7 +1427,10 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         for s in sessions:
             session_mod.refresh_journal(db, user_id, s.id, svc)
             db.refresh(s)
-    window_end = _utc(sessions[0].window_end) if sessions else et(row.day, plan.spec["setup"]["window"]["to"])
+    setup = plan.spec["setup"]
+    close = session_mod.market_close(row.day, setup["session"])
+    close = session_mod.window_end_of(sessions[0]) if sessions else close
+    focus_end = et(row.day, setup["window"]["to"])  # her practice window: the review's yardstick, not the day's end
     store = svc.store_factory(db)
     minutes: dict[str, pd.DataFrame | None] = {}
     for candidate in row.candidates:
@@ -1427,9 +1442,9 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
     picks = {w["symbol"]: "starred" for w in row.watch}
     picks.update({s.symbol: "traded" for s in sessions})
     now = svc.now()
-    row.review = jsonable(review_mod.compute_review(row.candidates, minutes, row.day, window_end, picks))
+    row.review = jsonable(review_mod.compute_review(row.candidates, minutes, row.day, focus_end, picks))
     row.journal = jsonable(_day_journal(sessions))
-    row.status, row.revealed_through, row.ended_at, row.updated_at = "ended", window_end.to_pydatetime(), now, now
+    row.status, row.revealed_through, row.ended_at, row.updated_at = "ended", close.to_pydatetime(), now, now
     db.flush()
     return row
 

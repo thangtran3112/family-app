@@ -186,7 +186,7 @@ export function weeksOf(daily: readonly ThreadDay[]): Week[] {
 
 export type ImprovementRow = { id: string; label: string; first: string; latest: string };
 export type Improvement = {
-  /** The first week and the latest week, with their rows; null with fewer than two weeks. */
+  /** The first week and the latest week, with their rows; null until two weeks each have a practice day. */
   compared: { first: Week; latest: Week; intro: string; rows: ImprovementRow[] } | null;
   /** True when at least `TREND_WEEKS` weeks each have `TREND_DAYS_PER_WEEK` or more practice days. */
   trend: boolean;
@@ -197,6 +197,8 @@ export type Improvement = {
 };
 
 const perDay = (week: Week) => (week.practiced === 0 ? null : week.pnl / week.practiced);
+/** "50% (2 of 4)": the share of a week's practice days that won. A week with no practice day has no rate, so a dash. */
+const dayWinRate = (week: Week) => (week.practiced === 0 ? EMPTY_VALUE : `${Math.round((week.won / week.practiced) * 100)}% (${week.won} of ${week.practiced})`);
 
 /** First week against the latest week, and whether there are enough days to call the comparison a trend. */
 export function improvementOf(weeks: readonly Week[]): Improvement {
@@ -204,15 +206,16 @@ export function improvementOf(weeks: readonly Week[]): Improvement {
   const trend = full.length >= TREND_WEEKS;
   const first = weeks[0];
   const latest = weeks.length > 1 ? weeks[weeks.length - 1] : undefined;
+  // The table needs a practiced day in both weeks: a week with none has no result, rate or adherence to set beside the other.
   const compared =
-    first && latest
+    first && latest && first.practiced > 0 && latest.practiced > 0
       ? {
           first,
           latest,
           intro: practiceText("improvementIntro", { n: latest.n, days: practiceDays(latest.practiced) }),
           rows: [
             { id: "result", label: "Day results", first: formatDayResult(first.pnl), latest: formatDayResult(latest.pnl) },
-            { id: "won", label: "Days won", first: `${first.won} of ${first.practiced}`, latest: `${latest.won} of ${latest.practiced}` },
+            { id: "win_rate", label: "Win rate (days)", first: dayWinRate(first), latest: dayWinRate(latest) },
             { id: "adherence", label: "Adherence", first: first.adherencePct === null ? EMPTY_VALUE : `${first.adherencePct}%`, latest: latest.adherencePct === null ? EMPTY_VALUE : `${latest.adherencePct}%` },
             { id: "practiced", label: "Days practiced", first: String(first.practiced), latest: String(latest.practiced) },
           ],

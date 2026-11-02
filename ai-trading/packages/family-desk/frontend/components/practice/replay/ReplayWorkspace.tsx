@@ -19,6 +19,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
 import { threadClock } from "@/lib/replay/clock";
+import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { formatEtClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { openRailTab } from "@/lib/desk/rail";
@@ -398,6 +399,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           error={api.player.error}
           windowStart={session.window_start}
           windowEnd={session.window_end}
+          focusEnd={etWallToUtcIso(etDayOf(session.window_start), spec.window.to)}
           clock={clock}
           marks={session.marks}
           signals={view.signals}
@@ -416,7 +418,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
           <span>{PRACTICE_COPY.threadTime}</span>
           <span data-testid="thread-clock-time">{formatEtClock(clock)}</span>
-          <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClose : PRACTICE_COPY.clockStatePaused}</span>
+          <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClosed : PRACTICE_COPY.clockStatePaused}</span>
           {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
         </p>
       )}

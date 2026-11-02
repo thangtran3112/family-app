@@ -248,10 +248,10 @@ test.describe("Practice", () => {
     await expectCleanScreen(page);
   });
 
-  test("jump to the window end shows the end prompt, and the journal of an unfinished session stays open", async ({ page, context }) => {
+  test("jump to the close shows the end prompt, and the journal of an unfinished session stays open", async ({ page, context }) => {
     await startStubSession(page, context);
     await page.getByRole("button", { name: /^Jump/ }).click();
-    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the window end/ }).click();
+    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the close/ }).click();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.endAndScore })).toBeVisible();
     await expect(page.getByText(/^Session over/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Play" })).toBeDisabled();
@@ -470,6 +470,13 @@ test.describe("Practice", () => {
     // The thread page charts the win/loss of her days, and the journal is a link of its own.
     await expect(page.getByRole("region", { name: PRACTICE_COPY.overviewCurveTitle }).getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
+    // D-041: one week alone shows the SIMULATED pill and the honest caveat with its real count and the 3-day threshold, and no week table.
+    await openDesk(page, `/practice/journal?thread=${threadId}`);
+    const oneWeek = await railSection(page, "Thread details", PRACTICE_COPY.improvementTitle);
+    await expect(oneWeek.getByText(PRACTICE_COPY.improvementTooFew)).toBeVisible();
+    await expect(oneWeek.getByText("Reason: week 1 has 1 practice day so far. A trend needs at least 2 weeks with 3 or more practice days each.")).toBeVisible();
+    await expect(oneWeek.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
+    await expect(oneWeek.getByRole("table")).toHaveCount(0);
     // Resume: the landing's row opens Day 2, which has no stored TSLA bars, so its list is empty and says so.
     await openDesk(page, "/practice");
     await dayRow(page).getByRole("button", { name: /^Start Day 2$/ }).click(); // D-078: after an ended day the action starts the next one
@@ -532,6 +539,7 @@ test.describe("Practice", () => {
     await expect(improvement.getByText(PRACTICE_COPY.improvementTooFew)).toBeVisible();
     await expect(improvement.getByText(/^Reason: week 2 has no practice days so far/)).toBeVisible();
     await expect(improvement.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible(); // D-041
+    await expect(improvement.getByRole("table")).toHaveCount(0); // D-041: week 2 has no practice day, so there is nothing to set beside week 1
 
     // Edit the plan on the journal, then close the thread; the closed thread keeps its journal.
     const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);

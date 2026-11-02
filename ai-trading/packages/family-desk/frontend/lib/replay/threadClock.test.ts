@@ -7,8 +7,9 @@ import {
   clockStateText,
   commandThreadClock,
   extrapolate,
+  focusProgress,
   loadThreadClock,
-  pauseText,
+  rolledText,
   skippedText,
   skipThreadDay,
   SkipDaySchema,
@@ -25,9 +26,9 @@ const clock = (over: Partial<ThreadClock> = {}): ThreadClock => ({
   speed: 5,
   clock: "2026-09-28T13:30:00Z",
   window_start: "2026-09-28T13:30:00Z",
-  window_end: "2026-09-28T15:30:00Z",
+  window_end: "2026-09-28T20:00:00Z",
+  focus_end: "2026-09-28T15:30:00Z",
   server_now: "2026-11-01T20:00:00Z",
-  pause: null,
   account: { balance: 50000, open_pnl_usd: 12.5, equity_usd: 50012.5, day_pnl_usd: 12.5, positions: 1, as_of: "2026-09-28T13:30:00Z" },
   label: "Simulated money · practice only, never a real account",
   ...over,
@@ -46,39 +47,44 @@ function fakeDesk(answer: unknown, status = 200) {
   return { client, calls };
 }
 
-test("a running clock label moves with wall time at the chosen speed and stops at the close; a paused one does not move", () => {
+test("a running clock label moves with wall time at the chosen speed, past her practice window, and stops at the market's close; a paused one does not move", () => {
   assert.equal(extrapolate(clock(), 2000), "2026-09-28T13:30:10.000Z"); // 2 s at 5x
   assert.equal(extrapolate(clock(), 0), "2026-09-28T13:30:00Z");
-  assert.equal(extrapolate(clock({ speed: 10 }), 3_600_000), "2026-09-28T15:30:00.000Z"); // capped at the window end
+  assert.equal(extrapolate(clock({ speed: 10 }), 1_200_000), "2026-09-28T16:50:00.000Z"); // 200 market minutes: far past her 11:30 mark
+  assert.equal(extrapolate(clock({ speed: 10 }), 3_600_000), "2026-09-28T20:00:00.000Z"); // capped at the market's close
   assert.equal(extrapolate(clock({ state: "paused", running: false }), 60_000), "2026-09-28T13:30:00Z");
   assert.equal(extrapolate(clock({ clock: null, state: "listed", running: false }), 60_000), null);
 });
 
-test("the state pill, the pause sentence and what the controls may do", () => {
+test("the state pill and what the controls may do: nothing but Pause stops the clock", () => {
   assert.equal(clockStateText(clock()), "Running at 5x");
   assert.equal(clockStateText(clock({ state: "paused", running: false })), "Paused");
-  assert.equal(clockStateText(clock({ state: "at_close", running: false })), "At the close");
-  assert.equal(pauseText(null), null);
-  assert.match(pauseText({ kind: "stop", at: "2026-09-28T14:21:00Z", symbol: "FLAT", stop_price: 49, price: 50, crossing: "cross", also: [] })!, /FLAT crossed its stop at 49\.00/);
-  assert.match(pauseText({ kind: "close", at: "2026-09-28T15:30:00Z", also: [] })!, /reached the close/);
   assert.deepEqual(clockControls(clock()), { play: true, jump: true, started: true, skip: true });
-  assert.deepEqual(clockControls(clock({ state: "at_close", running: false })), { play: false, jump: false, started: true, skip: true });
   assert.deepEqual(clockControls(clock({ state: "listed", running: false, clock: null })), { play: false, jump: false, started: false, skip: true });
   assert.deepEqual(clockControls(clock({ state: "no_day" })), { play: false, jump: false, started: false, skip: false });
   assert.deepEqual(clockControls(null), { play: false, jump: false, started: false, skip: false });
 });
 
 test("progress runs 0 to 1 over the window and is 0 before the day starts", () => {
-  assert.equal(clockProgress(clock(), "2026-09-28T14:30:00Z"), 0.5);
+  assert.equal(clockProgress(clock(), "2026-09-28T16:45:00Z"), 0.5);
   assert.equal(clockProgress(clock(), "2026-09-28T20:00:00Z"), 1);
   assert.equal(clockProgress(clock({ window_start: null, window_end: null }), "2026-09-28T14:30:00Z"), 0);
   assert.equal(clockProgress(clock(), null), 0);
+});
+
+test("her practice window is a mark on the track, and the market closing is told once as a roll to the next day", () => {
+  assert.equal(focusProgress(clock({ window_start: "2026-09-28T13:30:00Z", window_end: "2026-09-28T20:00:00Z", focus_end: "2026-09-28T15:30:00Z" })), 2 / 6.5);
+  assert.equal(focusProgress(clock({ focus_end: null })), null);
+  assert.equal(focusProgress(clock({ window_start: null })), null);
+  assert.equal(rolledText(2, { day_no: 3 }), "Day 2 closed with the market and every open position closed with it. Day 3 is on the Day list.");
+  assert.equal(rolledText(2, { day_no: null }), "Day 2 closed with the market and every open position closed with it.");
 });
 
 test("the clock answer parses and a wrong speed or state is a plain error", () => {
   assert.equal(ThreadClockSchema.parse(clock()).account?.equity_usd, 50012.5);
   assert.equal(ThreadClockSchema.safeParse({ ...clock(), speed: 3 }).success, false);
   assert.equal(ThreadClockSchema.safeParse({ ...clock(), state: "playing" }).success, false);
+  assert.equal(ThreadClockSchema.safeParse({ ...clock(), state: "at_close" }).success, false); // the close rolls the day: no state waits there
   assert.equal(SkipDaySchema.safeParse({ ended_day_list_id: 12, next_day_list_id: null, clock: clock({ state: "no_day", day_list_id: null, clock: null }) }).success, true);
 });
 

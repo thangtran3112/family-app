@@ -59,20 +59,20 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
 /** A new request may start only when none is in flight and the session has a playhead to move. */
 export const canRequest = (state: PlayerState): boolean => !state.busy && state.status !== "loading" && state.status !== "at_end";
 
-/** The line in the thread bar beside the clock: ready, playing, paused or at the window end. */
+/** The line in the thread bar beside the clock: ready, playing, paused or at the close. */
 export function statusLine(status: PlayerStatus, speed: Speed, revealedThrough: string, windowStart: string): string {
   const time = formatEtTime(revealedThrough);
   if (status === "playing") return practiceText("playing", { speed });
-  if (status === "at_end") return `Window end · ${time}`;
+  if (status === "at_end") return `Market close · ${time}`;
   if (status === "loading") return PRACTICE_COPY.loadingReplay;
   return Date.parse(revealedThrough) === Date.parse(windowStart) ? practiceText("ready", { time }) : practiceText("paused", { time });
 }
 
-/** The pill beside the header readouts (P2): "Playing · 5x", "Paused", "Window end". */
+/** The pill beside the header readouts (P2): "Playing · 5x", "Paused", "Market close". */
 export function playerPillText(status: PlayerStatus, speed: Speed): string {
   switch (status) {
     case "playing": return `Playing · ${speed}x`;
-    case "at_end": return "Window end";
+    case "at_end": return "Market close";
     case "loading": return "Loading";
     case "paused": return "Paused";
   }

@@ -142,7 +142,7 @@ export function DayPlanFields({
           <Field id="plan-from" label={PRACTICE_COPY.planWindowFrom} error={problems.window}>
             <Input type="time" value={setup.from} onChange={(event) => patchSetup({ ...setup, from: event.target.value })} />
           </Field>
-          <Field id="plan-to" label={PRACTICE_COPY.planWindowTo}>
+          <Field id="plan-to" label={PRACTICE_COPY.planWindowTo} note={PRACTICE_COPY.planWindowToNote}>
             <Input type="time" value={setup.to} aria-invalid={problems.window ? true : undefined} onChange={(event) => patchSetup({ ...setup, to: event.target.value })} />
           </Field>
         </div>

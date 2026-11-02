@@ -1174,15 +1174,16 @@ export interface paths {
          * Get Thread Clock
          * @description The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the
          *     simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the
-         *     answer whether or not anyone was looking in between. Poll it; it is idempotent.
+         *     answer whether or not anyone was looking in between. A clock that reached the close rolls the day over first (the
+         *     answer is then the next day's). Poll it; it is idempotent.
          */
         get: operations["get_thread_clock_api_desk_replay_threads__thread_id__clock_get"];
         put?: never;
         /**
          * Control Thread Clock
          * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump
-         *     it to a time. Forward only; a step or jump stops at a crossed stop or the close like Play does. 409 before the day
-         *     has started or when Play is asked at the close. Time then runs on the server until she pauses it.
+         *     it to a time. Forward only; a step or jump stops at the close like Play does. 409 before the day
+         *     has started. Time then runs on the server until she pauses it, and the day rolls over at the close.
          */
         post: operations["control_thread_clock_api_desk_replay_threads__thread_id__clock_post"];
         delete?: never;
@@ -1287,7 +1288,7 @@ export interface paths {
         put?: never;
         /**
          * Skip Thread Day
-         * @description Skip to the next day: the clock runs to the window end, the day ends (every open position flattens at that close)
+         * @description Skip to the next day: the clock runs to the close, the day ends (every open position flattens at that close)
          *     and the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.
          */
         post: operations["skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post"];
@@ -2710,7 +2711,7 @@ export interface components {
         /**
          * ClockIn
          * @description Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
-         *     its UTC offset). Any mix, at least one; a step or jump is forward only and stops at a crossed stop or the close.
+         *     its UTC offset). Any mix, at least one; a step or jump is forward only and stops at the close.
          */
         ClockIn: {
             /** Running */
@@ -2721,36 +2722,6 @@ export interface components {
             step?: ("bar" | "next_signal") | null;
             /** To */
             to?: string | null;
-        };
-        /**
-         * ClockPauseOut
-         * @description Why a running clock stopped: a stop crossed on an open name (`kind: "stop"`, with the name, the stop, the price
-         *     an Exit would book and `crossing` "cross" or "gap") or the window end (`kind: "close"`).
-         */
-        ClockPauseOut: {
-            /**
-             * Also
-             * @default []
-             */
-            also: string[];
-            /**
-             * At
-             * Format: date-time
-             */
-            at: string;
-            /** Crossing */
-            crossing?: ("cross" | "gap") | null;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "stop" | "close";
-            /** Price */
-            price?: number | null;
-            /** Stop Price */
-            stop_price?: number | null;
-            /** Symbol */
-            symbol?: string | null;
         };
         /** ConsensusOut */
         ConsensusOut: {
@@ -6894,9 +6865,10 @@ export interface components {
             day_list_id: number | null;
             /** Day No */
             day_no: number | null;
+            /** Focus End */
+            focus_end: string | null;
             /** Label */
             label: string;
-            pause: components["schemas"]["ClockPauseOut"] | null;
             /** Running */
             running: boolean;
             /**
@@ -6913,7 +6885,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "no_day" | "listed" | "paused" | "running" | "at_close";
+            state: "no_day" | "listed" | "paused" | "running";
             /** Thread Id */
             thread_id: number;
             /** Window End */
