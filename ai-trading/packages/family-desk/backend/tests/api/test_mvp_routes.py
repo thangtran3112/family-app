@@ -99,6 +99,7 @@ INVENTORY: list[tuple[str, str]] = [
     ("POST", "/api/desk/replay/threads/{}/close"),
     ("GET", "/api/desk/replay/threads/{}/ledger"),
     ("GET", "/api/desk/replay/threads/{}/fills"),  # ADR-0018: every Buy and Sell of a day thread
+    ("GET", "/api/desk/replay/threads/capacity"),  # the day-trade slots in use across all users (at most 10)
     ("GET", "/api/desk/replay/threads/{}/clock"),  # ADR-0018: the day thread's server-side clock and account
     ("POST", "/api/desk/replay/threads/{}/clock"),
     ("POST", "/api/desk/replay/threads/{}/skip-day"),
@@ -167,7 +168,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 117
+    assert len(INVENTORY) == 118
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

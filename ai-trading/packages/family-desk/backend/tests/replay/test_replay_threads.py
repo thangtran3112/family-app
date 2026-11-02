@@ -453,8 +453,9 @@ def test_a_session_snapshots_the_threads_plan_and_a_later_edit_does_not_rescore_
     row = _open(db_session, user_id, svc).day_list
     first = plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
     assert first.thread_id == thread.id and first.day_list_id == row.id
+    # a day thread has no stop rule: even a thread saved with "yes" writes "no" (owner, 2026-11-02)
     assert first.spec["plan"] == {
-        "stopRequired": "yes",
+        "stopRequired": "no",
         "signalOnly": "no",
         "maxLossUsd": 250,
         "maxTrades": 3,
@@ -689,9 +690,11 @@ def _advance_day(db_session, user_id, svc, session_id, day, hhmm):
     )
 
 
-def test_a_day_entry_without_a_stop_is_accepted_and_scored_not_refused(db_session, user_id, svc) -> None:
-    """ "Stop on every entry" is a score, never a refusal: an entry without a stop is placed, the stop_set check
-    fails for it, and a stop typed later (the Stop key) still moves the line."""
+def test_a_day_entry_without_a_stop_is_accepted_and_a_stop_set_later_still_moves_the_line(
+    db_session, user_id, svc
+) -> None:
+    """A stop is optional on a day thread (owner, 2026-11-02): an entry without one is placed, a stop typed later moves
+    the line, and the thread's old "stop on every entry" plan scores nothing (the check is not applicable)."""
     make_thread(db_session, user_id, stopNoteOnEntry="yes")
     _, session, _ = _day_one(db_session, user_id, svc)
     _advance(db_session, user_id, svc, session.id, "09:30")
@@ -702,10 +705,10 @@ def test_a_day_entry_without_a_stop_is_accepted_and_scored_not_refused(db_sessio
     _advance(db_session, user_id, svc, session.id, "10:00")
     done = _mark(db_session, user_id, svc, session.id, "long_exit")
     (check,) = [c for c in done["journal"]["adherence"]["checks"] if c["id"] == "stop_set"]
-    assert (check["applicable"], check["passed"]) == (True, True)  # the stop was set during the trade
+    assert check["applicable"] is False  # a day thread never requires a stop, however its plan was saved
 
 
-def test_a_day_entry_with_no_stop_at_all_fails_the_stop_check_without_blocking(db_session, user_id, svc) -> None:
+def test_a_day_entry_with_no_stop_at_all_is_not_scored_against_a_stop(db_session, user_id, svc) -> None:
     make_thread(db_session, user_id, stopNoteOnEntry="yes")
     _, session, _ = _day_one(db_session, user_id, svc)
     _advance(db_session, user_id, svc, session.id, "09:30")
@@ -713,19 +716,20 @@ def test_a_day_entry_with_no_stop_at_all_fails_the_stop_check_without_blocking(d
     _advance(db_session, user_id, svc, session.id, "10:00")
     done = _mark(db_session, user_id, svc, session.id, "long_exit")
     (check,) = [c for c in done["journal"]["adherence"]["checks"] if c["id"] == "stop_set"]
-    assert (check["applicable"], check["passed"], check["detail"]) == (True, False, "0 of 1")
+    assert check["applicable"] is False  # no stop rule on a day thread: the item is never applicable
 
 
 def test_adherence_endpoints_are_the_first_and_latest_scored_day(db_session, user_id, svc) -> None:
     make_thread(db_session, user_id, stopNoteOnEntry="yes", tradeOnlyOnSignal="yes")
     row, session, thread = _day_one(db_session, user_id, svc)
-    _trade(db_session, user_id, svc, session.id, "long", shares=10, stopPrice=104.0)  # stop set, off a signal: 2 of 3
+    _trade(db_session, user_id, svc, session.id, "long", shares=10, stopPrice=104.0)  # off a signal: 1 of 2
     plan_mod.end_day(db_session, user_id, row.id, svc)
     second = _open(db_session, user_id, svc).day_list
     plan_mod.end_day(db_session, user_id, second.id, svc)  # skipped: no score
     stats = _stats(db_session, thread)
     day_one = plan_mod.day_list_out(db_session, user_id, row.id, svc)["journal"]["sessions"][0]["adherence_pct"]
-    assert day_one == 67 and (stats.adherenceFirstPct, stats.adherenceLastPct) == (67, 67)
+    # the stop item is not applicable on a day thread (it was the third item), so only "traded on a signal" scores
+    assert day_one == 50 and (stats.adherenceFirstPct, stats.adherenceLastPct) == (50, 50)
 
 
 def test_listing_puts_active_threads_first_and_a_closed_thread_keeps_its_numbers(db_session, user_id, svc) -> None:

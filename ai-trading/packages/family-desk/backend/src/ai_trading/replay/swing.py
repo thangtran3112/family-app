@@ -872,7 +872,7 @@ def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeTh
             "shares": plan_mod.DAY_SESSION_SHARES,
             "armed": plan.spec["armed"],
             "plan": threads_mod.session_plan(thread),
-            "hideDate": plan.spec["hideDates"],
+            "hideDate": "no",  # the plan's `hideDates` is accepted and ignored: a date is always shown
         }
     )
 

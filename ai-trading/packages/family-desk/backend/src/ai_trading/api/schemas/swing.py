@@ -4,8 +4,8 @@ The session-side shapes (`HoldOut`, `PausedOut`, the strip and the daily block) 
 session models that carry them, and the thread's `swing` state in `schemas/threads.py`; this module holds the rest:
 the universe preview, the swing board (the swing counterpart of `DayListOut`), the plan cursor, the hold list and the
 weekly review. Plain Pydantic, snake_case. A swing payload names days by number and weekday; the only dates are the day
-list's own `day` (the web hides it by the `hideDates` rule) and the preview's `basis_day` (setup, not a session). Every
-dollar figure is SIMULATED and the `label` fields say so in words.
+list's own `day` (always shown: a plan's `hideDates` is accepted and ignored) and the preview's `basis_day` (setup,
+not a session). Every dollar figure is SIMULATED and the `label` fields say so in words.
 """
 
 from datetime import date, datetime

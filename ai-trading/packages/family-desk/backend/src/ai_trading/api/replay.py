@@ -72,6 +72,7 @@ from ai_trading.api.schemas.swing import (
 from ai_trading.api.schemas.threads import (
     ClockIn,
     SkipDayOut,
+    ThreadCapacityOut,
     ThreadClockOut,
     ThreadFillsOut,
     ThreadLedgerOut,
@@ -308,6 +309,7 @@ def advance_session(
 @router.get("/sessions/{session_id}/feed", response_model=FeedOut)
 def session_feed(
     session_id: int,
+    request: Request,
     interval: Interval | None = None,
     min_size: int = Query(default=0, ge=0, le=1_000_000),
     min_notional: int = Query(default=0, ge=0, le=1_000_000_000),
@@ -315,9 +317,14 @@ def session_feed(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    return _call(
+    out = _call(
         svc_mod.feed, db, user.id, session_id, services, interval=interval, min_size=min_size, min_notional=min_notional
     )
+    if interval is not None and out["market"] is not None:
+        # A day-thread chart switched interval: this name's series was built in the request; prepare the rest of the
+        # day's names at it in the background, so the next name she opens is a slice too.
+        _warm_day(db, request, services, svc_mod.get_row(db, user.id, session_id).day_list_id, interval)
+    return out
 
 
 # -- practice marks -----------------------------------------------------------------------------------------
@@ -424,6 +431,8 @@ def _roll_closed_day(db: Session, request: Request, services: Services, roll) ->
     if opened is not None and opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
         _detach(_prep_in_background, request.app, services, opened.plan.id)
+    if opened is not None and opened.day_list is not None:  # a day opened: prepare its names (`plan.warm_day`)
+        _warm_day(db, request, services, opened.day_list.id, None)
 
 
 def _prep_in_background(app: Any, services: Services, plan_id: int) -> None:
@@ -437,6 +446,38 @@ def _prep_in_background(app: Any, services: Services, plan_id: int) -> None:
             plan_mod.run_prep(db, services, plan_id)
     except Exception:  # noqa: BLE001 -- a dead prep is picked up again by the next open (it goes stale)
         log.exception("daily-list prep failed for plan %s", plan_id)
+
+
+_WARMING: set[tuple[int, str]] = set()  # (day list, interval) pairs being warmed in this process right now
+
+
+def _warm_in_background(app: Any, services: Services, day_list_id: int, interval: str | None) -> None:
+    """Prepare a day's names at a chart interval on their own session, after the response (`plan.warm_day`): the decode
+    work moves off the first read of the day. One warm of a (day list, interval) at a time in this process; a process
+    without a session factory (a test) skips it, and a failed warm costs nothing (the first read builds the series)."""
+    factory = getattr(app.state, "session_factory", None)
+    key = (day_list_id, interval or "")
+    if factory is None:
+        return
+    with _PREPARING_LOCK:
+        if key in _WARMING:
+            return
+        _WARMING.add(key)
+    try:
+        with session_scope(factory) as db:
+            plan_mod.warm_day(db, services, day_list_id, interval)
+    except Exception:  # noqa: BLE001 -- the first read of an unprepared name builds it
+        log.exception("day warm failed for day list %s", day_list_id)
+    finally:
+        with _PREPARING_LOCK:
+            _WARMING.discard(key)
+
+
+def _warm_day(db: Session, request: Request, services: Services, day_list_id: int | None, interval: str | None) -> None:
+    """Start a warm of a day's names after this request: the day list must be committed first (see `open_next`)."""
+    if day_list_id is not None:
+        db.commit()
+        _detach(_warm_in_background, request.app, services, day_list_id, interval)
 
 
 _PREPARING: set[tuple[int, str]] = set()  # (user, symbol) pairs a pool prep in this process is fetching right now
@@ -545,6 +586,8 @@ def open_next(
         # before the task can see it.
         db.commit()
         _detach(_prep_in_background, request.app, services, opened.plan.id)
+    if opened.day_list is not None:  # the day is open: prepare its names (`plan.warm_day`)
+        _warm_day(db, request, services, opened.day_list.id, None)
     out = {
         "plan": plan_mod.plan_out(db, opened.plan),
         "day_list_id": None if opened.day_list is None else opened.day_list.id,
@@ -696,8 +739,9 @@ def create_thread(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-    risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
-    each with its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
+    risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day
+    threads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each
+    thread has its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
     she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
     check out (every rejection is a plain problem), and starts preparing its bars in the background."""
     swing = isinstance(raw, dict) and raw.get("mode") == "swing"
@@ -745,6 +789,13 @@ def list_threads(
 ) -> list[dict[str, Any]]:
     """Her threads, the active ones first, each with its plan, stats and today (the hub's resume list)."""
     return threads_mod.list_threads(db, user.id)
+
+
+@router.get("/threads/capacity", response_model=ThreadCapacityOut)
+def thread_capacity(user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)) -> dict[str, int]:
+    """The day-trade slots in use across all users and the most there can be (10). Declared before
+    `/threads/{thread_id}`, which would otherwise read "capacity" as an id."""
+    return threads_mod.capacity(db)
 
 
 @router.get("/threads/{thread_id}", response_model=ThreadOut)
@@ -890,6 +941,8 @@ def skip_thread_day(
     if opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
         _detach(_prep_in_background, request.app, services, opened.plan.id)
+    if opened.day_list is not None:
+        _warm_day(db, request, services, opened.day_list.id, None)
     return {
         "ended_day_list_id": ended.id,
         "next_day_list_id": None if opened.day_list is None else opened.day_list.id,

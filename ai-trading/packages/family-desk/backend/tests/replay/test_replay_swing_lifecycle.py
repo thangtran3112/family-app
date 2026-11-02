@@ -384,7 +384,7 @@ def test_a_session_needs_a_focus_name_or_a_hold_and_many_names_are_allowed(db_se
         "regular",
         "15m",
         100,
-        "yes",
+        "no",  # the plan's hideDates "yes" is accepted and ignored
     )
     assert spec["plan"] == threads_mod.session_plan(thread)
     db_session.refresh(row)
