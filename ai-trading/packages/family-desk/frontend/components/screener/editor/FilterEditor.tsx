@@ -11,7 +11,7 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
 import type { Problem, ScreenerFilterDetail } from "@/lib/api/schemas";
-import { formToSpec, isDirty, problemsFor, specToForm, type FilterForm } from "@/lib/desk/filterForm";
+import { formToNewSpec, formToSpec, isDirty, problemsFor, specToForm, type FilterForm } from "@/lib/desk/filterForm";
 import { createFilter, loadFilterDetail, loadFilters, previewFilter, updateFilter } from "@/lib/desk/screener";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { COPY } from "@/lib/desk/freshness";
@@ -123,7 +123,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
     setSaving(true);
     try {
       if (filter === null) {
-        const created = await createFilter({ spec: formToSpec(form) });
+        const created = await createFilter({ spec: formToNewSpec(form) });
         invalidate("filters");
         router.replace(filterHref(created.id));
         return;

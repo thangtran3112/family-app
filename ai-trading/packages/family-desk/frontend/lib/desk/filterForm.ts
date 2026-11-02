@@ -67,6 +67,19 @@ const num = (value: string): number | undefined => {
 export const symbolsFromText = (value: string): string[] =>
   value.split(/[\s,]+/).map((symbol) => symbol.trim().toUpperCase()).filter(Boolean);
 
+/** What a blank "Average volume days" counts: the server's `DEFAULT_AVG_VOLUME_DAYS`. The contract accepts `AVG_VOLUME_DAYS_MIN` to `AVG_VOLUME_DAYS_MAX` (`avgVolumeDays`). */
+export const DEFAULT_AVG_VOLUME_DAYS = 20;
+export const AVG_VOLUME_DAYS_MIN = 5;
+export const AVG_VOLUME_DAYS_MAX = 60;
+/** The field's hint: the range, and what a blank means (D-197). */
+export const AVG_VOLUME_DAYS_HINT = `${AVG_VOLUME_DAYS_MIN} to ${AVG_VOLUME_DAYS_MAX} · blank is ${DEFAULT_AVG_VOLUME_DAYS}`;
+
+/** The spec a new filter is created from: a volume floor with the days box blank is saved with the 20 it means, so the saved filter says so. An edit keeps its blank (a shipped filter round-trips unchanged). */
+export function formToNewSpec(form: FilterForm): Record<string, unknown> {
+  const blank = form.avgVolumeDays.trim() === "" && form.minAvgVolume.trim() !== "";
+  return formToSpec(blank ? { ...form, avgVolumeDays: String(DEFAULT_AVG_VOLUME_DAYS) } : form);
+}
+
 /** The spec the API validates. Never throws: a bad number stays NaN (JSON null) and the server says why. */
 export function formToSpec(form: FilterForm): Record<string, unknown> {
   const universe =
