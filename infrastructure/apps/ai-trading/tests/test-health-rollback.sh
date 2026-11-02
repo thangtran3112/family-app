@@ -80,6 +80,16 @@ if [[ "${1:-}" == inspect ]]; then
         state=unhealthy
       fi
     done
+    # FAKE_STARTING_SVC reports `starting` for its first FAKE_STARTING_POLLS health polls, then healthy:
+    # a slow-starting container (the scheduler's cold DB wait plus a long first iteration).
+    if [[ -n "${FAKE_STARTING_SVC:-}" && "$svc" == "$FAKE_STARTING_SVC" && "$state" == healthy ]]; then
+      polls=0
+      if [[ -f "$FAKE_STARTING_COUNTER" ]]; then polls="$(cat "$FAKE_STARTING_COUNTER")"; fi
+      if ((polls < FAKE_STARTING_POLLS)); then
+        echo $((polls + 1)) >"$FAKE_STARTING_COUNTER"
+        state=starting
+      fi
+    fi
     echo "$state"
   else
     echo running
@@ -106,6 +116,12 @@ run_health() {
   # RUN_DARK / RUN_TUNNEL_DOWN: set by the dark-mode cases below, empty otherwise.
   if [[ -n "${RUN_DARK:-}" ]]; then extra+=(DEPLOY_DARK=1); fi
   if [[ -n "${RUN_TUNNEL_DOWN:-}" ]]; then extra+=(FAKE_TUNNEL_DOWN=1); fi
+  # RUN_STARTING_POLLS / RUN_ATTEMPTS: the slow-start cases below (a later HEALTH_CHECK_ATTEMPTS wins).
+  if [[ -n "${RUN_STARTING_POLLS:-}" ]]; then
+    rm -f "$ROOT/starting-count"
+    extra+=(FAKE_STARTING_SVC=scheduler FAKE_STARTING_POLLS="$RUN_STARTING_POLLS" FAKE_STARTING_COUNTER="$ROOT/starting-count")
+  fi
+  if [[ -n "${RUN_ATTEMPTS:-}" ]]; then extra+=(HEALTH_CHECK_ATTEMPTS="$RUN_ATTEMPTS"); fi
   OUT="$ROOT/out.txt"
   ERR="$ROOT/err.txt"
   set +e
@@ -190,5 +206,22 @@ RUN_DARK=1 run_health "" "$DARK_LIST" "$STOPPED_DARK_GATEWAY" ""
 [[ $RC -eq 1 ]] || fail "a dark deploy must still fail when another protected service is down (rc=$RC)"
 grep -q "failing services:.*gateway" "$ERR" || fail "a dark deploy must name the stopped gateway: $(cat "$ERR")"
 ok "a dark deploy still requires every other protected service"
+
+# --- Slow start (incident 41472449417): the scheduler reports `starting` while it waits for Postgres and
+# runs its first iteration. health-check.sh polls it until it is healthy instead of failing at once; one
+# that stays `starting` past the polling budget still fails, so a dead loop is never waved through.
+RUN_STARTING_POLLS=3 RUN_ATTEMPTS=5 run_health "" "$FULL" "$FULL" ""
+[[ $RC -eq 0 ]] || fail "a scheduler that is starting for 3 polls must pass within 5 attempts (rc=$RC): $(cat "$ERR")"
+grep -q "all services healthy" "$OUT" || fail "slow-start success message missing: $(cat "$OUT")"
+ok "a slow-starting scheduler (starting for 3 polls, then healthy) passes the gate"
+
+RUN_STARTING_POLLS=3 RUN_ATTEMPTS=2 run_health "" "$FULL" "$FULL" ""
+[[ $RC -eq 1 ]] || fail "a scheduler still starting after the polling budget must fail (rc=$RC)"
+grep -q "failing services:.*scheduler" "$ERR" || fail "an exhausted slow start must name the scheduler: $(cat "$ERR")"
+ok "a scheduler still starting after the polling budget still fails, naming it"
+
+RUN_STARTING_POLLS=3 RUN_ATTEMPTS=5 run_health 1 "$FULL" "$FULL" ""
+[[ $RC -eq 0 ]] || fail "a slow-starting scheduler must also pass in rollback mode (rc=$RC): $(cat "$ERR")"
+ok "a slow-starting scheduler passes the rollback health check too"
 
 printf '\n%d checks passed (health-check rollback mode)\n' "$PASS"

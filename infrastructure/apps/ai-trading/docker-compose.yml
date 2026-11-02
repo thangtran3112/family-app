@@ -319,15 +319,24 @@ services:
     healthcheck:
       # F4: `scheduler` has no HTTP endpoint for Docker to poll (unlike
       # `api`'s `/healthz`), so its own main loop touches a heartbeat file
-      # once per iteration (ai_trading.jobs.scheduler.main) and this
-      # healthcheck runs ai_trading.jobs.healthcheck in-process, which exits
-      # 0 only while that heartbeat is still fresh (< 180s old) -- a stuck or
-      # crashed loop stops touching it and this starts failing within one
-      # window.
+      # at the start and the end of every iteration
+      # (ai_trading.jobs.scheduler.run_once) and this healthcheck runs
+      # ai_trading.jobs.healthcheck in-process, which exits 0 only while that
+      # heartbeat is still fresh (< 180s old) -- a stuck or crashed loop
+      # stops touching it and this starts failing within one window.
+      #
+      # start_period: a cold start waits for Postgres (up to 60 s, 30 x 2 s)
+      # and then runs a first iteration that can include a long job; the
+      # 60 s that used to be here marked a live scheduler unhealthy 181 s in
+      # and aborted the deploy and its rollback (run 41472449417). Failures
+      # inside start_period are only not counted: a healthy result still
+      # flips the status at once, and a dead loop (no heartbeat, or a stale
+      # one) never passes, it just fails later, at start_period + retries x
+      # interval. deploy.sh's `up --wait --wait-timeout` must stay >= this.
       test: ["CMD", "python", "-m", "ai_trading.jobs.healthcheck"]
       interval: 30s
       timeout: 5s
-      start_period: 60s
+      start_period: 300s
       retries: 5
 
 networks:
