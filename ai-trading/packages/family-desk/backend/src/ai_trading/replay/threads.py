@@ -10,11 +10,13 @@ ledger and the ended day lists, so the numbers cannot drift from the trades (the
   (02p), which shares the checks and the insert below.
 - **Plan edits apply from the next session.** A session snapshots the plan when it starts, so a day already under way
   is scored against the plan it began with. The starting balance and the mode never change.
-- **Closing** archives the daily plan and freezes the thread (no plan edits, no new days). It waits for an open
-  practice day: that day holds trades that are not scored yet. A swing thread's open holds exit at the last ended
-  day's close first (`swing.close_thread`).
+- **Closing** archives the daily plan and freezes the thread (no plan edits, no new days). A day-trade day has no manual
+  End day (it ends when the clock reaches the next open), so closing ends the open day itself: its open positions book
+  at the clock and its review is stored. Without data services (`svc`) it waits for an open practice day instead. A
+  swing thread waits for its open day (End Day), and its open holds exit at the last ended day's close first
+  (`swing.close_thread`).
 - **Deleting** removes the thread and everything under it (its ledger, holds, weeks, plans, day lists and sessions). It
-  waits for an open practice day, like closing; a swing thread's open holds go with it.
+  waits for an open practice day (close the thread first: that ends the day); a swing thread's open holds go with it.
 - **A practised day** is an ended day list that had a session; a **skipped day** ended with none, and the balance
   simply carries. In a swing thread a ledger row belongs to the ended day it exited on (it may have no session).
 
@@ -53,7 +55,7 @@ SWING_SHARES = "A swing thread sizes each hold from its cash · the share count 
 NO_THREAD = "Start a practice thread first · it holds your simulated balance and risk plan"
 CLOSED_THREAD = "Your practice thread is closed · start a new thread to keep practising"
 DAY_OPEN = "End today's practice day before closing the thread · its simulated trades are not scored yet"
-DAY_OPEN_DELETE = "End today's practice day before deleting the thread · its simulated trades are not scored yet"
+DAY_OPEN_DELETE = "Close the thread before deleting it · closing ends today's practice day and scores its trades"
 LEDGER_LIMIT = 500
 
 
@@ -269,6 +271,11 @@ def close_thread(
     if row.status == "closed":
         return row
     under_way = open_day(db, row.id)
+    if under_way is not None and row.mode == "day" and svc is not None:
+        from ai_trading.replay import plan as plan_mod  # plan imports this module
+
+        plan_mod.end_day(db, user_id, under_way.id, svc)  # no manual End day: closing is how she stops mid-plan
+        under_way = None
     if under_way is not None:
         # 02p b7: a swing thread names the day ("scored weekly" makes the day thread's sentence wrong for it).
         raise ReplayProblem(

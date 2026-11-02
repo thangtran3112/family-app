@@ -172,6 +172,14 @@ def _ts(value: datetime | pd.Timestamp) -> pd.Timestamp:
     return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
 
 
+def market_open(day: date) -> pd.Timestamp:
+    """The exchange's regular open (09:30 ET) of `day`: where a day begins for the thread clock, whatever time the plan
+    starts practice at."""
+    found = trading_session("stock", day)
+    assert found is not None
+    return found.regular_open
+
+
 def market_close(day: date, kind: str) -> pd.Timestamp:
     """The exchange's close for a session of `kind` ("regular" 16:00 ET, 13:00 on a half day; "extended" four hours
     after). The only time the replayed market stops on its own: a real day has no earlier end."""
@@ -627,6 +635,10 @@ def create(
     check_day(day, now)
     # Her `window.to` is a focus mark kept in the spec; the session itself runs to the exchange close.
     start, _focus = window_bounds(day, dumped["window"]["from"], dumped["window"]["to"])
+    if day_list is not None and day_list.revealed_through:
+        # The thread clock does not wait for her window: a name opened before the plan's "Start at" starts at the clock.
+        # It never lifts the clock to the window start (a hidden jump of time that only she may make).
+        start = min(start, _ts(day_list.revealed_through))
     asked_end = market_close(day, dumped["session"])
     check_window(day, asked_end, now)
     end = market_close(day, "extended") if extended_tape else asked_end
@@ -854,8 +866,9 @@ def _clock_state(ctx: Ctx) -> dict[str, Any] | None:
     return {"running": True, "speed": day_list.clock_speed} if day_list is not None and day_list.clock_running else None
 
 
-def _next_start(ctx: Ctx) -> pd.Timestamp | None:
-    """When the thread's next trading day starts (the day hands over there); None on the plan's last day."""
+def _next_start(ctx: Ctx) -> pd.Timestamp | None:  # None only without a day list (a standalone session)
+    """When the thread's next trading day opens (the day hands over there): the exchange's open, also after the plan's
+    last day (that day ends there)."""
     if "next_start" not in ctx._cache:
         from ai_trading.replay import plan as plan_mod  # plan imports this module: the lookup lives there
 

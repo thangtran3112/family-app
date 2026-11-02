@@ -281,6 +281,16 @@ def _open_days(db_session, thread_id):
     )
 
 
+def test_closing_a_day_thread_ends_its_open_day_since_there_is_no_manual_end(db_session, user_id, svc) -> None:
+    row = _first_list(db_session, user_id, svc)
+    thread = threads_mod.active_thread(db_session, user_id)
+    closed = threads_mod.close_thread(db_session, user_id, thread.id, NOW, svc)
+    assert closed.status == "closed"
+    db_session.refresh(row)
+    assert row.status == "ended" and row.review is not None  # scored, with no End day press
+    assert threads_mod.open_day(db_session, thread.id) is None
+
+
 def test_replacing_a_plan_ends_its_half_practised_day_so_one_day_is_open_and_the_balance_reconciles(
     db_session, user_id, svc
 ) -> None:
@@ -1066,7 +1076,7 @@ def test_deleting_a_thread_waits_for_an_open_day_then_removes_only_its_own_rows(
     gone_id, keep_id, gone_plan_id = gone.id, keep.id, gone_plan.id
     with pytest.raises(ReplayProblem) as open_day:
         threads_mod.delete_thread(db_session, user_id, gone_id)
-    assert open_day.value.status == 409 and "before deleting the thread" in open_day.value.message
+    assert open_day.value.status == 409 and "Close the thread before deleting it" in open_day.value.message
     db_session.rollback()
     assert db_session.get(PracticeThread, gone_id) is not None and len(_ledger(db_session, gone_id)) == 1
 
