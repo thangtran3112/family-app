@@ -2593,6 +2593,8 @@ export interface components {
          * @description One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.
          */
         CandidateOut: {
+            /** Earnings State */
+            earnings_state?: ("reported" | "none") | null;
             /** Filters */
             filters: string[];
             /**
@@ -2636,8 +2638,6 @@ export interface components {
             rank: number;
             /** Rank Value */
             rank_value: number | null;
-            /** Reported Before Open */
-            reported_before_open: boolean;
             /** Symbol */
             symbol: string;
         };
@@ -5114,6 +5114,8 @@ export interface components {
             spec: components["schemas"]["PracticeBlockV1"];
             /** Thread Id */
             thread_id: number | null;
+            /** Weekdays */
+            weekdays: ("Mon" | "Tue" | "Wed" | "Thu" | "Fri")[];
         };
         /** PracticeScreenV1 */
         PracticeScreenV1: {

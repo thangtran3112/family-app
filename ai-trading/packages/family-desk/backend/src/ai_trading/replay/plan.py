@@ -417,6 +417,7 @@ def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
         "next_day": upcoming,
         "next_weekday": None if upcoming is None else _weekday(upcoming),
         "next_day_no": None if upcoming is None else days.index(upcoming) + 1,
+        "weekdays": [_weekday(day) for day in days],
         "finished": finished,
         "prep": {
             "state": prep["state"],
@@ -491,24 +492,25 @@ def _filter_inputs(
     return out
 
 
-def earnings_flags(sources: Any, symbols: list[str], day: date, now: datetime) -> set[str]:
-    """Symbols that reported before the open of `day` (explicit report times only), within a small time budget.
-    A provider failure or a slow chain leaves a symbol unflagged: the flag is a positive claim only."""
+def earnings_states(sources: Any, symbols: list[str], day: date, now: datetime) -> dict[str, str]:
+    """`reported` or `none` for each symbol whose report history was read (explicit report times only), within a small
+    time budget. A symbol the check did not reach (no provider history, a provider failure, the budget spent) is left
+    out: unknown, never `none`."""
     if sources is None:
-        return set()
-    flagged: set[str] = set()
+        return {}
+    states: dict[str, str] = {}
     started = time.monotonic()
     for symbol in symbols:
         if time.monotonic() - started > EARNINGS_BUDGET_S:
             break
         try:
             events = days_mod.earnings_events(sources, symbol, now)
-            if events and screen.reported_before_open(events, day):
-                flagged.add(symbol)
+            if events:
+                states[symbol] = "reported" if screen.reported_before_open(events, day) else "none"
         except Exception as exc:  # noqa: BLE001 -- never fail a list over a calendar lookup
             log.warning("earnings lookup failed for %s: %s", symbol, type(exc).__name__)
             continue
-    return flagged
+    return states
 
 
 def _universe_note(
@@ -574,9 +576,9 @@ def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, stor
         list_at=list_at,
         max_list=spec["screen"]["maxList"],
     )
-    flagged = earnings_flags(svc.sources, [c["symbol"] for c in built.candidates], day, now)
+    states = earnings_states(svc.sources, [c["symbol"] for c in built.candidates], day, now)
     for candidate in built.candidates:
-        candidate["reported_before_open"] = candidate["symbol"] in flagged
+        candidate["earnings_state"] = states.get(candidate["symbol"])
     note = _universe_note(len(symbols), filters, bool(plan.universe.get("capped")), member)
     return {
         "screen": {
@@ -1248,13 +1250,16 @@ def _run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> Repla
         max_list=max_list,
     )
     fresh = [c["symbol"] for c in built.candidates if c["symbol"] not in prior]
-    flagged = earnings_flags(svc.sources, fresh, day, svc.now())
+    states = earnings_states(svc.sources, fresh, day, svc.now())
     for candidate in built.candidates:
         seen = prior.get(candidate["symbol"])
         candidate["new_since_list"] = seen is None
         candidate["held_over"] = False
-        candidate["reported_before_open"] = (
-            candidate["symbol"] in flagged if seen is None else bool(seen.get("reported_before_open"))
+        # a name already on the list keeps what the list held (a list stored before the state existed has the flag only)
+        candidate["earnings_state"] = (
+            states.get(candidate["symbol"])
+            if seen is None
+            else seen.get("earnings_state") or ("reported" if seen.get("reported_before_open") else None)
         )
 
     # From here the day list changes: under its lock, on what the day holds now (a star or a name opened while the scan
@@ -1549,7 +1554,7 @@ __all__ = (
     "check_range",
     "create_plan",
     "day_list_out",
-    "earnings_flags",
+    "earnings_states",
     "end_day",
     "hub",
     "open_next",
