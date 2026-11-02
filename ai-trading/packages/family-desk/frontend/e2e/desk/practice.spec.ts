@@ -105,12 +105,11 @@ test.describe("Practice", () => {
     await expectCleanScreen(page);
   });
 
-  test("a session with a hidden day keeps its date off the screen", async ({ page, context }) => {
-    await startStubSession(page, context, { dayHidden: true });
-    // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
-    await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(DAY);
+  test("a session shows its date: the band, the header and the clock name Fri 2026-09-25 (ADR-0022)", async ({ page, context }) => {
+    await startStubSession(page, context);
+    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
+    await expect(page.locator("body")).toContainText(formatEtDay(DAY));
+    await expect(page.locator("body")).not.toContainText(/hidden day|show date/i);
     await expectCleanScreen(page);
   });
 
@@ -149,8 +148,6 @@ test.describe("Practice", () => {
     await expect(page.getByTitle("Closed practice trades plus the open trade at the last price")).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(page.locator("dt", { hasText: "VWAP" })).toBeVisible();
     await expect(page.locator("dt", { hasText: "Prior close" })).toBeVisible();
-    // D-023: this session shows its date, so the band has nothing to hide and no "Show date" (the hidden-day case is below).
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toHaveCount(0);
     // D-043: the replay has its own status line, not the live-quotes one.
     await expect(page.getByLabel("Status")).toContainText("Prices: Alpaca SIP · replay");
     await expect(page.getByLabel("Status")).not.toContainText("Alerts start when live quotes are connected");
@@ -266,7 +263,7 @@ test.describe("Practice", () => {
   // Daily-list practice (02o-b v1): the plan, the day list before the open, Peek, a row click that opens a practice session, the end of
   // the day and its review, then the next day. The stub holds TSLA on Fri 2026-09-25 only, so Day 1 lists TSLA through her
   // own always-matching daily filter and Day 2 lists nothing; the plan's data is fetched in the background first.
-  test("a daily plan opens a hidden-date day list with Peek, opens a name from a row click, ends into the review, and Continue opens Day 2", async ({ page, context }) => {
+  test("a daily plan opens a dated day list with Peek, opens a name from a row click, ends into the review, and Continue opens Day 2", async ({ page, context }) => {
     test.setTimeout(180_000);
     const answers = watchReplayAnswers(page);
     const api = watchApi(page);
@@ -288,7 +285,7 @@ test.describe("Practice", () => {
     await expect(planCard).toContainText("Day 1 of 5 · next: Fri", { timeout: 60_000 });
     await expect(planCard).toContainText("Any close"); // the card names the filter once (D-118: the armed line is gone with the arming)
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(50_000));
-    await expect(page.locator("body")).not.toContainText(DAY);
+    await expect(planCard, "the plan names the next day's actual date (ADR-0022)").toContainText(`next: ${formatEtDay(DAY)}`);
     await expectCleanScreen(page);
     await openFirstDay(page);
     const dayUrl = page.url();
@@ -296,11 +293,11 @@ test.describe("Practice", () => {
     // D-004: the bare route finds the day she has open.
     await openDesk(page, "/practice/day");
     await page.waitForURL(dayUrl);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri 2026-09-25");
 
-    // The day list: dates hidden, the candidate, the universe line, and the footnote.
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri");
-    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY, true, true));
+    // The day list: the dated title, the candidate, the universe line, and the footnote.
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri 2026-09-25");
+    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
     await expect(page.getByText(/^List built at 8:30 AM ET from data through 8:15 AM/)).toBeVisible();
     await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
     const table = page.getByRole("table", { name: "Candidates" });
@@ -317,7 +314,9 @@ test.describe("Practice", () => {
     const planRail =
       test.info().project.name === "desktop-1180" ? page.getByRole("dialog", { name: PRACTICE_COPY.threadPlanTitle }) : page.getByRole("complementary", { name: "Day context" });
     await expect(planRail).toContainText(PRACTICE_COPY.threadPlanFrom);
-    await expect(planRail).toContainText(/Stop on every entry\s*Yes/);
+    await expect(planRail, "a stop is not asked for or scored").not.toContainText(/stop on every entry/i);
+    await expect(planRail).toContainText(/Day starts\s*\d{1,2}:\d{2} (AM|PM) ET/);
+    await expect(planRail).not.toContainText(/practice window/i);
     await expect(planRail).toContainText(/Max loss, pretend dollars a day\s*\$600/);
     await expect(planRail).toContainText(/Max trades a day\s*3/);
     if (test.info().project.name === "desktop-1180") await page.keyboard.press("Escape");
@@ -330,7 +329,7 @@ test.describe("Practice", () => {
     // D-165: the day's clock starts at the open, so "built before the open" is already not true to say; the list time is still the build time (no re-scan).
     await expect(page.getByLabel("Status")).toContainText("List built 8:30 AM ET");
     await expect(page.getByLabel("Status")).not.toContainText("Day lists built before the open");
-    await expect(page.locator("body")).not.toContainText(DAY);
+    await expect(page.locator("body")).toContainText(formatEtDay(DAY)); // the actual date of the list's day (ADR-0022)
     await expectCleanScreen(page);
 
     // Peek: the chart before the open, from the row's own button, in a wide drawer. It adds nothing to the portfolio and starts no clock.
@@ -379,10 +378,8 @@ test.describe("Practice", () => {
     await expect(page.getByRole("button", { name: "End day…" }), "no End day on the chart: it is on the Summary").toHaveCount(0);
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice }), "the tab strip stands in for the back link").toHaveCount(0);
     await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabOrder })).toHaveAttribute("aria-selected", "true");
-    // D-023: a hidden day says why it is hidden and offers "Show date"; the date stays off the screen until she asks.
-    await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(DAY);
+    // ADR-0022: the date always shows, on the band, the header and the clock.
+    await expect(page.locator("body")).toContainText(formatEtDay(DAY));
     await stepBar(page);
     await expect(playhead(page)).not.toContainText("9:30:00");
     await expectCleanScreen(page);
@@ -431,7 +428,6 @@ test.describe("Practice", () => {
     const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
     await expect(review).toBeVisible();
     await expect(review).toContainText("Your names moved");
-    await expect(review).toContainText(PRACTICE_COPY.reviewDayFinished); // D-029: the finished day shows its date, and says so
     await expect(review).toContainText(PRACTICE_COPY.reviewRankNote); // D-031: signed, biggest gain first
     const trades = review.getByRole("table", { name: "Your practice trades" });
     await expect(trades).toBeVisible(); // D-032: a line per trade
@@ -441,7 +437,7 @@ test.describe("Practice", () => {
     // D-173: both review tables hold their pane at either width, so no header ("Low after open") and no value is cut; the ranking table drops Range, then Move to close.
     await expectTableFits(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }));
     await expectTableFits(trades);
-    for (const name of ["Rank", "Symbol", "List price", "Move to window end", "High after open", "Low after open"]) await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("columnheader", { name })).toBeVisible();
+    for (const name of ["Rank", "Symbol", "List price", "Move to close", "High after open", "Low after open"]) await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("columnheader", { name })).toBeVisible();
     await expect(review).toContainText("Practice universe");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(`Day 1 of 5 · ${formatEtDay(DAY)}`); // nothing left to spoil
     await expectCleanScreen(page);
@@ -489,7 +485,7 @@ test.describe("Practice", () => {
     await openDesk(page, "/practice");
     await dayRow(page).getByRole("button", { name: /^Start Day 2$/ }).click(); // D-078: after an ended day the action starts the next one
     await page.waitForURL(/\/practice\/day\?id=\d+/);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5 · Mon 2026-09-28");
     await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle)).toBeVisible();
     // D-005: the banner names the cause (the stub holds no bars for this day), not "Only 0 names matched".
     await expect(page.getByRole("status").filter({ hasText: "No symbol could be scanned" })).toBeVisible();
@@ -532,7 +528,6 @@ test.describe("Practice", () => {
     await expect(tile(PRACTICE_COPY.threadSkipped)).toContainText(PRACTICE_COPY.threadTileCarried);
     await expect(tile("Wins")).toContainText(String(read.thread.stats.wins));
     await expect(tile("Losses")).toContainText(String(read.thread.stats.losses));
-    await expect(page.locator("body")).not.toContainText(/20\d\d-\d\d-\d\d/); // dates stay hidden on the journal
     // D-039: her threads and the weeks sit in the left rail; D-043: the journal's own status line.
     const journalLeft = page.getByRole("complementary", { name: "Practice side panel" });
     await expect(journalLeft).toContainText(PRACTICE_COPY.threadSwitcher);
@@ -818,7 +813,7 @@ test.describe("Practice", () => {
         schemaVersion: 1,
         firstDay: DAY,
         sessions: 5,
-        hideDates: "yes",
+        hideDates: "no",
         screen: { filters: [{ id: volume!.id }], listAt, maxList: 30 },
         setup: {
           window: { from, to: "11:30" },
@@ -1162,7 +1157,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     test.setTimeout(180_000);
     await openDayList(page, context);
     const h1 = page.getByRole("heading", { level: 1 });
-    await expect(h1).toHaveText("Day 1 of 5 · Fri");
+    await expect(h1).toHaveText("Day 1 of 5 · Fri 2026-09-25");
     await expect(page.getByText("Practice day list", { exact: true })).toBeVisible();
   });
 

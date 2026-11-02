@@ -18,7 +18,6 @@ export type ThreadDraft = {
   /** Whole dollars as typed; the contract's default is 50,000. */
   startingBalance: string;
   mode: "day" | "swing";
-  stopNoteOnEntry: boolean;
   tradeOnlyOnSignal: boolean;
   maxLossUsd: string;
   maxTrades: string;
@@ -30,8 +29,6 @@ export type ThreadDraft = {
 export const defaultThreadDraft = (): ThreadDraft => ({
   startingBalance: String(DEFAULT_STARTING_BALANCE),
   mode: "day",
-  // A stop is advisable and never required: a new thread does not score, let alone ask for, one unless she turns it on.
-  stopNoteOnEntry: false,
   tradeOnlyOnSignal: false,
   maxLossUsd: "",
   maxTrades: "",
@@ -48,9 +45,9 @@ export function formatBalanceInput(text: string): string {
 const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN : Number(text.replaceAll(",", "")));
 
 /** The plan half of the draft as the contract's JSON. Optional fields are left out when empty; nothing is null or boolean. */
-export function threadPlanToSpec(draft: Pick<ThreadDraft, "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote">) {
+export function threadPlanToSpec(draft: Pick<ThreadDraft, "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote">) {
   const plan: Record<string, unknown> = {
-    stopNoteOnEntry: draft.stopNoteOnEntry ? "yes" : "no",
+    stopNoteOnEntry: "no", // a stop is optional and never asked for or scored; the contract still wants the field
     tradeOnlyOnSignal: draft.tradeOnlyOnSignal ? "yes" : "no",
   };
   if (draft.maxLossUsd.trim() !== "") plan.maxLossUsd = numberOrNaN(draft.maxLossUsd);
@@ -70,7 +67,6 @@ export const threadDraftToSpec = (draft: ThreadDraft): unknown => ({
 export const planToDraft = (plan: ThreadPlan, startingBalance: number, shares?: number): ThreadDraft => ({
   startingBalance: String(startingBalance),
   mode: "day",
-  stopNoteOnEntry: plan.stopNoteOnEntry === "yes",
   tradeOnlyOnSignal: plan.tradeOnlyOnSignal === "yes",
   maxLossUsd: plan.maxLossUsd === undefined ? "" : String(plan.maxLossUsd),
   maxTrades: plan.maxTrades === undefined ? "" : String(plan.maxTrades),
@@ -85,13 +81,12 @@ export const threadPatchToSpec = (draft: ThreadDraft): unknown => ({
   ...(draft.shares.trim() === "" ? {} : { shares: numberOrNaN(draft.shares) }),
 });
 
-export type ThreadField = "startingBalance" | "mode" | "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote" | "shares" | "form";
+export type ThreadField = "startingBalance" | "mode" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote" | "shares" | "form";
 export type ThreadProblems = Partial<Record<ThreadField, string>>;
 
 const FIELD_MESSAGE: Record<ThreadField, string> = {
   startingBalance: `Starting balance: whole dollars from ${MIN_STARTING_BALANCE.toLocaleString("en-US")} to ${MAX_STARTING_BALANCE.toLocaleString("en-US")}`,
   mode: "Pick day trading",
-  stopNoteOnEntry: "Pick yes or no",
   tradeOnlyOnSignal: "Pick yes or no",
   maxLossUsd: "Max loss: whole dollars from 1 to 100,000",
   maxTrades: "Max trades: a whole number from 1 to 50",
@@ -105,7 +100,7 @@ export function threadFieldOfPath(path: string): ThreadField {
   const parts = path.split(".");
   const last = parts[parts.length - 1] ?? "";
   switch (last) {
-    case "startingBalance": case "mode": case "stopNoteOnEntry": case "tradeOnlyOnSignal": case "maxLossUsd": case "maxTrades": case "planNote": case "shares":
+    case "startingBalance": case "mode": case "tradeOnlyOnSignal": case "maxLossUsd": case "maxTrades": case "planNote": case "shares":
       return last;
     default:
       return "form";

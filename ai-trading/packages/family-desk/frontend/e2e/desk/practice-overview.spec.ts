@@ -5,7 +5,7 @@ import { formatBalance } from "../../lib/replay/threadView.ts";
 import { brokenTileValues, expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
 import { origin } from "../helpers";
 import { THREAD_URL, createThreadByApi, startThread, threadIdOf } from "./hub-helpers";
-import { DAY_ISO, createSwingThread, enterByApi, expectNoDates, markByApi, openNextDay, send, swingRow } from "./swing-helpers";
+import { DAY_ISO, createSwingThread, enterByApi, markByApi, openNextDay, send, swingRow } from "./swing-helpers";
 
 // The thread overview (5R): a dashboard per thread, the Progress column and the row that is one stretched link.
 
@@ -80,12 +80,12 @@ test.describe("Practice thread overview", () => {
     await expect(rows(weeks).nth(1).getByRole("link")).toHaveCount(0);
     await expect(rows(weeks).nth(2)).toContainText(PRACTICE_COPY.overviewWeekUpcoming);
 
-    // Days: one row per ended day, the newest first, by number and weekday.
+    // Days: one row per ended day, the newest first, by number, weekday and date.
     const days = page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption });
     await expect(rows(days)).toHaveCount(5);
-    await expect(rows(days).first()).toContainText("Day 5 · Fri");
-    await expect(rows(days).last()).toContainText("Day 1 · Mon");
-    await expect(rows(days).first().getByRole("link", { name: "Day 5 · Fri" })).toHaveAttribute("href", /\/practice\/day\?id=\d+$/);
+    await expect(rows(days).first()).toContainText("Day 5 · Fri 2026-09-18");
+    await expect(rows(days).last()).toContainText("Day 1 · Mon 2026-09-14");
+    await expect(rows(days).first().getByRole("link", { name: "Day 5 · Fri 2026-09-18" })).toHaveAttribute("href", /\/practice\/day\?id=\d+$/);
     await expect(rows(days).last()).toContainText(PRACTICE_COPY.overviewDayPracticed);
     await expect(rows(days).first()).toContainText(PRACTICE_COPY.overviewDaySkipped);
 
@@ -110,7 +110,6 @@ test.describe("Practice thread overview", () => {
     await expect(stats.getByText(PRACTICE_COPY.threadAdherence, { exact: true })).toBeVisible();
     await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceMeaning);
     await expect(stats.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
-    await expectNoDates(page);
     await expectCleanScreen(page);
 
     // The review is the way on: it opens, Start Week 2 opens Day 6, and the overview then offers Continue with Week 1 done.
@@ -124,7 +123,6 @@ test.describe("Practice thread overview", () => {
     await expect(practiceDay(page)).not.toContainText("unlocks after");
     await expect(rows(weeks).nth(0)).toContainText(PRACTICE_COPY.overviewWeekDone);
     await expect(rows(weeks).nth(1)).toContainText(PRACTICE_COPY.overviewWeekCurrent);
-    await expectNoDates(page);
   });
 
   test("a fresh swing thread: Start Day 1 is the step, every week is still ahead, and the empty sections say so", async ({ page, context }) => {
@@ -145,7 +143,6 @@ test.describe("Practice thread overview", () => {
     await page.getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Week 1 of 3 · No holds open"); // D-112: the place line has names, week and holds
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Day 1 of 15");
-    await expectNoDates(page);
     await expectCleanScreen(page);
   });
 
@@ -169,7 +166,6 @@ test.describe("Practice thread overview", () => {
     await expect(page.getByRole("region", { name: PRACTICE_COPY.overviewDaysTitle })).toContainText(PRACTICE_COPY.overviewDaysNone);
     await expect(page.getByRole("region", { name: "Thread stats" })).toContainText(PRACTICE_COPY.threadAdherenceNone);
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
-    await expectNoDates(page);
     await expectCleanScreen(page);
   });
 

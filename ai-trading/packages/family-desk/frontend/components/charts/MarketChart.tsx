@@ -24,7 +24,6 @@ import {
   clearTickLabel,
   crosshairPoint,
   followsNewest,
-  formatChartClock,
   sourceTimeLabel,
   replayTickLabel,
   currentValue,
@@ -115,11 +114,9 @@ export type MarketChartProps = {
   firstDraw?: number;
   /** Index of the session's first bar (the bars before it are lookback). Before the open, with no session bar revealed yet, the followed chart waits there; from the first session bar on it follows the newest bar. */
   sessionStart?: number;
-  /** Replay of a hidden day: axis, crosshair and data table show the time of day only, never the date. */
-  hideDates?: boolean;
-  /** Axis ticks read as time of day ("11:00 AM") with "Oct 22" at day changes, instead of a date on every tick. On for followed and hidden-date charts. */
+  /** Axis ticks read as time of day ("11:00 AM") with "Oct 22" at day changes, instead of a date on every tick. On for followed charts. */
   clockTicks?: boolean;
-  /** One label per bar for the data table while dates are hidden ("D-3", "Day 6"): a stand-in timeline's own times say nothing. */
+  /** One label per bar for the data table when the bars sit on a stand-in timeline ("D1", "D2"): its own times say nothing. A real timeline names its rows by date and time. */
   rowLabels?: readonly string[];
   /** Money, not a price: day names on the time axis, dollars on the price axis, and room above and below the lines for the top label and the library's logo (D-087, D-128). */
   moneyAxis?: MarketChartMoneyAxis;
@@ -244,7 +241,6 @@ export function MarketChart({
   follow = false,
   firstDraw = FOLLOW_VISIBLE_BARS,
   sessionStart,
-  hideDates = false,
   clockTicks = false,
   rowLabels,
   moneyAxis,
@@ -457,7 +453,7 @@ export function MarketChart({
     if (wantKind === "Candlestick") mainSeries.applyOptions(candleStyle(chartType));
 
     const dayName = moneyAxis ? new Map(bars.map((bar, index) => [timeId(chartTime(bar.t)), moneyAxis.days[index] ?? ""])) : null;
-    const timeLabel = dayName ? (time: Time) => dayName.get(timeId(time)) ?? "" : hideDates ? formatChartClock : formatChartTime;
+    const timeLabel = dayName ? (time: Time) => dayName.get(timeId(time)) ?? "" : formatChartTime;
     // The right offset goes in only when it changes: the library scrolls to it every time it is set, so setting it on each data update snapped a chart she had scrolled back to the newest bar.
     const wantedOffset = follow ? FOLLOW_RIGHT_PAD : 0;
     // The library centres a tick label on its tick and clips it at the axis edge ("0 AM" for "04:00 AM", D-180): a label that would not
@@ -466,7 +462,7 @@ export function MarketChart({
       const scale = currentChart.timeScale();
       return wholeAxisLabel(label, scale.timeToCoordinate(time), scale.width());
     };
-    const tickLabel = dayName || !(follow || hideDates || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates);
+    const tickLabel = dayName || !(follow || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType);
     const formatTick: TickFormat = (time, tickType) => wholeLabel(tickLabel(time, tickType), time);
     tickFormat.current = formatTick;
     // The tags on the price axis (the overlays' last values, the level lines' numbers, the last price) are the numbers that matter; a tick label
@@ -668,7 +664,7 @@ export function MarketChart({
       currentChart.timeScale().scrollToPosition(FOLLOW_RIGHT_PAD, false);
     }
     lastIndex.current = count - 1;
-  }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, hideDates, clockTicks, chartType, moneyAxis]);
+  }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, clockTicks, chartType, moneyAxis]);
 
   // Click-to-order: a dashed line with its price on the axis at the picked price, for as long as the pick is open. Declared after
   // the data effect, whose series swap (a chart-type change) it follows: the cleanup removes the line from the old series first.
@@ -767,7 +763,7 @@ export function MarketChart({
           <table>
             <thead><tr><th scope="col">Time (ET)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
             <tbody>{bars.map((bar, index) => (
-              <tr key={`${bar.t}-${index}`}><th scope="row">{sourceTimeLabel(bar.t, index, hideDates, rowLabels)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
+              <tr key={`${bar.t}-${index}`}><th scope="row">{rowLabels?.[index] ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
             ))}</tbody>
           </table>
         </div>

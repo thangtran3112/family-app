@@ -35,7 +35,7 @@ test("adherence is never a bare number: it says which day it is, and first to la
   assert.deepEqual(adherenceStat({}), { value: "—", hint: "no scored day yet" });
 });
 
-test("the days table lists the newest day first, by number and weekday, and never a calendar date", () => {
+test("the days table lists the newest day first, by number, weekday and date", () => {
   const rows = overviewDayRows(threadDays);
   assert.equal(rows.length, threadDays.length);
   assert.deepEqual(rows.map((row) => row.n), [...threadDays.map((day) => day.n)].sort((a, b) => b - a));
@@ -45,9 +45,8 @@ test("the days table lists the newest day first, by number and weekday, and neve
   assert.equal(practiced.status, "Practiced");
   assert.match(practiced.result, /^[+−]\$|^\$0\.00$/);
   for (const row of rows) {
-    assert.match(row.title, /^Day \d+ · (Mon|Tue|Wed|Thu|Fri)$/);
+    assert.match(row.title, /^Day \d+ · (Mon|Tue|Wed|Thu|Fri) 20\d\d-\d\d-\d\d$/);
     assert.match(row.href, /^\/practice\/day\?id=\d+$/);
-    assert.equal(/20\d\d-\d\d-\d\d/.test(JSON.stringify(row)), false, "no calendar date");
   }
 });
 

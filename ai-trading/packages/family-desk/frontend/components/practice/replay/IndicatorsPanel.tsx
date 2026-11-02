@@ -4,17 +4,17 @@ import { useMemo } from "react";
 import { RailList, RailValue } from "@/components/ui/RailList";
 import type { ChartBar } from "@/lib/chart-data";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import type { ServerSeries } from "@/lib/desk/workspace";
 import { indicatorGroups } from "@/lib/replay/indicatorsView";
-import type { SessionVwap } from "@/lib/replay/sessionVwap";
 import styles from "./replay.module.css";
 
 /**
  * The replay's left rail (owner, 2026-11-01): RSI and MACD, then VWAP and the two EMAs against the price, each with a word for what it
- * says. The numbers are read off the bars shown on the chart, so they move as the replay does and never look ahead. `timeframe` names
+ * says. The numbers are the server's, from the same cut as the chart and the price, so they move as the replay does and never look ahead. `timeframe` names
  * the candle they are computed on ("15m", "Daily").
  */
-export function IndicatorsPanel({ bars, interval, timeframe, vwap }: { bars: readonly ChartBar[]; interval: string; timeframe: string; /** The session VWAP of these bars, built from one-minute bars (D-168); left out, it is computed from `bars`. */ vwap?: SessionVwap }) {
-  const groups = useMemo(() => indicatorGroups(bars, interval, vwap), [bars, interval, vwap]);
+export function IndicatorsPanel({ bars, interval, timeframe, server }: { bars: readonly ChartBar[]; interval: string; timeframe: string; /** The server's indicator rows laid on `bars` (ADR-0022); left out (the Daily view), the values are computed from `bars`. */ server?: ServerSeries }) {
+  const groups = useMemo(() => indicatorGroups(bars, interval, server), [bars, interval, server]);
   return (
     <section className={styles.sessionSection} aria-label={PRACTICE_COPY.indicatorsTitle} data-testid="indicators-panel">
       <div className={styles.railHead}>

@@ -21,12 +21,11 @@ test("the Practice lane may say order, position and fill; the desk-wide technica
   }
 });
 
-test("the band and the replay badge name the day, the hidden state and the playhead time", () => {
+test("the band names the day and the replay badge names the thread clock's own date and time", () => {
   assert.equal(practiceBandText(null), "Practice · replay of past days · nothing here reaches a broker");
   assert.equal(practiceBandText("2026-10-23"), "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker");
-  assert.equal(practiceBandText("2026-10-23", true), "Practice · replay of a hidden day · nothing here reaches a broker");
-  assert.equal(replayBadgeText("2026-10-23", "2026-10-23T14:07:00Z", false), "Replay · Fri 2026-10-23 · 10:07 AM ET");
-  assert.equal(replayBadgeText("2026-10-23", "2026-10-23T14:07:00Z", true), "Replay · hidden day · 10:07 AM ET");
+  assert.equal(replayBadgeText("2026-10-23T14:07:00Z"), "Replay · Fri 2026-10-23 · 10:07:00 AM ET");
+  assert.equal(replayBadgeText("2026-10-23T05:22:24Z"), "Replay · Fri 2026-10-23 · 1:22:24 AM ET"); // the night after Thursday's list: Friday's date
 });
 
 test("practiceText fills placeholders, and the strings the screens build contain no banned term", () => {
@@ -40,7 +39,12 @@ test("practiceText fills placeholders, and the strings the screens build contain
     noTradesText(0),
     noTradesText(2),
     tradesCountText(1),
+    practiceText("chartNotUpdating", { when: "Fri 2026-10-23 · 7:59:00 PM ET" }),
+    practiceText("marketClosed", { time: "8:00 PM ET" }),
+    practiceText("marketNextOpen", { when: "Fri 2026-10-23 · 10:00 AM ET" }),
   ];
+  assert.equal(practiceText("chartNotUpdating", { when: "8:00 PM ET" }), "Not updating · last data 8:00 PM ET");
+  assert.equal(practiceText("marketClosed", { time: "8:00 PM ET" }), "Market closed · data through 8:00 PM ET");
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
 });
 

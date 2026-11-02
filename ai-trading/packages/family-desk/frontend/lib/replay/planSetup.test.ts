@@ -46,8 +46,8 @@ test("the first day is her pick, else the recorded-universe default when the ser
 test("a draft becomes the contract's JSON: yes/no words, no null, no shares and no risk plan (the thread's, D-007)", () => {
   const spec = planDraftToSpec(ready()) as Record<string, unknown>;
   assert.deepEqual(spec.screen, { filters: [{ id: 4 }], listAt: "08:30", maxList: 30 });
-  assert.equal(spec.hideDates, "yes");
-  assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "11:30" });
+  assert.equal(spec.hideDates, "no"); // the contract still wants the field; a date is always shown
+  assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "16:00" });
   assert.deepEqual(Object.keys(spec.setup as object), ["window", "session", "interval", "armed"]);
   // D-153: the field is required by the contract and always empty, even when a draft carries strategies from elsewhere.
   assert.deepEqual((spec.setup as Record<string, unknown>).armed, []);
@@ -70,7 +70,7 @@ test("a good draft validates; the window may not begin before the list time", ()
   assert.equal(early.ok, false);
   assert.equal(!early.ok && early.problems.window, "Start at must be at or after List time");
   const moved = withListTime(ready(), "10:00");
-  assert.deepEqual([moved.setup.from, moved.setup.to], ["10:00", "11:30"]);
+  assert.deepEqual([moved.setup.from, moved.setup.to], ["10:00", "16:00"]);
   assert.equal(validatePlanDraft(moved).ok, true);
 });
 
@@ -108,8 +108,9 @@ test("filters toggle in order and stop at three; the window follows the list tim
   assert.deepEqual(toggleFilter([1], 2), [1, 2]);
   assert.deepEqual(toggleFilter([1, 2], 1), [2]);
   assert.deepEqual(toggleFilter([1, 2, 3], 4), [1, 2, 3]);
-  assert.deepEqual(windowForList("08:30"), { from: "09:30", to: "11:30" });
-  assert.deepEqual(windowForList("10:45"), { from: "10:45", to: "12:45" });
+  // The day starts at the list time and has no end of its own: the contract's `to` is the regular close.
+  assert.deepEqual(windowForList("08:30"), { from: "09:30", to: "16:00" });
+  assert.deepEqual(windowForList("10:45"), { from: "10:45", to: "16:00" });
   assert.deepEqual(windowForList("15:30"), { from: "15:30", to: "16:00" });
 });
 
@@ -158,7 +159,7 @@ test("picking a filter moves an early list time up and arms nothing; dropping it
   assert.deepEqual([gap.filterIds, gap.listAt, gap.setup.armed], [[1], "08:30", []]); // premarket stays at 8:30, nothing armed
   const volume = withFilterToggled(gap, 2, timings);
   assert.deepEqual([volume.filterIds, volume.listAt, volume.setup.armed], [[1, 2], "10:00", []]);
-  assert.deepEqual([volume.setup.from, volume.setup.to], ["10:00", "11:30"]); // the window follows the list time
+  assert.deepEqual([volume.setup.from, volume.setup.to], ["10:00", "16:00"]); // the start follows the list time; the end is the close
   assert.equal(validatePlanDraft({ ...volume, filterIds: [1, 2] }).ok, true);
   const dropped = withFilterToggled(volume, 2, timings);
   assert.deepEqual([dropped.filterIds, dropped.setup.armed], [[1], []]);

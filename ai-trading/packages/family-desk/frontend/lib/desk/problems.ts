@@ -9,7 +9,7 @@ const group = (text: string, pattern: RegExp) => pattern.exec(text)?.[1];
 
 /** Contract sentences that name a schema path, as plain words. Matched whole, after pydantic's "Value error, " prefix. */
 const PATH_SENTENCES: Readonly<Record<string, string>> = {
-  "window.from must be before window.to": "Focus until must be after Start at",
+  "window.from must be before window.to": "Start at must be before the 4:00 PM close",
   "window.from must be at or after screen.listAt": "Start at must be at or after List time",
   "screen.listAt must be between 04:30 and 15:30 ET": "List time must be between 4:30 AM and 3:30 PM",
 };

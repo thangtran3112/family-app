@@ -41,10 +41,9 @@ test("a swing session is one whose thread is a swing thread", () => {
 });
 
 test("the Daily chart is the rebased bars plus the forming candle, with her hold's lines and no entry arrow or label", () => {
-  const model = dailyChartModel(dailyBlock, false);
+  const model = dailyChartModel(dailyBlock);
   assert.deepEqual(model.bars.map((bar) => bar.t), ["2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14"]);
   assert.equal(model.bars.at(-1)!.c, 191.4);
-  assert.equal(model.offsets, null);
   assert.equal("markers" in model, false, "no entry marker: the chart reads as a broker's, not a guided drill");
   assert.deepEqual(model.levels.map((level) => [level.label, level.price, level.style]), [
     ["Entry", 184.2, "dotted"],
@@ -54,41 +53,32 @@ test("the Daily chart is the rebased bars plus the forming candle, with her hold
 });
 
 test("without a forming candle the chart ends at the prior close, and a hold without a stop draws no stop line", () => {
-  const model = dailyChartModel({ ...dailyBlock, forming: null, holds: [{ ...dailyBlock.holds[0]!, stop_price: null, side: "short" }] }, false);
+  const model = dailyChartModel({ ...dailyBlock, forming: null, holds: [{ ...dailyBlock.holds[0]!, stop_price: null, side: "short" }] });
   assert.equal(model.bars.length, 3);
   assert.equal(model.note, "Daily bars through the prior close");
   assert.deepEqual(model.levels.map((level) => level.label), ["Entry"]);
-  assert.deepEqual(dailyChartModel({ bars: dailyBlock.bars, forming: null, holds: [] }, false).levels, []);
+  assert.deepEqual(dailyChartModel({ bars: dailyBlock.bars, forming: null, holds: [] }).levels, []);
 });
 
-test("with dates hidden no real date reaches the chart", () => {
-  const model = dailyChartModel(dailyBlock, true);
-  const real = new Set([...dailyBlock.bars.map((bar) => bar.t), dailyBlock.forming!.t]);
-  for (const bar of model.bars) assert.equal(real.has(bar.t), false, bar.t);
-  assert.deepEqual(model.offsets, ["D-3", "D-2", "D-1", "Today"]);
-  assert.equal(model.bars.length, dailyBlock.bars.length + 1);
+test("the Daily chart sits on the real dates of its bars, the forming candle last", () => {
+  const model = dailyChartModel(dailyBlock);
+  assert.deepEqual(model.bars.map((bar) => bar.t), [...dailyBlock.bars.map((bar) => bar.t), dailyBlock.forming!.t]);
 });
 
 test("a hold's lines are prices: they draw whatever day it was entered, with no marker to place", () => {
   for (const entry_t of ["2026-07-14", "2025-01-02"]) {
-    const model = dailyChartModel({ ...dailyBlock, holds: [{ ...dailyBlock.holds[0]!, entry_t }] }, true);
+    const model = dailyChartModel({ ...dailyBlock, holds: [{ ...dailyBlock.holds[0]!, entry_t }] });
     assert.equal(model.levels.length, 2, entry_t);
   }
 });
 
-test("the hidden offsets before any price end at D-1", () => {
-  assert.deepEqual(dailyChartModel({ ...dailyBlock, forming: null }, true).offsets, ["D-3", "D-2", "D-1"]);
-});
-
-test("the Daily legend names the bar under the crosshair by offset while dates are hidden", () => {
-  const model = dailyChartModel(dailyBlock, true);
-  assert.equal(dailyLegend("NVDA", model, null).title, "NVDA · Daily · Today · O 190.30 H 191.90 L 189.80 C 191.40");
+test("the Daily legend names the date of the bar under the crosshair, or of the newest bar", () => {
+  const model = dailyChartModel(dailyBlock);
+  assert.equal(dailyLegend("NVDA", model, null).title, "NVDA · Daily · Tue 2026-07-14 · O 190.30 H 191.90 L 189.80 C 191.40");
   const second = model.bars[1]!.t.split("-").map(Number);
   const hover = point({ year: second[0]!, month: second[1]!, day: second[2]! }, 188.2);
-  assert.equal(dailyLegend("NVDA", model, hover).title, "NVDA · Daily · D-2 · O 187.20 H 189.20 L 186.20 C 188.20");
-  const shown = dailyLegend("NVDA", dailyChartModel(dailyBlock, false), null);
-  assert.equal(shown.title, "NVDA · Daily · O 190.30 H 191.90 L 189.80 C 191.40");
-  assert.deepEqual(shown.items, []);
+  assert.equal(dailyLegend("NVDA", model, hover).title, "NVDA · Daily · Fri 2026-07-10 · O 187.20 H 189.20 L 186.20 C 188.20");
+  assert.deepEqual(dailyLegend("NVDA", model, null).items, []);
 });
 
 test("the stop pause's Exit targets the paused name, on the chart or through another name's strip row", () => {
@@ -142,10 +132,9 @@ test("the swing plan rows count the open holds with no limit, then the week when
 });
 
 test("the header says the day, the money and the tape", () => {
-  assert.equal(swingDayChip(swingBrief, "2026-07-14", true), "Day 7 of 20 · Week 2 · Tue");
-  assert.match(swingDayChip(swingBrief, "2026-07-14", false)!, /^Day 7 of 20 · Week 2 · .*2026/);
-  assert.equal(swingDayChip({ ...swingBrief, day_no: null }, "2026-07-14", true), null);
-  assert.equal(swingDayChip(swingBrief, "2026-07-18", true), null);
+  assert.equal(swingDayChip(swingBrief, "2026-07-14"), "Day 7 of 20 · Week 2 · Tue 2026-07-14");
+  assert.equal(swingDayChip({ ...swingBrief, day_no: null }, "2026-07-14"), null);
+  assert.equal(swingDayChip(swingBrief, "2026-07-18"), null);
   assert.equal(swingMoneyLine(swingBrief), "Balance $51,240.00 · Equity $52,010.00 · Free cash $24,720.00");
   assert.equal(swingBriefLine(swingBrief), `${swingMoneyLine(swingBrief)} · SIMULATED`);
   assert.equal(tapeNote("off"), "Tape off · swing prices are one-minute closes");
@@ -156,11 +145,10 @@ test("the header says the day, the money and the tape", () => {
 test("no workspace string says a banned word", () => {
   const strings: string[] = [
     ...Object.values(SWING_PLAY_COPY),
-    dailyChartModel(dailyBlock, true).note,
-    dailyLegend("NVDA", dailyChartModel(dailyBlock, true), null).title,
+    dailyChartModel(dailyBlock).note,
+    dailyLegend("NVDA", dailyChartModel(dailyBlock), null).title,
     ...swingPlanItems({ holdsOpen: 2, maxTrades: 6, maxLossUsd: 500, week: { entries: 3, realizedUsd: -120 } }).flatMap((item) => [item.label, item.detail]),
-    ...dailyChartModel(dailyBlock, true).offsets!,
-    ...dailyChartModel(dailyBlock, true).levels.map((level) => level.label),
+    ...dailyChartModel(dailyBlock).levels.map((level) => level.label),
   ];
   for (const text of strings) assert.equal(containsPracticeBannedTerm(text), false, text);
 });

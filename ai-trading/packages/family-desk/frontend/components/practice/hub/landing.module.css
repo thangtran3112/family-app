@@ -1,6 +1,7 @@
 /* Practice landing and New plan modal (02r2, Paper mocks LEW-0 and X9Y-0). Tokens only; the form controls come from hub.module.css. */
 
 .headerSplit { justify-content: space-between; gap: var(--space-4); }
+.headerActions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-3); }
 .titleBlock { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 
 /* The thread table: one row per thread, the active ones first and the closed ones below. */
