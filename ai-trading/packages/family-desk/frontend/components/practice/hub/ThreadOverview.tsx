@@ -12,6 +12,7 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { parseThreadTab, threadPageHref } from "@/lib/replay/practiceTabs";
+import { routeId } from "@/lib/replay/routeId";
 import { threadName } from "@/lib/replay/threadView";
 import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { DayOverview } from "./DayOverview";
@@ -33,9 +34,8 @@ const POLL_MS = 4000;
  *  this component, so a switch keeps the loaded thread. Reads the URL, so the page wraps it in Suspense. */
 export function ThreadOverview() {
   const params = useSearchParams();
-  const raw = params.get("id");
+  const { id, given } = routeId(params.get("id"));
   const tab = parseThreadTab(params.get("tab"));
-  const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
   const [revision, setRevision] = useState(0);
   const changed = useCallback(() => setRevision((n) => n + 1), []);
   const [replacing, setReplacing] = useState(false);
@@ -66,14 +66,14 @@ export function ThreadOverview() {
     return () => clearTimeout(timer);
   }, [preparing, changed, failures, revision]);
 
-  if (id === null) {
+  if (id === null && !given) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
         <ThreadPicker hint={PRACTICE_COPY.threadPickHintThread} href={threadPageHref} />
       </OverviewShell>
     );
   }
-  if (query.error instanceof DeskApiError && query.error.status === 404) {
+  if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
         <PracticeNotice title={PRACTICE_COPY.threadPageNotFound} />
