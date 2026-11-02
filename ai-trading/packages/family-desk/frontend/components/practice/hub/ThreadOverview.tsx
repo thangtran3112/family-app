@@ -11,7 +11,7 @@ import { backoffMs } from "@/lib/desk/backoff";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDaily, loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { parseThreadTab } from "@/lib/replay/practiceTabs";
+import { parseThreadTab, threadPageHref } from "@/lib/replay/practiceTabs";
 import { threadName } from "@/lib/replay/threadView";
 import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { DayOverview } from "./DayOverview";
@@ -69,7 +69,7 @@ export function ThreadOverview() {
   if (id === null) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
-        <ThreadPicker />
+        <ThreadPicker hint={PRACTICE_COPY.threadPickHintThread} href={threadPageHref} />
       </OverviewShell>
     );
   }

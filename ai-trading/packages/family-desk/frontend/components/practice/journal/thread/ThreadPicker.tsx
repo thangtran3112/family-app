@@ -7,8 +7,11 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { ThreadList } from "./ThreadList";
 import styles from "./threadJournal.module.css";
 
-/** `/practice/journal` with no thread (D-037): says so in plain words and lists her threads, the active one first, each a link to its journal. */
-export function ThreadPicker() {
+/**
+ * No thread chosen (D-037): says so in plain words and lists her threads, the active one first. Each row is a link to the journal
+ * unless the screen names its own next step: `hint` is that step in words and `href` where a row goes (D-183).
+ */
+export function ThreadPicker({ hint = PRACTICE_COPY.threadPickHint, href }: { hint?: string; href?: (threadId: number) => string } = {}) {
   const list = useDeskQuery("replay-threads:picker", (signal) => loadThreads({ signal }));
   return (
     <div className={styles.center}>
@@ -20,8 +23,8 @@ export function ThreadPicker() {
             <EmptyBlock framed={rows.length === 0} title={rows.length === 0 ? PRACTICE_COPY.threadPickNone : PRACTICE_COPY.threadPickTitle} action={{ label: PRACTICE_COPY.openPractice, href: "/practice", primary: rows.length === 0 }}>
               {rows.length > 0 && (
                 <div className={styles.stack}>
-                  <p className={styles.muted}>{PRACTICE_COPY.threadPickHint}</p>
-                  <ThreadList rows={rows} label="Your threads" />
+                  <p className={styles.muted}>{hint}</p>
+                  <ThreadList rows={rows} label="Your threads" href={href} />
                 </div>
               )}
             </EmptyBlock>
