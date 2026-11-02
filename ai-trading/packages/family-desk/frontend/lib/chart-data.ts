@@ -189,16 +189,74 @@ export function wholeAxisLabel(label: string, x: number | null, axisWidth: numbe
 /** How far apart (px) a price-axis tick label and a last-value tag must be to read apart: half the tag's height plus half the label's. */
 export const TAG_CLEARANCE = 16;
 
+/** The height (px) of a price-axis tag in the library: its type plus 2.5 px of padding above and below (17 px at 12 px type). */
+export const TAG_HEIGHT = AXIS_FONT_PX + 2 * ((2.5 / 12) * AXIS_FONT_PX);
+
 /**
  * A price-axis tick label, or "" when it would not print whole: a last-value tag (the "Equity $51,457.00" pill) already sits on it, the tag
  * being the number that matters (D-181), or the pane's edge would cut it (D-199: "368.00" sat on the bottom edge and lost its lower half).
- * `y` is the tick's place on the axis, `tagYs` the tags', `paneHeight` the axis' height; without one the
+ * `y` is the tick's place on the axis, `tagYs` where the tags are drawn (`drawnTagYs`), `paneHeight` the axis' height; without one the
  * edge gives no verdict. An axis may drop a label; it may not cut one (D-180).
  */
 export function clearTickLabel(label: string, y: number | null, tagYs: readonly number[], paneHeight: number | null = null): string {
   if (y === null) return label;
   if (paneHeight !== null && (y < AXIS_FONT_PX / 2 || y > paneHeight - AXIS_FONT_PX / 2)) return "";
   return tagYs.every((tag) => Math.abs(tag - y) >= TAG_CLEARANCE) ? label : "";
+}
+
+/**
+ * Where the library draws its price-axis tags (D-200): `ys` are the tags' prices on the axis (`priceToCoordinate`), the answer their places,
+ * in the same order. A tag sits on its price unless it would overlap another, and then the library pushes it a tag height off the one
+ * nearer the centre, so a tag crowded by its neighbours is drawn up to several tag heights from its price and covers a tick that was clear of
+ * the price. This is the library's own `_fixLabelOverlap` (5.2) for tags of one height: the tags above `centerY` (the main series' own tag,
+ * the one it takes for the centre; the middle of the pane when unknown) stack upward, those below stack downward, and a tag within half
+ * its height of the pane's edge is pulled inside. Calibration: `TAG_HEIGHT`, if the chart's type size ever changes.
+ */
+export function drawnTagYs(ys: readonly number[], paneHeight: number, centerY: number | null = null): number[] {
+  const half = Math.floor(TAG_HEIGHT / 2);
+  const center = centerY ?? paneHeight / 2;
+  const at = ys.map((y) => (y > -half && y < half ? half : y > paneHeight - half && y < paneHeight + half ? paneHeight - half : y));
+  const above = ys.flatMap((y, i) => (y <= center ? [i] : [])).sort((a, b) => ys[b]! - ys[a]!);
+  const below = ys.flatMap((y, i) => (y > center ? [i] : []));
+  if (above.length > 0 && below.length > 0) below.push(above[0]!);
+  below.sort((a, b) => ys[a]! - ys[b]!);
+  const stack = (views: number[], direction: 1 | -1) => {
+    if (views.length === 0) return;
+    let groupStart = 0;
+    let room = Math.max(0, direction === 1 ? paneHeight / 2 - (at[views[0]!]! - TAG_HEIGHT / 2) : at[views[0]!]! - TAG_HEIGHT / 2 - paneHeight / 2);
+    for (let n = 1; n < views.length; n++) {
+      const [view, prev] = [views[n]!, views[n - 1]!];
+      const [coordinate, prevCoordinate] = [at[view]!, at[prev]!];
+      if (direction === 1 ? coordinate > prevCoordinate - TAG_HEIGHT : coordinate < prevCoordinate + TAG_HEIGHT) {
+        at[view] = prevCoordinate - TAG_HEIGHT * direction;
+        const edge = at[view]! - (direction * TAG_HEIGHT) / 2;
+        if ((direction === 1 ? edge < 0 : edge > paneHeight) && room > 0) {
+          // The group is up against the pane's edge: it moves back along the axis, as far as there is room.
+          const shift = Math.min(direction === 1 ? -1 - edge : edge - paneHeight, room);
+          for (const moved of views.slice(groupStart)) at[moved] = at[moved]! + direction * shift;
+          room -= shift;
+        }
+      } else {
+        groupStart = n;
+        room = direction === 1 ? prevCoordinate - TAG_HEIGHT - coordinate : coordinate - (prevCoordinate + TAG_HEIGHT);
+      }
+    }
+  };
+  stack(above, 1);
+  stack(below, -1);
+  return at;
+}
+
+/**
+ * The value a series' axis tag shows: the library prints the one at the last bar in view, so a chart scrolled back shows an older value than
+ * the newest (D-200). `right` is the visible range's right edge as a bar index; the nearest value at or before it, null when there is none.
+ */
+export function valueAtOrBefore(values: readonly (number | null)[], right: number): number | null {
+  for (let index = Math.min(Math.ceil(right), values.length - 1); index >= 0; index--) {
+    const value = values[index];
+    if (value !== null && value !== undefined) return value;
+  }
+  return null;
 }
 
 /**

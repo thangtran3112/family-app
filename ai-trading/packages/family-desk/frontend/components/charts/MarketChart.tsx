@@ -22,6 +22,7 @@ import {
   candlestickData,
   chartTime,
   clearTickLabel,
+  drawnTagYs,
   crosshairPoint,
   followsNewest,
   sourceTimeLabel,
@@ -33,6 +34,7 @@ import {
   rightOffsetOption,
   seriesMarkers,
   shadingData,
+  valueAtOrBefore,
   volumeData,
   wholeAxisLabel,
   type ChartBar,
@@ -124,7 +126,7 @@ export type MarketChartProps = {
   focus?: { time: string; at: number } | null;
   /** Replay: a level line carries no title, only its number on the price axis; its name (`label`) shows in a tooltip while the cursor is on the line. */
   levelTips?: boolean;
-  /** Price ticks keep clear of the tags and of the pane's edge (D-199), as the replay chart's do; a chart with indicator panes cannot (see the formatter). */
+  /** Price ticks keep clear of the tags and of the pane's edge (D-199, D-200), as the replay chart's do; a chart with indicator panes cannot (see the formatter). */
   guardAxis?: boolean;
   /** Replay click-to-order: a click on the price pane picks a price (snapped onto a level line when it is on one) and draws what this returns beside the click, with a dashed line at the price. `close` dismisses it. Escape and a press elsewhere dismiss it too. */
   renderPick?: (price: number, close: () => void) => ReactNode;
@@ -270,6 +272,7 @@ export function MarketChart({
   const lastIndex = useRef(-1);
   const rightOffset = useRef<number | null>(null);
   const tickFormat = useRef<TickFormat | null>(null);
+  const priceTickFormat = useRef<((prices: readonly number[]) => string[]) | null>(null);
   const paneSignature = useRef("");
   const paneLayout = useRef(panes);
   const [ready, setReady] = useState(false);
@@ -350,6 +353,8 @@ export function MarketChart({
         cancelAnimationFrame(relabel);
         relabel = requestAnimationFrame(() => {
           if (tickFormat.current) currentChart.applyOptions({ timeScale: { tickMarkFormatter: tickFormat.current } });
+          // The price ticks answer to where the tags are drawn, which moves with the last bar in view (D-200).
+          if (priceTickFormat.current) currentChart.applyOptions({ localization: { tickmarksPriceFormatter: priceTickFormat.current } });
         });
       };
       scale.subscribeVisibleLogicalRangeChange(relabelSoon);
@@ -413,6 +418,7 @@ export function MarketChart({
       detachPinch?.();
       detachRelabel?.();
       tickFormat.current = null;
+      priceTickFormat.current = null;
       chart.current?.remove();
       chart.current = null;
       main.current = null;
@@ -469,20 +475,33 @@ export function MarketChart({
     const formatTick: TickFormat = (time, tickType) => wholeLabel(tickLabel(time, tickType), time);
     tickFormat.current = formatTick;
     // The tags on the price axis (the overlays' last values, the level lines' numbers, the last price) are the numbers that matter; a tick label
-    // under one is left out, never cut (D-181, D-196), and so is one the pane's edge would cut (D-199). The money axis and the charts that opt in
-    // (`levelTips`, `guardAxis`) do this; a chart with indicator panes does not, because the library takes one tick formatter for every price
-    // scale and the panes' scales are not this one.
-    const tagPrices = axisTagPrices(overlays.map(({ values }) => currentValue(values)), levels, lastPricePill ? bars.reduce<number | null>((found, bar) => bar.c ?? found, null) : null);
-    const tagYs = () => {
+    // under one is left out, never cut (D-181, D-196), and so is one the pane's edge would cut (D-199). The library prints a series' tag at the
+    // last bar in view and stacks crowded tags apart, so the tags are measured where it draws them, not at the newest value's price (D-200).
+    // The money axis and the charts that opt in (`levelTips`, `guardAxis`) do this; a chart with indicator panes does not, because the library
+    // takes one tick formatter for every price scale and the panes' scales are not this one.
+    const closes = bars.map((bar) => bar.c ?? null);
+    const drawnTags = () => {
       const series = main.current;
-      if (!series) return [];
-      return tagPrices.flatMap((price) => {
+      // Not `series.getPane()`: the library formats ticks while a chart-type switch is removing the old series, and a removed series throws there.
+      const height = currentChart.panes()[0]?.getHeight();
+      if (!series || height === undefined) return { ys: [], height: null };
+      const range = currentChart.timeScale().getVisibleLogicalRange();
+      const right = range ? range.to : bars.length - 1;
+      const prices = axisTagPrices(overlays.map(({ values }) => valueAtOrBefore(values, right)), levels, lastPricePill ? valueAtOrBefore(closes, right) : null);
+      const ys = prices.flatMap((price) => {
         const y = series.priceToCoordinate(price);
         return y === null ? [] : [y];
       });
+      const centre = valueAtOrBefore(closes, right);
+      return { ys: drawnTagYs(ys, height, centre === null ? null : series.priceToCoordinate(centre)), height };
     };
     const clearsTags = moneyAxis !== undefined || ((levelTips || guardAxis) && panes.length === 0);
     const priceTick = moneyAxis ? moneyAxis.tick : (price: number) => main.current?.priceFormatter().format(price) ?? "";
+    const tickmarksPriceFormatter = (prices: readonly number[]) => {
+      const { ys, height } = drawnTags();
+      return prices.map((price) => clearTickLabel(priceTick(price), main.current?.priceToCoordinate(price) ?? null, ys, height));
+    };
+    priceTickFormat.current = clearsTags ? tickmarksPriceFormatter : null;
     currentChart.applyOptions({
       timeScale: {
         timeVisible: interval !== "1d" && interval !== "1w",
@@ -492,16 +511,7 @@ export function MarketChart({
       localization: {
         timeFormatter: timeLabel,
         ...(moneyAxis ? { priceFormatter: moneyAxis.label } : {}),
-        ...(clearsTags
-          ? {
-              tickmarksPriceFormatter: (prices: readonly number[]) => {
-                const tags = tagYs();
-                // Not `series.getPane()`: a chart-type switch formats ticks while it removes the old series, and a removed series throws there.
-                const height = currentChart.panes()[0]?.getHeight() ?? null;
-                return prices.map((price) => clearTickLabel(priceTick(price), main.current?.priceToCoordinate(price) ?? null, tags, height));
-              },
-            }
-          : {}),
+        ...(clearsTags ? { tickmarksPriceFormatter } : {}),
       },
     });
     rightOffset.current = wantedOffset;
