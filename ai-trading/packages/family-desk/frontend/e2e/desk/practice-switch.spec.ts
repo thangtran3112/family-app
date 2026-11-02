@@ -435,10 +435,10 @@ test.describe("Practice: switching names", () => {
     await expect(list.getByRole("row", { name: /PANW|XOM/ })).toHaveCount(0);
     await expect(page.getByText(/the 2 symbols the Desk scanned that morning, as recorded/)).toBeVisible();
 
-    // No name practiced yet, so no day clock: the button waits and says why.
+    // The day's clock runs from its start, so the button needs no practiced name.
     const rescan = page.getByRole("button", { name: PRACTICE_COPY.dayRescan });
-    await expect(rescan).toBeDisabled();
-    await expect(page.getByText(PRACTICE_COPY.dayRescanNeedsClock)).toBeVisible();
+    await expect(rescan).toBeEnabled();
+    await expect(page.getByText(PRACTICE_COPY.dayRescanNeedsClock)).toHaveCount(0);
 
     // Practice TSLA five bars in (the clock reads 9:35), come back, and scan.
     await page.getByRole("button", { name: "Open TSLA" }).first().click();

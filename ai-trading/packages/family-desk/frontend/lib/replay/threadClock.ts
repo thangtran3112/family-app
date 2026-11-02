@@ -6,9 +6,9 @@ import { SPEEDS, type Speed } from "./clock.ts";
 import { ms } from "./time.ts";
 
 // The day-trade thread's clock as the Summary sees it (ADR-0018). The clock, the positions and the balance live on the server; this
-// file only reads them and asks for changes. `extrapolate` moves the TIME LABEL between two polls (clock + elapsed x speed, capped at
-// the close). It never prices anything: a balance needs prices after the clock, which the server must not send, so it comes from the
-// next poll. Every dollar is SIMULATED.
+// file only reads them and asks for changes. The clock is real time, shifted: it runs through the close, the night and the weekend and
+// stops only when she pauses it. `extrapolate` moves the TIME LABEL between two polls (clock + elapsed x speed, no cap). It never prices
+// anything: a balance needs prices after the clock, which the server must not send, so it comes from the next poll. Every dollar is SIMULATED.
 
 const finite = z.number().finite();
 const timestamp = z.iso.datetime({ offset: true });
@@ -25,7 +25,7 @@ export const ClockAccountSchema = z.object({
 
 export const ThreadClockSchema = z.object({
   thread_id: finite.int(),
-  state: z.enum(["no_day", "listed", "paused", "running"]),
+  state: z.enum(["no_day", "paused", "running"]),
   day_list_id: finite.int().nullable(),
   day_no: finite.int().nullable(),
   running: z.boolean(),
@@ -34,6 +34,7 @@ export const ThreadClockSchema = z.object({
   window_start: timestamp.nullable(),
   window_end: timestamp.nullable(),
   focus_end: timestamp.nullable(),
+  next_start: timestamp.nullable(),
   server_now: timestamp,
   account: ClockAccountSchema.nullable(),
   label: z.string(),
@@ -64,37 +65,30 @@ export const isSpeed = (value: number): value is Speed => (SPEEDS as readonly nu
 
 /**
  * The clock label `elapsedMs` of wall time after the poll that read `clock`. Only a running clock moves, at `speed` market seconds per
- * wall second, and never past the window end; anything else shows the server's time as it is.
+ * wall second, and it has no end: the close, the night and the weekend are ordinary time. Anything else shows the server's time as it is.
  */
-export function extrapolate(clock: Pick<ThreadClock, "clock" | "running" | "speed" | "window_end" | "state">, elapsedMs: number): string | null {
+export function extrapolate(clock: Pick<ThreadClock, "clock" | "running" | "speed" | "state">, elapsedMs: number): string | null {
   if (clock.clock === null) return null;
   if (!clock.running || clock.state !== "running" || elapsedMs <= 0) return clock.clock;
-  const target = ms(clock.clock) + elapsedMs * clock.speed;
-  return new Date(clock.window_end === null ? target : Math.min(target, ms(clock.window_end))).toISOString();
+  return new Date(ms(clock.clock) + elapsedMs * clock.speed).toISOString();
 }
 
 /** The pill beside the time. */
 export function clockStateText(clock: Pick<ThreadClock, "state" | "speed">): string {
   switch (clock.state) {
     case "running": return practiceText("clockStateRunning", { speed: clock.speed });
-    case "listed": return PRACTICE_COPY.clockStateListed;
     case "paused": return PRACTICE_COPY.clockStatePaused;
     case "no_day": return "";
   }
 }
 
-/** What the controls may do now: Play, Step and Jump need a started day; Skip needs any open day. The clock has no other stop than Pause. */
+/** What the board may do: Play or Pause, the speed and Skip day need an open day, and nothing else is needed (no name has to be opened). */
 export function clockControls(clock: Pick<ThreadClock, "state"> | null) {
-  const started = clock !== null && (clock.state === "running" || clock.state === "paused");
-  return {
-    play: clock !== null && (clock.state === "paused" || clock.state === "running"),
-    jump: clock !== null && (clock.state === "paused" || clock.state === "running"),
-    started,
-    skip: clock !== null && clock.state !== "no_day",
-  };
+  const open = clock !== null && clock.state !== "no_day";
+  return { play: open, started: open, skip: open };
 }
 
-/** How far through the market's day the clock is, 0 to 1 (0 before the day starts). */
+/** How far through the current day's tape the clock is, 0 to 1: 1 once it is past the extended session's end (the night, the weekend). */
 export function clockProgress(clock: Pick<ThreadClock, "clock" | "window_start" | "window_end">, shown: string | null): number {
   if (shown === null || clock.window_start === null || clock.window_end === null) return 0;
   const span = ms(clock.window_end) - ms(clock.window_start);
@@ -108,7 +102,7 @@ export function focusProgress(clock: Pick<ThreadClock, "window_start" | "window_
   return span <= 0 ? null : Math.min(1, Math.max(0, (ms(clock.focus_end) - ms(clock.window_start)) / span));
 }
 
-/** The line after the market closed on its own: the day that ended and where the next one stands. */
+/** The line after the clock reached the next session on its own: the day that ended and where the next one stands. */
 export const rolledText = (from: number | null, next: { day_no: number | null }): string =>
   next.day_no !== null ? practiceText("clockRolled", { from: from ?? "", next: next.day_no }) : practiceText("clockRolledDone", { from: from ?? "" });
 

@@ -354,23 +354,22 @@ def test_the_thread_clock_routes_play_sync_skip_and_refuse(world, db_session) ->
     tid = client.get(f"{BASE}/daily", headers=auth_headers()).json()["thread"]["thread"]["id"]
     clock_url = f"{BASE}/threads/{tid}/clock"
 
-    # Before any name is opened the day is listed: no clock, an account, and Play is a plain 409.
+    # Before any name is opened the day's clock stands at its start, paused, with an account; Play needs no name.
     listed = client.get(clock_url, headers=auth_headers()).json()
-    assert (listed["state"], listed["clock"], listed["day_list_id"], listed["running"]) == (
-        "listed",
-        None,
-        list_id,
-        False,
+    assert (listed["state"], listed["day_list_id"], listed["running"]) == ("paused", list_id, False)
+    assert pd.Timestamp(listed["clock"]) == et(DAYS[0], "09:30") and pd.Timestamp(listed["window_start"]) == et(
+        DAYS[0], "09:30"
     )
+    assert pd.Timestamp(listed["window_end"]) == et(DAYS[0], "20:00")  # the day's tape: the extended session
+    assert pd.Timestamp(listed["next_start"]) == et(
+        DAYS[1], "09:30"
+    )  # when the day hands over: the next session's start
     assert listed["account"]["balance"] == 50_000.0 and "Simulated" in listed["label"]
-    assert client.post(clock_url, json={"running": True}, headers=auth_headers()).status_code == 409
-
     sid = client.post(f"{BASE}/day-lists/{list_id}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()).json()[
         "id"
     ]
     paused = client.get(clock_url, headers=auth_headers()).json()
     assert paused["state"] == "paused" and pd.Timestamp(paused["clock"]) == et(DAYS[0], "09:30")
-    assert pd.Timestamp(paused["window_end"]) == et(DAYS[0], "16:00")  # the market's close
     assert pd.Timestamp(paused["focus_end"]) == et(DAYS[0], "11:30")  # her window: a mark, not an end
     assert paused["account"]["equity_usd"] == 50_000.0 and "pause" not in paused
 
@@ -413,7 +412,8 @@ def test_the_thread_clock_routes_play_sync_skip_and_refuse(world, db_session) ->
     assert skipped.status_code == 200, skipped.text
     body = skipped.json()
     assert body["ended_day_list_id"] == list_id and body["next_day_list_id"] not in (None, list_id)
-    assert body["clock"]["state"] == "listed" and body["clock"]["day_list_id"] == body["next_day_list_id"]
+    assert body["clock"]["state"] == "paused" and body["clock"]["day_list_id"] == body["next_day_list_id"]
+    assert pd.Timestamp(body["clock"]["clock"]) == et(DAYS[1], "09:30")  # the next session's start
     assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["status"] == "ended"
 
 

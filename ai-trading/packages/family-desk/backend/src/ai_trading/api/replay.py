@@ -298,7 +298,9 @@ def advance_session(
         min_notional=body.min_notional,
         max_prints=body.max_prints,
     )
-    if frame.get("at_end"):  # the close reached on a chart: the day rolls over now, not when the Summary is next opened
+    if frame.get(
+        "thread_clock"
+    ):  # a running clock may have reached the next session: hand over now, not when the Summary is next opened
         _roll_closed_day(
             db, request, background, services, lambda: clock_mod.roll_of_session(db, user.id, session_id, services)
         )
@@ -405,8 +407,8 @@ def end_session(
 
 
 def _roll_closed_day(db: Session, request: Request, background: BackgroundTasks, services: Services, roll) -> None:
-    """Run `roll` (the day rolls over when the clock is at the close) and, when the next day's data still needs
-    preparing, start that prep the way every open does."""
+    """Run `roll` (the day hands over when the clock reaches the next trading day's start) and, when the next day's data
+    still needs preparing, start that prep the way every open does."""
     opened = _call(roll)
     if opened is not None and opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
@@ -834,10 +836,10 @@ def get_thread_clock(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the
-    simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the
-    answer whether or not anyone was looking in between. A clock that reached the close rolls the day over first (the
-    answer is then the next day's). Poll it; it is idempotent."""
+    """The day thread's clock now (ADR-0018): its state, speed, the simulated time, the day's tape, when the next day
+    starts, and the simulated account at that time (balance, open P/L, equity). A running clock is brought to now
+    first, so this is the answer whether or not anyone was looking in between. A clock that reached the next trading
+    day's start hands the day over first (the answer is then the next day's). Poll it; it is idempotent."""
     _roll_closed_day(db, request, background, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
     return _call(clock_mod.read, db, user.id, thread_id, services)
 
@@ -852,9 +854,9 @@ def control_thread_clock(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump
-    it to a time. Forward only; a step or jump stops at the close like Play does. 409 before the day
-    has started. Time then runs on the server until she pauses it, and the day rolls over at the close."""
+    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), or (tests, tools) step it a bar or to the next
+    signal, or jump it to a time. Forward only. 409 without an open day. Time then runs on the server until she pauses
+    it, through the close and the night; the day hands over at the next trading day's start."""
     _call(
         clock_mod.control,
         db,
@@ -879,8 +881,9 @@ def skip_thread_day(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Skip to the next day: the clock runs to the close, the day ends (every open position flattens at that close)
-    and the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then."""
+    """Skip to the next day: the clock jumps to the next trading day's start (over the night and the weekend), the day
+    ends (every open position flattens at its tape's end) and the next day's list opens with the clock there. The next
+    list may wait on its data (`next_day_list_id` null): poll the hub then."""
     ended, opened = _call(clock_mod.skip_day, db, user.id, thread_id, services)
     if opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)

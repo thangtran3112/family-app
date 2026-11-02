@@ -5,15 +5,17 @@ import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helper
 import { THREAD_URL, openFirstDay, startThread } from "./hub-helpers";
 import { placeOrder } from "./swing-helpers";
 
-// The day thread's clock lives on the server (ADR-0018): it keeps running when she leaves a chart for the Portfolio, closes the
-// page or signs out; its controls are on the Summary and nowhere else; Skip day runs it to the close and opens the next day; and
-// the account is priced at the clock; her plan's window is a mark, and the market's close rolls the day over. The stub holds TSLA on Fri 2026-09-25, replayed 09:30 to 09:40 ET: ten market minutes, so
-// at 5x the whole window is two wall minutes. Every step below is real wall time against the real server.
+// The day thread's clock lives on the server (ADR-0018) and is real time, shifted: it keeps running when she leaves a chart for the
+// Portfolio, closes the page or signs out; its whole board (Play or Pause, speed, Skip day) is on the Summary and nowhere else, with
+// no stock opened first; it shows the full date and ticks each second; it does not stop or jump at the close, the night or the weekend
+// (the day hands over only when the clock reaches the next session's start); Skip day jumps to that start; and the account is priced at
+// the clock. Her plan's window is a mark. The stub holds TSLA on Fri 2026-09-25, replayed 09:30 to 09:40 ET. Every step below is real
+// wall time against the real server.
 
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const readout = (page: Page) => page.getByTestId("thread-clock-time");
 
-/** "9:31:20 AM ET" to seconds since midnight. */
+/** "Fri, Sep 25 · 9:31:20 AM ET" to seconds since midnight. */
 function seconds(text: string | null): number {
   const match = /(\d+):(\d+):(\d+)\s*(AM|PM)/.exec(text ?? "");
   if (!match) throw new Error(`not a clock: ${text}`);
@@ -96,6 +98,30 @@ test.describe("Practice: the thread clock", () => {
     await expectCleanScreen(page);
   });
 
+  test("the board is on the Summary before any stock is opened: the clock plays with the Day list untouched and shows the full date, ticking", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await startThread(page, context);
+    await openFirstDay(page); // the Day list: no stock opened, and none will be
+    await openDesk(page, summaryUrl(threadId));
+    await expect(panel(page)).toBeVisible();
+    await expect(page.getByText(/Open a stock from the Day list/)).toHaveCount(0);
+    for (const name of ["Play", "Skip day", "End day", "1x", "2x", "5x", "10x"]) await expect(panel(page).getByRole("button", { name, exact: true })).toBeEnabled();
+    for (const name of ["Step"]) await expect(panel(page).getByRole("button", { name, exact: true })).toHaveCount(0); // only Pause, the speed and Skip day change time
+    await expect(panel(page).getByRole("button", { name: /^Jump/ })).toHaveCount(0);
+    await expect(readout(page)).toHaveText(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // a full date, never a bare time
+    const paused = await clockOf(page);
+
+    await play(page, "5x");
+    const first = await clockOf(page);
+    await page.waitForTimeout(2500);
+    expect(await clockOf(page), "the label ticks live between polls, at 5x").toBeGreaterThanOrEqual(first + 8);
+    expect(first).toBeGreaterThanOrEqual(paused);
+    const body = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/clock`)).json();
+    expect(body.state).toBe("running");
+    expect(body.next_start).not.toBeNull();
+    await expectCleanScreen(page);
+  });
+
   test("the account is priced at the clock: equity moves with an open position while time runs and nobody is on the chart", async ({ page, context }) => {
     test.setTimeout(240_000);
     const threadId = await startDayOnTsla(page, context);
@@ -124,31 +150,49 @@ test.describe("Practice: the thread clock", () => {
     expect(Date.parse(body.clock)).toBeLessThanOrEqual(Date.parse(body.window_end)); // never past the window: nothing later is read
   });
 
-  test("her practice window is only a mark: the market closes at 4:00 PM, and reaching the close rolls the day over with nothing to press", async ({ page, context }) => {
+  test("nothing happens at the close: the clock flows through after-hours and the night, and the day hands over only at the next session's start", async ({ page, context }) => {
     test.setTimeout(240_000);
     const threadId = await startDayOnTsla(page, context);
     await placeOrder(page, "Buy");
     await page.getByRole("tab", { name: "Summary" }).click();
     await page.waitForURL(THREAD_URL);
 
-    // The plan's window ends long before the market does: the track carries it as a mark, and the clock's own end is the close.
-    const before = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/clock`)).json();
+    // The plan's window ends long before the tape does: the track carries it as a mark. The tape is the extended session (8:00 PM ET).
+    const clockUrl = `${origin}/api/desk/replay/threads/${threadId}/clock`;
+    const before = await (await context.request.get(clockUrl)).json();
     expect(Date.parse(before.focus_end)).toBeLessThan(Date.parse(before.window_end));
-    expect(new Date(before.window_end).toISOString()).toMatch(/T20:00:00\.000Z$/); // 4:00 PM ET
+    expect(new Date(before.window_end).toISOString()).toMatch(/T00:00:00\.000Z$/); // 8:00 PM ET
     await expect(page.getByTestId("thread-clock-focus")).toBeAttached();
+    const jump = async (to: number) => {
+      const response = await context.request.post(clockUrl, { data: { to: new Date(to).toISOString() } });
+      expect(response.ok(), await response.text()).toBeTruthy();
+      return response.json();
+    };
 
-    // Jump to the close: no "the clock reached the close" prompt and no End day to press. The day ended and Day 2 is listed.
-    await panel(page).getByRole("button", { name: /^Jump/ }).click();
-    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the close/ }).click();
-    await expect(page.getByTestId("thread-clock-rolled")).toContainText(/^Day 1 closed with the market/, { timeout: 30_000 });
-    await expect(page.getByTestId("thread-clock-state")).toContainText(PRACTICE_COPY.clockStateListed);
+    // 5:00 PM ET, past the 4:00 close: still Day 1, nothing rolled, nothing stopped, nothing to press.
+    const hour = 3_600_000;
+    const afterHours = await jump(Date.parse(before.window_end) - 3 * hour);
+    expect(afterHours.day_no).toBe(1);
+    await expect(readout(page)).toContainText(/Sep 25 · 5:0\d:\d{2} PM ET/, { timeout: 15_000 });
+    // The night after the tape ended: the same day, the clock still has a full date and time.
+    const night = await jump(Date.parse(before.window_end) + 5 * hour);
+    expect(night.day_no).toBe(1);
+    await expect(readout(page)).toContainText(/Sep 26 · 1:0\d:\d{2} AM ET/, { timeout: 15_000 });
+    await expect(page.getByTestId("thread-clock-rolled")).toHaveCount(0);
     await expect(page.getByText(/reached the close/)).toHaveCount(0);
+    expect((await (await context.request.get(clockUrl)).json()).account.positions).toBe(1); // the position waits, open
+
+    // The clock reaching the next session is the hand-over: Day 1 ends (the position books), Day 2 is listed, the clock carries on.
+    const next = await jump(Date.parse(before.next_start));
+    expect(next.day_no).toBe(2);
+    await expect(page.getByTestId("thread-clock-rolled")).toContainText(/^The clock reached the next session\. Day 1 ended/, { timeout: 30_000 });
+    await expect(readout(page)).toContainText(/ 9:3\d:\d{2} AM ET/);
     const fills = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/fills`)).json();
     expect(fills.fills.map((f: { action: string; source: string }) => [f.action, f.source])).toEqual([["sell", "auto"], ["buy", "her"]]);
     await expectCleanScreen(page);
   });
 
-  test("Skip day runs to the close, closes the position at it and opens the next day", async ({ page, context }) => {
+  test("Skip day jumps to the next session, closes the position at the last price of the day and opens the next day", async ({ page, context }) => {
     test.setTimeout(240_000);
     const threadId = await startDayOnTsla(page, context);
     await placeOrder(page, "Buy");
@@ -159,9 +203,10 @@ test.describe("Practice: the thread clock", () => {
     await panel(page).getByRole("button", { name: PRACTICE_COPY.clockSkipConfirm, exact: true }).click();
     await expect(panel(page).getByText(/^Skipped/)).toBeVisible({ timeout: 90_000 });
 
-    // Day 1 ended with its trade booked, and Day 2 is the open day: not started, so nothing runs yet.
+    // Day 1 ended with its trade booked, and Day 2 is the open day: its clock stands at the day's start, paused as the old one was.
     await expect(page.getByRole("link", { name: /^Open Day 2$/ }).or(page.getByRole("button", { name: /^Start Day 2$/ }))).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByTestId("thread-clock-state")).toContainText(PRACTICE_COPY.clockStateListed);
+    await expect(page.getByTestId("thread-clock-state")).toContainText(PRACTICE_COPY.clockStatePaused);
+    await expect(readout(page)).toContainText(/ 9:3\d:\d{2} AM ET/);
     const days = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}`)).json();
     expect(days.daily).toHaveLength(1);
     expect(days.daily[0].kind).toBe("practiced");

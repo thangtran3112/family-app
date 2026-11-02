@@ -663,7 +663,9 @@ class ReplayDayList(Base):
     # symbols read of total, a run token. Null until the first re-scan.
     rescan_job: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Alembic 0019 (ADR-0018): the thread's server-side clock. `revealed_through` is the simulated time as of
-    # `clock_anchor_at`; while `clock_running` it advances `clock_speed` x wall time since then, settled on read.
+    # `clock_anchor_at`; while `clock_running` it advances `clock_speed` x wall time since then, settled on read. It is
+    # real time shifted: it exists from the day's opening, runs past the close and the night, and hands over to the next
+    # day's list when it reaches that day's start.
     clock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default=text("1"))
     clock_anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
