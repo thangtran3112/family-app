@@ -14,6 +14,14 @@ test("V-Strategies-03: builder parameter names read as trader words, not identif
   assert.equal(paramLabel("unmappedThing"), "Unmapped thing");
 });
 
+// D-205: the screener's error summary spells a field as its control labels it (the summary used to say "Avg volume days").
+test("D-205: the screener's liquidity and rank fields read in the summary as their controls label them", () => {
+  assert.equal(paramLabel("avgVolumeDays"), "Average volume days");
+  assert.equal(paramLabel("minPrice"), "Minimum price ($)");
+  assert.equal(paramLabel("minAvgVolume"), "Minimum average volume");
+  assert.equal(paramLabel("by"), "Rank by");
+});
+
 test("option labels: operators, series, levels, run-on and size types are plain English", () => {
   assert.equal(optionLabel("crosses_above"), "crosses above");
   assert.equal(optionLabel("gte"), "is at least");

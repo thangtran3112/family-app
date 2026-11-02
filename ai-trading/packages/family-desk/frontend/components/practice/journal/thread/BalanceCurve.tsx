@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
+import { useChartBox } from "@/lib/desk/useChartBox";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { endLabelSpots, placeLabel, startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
 import { curveLayout, dayTickStep, type Box } from "@/lib/replay/threadChart";
@@ -15,9 +16,10 @@ const BOX: Box = { width: 760, height: 240, left: 76, right: 24, top: 16, bottom
 /** The balance at the end of each day (02r board P8). Practiced days are solid dots, skipped days open circles, the newest
  *  point amber; the red shading is the part of the line below the starting balance. Colours come from the CSS classes. */
 export function BalanceCurve({ thread }: { thread: Thread }) {
+  const [ref, box] = useChartBox(BOX);
   const clipId = `below-start-${useId().replace(/\W/g, "")}`;
   const { startingBalance, stats } = thread.thread;
-  const layout = curveLayout(thread.curve, thread.daily, startingBalance, BOX);
+  const layout = curveLayout(thread.curve, thread.daily, startingBalance, box);
   const { plot, startY, points, lowest, now } = layout;
   const bottom = plot.y + plot.height;
   const last = points.length - 1;
@@ -40,42 +42,44 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, ${now ? `after day ${lastDay} ${formatBalance(now.balance)}` : `now ${formatBalance(stats.balance)}`}, ${lowText}.`;
 
   return (
-    <MiniChartFrame
-      box={BOX}
-      label={summary}
-      yTicks={layout.ticks.map((tick) => ({ key: tick.value, y: tick.y, label: formatAxisDollars(tick.value) }))}
-      start={{ y: startY, note }}
-    >
-      <defs>
-        <clipPath id={clipId}>
-          <rect x={plot.x} y={startY} width={plot.width} height={bottom - startY} />
-        </clipPath>
-      </defs>
-      {drawn && (
-        <>
-          <path d={layout.area} clipPath={`url(#${clipId})`} className={styles.below} />
-          <path d={layout.line} className={styles.line} />
-        </>
-      )}
-      {drawn &&
-        points.map((point, index) =>
-          index === last && point.n > 0 ? (
-            <circle key={point.n} cx={point.x} cy={point.y} r={4.5} className={styles.dotNow} />
-          ) : (
-            <circle key={point.n} cx={point.x} cy={point.y} r={3.5} className={point.skipped ? styles.dotOpen : styles.dot} />
-          ),
+    <div ref={ref}>
+      <MiniChartFrame
+        box={box}
+        label={summary}
+        yTicks={layout.ticks.map((tick) => ({ key: tick.value, y: tick.y, label: formatAxisDollars(tick.value) }))}
+        start={{ y: startY, note }}
+      >
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={plot.x} y={startY} width={plot.width} height={bottom - startY} />
+          </clipPath>
+        </defs>
+        {drawn && (
+          <>
+            <path d={layout.area} clipPath={`url(#${clipId})`} className={styles.below} />
+            <path d={layout.line} className={styles.line} />
+          </>
         )}
-      {points.map((point, index) =>
-        point.n % step === 0 ? (
-          <text key={point.n} x={point.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{point.label}</text>
-        ) : null,
-      )}
-      {nowLabel && (
-        <text x={nowLabel.x} y={nowLabel.y} textAnchor={nowLabel.anchor} className={styles.nowLabel}>{nowLabel.text}</text>
-      )}
-      {lowLabel && (
-        <text x={lowLabel.x} y={lowLabel.y} textAnchor={lowRight ? "end" : "middle"} className={styles.lowLabel}>{lowLabel.text}</text>
-      )}
-    </MiniChartFrame>
+        {drawn &&
+          points.map((point, index) =>
+            index === last && point.n > 0 ? (
+              <circle key={point.n} cx={point.x} cy={point.y} r={4.5} className={styles.dotNow} />
+            ) : (
+              <circle key={point.n} cx={point.x} cy={point.y} r={3.5} className={point.skipped ? styles.dotOpen : styles.dot} />
+            ),
+          )}
+        {points.map((point, index) =>
+          point.n % step === 0 ? (
+            <text key={point.n} x={point.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{point.label}</text>
+          ) : null,
+        )}
+        {nowLabel && (
+          <text x={nowLabel.x} y={nowLabel.y} textAnchor={nowLabel.anchor} className={styles.nowLabel}>{nowLabel.text}</text>
+        )}
+        {lowLabel && (
+          <text x={lowLabel.x} y={lowLabel.y} textAnchor={lowRight ? "end" : "middle"} className={styles.lowLabel}>{lowLabel.text}</text>
+        )}
+      </MiniChartFrame>
+    </div>
   );
 }

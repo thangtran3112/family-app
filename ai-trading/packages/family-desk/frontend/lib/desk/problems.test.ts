@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { StrategySpecV1Schema } from "@ai-trading/contracts";
-import { fieldError, fieldLabel, formProblems, plainMessage, plainProblem, problemLine, problemsByField, problemsTitle } from "./problems.ts";
+import { fieldError, fieldLabel, formProblems, plainMessage, plainProblem, problemLine, problemsByField, problemsTitle, problemText } from "./problems.ts";
 
 test("V-ALERTS-01: the empty-symbols error reads as an instruction, with no schema words or JSON path", () => {
   const server = { path: "watch.universe.symbols", message: "List should have at least 1 item after validation, not 0" };
@@ -28,6 +28,13 @@ test("pydantic and zod messages for the same mistake read the same", () => {
 
 test("a message already in plain words passes through unchanged", () => {
   assert.equal(plainMessage("the first alert channel must be inbox", "then.alert.channels"), "the first alert channel must be inbox");
+});
+
+test("D-204: the New plan window rule reads as a plain sentence at its field, in 12-hour words", () => {
+  const sentence = "a regular-session window must stay inside 09:30-16:00 ET";
+  assert.equal(plainMessage(sentence, "setup.window"), "Start at must be between 9:30 AM and 4:00 PM");
+  assert.equal(plainMessage(`Value error, ${sentence}`, "setup.window"), "Start at must be between 9:30 AM and 4:00 PM");
+  assert.equal(problemText({ path: "setup.window", message: sentence }), "Start at must be between 9:30 AM and 4:00 PM");
 });
 
 test("field labels name the form control, never the schema path", () => {

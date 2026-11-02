@@ -33,7 +33,7 @@ test("bar and line points are sorted, unique, and use whitespace for missing val
 
 import { defaultChartPrefs } from "./replay/chartPrefs.ts";
 import { chartLevels, positionLevel, stopLevel } from "./replay/marks.ts";
-import { TAG_CLEARANCE, axisTagPrices, clearTickLabel, crosshairPoint, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData, wholeAxisLabel } from "./chart-data.ts";
+import { TAG_CLEARANCE, TAG_HEIGHT, axisTagPrices, clearTickLabel, crosshairPoint, drawnTagYs, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, valueAtOrBefore, volumeData, wholeAxisLabel } from "./chart-data.ts";
 
 const intraday = [
   { t: "2026-10-23T13:30:00Z", o: 10, h: 12, l: 9, c: 11, v: 100, ext: false },
@@ -335,4 +335,52 @@ test("the replay price axis leaves out a tick that any tag sits on: levels, last
 test("a level line that prints no number, a missing price and a hidden last-price pill leave their ticks alone (D-196)", () => {
   assert.deepEqual(axisTagPrices([], [{ price: 376, plain: true }, { price: null }, { price: Number.NaN }, { price: 380 }], null), [380]);
   assert.deepEqual(axisTagPrices([375.2, null], [], 372.47), [375.2, 372.47], "the overlays' last values come first, then the last price");
+});
+
+// The wave-13 walk's TSLA 1m/15m pane at 1440: 286 px tall, 384.00 at y 99.5 and 11.5 px a dollar.
+const WALK_PANE = 286;
+const walkY = (price: number) => 99.5 + (384 - price) * 11.5;
+
+test("a price tick the pane's edge would cut is left out; one that fits stays (D-199)", () => {
+  // 9:34: "368.00" was centred 3 px above the bottom of the pane and read with its lower half gone; "370.26" above it is whole.
+  assert.equal(clearTickLabel("368.00", WALK_PANE - 3, [], WALK_PANE), "");
+  assert.equal(clearTickLabel("370.26", walkY(370.26), [], WALK_PANE), "370.26");
+  assert.equal(clearTickLabel("388.00", 3, [], WALK_PANE), "", "the top edge cuts as well");
+  assert.equal(clearTickLabel("368.00", WALK_PANE - 3, [], null), "368.00", "a pane the chart cannot measure gives no verdict");
+  assert.equal(clearTickLabel("368.00", WALK_PANE - 3, [10]), "368.00", "and none is asked of a caller that sends no height");
+});
+
+test("the tags the chart draws are where it stacks them, not at their prices (D-200)", () => {
+  // The 15m axis at 9:40: the white EMA tag and the grey tags above the red last-price tag sit within a tag height of each other, so the
+  // chart pushes each one up from the one below it (the screenshot's 120.5, 137, 154, 171 and 214.5 px).
+  const prices = [380.58, 380.15, 377.94, 377.74, 372.62];
+  const last = walkY(372.57);
+  const drawn = drawnTagYs([...prices.map(walkY), last], WALK_PANE, last);
+  assert.deepEqual(drawn.map((y) => Math.round(y * 2) / 2), [120.5, 137.5, 154.5, 171.5, 214, 231]);
+  assert.equal(TAG_HEIGHT, 17);
+  // A tag with nothing near it stays on its price; the last price is the centre and never moves.
+  assert.deepEqual(drawnTagYs([100, 250], WALK_PANE, 250), [100, 250]);
+  // The pane's edge pulls a tag that overlaps it back inside (the library's own clamp).
+  assert.deepEqual(drawnTagYs([2, 283], WALK_PANE, 143), [8, WALK_PANE - 8]);
+});
+
+test("a tick the chart's stacking put under a tag is left out, whatever its own price was (D-200)", () => {
+  const prices = [386.83, 380.58, 380.15, 377.94, 377.74, 372.62];
+  const last = walkY(372.57);
+  const tags = [...prices.map(walkY), last];
+  const ticks = [384, 382, 380, 376, 374, 370];
+  const read = (against: readonly number[]) => ticks.map((price) => clearTickLabel(price.toFixed(2), walkY(price), against, WALK_PANE));
+  // Measured from each tag's price (D-196), "382.00" stayed: 16.3 px from the nearest price, yet the chart drew the "380.58" tag 2 px from it.
+  assert.deepEqual(read(tags), ["384.00", "382.00", "", "376.00", "", "370.00"]);
+  assert.deepEqual(read(drawnTagYs(tags, WALK_PANE, last)), ["384.00", "", "", "376.00", "", "370.00"], "from where the tags are drawn, 382.00 is under one");
+});
+
+test("an axis tag shows the value at the last bar in view, so a chart scrolled back tags an older value (D-200)", () => {
+  const ema = [10, 11, null, 13, null];
+  assert.equal(valueAtOrBefore(ema, 4), 13, "the newest bar in view: the newest value, skipping a gap");
+  assert.equal(valueAtOrBefore(ema, 14.6), 13, "a right edge past the data (the follow padding) is the newest bar");
+  assert.equal(valueAtOrBefore(ema, 1.2), 11, "scrolled back: the edge rounds up to bar 2 as the library's does, bar 2 has no value, so bar 1's");
+  assert.equal(valueAtOrBefore(ema, 0), 10);
+  assert.equal(valueAtOrBefore(ema, -3), null, "nothing in view yet");
+  assert.equal(valueAtOrBefore([null, null], 1), null);
 });
