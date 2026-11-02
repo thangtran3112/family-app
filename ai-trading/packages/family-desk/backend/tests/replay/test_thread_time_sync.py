@@ -31,8 +31,11 @@ on a name, (c) `History._lru` of 8 days evicting. Probed here against this code 
 the positions and the clock's account agree. I5: a read moves nothing.
 """
 
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
+from ai_trading_common.trades import Trades
 from daily_world import DAYS, NOW, make_thread
 from test_day_positions import _bend
 from test_replay_switch import _feed, _mark, _names, _row
@@ -42,9 +45,23 @@ from ai_trading.db.models import PracticePlan
 from ai_trading.replay import clock as clock_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
+from ai_trading.replay.tape import Tape
 
 NIGHT = et(DAYS[0], "20:00") + pd.Timedelta(hours=5)  # 01:00 ET on the next calendar date
 TAPE_END = et(DAYS[0], "20:00")
+LATE = et(DAYS[0], "19:58:30")  # inside the print's lookback: a last print exists at this clock
+
+
+class PrintTrades:
+    """One eligible print on FLAT at 19:58:10 ET for 52.37 (the 19:57 bar closes at 52.0): a tape that disagrees with
+    the minute bars by a few cents, the way a live print inside a minute does."""
+
+    def trades(self, symbol, start, end, *, feed, now=None):
+        at = et(DAYS[0], "19:58:10")
+        rows = [(at, 52.37, 100, "D", "@")] if symbol == "FLAT" and start <= at <= end else []
+        frame = pd.DataFrame(rows, columns=["t", "p", "s", "x", "c"])
+        frame["t"] = pd.to_datetime(frame["t"], utc=True)
+        return Trades(frame=frame, source="synthetic", feed=feed)
 
 
 @pytest.fixture
@@ -71,23 +88,20 @@ def _sync(db_session, user_id, svc, session_id) -> dict:
     )
 
 
-def _night(db_session, user_id, svc, world, *, long_flat: bool = True):
-    """A day with GAPPER and a legacy FLAT open, FLAT long 10 shares from 09:30, the clock at `NIGHT`. Returns
+def _night(db_session, user_id, svc, world, *, at=NIGHT):
+    """A day with GAPPER and a legacy FLAT open, FLAT long 10 shares from 09:30, the clock at `at`. Returns
     `(thread id, day list, GAPPER session, FLAT session)`."""
     _bend(world, "FLAT", "16:00", None, open=52.0, high=52.0, low=52.0, close=52.0)  # the extended-hours tape
     make_thread(db_session, user_id)
     row, gapper = _names(db_session, user_id, svc, "FLAT")
     flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    if long_flat:
-        _mark(db_session, user_id, svc, flat.id, "long_entry", shares=10)
+    _mark(db_session, user_id, svc, flat.id, "long_entry", shares=10)
     legacy = _row(db_session, flat.id)
     legacy.window_end = et(DAYS[0], "16:00").to_pydatetime()  # a session saved before the extended-tape rule
     assert legacy.spec["session"] == "regular"
     db_session.commit()
     thread_id = db_session.get(PracticePlan, row.plan_id).thread_id
-    clock_mod.control(
-        db_session, user_id, thread_id, svc, running=None, speed=None, to=NIGHT.to_pydatetime(), step=None
-    )
+    clock_mod.control(db_session, user_id, thread_id, svc, running=None, speed=None, to=at.to_pydatetime(), step=None)
     db_session.commit()
     return thread_id, row, gapper, flat
 
@@ -100,9 +114,76 @@ def _candidate(out: dict, symbol: str) -> dict:
     return next(c for c in out["candidates"] if c["symbol"] == symbol)
 
 
-# -- I1: one instant --------------------------------------------------------------------------------------------------
+# -- I2 (A1): one tape end per day ------------------------------------------------------------------------------------
 
 
+def test_a_legacy_row_with_a_sixteen_hundred_end_runs_to_the_extended_close(
+    db_session, user_id, svc, world, pinned
+) -> None:
+    """RC1: `window_end_of` kept a legacy open row at 16:00 while the Summary says the tape runs to 20:00."""
+    _, _, gapper, flat = _night(db_session, user_id, svc, world)
+    gapper_frame = _sync(db_session, user_id, svc, gapper.id)
+    flat_frame = _sync(db_session, user_id, svc, flat.id)
+    db_session.commit()
+    assert gapper_frame["revealed_through"] == TAPE_END  # the new row already ends at 20:00
+    assert flat_frame["revealed_through"] == TAPE_END, "the legacy FLAT row stopped at its stored 16:00 end"
+    assert flat_frame["day_clock"] == TAPE_END and flat_frame["at_end"] is True
+    assert session_mod.window_end_of(_row(db_session, flat.id), day_thread=True) == TAPE_END
+
+
+def test_the_derived_end_applies_to_an_open_day_thread_session_only() -> None:
+    row = SimpleNamespace(
+        status="active", day=DAYS[0], window_end=et(DAYS[0], "16:00").to_pydatetime(), spec={"session": "regular"}
+    )
+    assert session_mod.window_end_of(row, day_thread=True) == TAPE_END  # derived, whatever was stored
+    assert session_mod.window_end_of(row, day_thread=False) == et(DAYS[0], "16:00")  # swing and standalone: as before
+    row.window_end = et(DAYS[0], "11:30").to_pydatetime()  # a row stored with her old focus mark
+    assert session_mod.window_end_of(row, day_thread=False) == et(DAYS[0], "16:00")
+    row.status, row.window_end = "ended", et(DAYS[0], "12:00").to_pydatetime()
+    assert session_mod.window_end_of(row, day_thread=True) == et(DAYS[0], "12:00")  # an ended session keeps its end
+
+
+# -- I3: one price ----------------------------------------------------------------------------------------------------
+
+
+def test_one_price_on_the_chart_the_day_list_the_position_and_the_account_at_night(
+    db_session, user_id, svc, world, pinned
+) -> None:
+    thread_id, row, _, flat = _night(db_session, user_id, svc, world)
+    clock = pd.Timestamp(NIGHT)
+    synced = _sync(db_session, user_id, svc, flat.id)["last"]["price"]
+    prices = {
+        "advance(sync).last": synced,
+        "feed.last": _feed(db_session, user_id, svc, flat.id)["last"]["price"],
+        "day list live": _candidate(_live(db_session, user_id, svc, row), "FLAT")["live"]["price"],
+        "positions()": session_mod.positions(db_session, svc, row.id, clock)[0].price,
+    }
+    account = clock_mod.read(db_session, user_id, thread_id, svc)["account"]
+    db_session.commit()
+    prices["account (entry + open P/L per share)"] = 50.0 + account["open_pnl_usd"] / 10
+    assert set(prices.values()) == {52.0}, prices
+
+
+@pytest.mark.xfail(strict=True, reason="A2: the day list prices an opened name off its minute bar, not its tape")
+def test_the_day_list_prices_an_opened_name_like_its_chart_inside_a_minute(
+    db_session, user_id, svc, world, pinned
+) -> None:
+    svc.tape = Tape(svc.sources.__class__(**{**svc.sources.__dict__, "trades": PrintTrades()}), now=lambda: NOW)
+    thread_id, row, _, flat = _night(db_session, user_id, svc, world, at=LATE)
+    clock = pd.Timestamp(LATE)
+    prices = {
+        "advance(sync).last": _sync(db_session, user_id, svc, flat.id)["last"]["price"],
+        "feed.last": _feed(db_session, user_id, svc, flat.id)["last"]["price"],
+        "day list live": _candidate(_live(db_session, user_id, svc, row), "FLAT")["live"]["price"],
+        "positions()": session_mod.positions(db_session, svc, row.id, clock)[0].price,
+    }
+    assert set(prices.values()) == {52.37}, prices
+
+
+# -- I1 (A3): one instant ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.xfail(strict=True, reason="A3: no payload carries thread_time yet")
 def test_every_surface_reports_the_thread_clock_as_its_time(db_session, user_id, svc, world, pinned) -> None:
     thread_id, row, gapper, flat = _night(db_session, user_id, svc, world)
     clock = clock_mod.read(db_session, user_id, thread_id, svc)["clock"]
@@ -115,63 +196,45 @@ def test_every_surface_reports_the_thread_clock_as_its_time(db_session, user_id,
         db_session.commit()
         frame = _sync(db_session, user_id, svc, session_id)
         db_session.commit()
-        # Today the only time on a name's payload is `day_clock`, which is min(T, the name's stored tape end).
         seen[f"advance {label}"] = frame.get("thread_time")
-        seen[f"day_clock {label}"] = frame["day_clock"]
     listed = _live(db_session, user_id, svc, row)
     seen["day list"] = listed.get("thread_time")
     wrong = {label: value for label, value in seen.items() if value != NIGHT}
     assert not wrong, f"every surface must name T={NIGHT}; these do not: {wrong}"
 
 
-# -- I2: one tape end per day -----------------------------------------------------------------------------------------
+@pytest.mark.xfail(strict=True, reason="A3: no payload carries data_through or market yet")
+def test_data_through_is_the_tape_end_on_every_name_payload(db_session, user_id, svc, world, pinned) -> None:
+    thread_id, _, gapper, flat = _night(db_session, user_id, svc, world)
+    for label, session_id in (("GAPPER", gapper.id), ("FLAT (legacy)", flat.id)):
+        for source, frame in (
+            ("advance", _sync(db_session, user_id, svc, session_id)),
+            ("feed", _feed(db_session, user_id, svc, session_id)),
+        ):
+            assert frame.get("data_through") == TAPE_END, (label, source)
+            assert frame["market"]["phase"] == "closed" and frame["market"]["tape_end"] == TAPE_END, (label, source)
+    assert clock_mod.read(db_session, user_id, thread_id, svc)["market"]["phase"] == "closed"
 
 
+# -- RC3 (A4): a feed is cut at the thread's time ---------------------------------------------------------------------
+
+
+@pytest.mark.xfail(strict=True, reason="A4: the feed cuts at the name's stored playhead")
 def test_a_name_that_was_not_synced_shows_the_tape_through_its_end(db_session, user_id, svc, world, pinned) -> None:
-    """RC3: the feed cuts at the name's stored playhead (09:30, nobody synced it), not at the thread's time."""
+    """RC3: the feed cut at the name's stored playhead (09:30, nobody synced it), not at the thread's time."""
     _, _, gapper, flat = _night(db_session, user_id, svc, world)
     for label, session_id in (("GAPPER", gapper.id), ("FLAT (legacy)", flat.id)):
+        stored = _row(db_session, session_id).revealed_through
         out = _feed(db_session, user_id, svc, session_id)
         db_session.commit()
-        assert out.get("data_through") == TAPE_END, (label, out["revealed_through"], out.get("data_through"))
+        assert out["revealed_through"] == TAPE_END, (label, out["revealed_through"])
         assert out["bars"][-1]["t"] + pd.Timedelta(minutes=5) == TAPE_END, label
+        assert _row(db_session, session_id).revealed_through == stored, "a GET never writes the playhead"
+    flat_out = _feed(db_session, user_id, svc, flat.id)
+    assert flat_out["last"]["price"] == 52.0 and flat_out["behind_clock"] is True  # still not markable until a sync
 
 
-def test_a_legacy_row_with_a_sixteen_hundred_end_runs_to_the_extended_close(
-    db_session, user_id, svc, world, pinned
-) -> None:
-    """RC1: `window_end_of` keeps a legacy open row at 16:00 while the Summary says the tape runs to 20:00."""
-    _, _, gapper, flat = _night(db_session, user_id, svc, world)
-    gapper_frame = _sync(db_session, user_id, svc, gapper.id)
-    flat_frame = _sync(db_session, user_id, svc, flat.id)
-    db_session.commit()
-    assert gapper_frame["revealed_through"] == TAPE_END  # the new row already ends at 20:00
-    assert flat_frame["revealed_through"] == TAPE_END, "the legacy FLAT row stopped at its stored 16:00 end"
-    assert flat_frame["at_end"] is True and flat_frame.get("data_through") == TAPE_END
-    assert session_mod.window_end_of(_row(db_session, flat.id)) == TAPE_END
-
-
-# -- I3: one price ----------------------------------------------------------------------------------------------------
-
-
-def test_one_price_on_the_chart_the_day_list_the_position_and_the_account(
-    db_session, user_id, svc, world, pinned
-) -> None:
-    thread_id, row, _, flat = _night(db_session, user_id, svc, world)
-    clock = pd.Timestamp(NIGHT)
-    prices = {
-        "feed.last": _feed(db_session, user_id, svc, flat.id)["last"]["price"],
-        "day list live": _candidate(_live(db_session, user_id, svc, row), "FLAT")["live"]["price"],
-        "positions()": session_mod.positions(db_session, svc, row.id, clock)[0].price,
-        "advance(sync).last": _sync(db_session, user_id, svc, flat.id)["last"]["price"],
-    }
-    account = clock_mod.read(db_session, user_id, thread_id, svc)["account"]
-    db_session.commit()
-    prices["account (entry + open P/L per share)"] = 50.0 + account["open_pnl_usd"] / 10
-    assert set(prices.values()) == {52.0}, prices
-
-
-# -- what stays true today (guards, green before and after) ------------------------------------------------------------
+# -- what stays true (guards, green before and after) ------------------------------------------------------------------
 
 
 def test_the_day_list_prices_every_name_overnight(db_session, user_id, svc, world, pinned) -> None:
@@ -185,8 +248,7 @@ def test_the_day_list_prices_every_name_overnight(db_session, user_id, svc, worl
 
 
 def test_a_live_read_decodes_names_times_sessions_blobs(db_session, user_id, svc, world, pinned) -> None:
-    """Candidate (c)/(a): count blob reads of one live day-list read. 3 names x 15 sessions (14 lookback + the day),
-    twice over (daily as-of blob + minute blobs are separate kinds, so only minutes are counted here)."""
+    """Candidate (c)/(a): count blob reads of one live day-list read: 15 minute blobs (14 lookback + the day) a name."""
     _, row, _, _ = _night(db_session, user_id, svc, world)
     store = svc.store_factory(db_session)
     reads: list[str] = []

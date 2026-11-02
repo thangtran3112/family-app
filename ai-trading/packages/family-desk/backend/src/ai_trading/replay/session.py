@@ -178,13 +178,16 @@ def market_close(day: date, kind: str) -> pd.Timestamp:
     return found.regular_close if kind == "regular" else found.extended_close
 
 
-def window_end_of(row: ReplaySession) -> pd.Timestamp:
+def window_end_of(row: ReplaySession, *, day_thread: bool) -> pd.Timestamp:
     """Where this session's tape ends. An ended session keeps the time it was ended at (its exits and journal were
-    booked there). An open one runs to the later of its stored end and the close of its own session kind, so a
-    day-thread session (stored with the extended close, after-hours included) shows what the past data has, and a
-    session saved before the close rule (whose stored end was her old focus mark) still runs to the exchange close."""
+    booked there). An open session of a day thread ends at the extended close of its day, derived here and never read
+    from the stored column: every name of a day shares one tape end (the Summary's), whatever end the row was saved
+    with (a row saved before the extended-tape rule stored 16:00 or her old focus mark). A swing or standalone session
+    runs to the later of its stored end and the close of its own session kind, as it always did."""
     if row.status == "ended":
         return _ts(row.window_end)
+    if day_thread:
+        return market_close(row.day, "extended")
     return max(_ts(row.window_end), market_close(row.day, row.spec["session"]))
 
 
@@ -353,7 +356,7 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
     inputs = svc.history.day_inputs(store, row.symbol, row.day)
     swing = _is_swing(db, row)
     day_list = db.get(ReplayDayList, row.day_list_id) if row.day_list_id is not None else None
-    window_end = window_end_of(row)
+    window_end = window_end_of(row, day_thread=row.thread_id is not None and not swing)
     return Ctx(
         row=row,
         svc=svc,
@@ -376,6 +379,11 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         else min(_ts(day_list.revealed_through), window_end),
         away=spans_of(row.away or []),
     )
+
+
+def _is_day_thread(db: Session, row: ReplaySession) -> bool:
+    """A session of a day thread (not a swing thread's, not a standalone replay)."""
+    return row.thread_id is not None and not _is_swing(db, row)
 
 
 def _is_swing(db: Session, row: ReplaySession) -> bool:
@@ -592,7 +600,7 @@ def summary_out(db: Session, row: ReplaySession, marks: list[PracticeMark] | Non
         "status": row.status,
         "hide_date": row.spec["hideDate"],
         "revealed_through": row.revealed_through,
-        "window_end": window_end_of(row),
+        "window_end": window_end_of(row, day_thread=_is_day_thread(db, row)),
         "trades": trades,
         "pnl_usd": pnl,
         "adherence_pct": adherence,

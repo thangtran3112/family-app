@@ -760,7 +760,11 @@ def _session_brief(
     (its next advance catches it up), whether it holds an open position (one average-cost position per name), and its
     P/L: the closed trades booked so far and the open position marked at `last` (the price at the day clock) with when
     play paused on its stop. A swing session passes no `book` (its holds are read elsewhere)."""
-    clock = None if row.revealed_through is None else min(_utc(row.revealed_through), session_mod.window_end_of(s))
+    clock = (
+        None
+        if row.revealed_through is None
+        else min(_utc(row.revealed_through), session_mod.window_end_of(s, day_thread=True))
+    )
     closed, open_ = book if book is not None else ([], None)
     position = journal_mod.open_trade_out(open_, last)
     if position is not None and s.stop_hit_at is not None:
@@ -1412,7 +1416,7 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         # to the clock, as an `advance` does, as far as its tape goes (the clock runs on through the night and the
         # weekend; a name has no bars there): what lies between is revealed but was never in front of her (an away
         # span), and every advance scanned all open trades' stops, so nothing is skipped by the lift.
-        lift = min(_utc(row.revealed_through), session_mod.window_end_of(created))
+        lift = min(_utc(row.revealed_through), session_mod.window_end_of(created, day_thread=True))
         if created.status == "active" and _utc(created.revealed_through) < lift:
             created.away = add_span(list(created.away or []), _utc(created.revealed_through), lift)
             # A working order the tape reached inside that span fills at its bar, like a watched one (ADR-0019).
@@ -1484,7 +1488,7 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
             db.refresh(s)
     setup = plan.spec["setup"]
     close = session_mod.market_close(row.day, "extended")  # the day's tape ends with the extended session
-    close = session_mod.window_end_of(sessions[0]) if sessions else close
+    close = session_mod.window_end_of(sessions[0], day_thread=True) if sessions else close
     focus_end = et(row.day, setup["window"]["to"])  # her practice window: the review's yardstick, not the day's end
     store = svc.store_factory(db)
     minutes: dict[str, pd.DataFrame | None] = {}
