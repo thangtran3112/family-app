@@ -773,6 +773,17 @@ class DaySessionOut(BaseModel):
     position: OpenTradeOut | None  # the open trade marked at the DAY CLOCK, not the name's playhead; null when flat
 
 
+class HeldElsewhereOut(BaseModel):
+    """A name open in another day list (another thread's day, a swing day) or in a standalone session, on this day. The
+    one-open-session-per-name-and-day rule refuses it here, so the day list shows it open there, not "not opened"."""
+
+    session_id: int
+    symbol: str
+    day_list_id: int | None  # null: a standalone session (it ends on its own page)
+    thread_id: int | None
+    thread_name: str | None
+
+
 class DayPnlOut(BaseModel):
     """The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock."""
 
@@ -932,6 +943,7 @@ class DayListOut(BaseModel):
     watch: list[StarOut]
     clock: datetime | None
     sessions: list[DaySessionOut]
+    held_elsewhere: list[HeldElsewhereOut]
     day_pnl: DayPnlOut
     watch_check: WatchCheckOut
     thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into

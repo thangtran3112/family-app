@@ -69,12 +69,21 @@ export const threadName = (thread: Pick<PracticeThread, "name">): string => thre
 export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): string => `Started ${monthDay.format(new Date(thread.createdAt))}`;
 
 /** "Started with $50,000 · +$123 so far". A swing thread with holds open counts them apart (D-080): its balance holds closed
- *  holds only, so "no change yet" beside a higher Equity read as a flat thread. */
-export function startedWithText(thread: Pick<PracticeThread, "startingBalance" | "stats">, swing?: { holds_open: number; equity_usd: number } | null): string {
+ *  holds only, so "no change yet" beside a higher Equity read as a flat thread. A day thread with a position open at the clock
+ *  does the same with its open P/L (D-170). */
+export function startedWithText(
+  thread: Pick<PracticeThread, "startingBalance" | "stats">,
+  swing?: { holds_open: number; equity_usd: number } | null,
+  day?: Pick<ClockAccount, "balance" | "positions" | "open_pnl_usd"> | null,
+): string {
   const change = thread.stats.balance - thread.startingBalance;
   const start = formatWhole(thread.startingBalance);
   if (swing && swing.holds_open > 0) {
     return practiceText("threadStartedSwing", { start, realized: formatDayResult(change), open: formatDayResult(swing.equity_usd - thread.stats.balance) });
+  }
+  if (day && day.positions > 0) {
+    // The account's own balance: it is read with the open P/L, so the two always add up to the headline's Equity.
+    return practiceText("threadStartedOpen", { start, realized: formatDayResult(day.balance - thread.startingBalance), open: formatDayResult(day.open_pnl_usd) });
   }
   return Math.round(change) === 0
     ? practiceText("threadStartedFlat", { start })

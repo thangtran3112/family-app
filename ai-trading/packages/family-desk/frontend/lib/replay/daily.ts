@@ -181,6 +181,17 @@ export const DaySessionSchema = z.object({
   position: OpenTradeSchema.nullable(),
 }) satisfies z.ZodType<components["schemas"]["DaySessionOut"]>;
 
+/** A name open in another day list (another thread's day, a swing day) or in a standalone session, on this day: the open refuses it here (one active session per name and day). */
+export const HeldElsewhereSchema = z.object({
+  session_id: finite.int(),
+  symbol: z.string(),
+  /** Null: a standalone session, which ends on its own page. */
+  day_list_id: finite.int().nullable(),
+  thread_id: finite.int().nullable(),
+  thread_name: z.string().nullable(),
+}) satisfies z.ZodType<components["schemas"]["HeldElsewhereOut"]>;
+export type HeldElsewhere = z.infer<typeof HeldElsewhereSchema>;
+
 /** The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock. */
 export const DayPnlSchema = z.object({
   realized_usd: finite,
@@ -320,6 +331,7 @@ export const DayListSchema = z.object({
   watch_check: WatchCheckSchema,
   clock: timestamp.nullable(),
   sessions: z.array(DaySessionSchema),
+  held_elsewhere: z.array(HeldElsewhereSchema),
   day_pnl: DayPnlSchema,
   /** The SIMULATED balance and today's realized P/L of the thread this day books into (02r). */
   thread: ThreadBriefSchema.nullable(),

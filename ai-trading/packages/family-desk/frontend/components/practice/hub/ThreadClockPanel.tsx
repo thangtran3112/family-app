@@ -17,8 +17,9 @@ import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { clockControls, clockProgress, clockStateText, focusProgress, skippedText, type SkipDay } from "@/lib/replay/threadClock";
-import { formatBalance, formatDayResult } from "@/lib/replay/threadView";
+import { formatBalance } from "@/lib/replay/threadView";
 import type { ThreadClockApi } from "@/lib/replay/useThreadClock";
+import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
@@ -110,14 +111,14 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
           <p className={o.clockTime}>
             <span data-testid="thread-clock-time">{formatEtDateClock(shown, { hideDate: datesHidden })}</span>
           </p>
-          <p className={styles.hint} data-testid="thread-clock-replayed">{PRACTICE_COPY.clockReplayedDate}</p>
-          {api.stale && <p className={o.placeLine} role="status" data-testid="thread-clock-frozen">{practiceText("clockFrozen", { time: formatEtDateClock(shown) })}</p>}
+          <p className={hub.hint} data-testid="thread-clock-replayed">{PRACTICE_COPY.clockReplayedDate}</p>
+          {api.stale && <p className={o.placeLine} role="status" data-testid="thread-clock-frozen">{practiceText("clockFrozen", { time: formatEtDateClock(shown, { hideDate: datesHidden }) })}</p>}
           <div className={o.clockTrack} role="progressbar" aria-label="Day progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clockProgress(clock, shown) * 100)}>
             <div className={o.clockFill} style={{ width: `${clockProgress(clock, shown) * 100}%` }} />
             {focus !== null && <span className={o.clockFocus} style={{ left: `${focus * 100}%` }} title={clock.focus_end === null ? undefined : practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })} data-testid="thread-clock-focus" />}
           </div>
-          {clock.focus_end !== null && <p className={styles.hint}>{practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })}</p>}
-          <p className={styles.hint} data-testid="thread-clock-next">
+          {clock.focus_end !== null && <p className={hub.hint}>{practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })}</p>}
+          <p className={hub.hint} data-testid="thread-clock-next">
             {clock.next_start !== null ? practiceText("clockNextStart", { when: formatEtDateClock(clock.next_start, { seconds: false, hideDate: datesHidden }) }) : PRACTICE_COPY.clockLastDay}
           </p>
         </>
@@ -167,7 +168,7 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
         />
       )}
 
-      {clock.state === "paused" && !skipping && <p className={styles.hint} data-testid="thread-clock-paused-hint">{PRACTICE_COPY.clockPausedHint}</p>}
+      {clock.state === "paused" && !skipping && <p className={hub.hint} data-testid="thread-clock-paused-hint">{PRACTICE_COPY.clockPausedHint}</p>}
       {skipping && <p className={o.placeLine} role="status">{PRACTICE_COPY.clockSkippingNote}</p>}
       {api.rolled && <p className={o.placeLine} role="status" data-testid="thread-clock-rolled">{api.rolled}</p>}
       {note && <p className={o.placeLine} role="status">{note}</p>}
@@ -175,24 +176,27 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
       {endError && <p className={o.placeLine} role="alert">{endError}</p>}
 
       {account && can.started && (
-        <div data-testid="thread-clock-account">
-          <div className={o.sectionHead}>
-            <h3 className={o.clockSub}>{PRACTICE_COPY.clockAccountEquity}</h3>
-            <SimulatedBadge />
-          </div>
+        // The headline above is the Equity and the line under it the Open P/L and the Balance (ADR-0018): this list only adds what they do not say (D-175).
+        <div className={o.account} data-testid="thread-clock-account">
           <FactList
-            columns={2}
+            className={o.accountList}
             facts={[
-              { id: "balance", label: PRACTICE_COPY.clockAccountBalance, value: formatBalance(account.balance) },
-              { id: "open", label: PRACTICE_COPY.clockAccountOpen, value: formatDayResult(account.open_pnl_usd), tone: account.open_pnl_usd > 0 ? "up" : account.open_pnl_usd < 0 ? "down" : "neutral" },
-              { id: "equity", label: PRACTICE_COPY.clockAccountEquity, value: <span data-testid="thread-clock-equity">{formatBalance(account.equity_usd)}</span> },
-              { id: "buying-power", label: PRACTICE_COPY.clockAccountBuyingPower, value: <span data-testid="thread-clock-buying-power">{formatBalance(account.buying_power_usd)}</span> },
+              {
+                id: "buying-power",
+                label: PRACTICE_COPY.clockAccountBuyingPower,
+                value: (
+                  <>
+                    <span data-testid="thread-clock-buying-power">{formatBalance(account.buying_power_usd)}</span>
+                    <SimulatedBadge />
+                  </>
+                ),
+              },
             ]}
           />
-          <p className={styles.hint}>{PRACTICE_COPY.clockAccountHint}</p>
+          <p className={hub.hint}>{PRACTICE_COPY.clockAccountHint}</p>
         </div>
       )}
-      <p className={styles.hint}>{PRACTICE_COPY.clockHint}</p>
+      <p className={hub.hint}>{PRACTICE_COPY.clockHint}</p>
     </section>
   );
 }

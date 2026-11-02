@@ -464,6 +464,10 @@ export const PRACTICE_COPY = {
   dayOpenButton: "Open",
   dayOpen: "Open {symbol}",
   dayOpening: "Opening {symbol}…",
+  dayHeldGo: "Go there",
+  dayHeldStandalone: "a standalone session",
+  dayHeldGoLabel: "{symbol} is open in {where} · go there to end it",
+  dayHeldBlocked: "{symbol} is open in {where} · end that day first, then open it here",
   dayPeekAt: "Peek at {symbol}",
   dayPortfolioOpenOf: "{open} open",
   dayPortfolioPositionsNone: "No open positions",
@@ -940,6 +944,7 @@ export const PRACTICE_COPY = {
   orderStatusHolding: "Open trade",
   orderStatusOpened: "Opened",
   orderStatusNone: "Not opened yet",
+  orderStatusElsewhere: "Open in {where}",
   orderOpenList: "Open the {list}",
   orderOpenPortfolio: "Open the Portfolio",
   orderNoDayTitle: "No day is open",
@@ -987,6 +992,7 @@ export const PRACTICE_COPY = {
   // Fix wave 5S, stream 3 (the replay chart and its controls).
   // Fix wave 5S, stream 1 (practice UX): the hub, the day list and the week review.
   threadStartedSwing: "Started with {start} · realized {realized} · open holds {open}",
+  threadStartedOpen: "Started with {start} · realized {realized} · open P/L {open}",
   // "Resume" is the clock's word alone (its Play/Pause on the Summary); a button that only goes to the day says "Open Day {n}".
   planOpenDay: "Open Day {n}",
   planStartDayN: "Start Day {n}",
