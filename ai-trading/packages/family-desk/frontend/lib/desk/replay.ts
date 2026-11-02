@@ -37,8 +37,11 @@ export const patchReplaySession = (id: number, body: { notes?: string | null; ra
   clientOf(options)(deskPath(`/replay/sessions/${id}`), ReplaySessionSchema, jsonInit("PATCH", body, options));
 
 export type TapeParams = { interval?: ReplayInterval; minSize?: number; minNotional?: number; maxPrints?: number };
-/** `sync`: follow the day thread's server-side clock (ADR-0018) - bring it to now, then reveal this name through it. */
-export type AdvanceTarget = { to: string } | { step: "bar" | "next_signal" } | { sync: true };
+/**
+ * `sync`: follow the day thread's server-side clock (ADR-0018) - bring it to now, then reveal this name through it. `since` is the playhead
+ * this window last read: the answer carries every bar closed after it, also the ones another window of the same session already took (D-198).
+ */
+export type AdvanceTarget = { to: string } | { step: "bar" | "next_signal" } | { sync: true; since?: string };
 
 const tapeBody = ({ interval, minSize, minNotional, maxPrints }: TapeParams) => ({
   interval,
