@@ -214,7 +214,7 @@ MIN_FREE_GB="${AI_TRADING_MIN_FREE_GB:-30}"
 DOCKER_DATA_DIR="${AI_TRADING_DOCKER_DATA_DIR:-/var/lib/docker}"
 STATE_FILE="$APP_DIR/last-good-tag"
 IMAGES_ENV="$APP_DIR/images.env"
-SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env desk.env cloudflared.env)
+SECRET_FILES=(tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env market-data-bridge-cache.env market-data-cache.env desk.env cloudflared.env)
 # Tracks, per secret file, whether it existed before this run's staging so
 # rollback can tell "restore the backup" from "delete what we just created".
 declare -A PRIOR_EXISTED=()
@@ -675,6 +675,34 @@ render_profiles() {
        "$family_config" render ai-trading/market-data-bridge --out-dir "$RENDER_SRC_DIR" >/dev/null 2>&1; then
     echo "deploy: ai-trading/market-data-bridge profile not available; market-data-bridge will serve with auth required and no providers until it exists" >&2
     (umask 077 && printf '# market-data-bridge profile not configured\n' >"$RENDER_SRC_DIR/market-data-bridge.env")
+  fi
+  render_market_data_cache "$family_config"
+}
+
+# render_market_data_cache FAMILY_CONFIG: the bridge's Redis hot tier. The optional profile
+# ai-trading/market-data-cache holds REDIS_PASSWORD (16-128 characters of [A-Za-z0-9_-], so it is
+# safe inside a URL and a shell word). It yields two files:
+#   market-data-cache.env         REDIS_PASSWORD for the Redis container
+#   market-data-bridge-cache.env  CACHE_ENABLED=1 and CACHE_REDIS_URL for the bridge
+# A missing or malformed profile never fails the deploy: both files become comment-only
+# placeholders, Redis starts on a random throwaway password nobody knows, and the bridge boots
+# with the cache off. The password and the URL are never printed; only the profile name is.
+render_market_data_cache() {
+  local family_config="$1" cache_pw=''
+  if FAMILY_CONFIG_CREDENTIALS="${FAMILY_CONFIG_CREDENTIALS:-/etc/family-app/config-reader.json}" \
+       "$family_config" render ai-trading/market-data-cache --out-dir "$RENDER_SRC_DIR" >/dev/null 2>&1; then
+    cache_pw="$(sed -n 's/^REDIS_PASSWORD=//p' "$RENDER_SRC_DIR/market-data-cache.env")"
+    [[ "$cache_pw" =~ ^[A-Za-z0-9_-]{16,128}$ ]] \
+      || echo "deploy: ai-trading/market-data-cache has no valid REDIS_PASSWORD (16-128 characters of A-Z a-z 0-9 _ -); the market-data cache stays off" >&2
+  else
+    echo "deploy: ai-trading/market-data-cache profile not available; the market-data cache stays off until it exists" >&2
+  fi
+  if [[ "$cache_pw" =~ ^[A-Za-z0-9_-]{16,128}$ ]]; then
+    (umask 077 && printf 'REDIS_PASSWORD=%s\n' "$cache_pw" >"$RENDER_SRC_DIR/market-data-cache.env")
+    (umask 077 && printf 'CACHE_ENABLED=1\nCACHE_REDIS_URL=redis://:%s@market-data-cache:6379/0\n' "$cache_pw" >"$RENDER_SRC_DIR/market-data-bridge-cache.env")
+  else
+    (umask 077 && printf '# market-data-cache profile not configured\n' >"$RENDER_SRC_DIR/market-data-cache.env")
+    (umask 077 && printf '# market-data-cache profile not configured; the bridge cache is off\n' >"$RENDER_SRC_DIR/market-data-bridge-cache.env")
   fi
 }
 

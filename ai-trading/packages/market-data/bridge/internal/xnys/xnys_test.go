@@ -226,3 +226,28 @@ func TestDriftAgainstThePythonCalendar(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionFinishedIsTwentyFifteenET(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		date string
+		now  time.Time
+		want bool
+	}{
+		{"one second before", "2026-10-30", at("2026-10-30", "20:14").Add(59 * time.Second), false},
+		{"on the minute", "2026-10-30", at("2026-10-30", "20:15"), true},
+		{"before the session day", "2026-10-30", at("2026-10-29", "23:00"), false},
+		{"days later", "2026-10-30", at("2026-11-03", "09:00"), true},
+		// 2026-11-01 is the DST end: 20:15 EST is 01:15Z the next UTC day.
+		{"DST end day, EST", "2026-11-02", utc("2026-11-03", "01:14"), false},
+		{"DST end day, EST on the minute", "2026-11-02", utc("2026-11-03", "01:15"), true},
+		// An early close (day after Thanksgiving) still ends the extended session at 20:00 ET.
+		{"early close day", "2026-11-27", at("2026-11-27", "20:14"), false},
+		{"early close day after", "2026-11-27", at("2026-11-27", "20:15"), true},
+		{"unparseable", "not-a-date", at("2026-11-27", "20:15"), false},
+	} {
+		if got := SessionFinished(tc.date, tc.now); got != tc.want {
+			t.Errorf("%s: SessionFinished(%s, %s) = %v, want %v", tc.name, tc.date, tc.now, got, tc.want)
+		}
+	}
+}
