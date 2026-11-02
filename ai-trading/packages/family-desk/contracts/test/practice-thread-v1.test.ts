@@ -13,8 +13,8 @@ import { jsonFiles } from "./fixtures.ts";
 
 const FAMILIES = {
   create: { schema: PracticeThreadCreateV1Schema, dir: "practice-thread-create-v1", valid: 7, invalid: 42 },
-  patch: { schema: PracticeThreadPatchV1Schema, dir: "practice-thread-patch-v1", valid: 2, invalid: 9 },
-  thread: { schema: PracticeThreadV1Schema, dir: "practice-thread-v1", valid: 7, invalid: 27 },
+  patch: { schema: PracticeThreadPatchV1Schema, dir: "practice-thread-patch-v1", valid: 3, invalid: 11 },
+  thread: { schema: PracticeThreadV1Schema, dir: "practice-thread-v1", valid: 8, invalid: 31 },
   ledger: { schema: PracticeLedgerEntryV1Schema, dir: "practice-ledger-entry-v1", valid: 7, invalid: 21 },
 };
 

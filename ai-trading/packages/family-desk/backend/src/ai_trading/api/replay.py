@@ -673,8 +673,9 @@ def create_thread(
 ) -> dict[str, Any]:
     """Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
     risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
-    each with its own plan and balance. A swing thread freezes its universe and calendar here, after the days, the data
-    and the arms check out (every rejection is a plain problem), and starts preparing its bars in the background."""
+    each with its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
+    she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
+    check out (every rejection is a plain problem), and starts preparing its bars in the background."""
     swing = isinstance(raw, dict) and raw.get("mode") == "swing"
     spec = _validated(PracticeThreadCreateV1, raw, "swing" if swing else "plan")
     if not swing:
@@ -749,8 +750,9 @@ def patch_thread(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Replace the risk plan while the thread is active (a closed thread is a 409). It applies from the next session:
-    a session already started keeps the plan it began with."""
+    """Replace the risk plan and the entry size (`shares`, a day thread only; left out clears it) while the thread is
+    active (a closed thread is a 409). It applies from the next session: a session already started keeps the plan and
+    the size it began with."""
     spec = _validated(PracticeThreadPatchV1, raw, "plan")
     row = _call(threads_mod.patch_thread, db, user.id, thread_id, spec, services.now())
     return threads_mod.detail(db, row)

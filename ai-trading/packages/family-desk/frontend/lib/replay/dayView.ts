@@ -200,7 +200,7 @@ export function cellTone(column: Pick<ListColumn, "key" | "format">, row: Pick<C
   return column.format === "pct_signed" ? changeToneAt(row.metrics[column.key] ?? null, 2) : null;
 }
 
-/** One column of the day list: the API's own metric columns, plus the P7 columns it only holds in part (D-018). */
+/** One column of the day list: the API's own metric columns, plus the P7 columns built from the candidate itself (D-018). */
 export type DayColumn = {
   key: string;
   label: string;
@@ -236,10 +236,10 @@ const EARNINGS_FORMAT = "earnings";
 
 /**
  * The table's columns in the order of P7: list price, prev close, prev RVOL, prev change %, ATR %, RSI, earnings, then the rest of the
- * server's columns and the time the match began. A list built before the open reads the previous session
- * in the server's own columns (`prev_basis`), so those fill Prev RVOL and Prev change %. A list built after the open has
- * no previous-session RVOL or change in its payload: those two columns stay and read a dash. Prev close is
- * the candidate's `prior_close` either way.
+ * server's columns and the time the match began. Prev close, prev RVOL and prev change % are the previous session's own figures on the
+ * candidate (`prior_close`, `prev_rvol`, `prev_change_pct`), whether the list was built before or after the open (D-018). A list built before
+ * the open also relabels the server's `rvol_10d` and `change_pct` as the same previous-session figures, so those two are not drawn twice; a list
+ * stored before the candidate carried them reads them from that block, and a dash where it has neither.
  */
 export function dayColumns(list: Pick<DayList, "columns" | "universe">, live: { today: boolean } | null = null): DayColumn[] {
   const prevBasis = list.universe.prev_basis;
@@ -252,11 +252,9 @@ export function dayColumns(list: Pick<DayList, "columns" | "universe">, live: { 
     used.add(key);
     return [{ key, label: column.label, format: column.format, value: metric(key), source: key }];
   };
-  const previous = (key: string, label: string, format: string, source: string): DayColumn => {
-    if (prevBasis) used.add(source);
-    return { key, label, format, value: prevBasis ? metric(source) : () => null, missing: !prevBasis, source: prevBasis ? source : undefined };
-  };
-  if (prevBasis) used.add("last");
+  if (prevBasis) for (const key of ["last", "rvol_10d", "change_pct"]) used.add(key);
+  const stored = (own: (row: Candidate) => number | null, source: string) => (row: Candidate) =>
+    own(row) ?? (prevBasis ? metric(source)(row) : null);
 
   // Following the clock, the list-time move from the prior close gives way to the one at the clock; the list price stays as the reference.
   if (live) used.add("list_change_pct"); // replaced by the move at the clock
@@ -269,8 +267,8 @@ export function dayColumns(list: Pick<DayList, "columns" | "universe">, live: { 
     : [...plain("list_price"), ...plain("list_change_pct")];
   const prev: DayColumn[] = [
     { key: "prev_close", label: "Prev close", format: "price", value: (row) => row.prior_close },
-    previous("prev_rvol", "Prev RVOL", "ratio", "rvol_10d"),
-    previous("prev_change_pct", "Prev change %", "pct_signed", "change_pct"),
+    { key: "prev_rvol", label: "Prev RVOL", format: "ratio", value: stored((row) => row.prev_rvol, "rvol_10d") },
+    { key: "prev_change_pct", label: "Prev change %", format: "pct_signed", value: stored((row) => row.prev_change_pct, "change_pct") },
   ];
   const core = [...plain("atr_pct_14"), ...plain("rsi_14")];
   const rest = list.columns.flatMap((column) => plain(column.key));

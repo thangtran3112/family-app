@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": 1,
+  "mode": "day",
+  "startingBalance": 50000,
+  "status": "active",
+  "plan": {
+    "stopNoteOnEntry": "yes",
+    "tradeOnlyOnSignal": "yes"
+  },
+  "createdAt": "2026-10-25T09:00:00Z",
+  "stats": {
+    "balance": 50000,
+    "daysPracticed": 0,
+    "daysSkipped": 0,
+    "wins": 0,
+    "losses": 0
+  }
+}

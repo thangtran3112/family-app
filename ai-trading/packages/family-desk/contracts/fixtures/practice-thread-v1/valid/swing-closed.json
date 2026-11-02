@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": 3,
+  "name": "Swing thread · Oct 25",
   "mode": "swing",
   "startingBalance": 250000,
   "status": "closed",
