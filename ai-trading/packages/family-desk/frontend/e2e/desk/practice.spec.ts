@@ -931,14 +931,15 @@ test.describe("Practice day list · fix wave 5S", () => {
     await page.waitForURL(SESSION_URL);
   });
 
-  test("the Day list's prices follow the thread clock: before the clock starts it is the list, after a name is opened every name is read at the clock and the moving columns say \"now\"", async ({ page, context }) => {
+  test("the Day list's prices follow the thread clock: the table is read at the clock from the day's start, with no name opened, and the moving columns say \"now\"", async ({ page, context }) => {
     test.setTimeout(180_000);
     const api = watchApi(page);
     await openDayList(page, context);
     const table = page.getByRole("table", { name: "Candidates" });
-    await expect(page.getByTestId("live-note"), "no clock yet: the table is the list's, and says nothing about a clock").toHaveCount(0);
-    await expect(table.getByRole("columnheader", { name: "Price now" })).toHaveCount(0);
-    expect(api.paths().filter((path) => /day-lists\/\d+\?.*live=true/.test(path)), "and nothing asks for the clock's prices").toEqual([]);
+    // The clock exists from the day's start: the table is read at it before any name is opened.
+    await expect(page.getByTestId("live-note")).toContainText(/follows? the day clock/);
+    await expect(table.getByRole("columnheader", { name: "Price now" })).toBeVisible();
+    expect(api.paths().filter((path) => /day-lists\/\d+\?.*live=true/.test(path)).length, "the table asks for the clock's prices").toBeGreaterThan(0);
 
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);

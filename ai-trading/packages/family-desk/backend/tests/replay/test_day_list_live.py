@@ -54,12 +54,15 @@ def test_the_live_block_follows_the_clock_while_the_list_values_stay_at_list_tim
     assert _gapper(_live_list(db_session, user_id, svc, row))["live"]["price"] == 130.0
 
 
-def test_the_snapshot_reads_are_unchanged_and_no_live_block_before_the_clock_or_after_the_day(
+def test_the_snapshot_reads_are_unchanged_and_no_live_block_without_live_or_after_the_day(
     db_session, user_id, svc
 ) -> None:
     row = _first_list(db_session, user_id, svc)
     before = plan_mod.day_list_out(db_session, user_id, row.id, svc, live=True)
-    assert before["clock"] is None and all(c.get("live") is None for c in before["candidates"]), "no clock, no live"
+    assert before["clock"] == _at("09:30"), "the day's clock stands at its start, with no name opened"
+    assert all(pd.Timestamp(c["live"]["at"]) <= _at("09:30") for c in before["candidates"]), (
+        "read at the clock, no later"
+    )
     started = plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
     db_session.commit()
     _advance(db_session, user_id, svc, started.id, "10:00")

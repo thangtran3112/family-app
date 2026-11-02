@@ -219,7 +219,7 @@ export type DayColumn = {
  *  gap, VWAP, RVOL and 52-week high). ATR % and RSI stay on closed daily bars, so they never repaint and are not here. */
 const CLOCK_METRICS = new Set(["last", "change_pct", "volume", "rvol_10d", "gap_pct_open", "vs_vwap_pct", "high_252d", "dist_to_252d_high_pct"]);
 
-/** Whether the table moves with the day clock: null before the clock starts and after the day ends (the read carries no `live` block). `today`: the
+/** Whether the table moves with the day clock: null before the read carries a clock and after the day ends (the read carries no `live` block). `today`: the
  *  regular session has opened at the clock, so the metric columns can move too; before that only the price does (extended hours). */
 export function liveState(list: Pick<DayList, "candidates">): { today: boolean } | null {
   const lives = list.candidates.flatMap((row) => (row.live ? [row.live] : []));
@@ -483,7 +483,7 @@ export const sessionResumeHref = (session: { id: number; day_list_id: number | n
 
 // ---- re-scan at the day clock (02o-b2) ---------------------------------------------------------------------------
 
-/** A re-scan runs at the day clock, which starts with her first name and is never before the list time. */
+/** A re-scan runs at the day clock, which runs from the day's start and is never before the list time. */
 export const canRescan = (list: Pick<DayList, "status" | "clock" | "list_at">): boolean =>
   list.status !== "ended" && list.clock !== null && Date.parse(list.clock) >= Date.parse(list.list_at);
 

@@ -165,19 +165,21 @@ class ClockAccountOut(BaseModel):
 
 
 class ThreadClockOut(BaseModel):
-    """The day-trade thread's clock (ADR-0018). `clock` is the simulated time at `server_now` (a running clock was
-    settled before this was built); a client may extrapolate it with `speed` between polls but never owns it."""
+    """The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a
+    running clock was settled before this was built); a client may extrapolate it with `speed` between polls but never
+    owns it. It runs through the close, the night and the weekend with no end of its own."""
 
     thread_id: int
-    state: Literal["no_day", "listed", "paused", "running"]
+    state: Literal["no_day", "paused", "running"]
     day_list_id: int | None
     day_no: int | None
     running: bool
     speed: Literal[1, 2, 5, 10]
     clock: datetime | None
     window_start: datetime | None
-    window_end: datetime | None  # the exchange close: the only time the clock ends on its own
+    window_end: datetime | None  # the end of the day's tape (extended close): the clock runs on past it
     focus_end: datetime | None  # where her plan's practice window ends: a mark on the timeline, never a stop
+    next_start: datetime | None  # when the next trading day starts and the day hands over; null on the plan's last day
     server_now: datetime
     account: ClockAccountOut | None
     label: str
@@ -185,7 +187,8 @@ class ThreadClockOut(BaseModel):
 
 class ClockIn(BaseModel):
     """Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
-    its UTC offset). Any mix, at least one; a step or jump is forward only and stops at the close."""
+    its UTC offset). Any mix, at least one; a step or jump is forward only. The Summary's board sends `running` and
+    `speed`; `step` and `to` are for tests and tools."""
 
     model_config = ConfigDict(extra="forbid")
 

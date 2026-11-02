@@ -1172,18 +1172,18 @@ export interface paths {
         };
         /**
          * Get Thread Clock
-         * @description The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the
-         *     simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the
-         *     answer whether or not anyone was looking in between. A clock that reached the close rolls the day over first (the
-         *     answer is then the next day's). Poll it; it is idempotent.
+         * @description The day thread's clock now (ADR-0018): its state, speed, the simulated time, the day's tape, when the next day
+         *     starts, and the simulated account at that time (balance, open P/L, equity). A running clock is brought to now
+         *     first, so this is the answer whether or not anyone was looking in between. A clock that reached the next trading
+         *     day's start hands the day over first (the answer is then the next day's). Poll it; it is idempotent.
          */
         get: operations["get_thread_clock_api_desk_replay_threads__thread_id__clock_get"];
         put?: never;
         /**
          * Control Thread Clock
-         * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump
-         *     it to a time. Forward only; a step or jump stops at the close like Play does. 409 before the day
-         *     has started. Time then runs on the server until she pauses it, and the day rolls over at the close.
+         * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), or (tests, tools) step it a bar or to the next
+         *     signal, or jump it to a time. Forward only. 409 without an open day. Time then runs on the server until she pauses
+         *     it, through the close and the night; the day hands over at the next trading day's start.
          */
         post: operations["control_thread_clock_api_desk_replay_threads__thread_id__clock_post"];
         delete?: never;
@@ -1288,8 +1288,9 @@ export interface paths {
         put?: never;
         /**
          * Skip Thread Day
-         * @description Skip to the next day: the clock runs to the close, the day ends (every open position flattens at that close)
-         *     and the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.
+         * @description Skip to the next day: the clock jumps to the next trading day's start (over the night and the weekend), the day
+         *     ends (every open position flattens at its tape's end) and the next day's list opens with the clock there. The next
+         *     list may wait on its data (`next_day_list_id` null): poll the hub then.
          */
         post: operations["skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post"];
         delete?: never;
@@ -2711,7 +2712,8 @@ export interface components {
         /**
          * ClockIn
          * @description Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
-         *     its UTC offset). Any mix, at least one; a step or jump is forward only and stops at the close.
+         *     its UTC offset). Any mix, at least one; a step or jump is forward only. The Summary's board sends `running` and
+         *     `speed`; `step` and `to` are for tests and tools.
          */
         ClockIn: {
             /** Running */
@@ -6852,8 +6854,9 @@ export interface components {
         };
         /**
          * ThreadClockOut
-         * @description The day-trade thread's clock (ADR-0018). `clock` is the simulated time at `server_now` (a running clock was
-         *     settled before this was built); a client may extrapolate it with `speed` between polls but never owns it.
+         * @description The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a
+         *     running clock was settled before this was built); a client may extrapolate it with `speed` between polls but never
+         *     owns it. It runs through the close, the night and the weekend with no end of its own.
          */
         ThreadClockOut: {
             account: components["schemas"]["ClockAccountOut"] | null;
@@ -6867,6 +6870,8 @@ export interface components {
             focus_end: string | null;
             /** Label */
             label: string;
+            /** Next Start */
+            next_start: string | null;
             /** Running */
             running: boolean;
             /**
@@ -6883,7 +6888,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "no_day" | "listed" | "paused" | "running";
+            state: "no_day" | "paused" | "running";
             /** Thread Id */
             thread_id: number;
             /** Window End */
