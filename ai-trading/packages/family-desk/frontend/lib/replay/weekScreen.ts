@@ -1,4 +1,5 @@
 import { DeskApiError } from "../api/client.ts";
+import { formatEtDay } from "../desk/format.ts";
 import { fillCopy, practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingOpenNext, WeekOut } from "./swingApi.ts";
 import type { SwingState, ThreadDay, ThreadToday } from "./threads.ts";
@@ -140,10 +141,12 @@ export const dayListIdOf = (daily: ReadonlyArray<Pick<ThreadDay, "n" | "day_list
   daily?.find((day) => day.n === dayNo)?.day_list_id ?? null;
 
 /** Each day row opens that day's board in its ended state; no link without a known board. */
-export const linkDayRows = (rows: readonly WeekDayRowView[], daily: ReadonlyArray<Pick<ThreadDay, "n" | "day_list_id">> | null | undefined): LinkedDayRow[] =>
+export const linkDayRows = (rows: readonly WeekDayRowView[], daily: ReadonlyArray<Pick<ThreadDay, "n" | "day_list_id" | "day">> | null | undefined): LinkedDayRow[] =>
   rows.map((row) => {
-    const id = dayListIdOf(daily, row.dayNo);
-    return { ...row, href: id === null ? null : dayBoardHref(id) };
+    const found = daily?.find((day) => day.n === row.dayNo);
+    // The week review names a day by number and weekday; the thread's own day carries its date, which the row then shows.
+    const title = found ? practiceText("swingDayShort", { day: row.dayNo, weekday: formatEtDay(found.day) }) : row.title;
+    return { ...row, title, href: found ? dayBoardHref(found.day_list_id) : null };
   });
 
 // -- equity chart ------------------------------------------------------------------------------------------------

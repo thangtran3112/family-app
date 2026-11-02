@@ -1,9 +1,8 @@
 import type { MarketChartLevel } from "../../components/charts/MarketChart.tsx";
 import type { ChartBar, CrosshairPoint } from "../chart-data.ts";
-import { formatPrice } from "../desk/format.ts";
+import { EMPTY_VALUE, formatEtDay, formatPrice } from "../desk/format.ts";
 import { PRACTICE_COPY } from "../desk/freshness.ts";
 import type { LegendModel } from "../desk/workspace.ts";
-import { syntheticDays } from "./dayView.ts";
 import type { PlanItem } from "./planView.ts";
 import type { DailyBlock, Hold, Paused, ReplayInterval, StripRow } from "./schemas.ts";
 import { swingBriefLine, swingDayTitle } from "./swing.ts";
@@ -13,7 +12,7 @@ import { formatBalance, formatDayResult } from "./threadView.ts";
 
 // The swing practice workspace (02p), the view logic F4's screens need on top of `swing.ts`: the chart toggle and the
 // Daily chart's data, the sizing default, the plan checklist rows, the stop-pause Exit target and the header lines.
-// Pure, so the node tests cover it. Money is SIMULATED and no date reaches the screen while the thread hides dates.
+// Pure, so the node tests cover it. Money is SIMULATED; a day is always named with its date (ADR-0022).
 
 /** The few strings the workspace says that no copy row carries. Plain words; the tests run them through the banned list. */
 export const SWING_PLAY_COPY = {
@@ -24,7 +23,6 @@ export const SWING_PLAY_COPY = {
   openHoldsLabel: "Open holds",
   holdOpenCardLabel: "Open practice hold",
   planTitle: "Swing plan",
-  today: "Today",
 } as const;
 
 
@@ -51,28 +49,18 @@ const AMBER = "#FFB020";
 const MUTED = "#9B9BA1";
 
 export type DailyChartModel = {
-  /** The rebased bars through the prior close, then today's forming candle. Dates are a stand-in timeline while hidden. */
+  /** The rebased bars through the prior close, then today's forming candle, each on its real date. */
   bars: ChartBar[];
   /** Her entry and stop as price lines across all the days: a number on the chart, the name on hover. No entry arrow or label is drawn. */
   levels: MarketChartLevel[];
-  /** While dates are hidden, "D-12 … D-1, Today" per bar; null when dates show. */
-  offsets: string[] | null;
   /** The sentence under the chart. */
   note: string;
 };
 
-const offsetLabel = (back: number): string => (back <= 0 ? SWING_PLAY_COPY.today : `D-${back}`);
-
-/**
- * The Daily chart's data from the API's `daily` block (the rebased frame through the prior close, the forming candle, her
- * hold). With dates hidden the real dates give way to a stand-in timeline (the last real date would name the day), and the
- * entry and stop lines are prices, so they need no date.
- */
-export function dailyChartModel(block: DailyBlock, hidden: boolean): DailyChartModel {
+/** The Daily chart's data from the API's `daily` block (the rebased frame through the prior close, the forming candle, her hold). */
+export function dailyChartModel(block: DailyBlock): DailyChartModel {
   const raw = block.forming ? [...block.bars, block.forming] : [...block.bars];
-  const dates = hidden ? syntheticDays(raw.length) : raw.map((bar) => bar.t);
-  const bars: ChartBar[] = raw.map((bar, index) => ({ t: dates[index]!, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v }));
-  const today = block.forming ? raw.length - 1 : raw.length;
+  const bars: ChartBar[] = raw.map((bar) => ({ t: bar.t, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v }));
   const hold = block.holds[0];
   const levels: MarketChartLevel[] = hold
     ? [
@@ -83,7 +71,6 @@ export function dailyChartModel(block: DailyBlock, hidden: boolean): DailyChartM
   return {
     bars,
     levels,
-    offsets: hidden ? raw.map((_, index) => offsetLabel(today - index)) : null,
     note: block.forming ? SWING_PLAY_COPY.dailyNote : SWING_PLAY_COPY.dailyNotePrior,
   };
 }
@@ -91,18 +78,18 @@ export function dailyChartModel(block: DailyBlock, hidden: boolean): DailyChartM
 const timeKey = (time: CrosshairPoint["time"]): string | null =>
   typeof time === "string" ? time : typeof time === "object" ? `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}` : null;
 
-/** The legend of the Daily chart: `NVDA · Daily · D-3 · O … H … L … C …` at the crosshair, or at the newest bar. */
-export function dailyLegend(symbol: string, model: Pick<DailyChartModel, "bars" | "offsets">, point: CrosshairPoint | null): LegendModel {
+/** The legend of the Daily chart: `NVDA · Daily · Fri 2026-10-23 · O … H … L … C …` at the crosshair, or at the newest bar. */
+export function dailyLegend(symbol: string, model: Pick<DailyChartModel, "bars">, point: CrosshairPoint | null): LegendModel {
   const last = model.bars.at(-1);
   const key = point ? timeKey(point.time) : null;
-  const index = key === null ? model.bars.length - 1 : model.bars.findIndex((bar) => bar.t === key);
-  const offset = model.offsets?.[index] ?? null;
+  const shown = key === null ? last : model.bars.find((bar) => bar.t === key);
+  const day = shown ? formatEtDay(shown.t) : null;
   const o = point ? point.open : (last?.o ?? null);
   const h = point ? point.high : (last?.h ?? null);
   const l = point ? point.low : (last?.l ?? null);
   const c = point ? point.close : (last?.c ?? null);
   const ohlc = `O ${formatPrice(o)} H ${formatPrice(h)} L ${formatPrice(l)} C ${formatPrice(c)}`;
-  return { title: [symbol, "Daily", offset, ohlc].filter((part): part is string => part !== null).join(" · "), items: [] };
+  return { title: [symbol, "Daily", day === EMPTY_VALUE ? null : day, ohlc].filter((part): part is string => part !== null).join(" · "), items: [] };
 }
 
 // -- marks: the stop pause ---------------------------------------------------------------------------------------
@@ -191,12 +178,12 @@ export function swingPlanItems(input: { holdsOpen: number; maxTrades: number | n
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-/** "Day 7 of 20 · Week 2 · Tue" (the date in place of the weekday when dates show). Null when the brief lacks the numbers. */
-export function swingDayChip(brief: Pick<ThreadBrief, "day_no" | "days" | "week_no">, day: string, hidden: boolean): string | null {
+/** "Day 7 of 20 · Week 2 · Tue 2026-07-14". Null when the brief lacks the numbers. */
+export function swingDayChip(brief: Pick<ThreadBrief, "day_no" | "days" | "week_no">, day: string): string | null {
   const weekday = WEEKDAYS[new Date(`${day}T12:00:00Z`).getUTCDay()];
   if (brief.day_no == null || brief.days == null || brief.week_no == null || weekday === undefined || weekday === "Sun" || weekday === "Sat") return null;
-  const list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "weekday" | "day"> = { day_no: brief.day_no, of: brief.days, week_no: brief.week_no, weekday, day };
-  return swingDayTitle(list, hidden);
+  const list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "day"> = { day_no: brief.day_no, of: brief.days, week_no: brief.week_no, day };
+  return swingDayTitle(list);
 }
 
 /** "Balance $51,240 · Equity $52,010 · Free cash $24,720": the money half of the header, without the SIMULATED word (a badge follows it). */

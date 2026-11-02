@@ -1,7 +1,7 @@
 import type { Tone } from "../../components/ui/tone.ts";
 import type { Stamp } from "../api/schemas.ts";
 import type { ShellBand } from "./viewport.ts";
-import { formatAgo, formatAsOfText, formatEtClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
+import { formatAgo, formatAsOfText, formatEtClock, formatEtDateClock, formatEtDay, formatEtTime, formatEtTimeZone, formatEtWeekdayTime, formatLastCloseLine } from "./format.ts";
 
 // The single copy table for freshness, session and empty/error wording (02l §c3, 02m §c3). Components
 // never write these strings; they call the functions below. `{x}` marks a value filled at render time.
@@ -317,10 +317,7 @@ export function notEnoughHistoryText(timeframe: string): string {
 export const PRACTICE_COPY = {
   band: "Practice · replay of {day} · nothing here reaches a broker",
   bandHub: "Practice · replay of past days · nothing here reaches a broker",
-  bandHidden: "Practice · replay of a hidden day · nothing here reaches a broker",
-  bandHiddenWhy: "Day hidden so it cannot spoil the session",
   bandMarks: "Practice trades are simulated on a finished day · nothing is sent to a broker",
-  showDate: "Show date",
   statusPricesPast: "Prices: Alpaca SIP · past days",
   statusPricesReplay: "Prices: Alpaca SIP · replay",
   statusPricesReplayIex: "Prices: Alpaca IEX · replay",
@@ -331,9 +328,7 @@ export const PRACTICE_COPY = {
   statusBalanceAsOf: "Balance as of day {day}",
   statusBalanceStart: "Balance at the start · no day ended yet",
   statusSignals: "Would-fire signals only · nothing is delivered",
-  badge: "Replay · {day} · {time}",
-  badgeHidden: "Replay · hidden day · {time}",
-  hiddenDay: "Hidden day",
+  badge: "Replay · {when}",
   feedSip: "Consolidated tape · all US exchanges",
   feedIex: "IEX prints only · about 4% of volume · bar volume is consolidated",
   fastTape: "Fast tape · showing the latest {shown} of {count} prints",
@@ -411,8 +406,6 @@ export const PRACTICE_COPY = {
   planArmed: "Armed on practice days: {names}",
   planArmedNone: "Nothing armed · no would-fire signals while you practice",
   planDays: "Days",
-  planHideDates: "Hide dates",
-  planHideDatesHint: "Hides the calendar dates, so you cannot tell which day you are practicing until you finish it",
   planListAtHint: "Your list for the day is built at this time, from what had happened by then",
   planInterval: "Chart interval",
   planWindowFrom: "Start at (ET)",
@@ -424,7 +417,6 @@ export const PRACTICE_COPY = {
   dayHeader: "List at {listAt} from data through {through} · {scanned} of {size} scanned · {matched} matched, showing {shown}",
   dayCounts: "{scanned} of {size} scanned · {matched} matched · showing {shown}",
   dayListBuilt: "List built at {listAt} from data through {through}",
-  dayDateHidden: "Date hidden",
   dayFiltersNote: "Chosen at setup · a name that passes either one is listed",
   dayFiltersNoteOne: "Chosen at setup",
   dayUniverse: "Universe: today's Desk set, up to {max} names by today's dollar volume ({size} names here). It can differ from the names that traded on that day.",
@@ -666,8 +658,9 @@ export const PRACTICE_COPY = {
   improvementReasonOneWeek: "Reason: improvement compares weeks. It waits for at least 2 weeks with practice days.",
   improvementVerdict: "Week {latest} averaged {latestAvg} a practice day; week {first} averaged {firstAvg}.",
   threadPlanTitle: "Thread plan",
+  threadFirstDay: "First day {day}",
   threadTime: "Thread time",
-  threadTimeHint: "One clock for every name on this day. Play, Step, speed and Jump move it for all of them; each name's chart catches up to it. It shows the replayed market date, not today's date.",
+  threadTimeHint: "One clock for every name on this day. Play, Step, speed and Jump move it for all of them; each name's chart catches up to it.",
   replayTime: "Replay time",
   replayTimeHint: "The clock of this replay. Play, Step, speed and Jump move it.",
   clockTitle: "Thread clock",
@@ -694,8 +687,6 @@ export const PRACTICE_COPY = {
   clockLoadError: "Couldn't read the thread clock · Try again",
   clockLoading: "Reading the thread clock…",
   clockFrozen: "Held at {time}, the last time the server confirmed the clock. It can't be read right now · trying again.",
-  clockReplayedDate: "The clock shows the replayed market date, not today's date.",
-  clockReplayedShort: "Replayed market date",
   clockPausedHint: "Paused: the clock does not move until you press Play.",
   clockSkipping: "Skipping…",
   clockSkippingNote: "Skipping to the next day. This can take up to a minute.",
@@ -723,7 +714,7 @@ export const PRACTICE_COPY = {
   threadCloseKeep: "Keep it open",
   threadCloseError: "Couldn't close the thread · Try again",
   // Swing practice (02p): a fixed list of names, practice holds that can stay open overnight, and a weekly review.
-  // Every dollar is SIMULATED. Dates stay hidden: a day is "Day 7 · Tue", a week is "Week 2".
+  // Every dollar is SIMULATED. A day is named "Day 7 · Tue 2026-10-20", a week is "Week 2".
   swingSimulated: "SIMULATED",
   swingWeek: "Week {n}",
   swingBalance: "Balance {amount}",
@@ -812,7 +803,6 @@ export const PRACTICE_COPY = {
   swingSetupHint: "Pick the first day and how many days to practice.",
   swingFirstDay: "First day",
   swingSessions: "Sessions",
-  swingHideDates: "Hide dates",
   swingCalendarLine: "{sessions} sessions · {weeks} {noun} · ends on day {sessions}",
   swingUniverseSection: "Universe",
   swingWatchlists: "Your watchlists",
@@ -974,7 +964,7 @@ export const PRACTICE_COPY = {
   threadReplaceOpenDay: "Replacing the plan ends the day in progress and exits its open trades at the day clock.",
   threadPageClosed: "This thread is closed. Its journal and final balance stay here.",
   threadPageFresh: "Your thread is ready · Day 1 is next",
-  // The thread overview (5R): a dashboard of where the thread is and what comes next. Dates stay hidden: a day is "Day 3 · Wed".
+  // The thread overview (5R): a dashboard of where the thread is and what comes next. A day is named "Day 3 · Wed 2026-10-21".
   overviewNext: "Next step",
   overviewReviewStep: "Week {n} review",
   overviewDayLocked: "Week {n} is done. Review it to unlock Day {day}.",
@@ -1044,15 +1034,12 @@ export const practiceText = (key: PracticeKey, values: Record<string, string | n
 /** A message line has no Try again button: the copy keeps its sentence and drops the " · Try again" tail that only an error block with a retry button can honour. */
 export const withoutRetryHint = (text: string): string => text.replace(/ · Try again$/, "");
 
-/** "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker"; `day` null on the hub, `hidden` while the date is masked. */
-export function practiceBandText(day: string | null, hidden = false, pastDays = false): string {
-  if (pastDays && hidden) return PRACTICE_COPY.bandHub; // a list or journal of hidden days says "past days" (D-015)
-  if (hidden) return PRACTICE_COPY.bandHidden;
-  return day ? practiceText("band", { day: formatEtDay(day) }) : PRACTICE_COPY.bandHub;
+/** "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker"; `day` null on the hub, `pastDays` on a list of days. */
+export function practiceBandText(day: string | null, pastDays = false): string {
+  return day && !pastDays ? practiceText("band", { day: formatEtDay(day) }) : PRACTICE_COPY.bandHub;
 }
 
-/** The top-bar badge during a replay: "Replay · Fri 2026-10-23 · 10:07 AM ET" or "Replay · hidden day · 10:07 AM ET". */
-export function replayBadgeText(day: string, playhead: string | null, hidden: boolean): string {
-  const time = formatEtTimeZone(playhead);
-  return hidden ? practiceText("badgeHidden", { time }) : practiceText("badge", { day: formatEtDay(day), time });
+/** The top-bar badge during a replay: "Replay · Fri 2026-10-23 · 1:22:24 AM ET", the thread clock's own date (it can be the day after the session day). */
+export function replayBadgeText(playhead: string | null): string {
+  return practiceText("badge", { when: formatEtDateClock(playhead) });
 }

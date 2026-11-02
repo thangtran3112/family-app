@@ -29,7 +29,6 @@ export type SwingDraft = {
   firstDay: string;
   /** Whole sessions as typed, 15 to 23. */
   sessions: string;
-  hideDates: boolean;
   interval: (typeof SWING_INTERVALS)[number];
   tape: (typeof SWING_TAPES)[number];
   /** Whole dollars as typed; empty means no per-hold risk. */
@@ -79,7 +78,6 @@ export function defaultSwingFirstDay(now: Date): string {
 export const defaultSwingDraft = (now: Date): SwingDraft => ({
   firstDay: defaultSwingFirstDay(now),
   sessions: String(DEFAULT_SESSIONS),
-  hideDates: true,
   interval: "15m",
   tape: "off",
   riskPerHoldUsd: "",
@@ -117,14 +115,13 @@ export function calendarLine(draft: Pick<SwingDraft, "firstDay" | "sessions">): 
 // -- validation --------------------------------------------------------------------------------------------------
 
 export type SwingField =
-  | "firstDay" | "sessions" | "hideDates" | "universe" | "interval" | "tape" | "armed" | "riskPerHoldUsd" | "target";
+  | "firstDay" | "sessions" | "universe" | "interval" | "tape" | "armed" | "riskPerHoldUsd" | "target";
 export type SwingFormField = ThreadField | SwingField;
 export type SwingProblems = Partial<Record<SwingFormField, string>>;
 
 const FIELD_MESSAGE: Record<SwingField, string> = {
   firstDay: "First day: pick a weekday from Jan 3, 2017",
   sessions: `Sessions: a whole number from ${MIN_SESSIONS} to ${MAX_SESSIONS}`,
-  hideDates: "Pick yes or no",
   universe: `Universe: ${MIN_UNIVERSE} to ${MAX_UNIVERSE} symbols, each once`,
   interval: "Interval: pick 15m or 5m",
   tape: "Tape: pick off or on",
@@ -133,7 +130,7 @@ const FIELD_MESSAGE: Record<SwingField, string> = {
   target: `Target size: a whole number from ${MIN_UNIVERSE} to ${MAX_UNIVERSE}`,
 };
 
-const SWING_FIELDS: ReadonlySet<string> = new Set<SwingField>(["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed", "riskPerHoldUsd", "target"]);
+const SWING_FIELDS: ReadonlySet<string> = new Set<SwingField>(["firstDay", "sessions", "universe", "interval", "tape", "armed", "riskPerHoldUsd", "target"]);
 
 /** Maps a contract or server path (`swing.universe.3.symbol`, `swing.armed.0.id`, `swing.firstDay`) to the field that shows it. */
 export function swingFieldOfPath(path: string): SwingField | "form" {
@@ -217,7 +214,7 @@ export function swingBlock(draft: SwingDraft, rows: readonly Pick<UniverseRow, "
   const block: Record<string, unknown> = {
     firstDay: draft.firstDay,
     sessions: numberOrNaN(draft.sessions),
-    hideDates: draft.hideDates ? "yes" : "no",
+    hideDates: "no", // the contract still wants the field; a date is always shown (ADR-0022), so the server ignores it
     universe: universeEntries(rows),
     interval: draft.interval,
     tape: draft.tape,

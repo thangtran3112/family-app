@@ -96,16 +96,5 @@ export const tradesCountText = (count: number): string => `${count} practice tra
 /** "Session over · 3 practice trades · See journal". */
 export const sessionOverText = (tradeCount: number): string => practiceText("sessionOver", { trades: tradesCountText(tradeCount) });
 
-/**
- * Whether the journal masks the session's date. An open session always does. An ended one reveals it (nothing is left to
- * spoil) unless it belongs to a swing thread that is still going: a swing day ending does not end the thread, and one
- * date gives every later day's date.
- */
-export function journalDatesHidden(session: { status: string; spec: { hideDate: "yes" | "no" }; thread: { mode: string; status: string } | null }): boolean {
-  if (session.spec.hideDate !== "yes") return false;
-  return session.status !== "ended" || (session.thread?.mode === "swing" && session.thread.status === "active");
-}
-
-/** "Day 3 of 15 · Week 1 · Wed" for a swing session's journal while dates are hidden; "Hidden day" until the day list answers. */
-export const swingJournalDay = (list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "weekday" | "day"> | null): string =>
-  list === null ? PRACTICE_COPY.hiddenDay : swingDayTitle(list, true);
+/** "Day 3 of 15 · Week 1 · Wed 2026-07-08" for a swing session's journal. */
+export const swingJournalDay = (list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "day">): string => swingDayTitle(list);

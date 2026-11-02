@@ -121,11 +121,11 @@ test.describe("Practice landing", () => {
     // No "Preset" pills: a filter row is its checkbox, its name and its rule (D-076, M-06).
     await expect(filters).not.toContainText(/Preset|Yours/);
 
-    // The rest of the form is on screen: dates (with the recorded-day note), days, hide dates, list time and size, interval, window.
+    // The rest of the form is on screen: dates (with the recorded-day note), days, list time and size, interval, window.
     await expect(dialog.getByTestId("first-day-note")).toBeVisible();
     await expect(dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio")).toHaveText(["5", "10", "20", "30"]);
     await expect(dialog.getByText("Names a day"), "a day opens any list name: no cap to pick").toHaveCount(0);
-    await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planHideDates }).getByRole("radio", { name: "Yes" })).toBeChecked();
+    await expect(dialog.getByText(/hide dates/i), "ADR-0022: no Hide dates choice").toHaveCount(0);
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt }).getByRole("radio")).toHaveCount(3);
     await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planInterval })).toBeVisible();
@@ -341,7 +341,7 @@ test.describe("New plan modal redesign", () => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
     const groups = await segmentedGroups(dialog);
-    expect(groups.length).toBeGreaterThanOrEqual(5); // mode, days, hide dates, list time, interval
+    expect(groups.length).toBeGreaterThanOrEqual(5); // mode, days, list time, interval
     for (const group of groups) {
       expect(group.overflow, `${group.name}: scrollWidth <= clientWidth`).toBeLessThanOrEqual(0);
       expect(group.poke, `${group.name}: no button outside its box`).toBeLessThanOrEqual(0.5);
@@ -364,7 +364,7 @@ test.describe("New plan modal redesign", () => {
   });
 
   // D-152: the swing settings sit on the same two-column grid, so each segmented control is as wide as its column and starts at
-  // that column's edge. The grid fills row by row (First day | Sessions, Hide dates | Interval, Risk per hold | Tape), so the first
+  // that column's edge. The grid fills row by row (First day | Sessions, Interval | Risk per hold, Tape), so the first
   // column's edge is the First day box and the second's is the Sessions box.
   test("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
     const dialog = await openNewPlan(page);
@@ -374,9 +374,8 @@ test.describe("New plan modal redesign", () => {
     expect(right.width, "two equal columns").toBeCloseTo(left.width, 0);
     expect(right.x, "the Sessions box is in the second column").toBeGreaterThan(left.x + left.width);
     const columns = [
-      { name: PRACTICE_COPY.swingHideDates, column: left, side: "first" },
-      { name: PRACTICE_COPY.swingInterval, column: right, side: "second" },
-      { name: PRACTICE_COPY.swingTape, column: right, side: "second" },
+      { name: PRACTICE_COPY.swingInterval, column: left, side: "first" },
+      { name: PRACTICE_COPY.swingTape, column: left, side: "first" },
     ];
     for (const { name, column, side } of columns) {
       const box = (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;

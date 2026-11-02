@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { DeskApiError } from "@/lib/api/client";
+import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -58,11 +59,12 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
   const closed = status === "closed";
   const balance = formatBalance(stats.balance);
   const todayGap = realizedToday(thread);
+  const firstDay = thread.daily[0]?.day ?? null;
   const name = threadName(thread.thread);
   // At the 1180 band the right rail is a tab strip: each tab opens its own drawer, and the screen leaves room for them (D-038, D-040).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
-  useReportPracticeChrome({ day: null, hidden: false, playhead: null, scope: "days", status: journalStatusLine(thread.daily) });
+  useReportPracticeChrome({ day: null, playhead: null, scope: "days", status: journalStatusLine(thread.daily) });
 
   return (
     <div className={styles.screen} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined}>
@@ -74,7 +76,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
             <Badge tone="neutral">{threadModeLabel(mode)}</Badge>
           </div>
           <p className={styles.sub}>
-            {`${startedWithText(thread.thread)} · start date hidden · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} passed${todayGap === null ? "" : ` · ${practiceText("balanceIncludesToday", { amount: formatDayResult(todayGap) })}`} `}
+            {`${startedWithText(thread.thread)}${firstDay === null ? "" : ` · ${practiceText("threadFirstDay", { day: formatEtDay(firstDay) })}`} · ${stats.daysPracticed} ${stats.daysPracticed === 1 ? "day" : "days"} practiced, ${stats.daysSkipped} passed${todayGap === null ? "" : ` · ${practiceText("balanceIncludesToday", { amount: formatDayResult(todayGap) })}`} `}
             <SimulatedBadge />
           </p>
         </div>

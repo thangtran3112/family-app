@@ -26,7 +26,6 @@ import {
   stripRowView,
   swingBriefLine,
   swingCardView,
-  swingDatesHidden,
   swingDayTitle,
   swingBoardTitle,
 } from "./swing.ts";
@@ -159,17 +158,9 @@ test("the strip's % colour follows the rounded text: -0.01% and +0.01% both read
   assert.equal(row(null).changeTone, "flat");
 });
 
-test("dates stay hidden unless the setup says otherwise", () => {
-  assert.equal(swingDatesHidden({ hideDates: "yes" }), true);
-  assert.equal(swingDatesHidden({ hideDates: "no" }), false);
-  assert.equal(swingDatesHidden(undefined), true, "no setup in hand, no date");
-});
-
 test("the board header: day, week, weekday, as of the prior close, balance, equity and SIMULATED", () => {
-  assert.equal(swingDayTitle(swingDayList, true), "Day 7 of 20 · Week 2 · Tue");
-  assert.equal(swingDayTitle(swingDayList, false), "Day 7 of 20 · Week 2 · Tue 2026-07-14");
-  assert.equal(swingBoardTitle(swingDayList, true), "Day 7 of 20 · Tue", "D-139: day and weekday; the week and the state are chips, the money is in the strip");
-  assert.equal(swingBoardTitle(swingDayList, false), "Day 7 of 20 · Tue 2026-07-14");
+  assert.equal(swingDayTitle(swingDayList), "Day 7 of 20 · Week 2 · Tue 2026-07-14");
+  assert.equal(swingBoardTitle(swingDayList), "Day 7 of 20 · Tue 2026-07-14", "D-139: day, weekday and date; the week and the state are chips, the money is in the strip");
   assert.equal(swingBriefLine(swingBrief), "Balance $51,240.00 · Equity $52,010.00 · Free cash $24,720.00 · SIMULATED");
 });
 
@@ -276,8 +267,8 @@ test("every string the helpers build avoids the Practice banned words", () => {
       const view = stripRowView(row);
       return [view.sub, view.label];
     }),
-    swingBoardTitle(swingDayList, true),
-    swingBoardTitle(swingDayListEnded, false),
+    swingBoardTitle(swingDayList),
+    swingBoardTitle(swingDayListEnded),
     swingBriefLine(swingBrief),
     ...[swingThreadSummary, swingThreadReviewReady, swingThreadFinished].flatMap((summary) => {
       const card = swingCardView(summary)!;

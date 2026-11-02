@@ -15,7 +15,7 @@ import { placeOrder } from "./swing-helpers";
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const readout = (page: Page) => page.getByTestId("thread-clock-time");
 
-/** "Fri, Sep 25 · 9:31:20 AM ET" to seconds since midnight. */
+/** "Fri 2026-09-25 · 9:31:20 AM ET" to seconds since midnight. */
 function seconds(text: string | null): number {
   const match = /(\d+):(\d+):(\d+)\s*(AM|PM)/.exec(text ?? "");
   if (!match) throw new Error(`not a clock: ${text}`);
@@ -108,7 +108,7 @@ test.describe("Practice: the thread clock", () => {
     for (const name of ["Play", "Skip day", "End day", "1x", "2x", "5x", "10x"]) await expect(panel(page).getByRole("button", { name, exact: true })).toBeEnabled();
     for (const name of ["Step"]) await expect(panel(page).getByRole("button", { name, exact: true })).toHaveCount(0); // only Pause, the speed and Skip day change time
     await expect(panel(page).getByRole("button", { name: /^Jump/ })).toHaveCount(0);
-    await expect(readout(page)).toHaveText(/^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // a full date, never a bare time
+    await expect(readout(page)).toHaveText(/^[A-Z][a-z]{2} \d{4}-\d{2}-\d{2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // the one format: weekday, ISO date, time to the second, zone
     const paused = await clockOf(page);
 
     await play(page, "5x");
@@ -166,24 +166,18 @@ test.describe("Practice: the thread clock", () => {
     expect(Date.parse(body.clock)).toBeLessThanOrEqual(Date.parse(body.window_end)); // never past the window: nothing later is read
   });
 
-  // D-174: Hide dates is Yes by default. "Show date" on the chart band reveals the date for that day, and the Summary clock shows what the chip shows.
-  test("Show date on the chart band reaches the Summary: the clock, the next session line and the End day question show the date, for that day only (D-174)", async ({ page, context }) => {
+  // ADR-0022: the date is never hidden. The chart's readout, the chip and the Summary clock all name the thread's own date; the Summary's next session line and the End day question do too.
+  test("the chart, the chip and the Summary clock show the date, and so do the next session line and the End day question (ADR-0022)", async ({ page, context }) => {
     test.setTimeout(240_000);
     await startDayOnTsla(page, context);
+    await expect(readout(page), "the chart's readout carries the date").toContainText("Fri 2026-09-25");
+    await expect(page.getByRole("button", { name: /show date/i })).toHaveCount(0);
     await page.getByRole("tab", { name: "Summary" }).click();
     await page.waitForURL(THREAD_URL);
-    await expect(readout(page), "hidden: the weekday and the time only").not.toContainText("Sep");
-    await page.goBack(); // the chart again
-    await page.waitForURL(SESSION_URL);
-    await page.getByRole("button", { name: PRACTICE_COPY.showDate }).click();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toHaveCount(0);
-    await page.getByRole("tab", { name: "Summary" }).click();
-    await page.waitForURL(THREAD_URL);
-    await expect(readout(page), "shown: the chip shows the date, so does the clock").toContainText("Sep 25");
-    await expect(page.getByTestId("thread-clock-next")).toContainText(/Sep \d+/);
+    await expect(readout(page), "the clock shows the date from the first read").toContainText("Fri 2026-09-25");
+    await expect(page.getByTestId("thread-clock-next")).toContainText(/(Mon|Tue|Wed|Thu|Fri|Sat|Sun) 20\d\d-\d\d-\d\d/);
     await panel(page).getByRole("button", { name: PRACTICE_COPY.clockEndDay }).click();
-    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toContainText("Sep 25");
-    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toContainText("Fri 2026-09-25");
   });
 
   test("nothing happens at the close: the clock flows through after-hours and the night, and the day hands over only at the next session's start", async ({ page, context }) => {
@@ -209,11 +203,11 @@ test.describe("Practice: the thread clock", () => {
     const hour = 3_600_000;
     const afterHours = await jump(Date.parse(before.window_end) - 3 * hour);
     expect(afterHours.day_no).toBe(1);
-    await expect(readout(page)).toContainText(/Sep 25 · 5:0\d:\d{2} PM ET/, { timeout: 15_000 });
+    await expect(readout(page)).toContainText(/Fri 2026-09-25 · 5:0\d:\d{2} PM ET/, { timeout: 15_000 });
     // The night after the tape ended: the same day, the clock still has a full date and time.
     const night = await jump(Date.parse(before.window_end) + 5 * hour);
     expect(night.day_no).toBe(1);
-    await expect(readout(page)).toContainText(/Sep 26 · 1:0\d:\d{2} AM ET/, { timeout: 15_000 });
+    await expect(readout(page)).toContainText(/Sat 2026-09-26 · 1:0\d:\d{2} AM ET/, { timeout: 15_000 });
     await expect(page.getByTestId("thread-clock-rolled")).toHaveCount(0);
     await expect(page.getByText(/reached the close/)).toHaveCount(0);
     expect((await (await context.request.get(clockUrl)).json()).account.positions).toBe(1); // the position waits, open

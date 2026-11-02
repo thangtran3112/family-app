@@ -20,16 +20,13 @@ import type { ClockAccount } from "./threadClock.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
-// node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
+// node tests cover it. A day is always named with its date (ADR-0022).
 
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
 
 
-/** The plan hides dates (the weekday stays). */
-export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
-
-const dayName = (weekday: string, day: string | null, hidden: boolean): string => (hidden || day === null ? weekday : formatEtDay(day));
+const dayName = (weekday: string, day: string | null): string => (day === null ? weekday : formatEtDay(day));
 
 /** A day's number in its thread (D-047): a plan counts its own days from 1, and a plan that replaced another comes after the
  *  days the thread had already ended. This is the number the journal gives the same day (`n`). */
@@ -42,9 +39,9 @@ export function dayNumberText(plan: Pick<PracticePlan, "day_offset" | "sessions"
     : practiceText("planDayInThread", { day: threadDayNo(plan, planDayNo), planDay: planDayNo, of: plan.sessions });
 }
 
-/** "Day 7 of 20 · Tue", or "Day 7 of 20 · Tue 2026-03-03" with dates shown. */
-export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"> & { plan: Pick<PracticePlan, "day_offset"> }, hidden: boolean): string {
-  return `${dayNumberText({ day_offset: list.plan.day_offset, sessions: list.of }, list.day_no)} · ${dayName(list.weekday, list.day, hidden)}`;
+/** "Day 7 of 20 · Tue 2026-03-03". */
+export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"> & { plan: Pick<PracticePlan, "day_offset"> }): string {
+  return `${dayNumberText({ day_offset: list.plan.day_offset, sessions: list.of }, list.day_no)} · ${dayName(list.weekday, list.day)}`;
 }
 
 /** "List at 8:30 AM ET from data through 8:15 AM · 118 of 131 scanned · 34 matched, showing 30" (kept whole for the plain-text reads). */
@@ -163,7 +160,6 @@ export type PlanCard = { headline: string; detail: string | null; action: PlanCa
 /** The hub card: "Day 7 of 20 · next: Tue" with Continue, the data-preparing line, or the empty state. */
 export function planCard(plan: PracticePlan | null): PlanCard {
   if (plan === null) return { headline: PRACTICE_COPY.planNone, detail: null, action: "new" };
-  const hidden = datesHidden(plan.spec);
   const failed = plan.prep.failed > 0 ? practiceText("planFailedSome", { failed: plan.prep.failed }) : null;
   if (plan.finished) return { headline: practiceText("planDone", { of: plan.sessions }), detail: failed, action: "new" };
   const current = plan.current;
@@ -184,7 +180,7 @@ export function planCard(plan: PracticePlan | null): PlanCard {
       action: "none",
     };
   }
-  const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day, hidden) })}`;
+  const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day) })}`;
   // The day just ended is said as done, and Continue opens the next one: the same list the review's "Next day" opens.
   const done = current === null ? null : practiceText("planDayDone", { day: threadDayNo(plan, current.day_no) });
   return {
@@ -669,7 +665,7 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
 
 // ---- Peek ----------------------------------------------------------------------------------------------------
 
-/** `count` weekday dates ending 2001-01-05 + count: a stand-in timeline for a daily chart whose real dates are hidden. */
+/** `count` weekday dates from 2001-01-01: a stand-in timeline that only spaces the bars of a chart whose API carries no dates (the week's equity series). It is never printed. */
 export function syntheticDays(count: number): string[] {
   const out: string[] = [];
   const date = new Date(Date.UTC(2001, 0, 1, 12));
@@ -679,15 +675,3 @@ export function syntheticDays(count: number): string[] {
   }
   return out;
 }
-
-type PeekDaily = { t: string; o: number; h: number; l: number; c: number; v: number };
-
-/** Daily bars for the chart; with dates hidden, real dates give way to a stand-in timeline (the last bar's date would name the day). */
-export function peekDailyBars(bars: readonly PeekDaily[], hidden: boolean): PeekDaily[] {
-  if (!hidden) return [...bars];
-  const days = syntheticDays(bars.length);
-  return bars.map((bar, index) => ({ ...bar, t: days[index]! }));
-}
-
-/** A hidden Peek chart's row labels for a screen reader: "D-3", "D-2", "D-1" (every bar is before the day; the last is the prior close). */
-export const peekOffsets = (count: number): string[] => Array.from({ length: count }, (_, index) => `D-${count - index}`);

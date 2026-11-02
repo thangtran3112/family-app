@@ -10,16 +10,13 @@ import { sourceLabel } from "./universeView.ts";
 
 // Swing practice (02p), view logic of the board, the workspace and the hub card: hold rows, free cash, the sizing hint,
 // the gap, the stop pause, the day strip, the header lines and the End day and Pass prompts. Pure, so the node tests
-// cover it. A swing payload names days by number and weekday; dates stay hidden by the thread's `hideDates` rule. Every
+// cover it. A swing day is named by number, weekday and date (ADR-0022; a plan's `hideDates` is accepted and ignored). Every
 // dollar figure is SIMULATED, and the lines that join money say so in words.
 
 
 const joinAnd = (parts: readonly string[]): string => (parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 const wholeNumber = (value: number) => value.toLocaleString("en-US");
 const plural = (count: number, one: string, many = `${one}s`) => (count === 1 ? one : many);
-
-/** The thread's dates rule: hidden unless the setup says otherwise. */
-export const swingDatesHidden = (swing: { hideDates: "yes" | "no" } | null | undefined): boolean => swing?.hideDates !== "no";
 
 export const sideLabel = (side: "long" | "short"): string => (side === "long" ? "Long" : "Short");
 
@@ -200,11 +197,9 @@ export function stripRowView(row: StripRow): StripRowView {
 
 // -- header lines ---------------------------------------------------------------------------------------------
 
-const dayName = (weekday: string, day: string, hidden: boolean): string => (hidden ? weekday : formatEtDay(day));
-
-/** "Day 7 of 20 · Week 2 · Tue", or with the date when dates are shown. */
-export function swingDayTitle(list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "weekday" | "day">, hidden: boolean): string {
-  return [practiceText("planDay", { day: list.day_no, of: list.of }), practiceText("swingWeek", { n: list.week_no }), dayName(list.weekday, list.day, hidden)].join(" · ");
+/** "Day 7 of 20 · Week 2 · Tue 2026-07-14". */
+export function swingDayTitle(list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "day">): string {
+  return [practiceText("planDay", { day: list.day_no, of: list.of }), practiceText("swingWeek", { n: list.week_no }), formatEtDay(list.day)].join(" · ");
 }
 
 /** "Balance $51,240 · Equity $52,010 · Free cash $8,240 · SIMULATED": the money half of the workspace header. */
@@ -216,9 +211,9 @@ export function swingBriefLine(brief: Pick<ThreadBrief, "balance" | "equity_usd"
   return parts.join(" · ");
 }
 
-/** "Day 7 of 20 · Tue": the board's h1. The week and the state are chips beside it and the money is in the strip below (D-139). */
-export function swingBoardTitle(list: Pick<SwingDayList, "day_no" | "of" | "weekday" | "day">, hidden: boolean): string {
-  return [practiceText("planDay", { day: list.day_no, of: list.of }), dayName(list.weekday, list.day, hidden)].join(" · ");
+/** "Day 7 of 20 · Tue 2026-07-14": the board's h1. The week and the state are chips beside it and the money is in the strip below (D-139). */
+export function swingBoardTitle(list: Pick<SwingDayList, "day_no" | "of" | "day">): string {
+  return [practiceText("planDay", { day: list.day_no, of: list.of }), formatEtDay(list.day)].join(" · ");
 }
 
 /** "2 holds open" / "1 hold open" / "No holds open". */

@@ -15,7 +15,7 @@ export type SwingHeaderBar = {
 
 export type ReplayHeaderProps = {
   symbol: string;
-  /** "Fri 2026-10-23", "Hidden day", or for a swing day "Day 7 of 20 · Week 2 · Tue". */
+  /** "Fri 2026-10-23", or for a swing day "Day 7 of 20 · Week 2 · Tue 2026-07-14". */
   dayLabel: string;
   attempt: number;
   lastPrice: number | null;

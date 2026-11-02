@@ -113,13 +113,6 @@ export function DayPlanFields({
               onChange={(sessions) => onDraft({ ...draft, sessions })}
             />
           </Field>
-          <Field id="plan-hide" label={PRACTICE_COPY.planHideDates} group className={modal.span} note={PRACTICE_COPY.planHideDatesHint}>
-            <Segmented
-              value={draft.hideDates ? "yes" : "no"}
-              options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
-              onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
-            />
-          </Field>
           <Field id="plan-list-at" label={PRACTICE_COPY.planListAt} group className={modal.span} note={anyHeld ? needText : PRACTICE_COPY.planListAtHint} error={problems.listAt} reserve>
             <Segmented
               fill

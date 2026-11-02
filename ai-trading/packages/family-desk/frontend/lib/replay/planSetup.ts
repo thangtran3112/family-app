@@ -61,7 +61,6 @@ export const listTimeHeld = (time: string, need: { time: string; ids: readonly n
 export type PlanDraft = {
   firstDay: string;
   sessions: string;
-  hideDates: boolean;
   /** The most names she may star and practise in a day. */
   filterIds: number[];
   listAt: string;
@@ -99,7 +98,6 @@ export function defaultPlanDraft(now: Date): PlanDraft {
   return {
     firstDay: defaultFirstDay(now),
     sessions: "20",
-    hideDates: true,
     filterIds: [],
     listAt,
     maxList: "30",
@@ -142,7 +140,7 @@ export function planDraftToSpec(draft: PlanDraft): unknown {
     schemaVersion: 1,
     firstDay: draft.firstDay,
     sessions: numberOrNaN(draft.sessions),
-    hideDates: draft.hideDates ? "yes" : "no",
+    hideDates: "no", // the contract still wants the field; a date is always shown (ADR-0022), so the server ignores it
     screen: { filters: draft.filterIds.map((id) => ({ id })), listAt: draft.listAt, maxList: numberOrNaN(draft.maxList) },
     setup: { window: setup.window, session: setup.session, interval: setup.interval, armed: [] }, // nothing is armed on a new plan (D-153); the contract wants the field
   };

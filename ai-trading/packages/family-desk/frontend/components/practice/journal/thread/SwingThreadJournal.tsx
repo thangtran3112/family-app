@@ -16,7 +16,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
-import { swingDatesHidden, swingCardView } from "@/lib/replay/swing";
+import { swingCardView } from "@/lib/replay/swing";
 import { swingGate } from "@/lib/replay/overviewView";
 import { loadHolds, loadWeeks } from "@/lib/replay/swingApi";
 import { journalStatusLine } from "@/lib/replay/statusLine";
@@ -33,7 +33,7 @@ import { FactList } from "@/components/ui/FactList";
 /**
  * `/practice/journal?thread=` for a swing thread (02p h): the balance and the equity at each close, the weeks with links to
  * their reviews, the open practice holds, and what comes next (Continue, the finished week's review, or nothing). The day
- * thread's journal is a different screen. Every dollar on it is SIMULATED, and no date shows while the thread hides dates.
+ * thread's journal is a different screen. Every dollar on it is SIMULATED.
  */
 export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
   const { id, stats, status, startingBalance, swing: setup } = thread.thread;
@@ -46,12 +46,11 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
   // At the 1180 band the right rail is a tab strip: each tab opens its own drawer, and the screen leaves room for them (D-038, D-040).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
-  useReportPracticeChrome({ day: null, hidden: false, playhead: null, scope: "days", status: journalStatusLine(thread.daily) });
+  useReportPracticeChrome({ day: null, playhead: null, scope: "days", status: journalStatusLine(thread.daily) });
   if (!state) return null; // the screen only opens this for a thread that carries its swing state
 
   const balance = formatBalance(stats.balance);
   const name = threadName(thread.thread);
-  const hidden = swingDatesHidden(setup);
   const view = swingCardView(thread);
   const where = state.next === "finished" ? practiceText("swingFinished", { days: state.days }) : practiceText("planDay", { day: state.day_no, of: state.days });
   const nextText =
@@ -68,7 +67,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
             <h1 className={styles.title}>{`${name} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`}</h1>
             <Badge tone="neutral">{threadModeLabel(thread.thread.mode)}</Badge>
           </div>
-          <p className={styles.sub}>{`${startedWithText(thread.thread, state)} · ${where}${hidden ? ` · ${HUB_SWING_COPY.dateHidden}` : ""}`}</p>
+          <p className={styles.sub}>{`${startedWithText(thread.thread, state)} · ${where}`}</p>
         </div>
         <div className={styles.balanceStack}>
           <div className={styles.balance}>
@@ -153,7 +152,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
         openIds={railOpen}
         onOpenIdsChange={setRailOpen}
         sections={[
-          { id: "swing", label: PRACTICE_COPY.swingModeLabel, node: <SwingSetupPanel thread={thread} hidden={hidden} /> },
+          { id: "swing", label: PRACTICE_COPY.swingModeLabel, node: <SwingSetupPanel thread={thread} /> },
           { id: "plan", label: PRACTICE_COPY.threadPlanTitle, node: <ThreadPlanPanel thread={thread} onChanged={onChanged} /> },
           { id: "close", label: PRACTICE_COPY.threadClose, node: <CloseThreadPanel thread={thread} onChanged={onChanged} /> },
         ]}
@@ -163,12 +162,12 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
 }
 
 /** What the thread was started with (02p c1): the calendar, the interval and tape, the risk per hold, and the frozen universe's mix. */
-function SwingSetupPanel({ thread, hidden }: { thread: Thread; hidden: boolean }) {
+function SwingSetupPanel({ thread }: { thread: Thread }) {
   const setup = thread.thread.swing;
   if (!setup) return null;
   const rows: Array<{ label: string; value: string; money?: boolean }> = [
     { label: "Sessions", value: String(setup.sessions) },
-    { label: "Dates", value: hidden ? "Hidden" : `From ${formatEtDay(setup.firstDay)}` },
+    { label: "Dates", value: `From ${formatEtDay(setup.firstDay)}` },
     { label: "Interval", value: setup.interval },
     { label: "Tape", value: setup.tape === "on" ? PRACTICE_COPY.swingTapeYes : PRACTICE_COPY.swingTapeNo },
     { label: "Risk per hold", value: setup.riskPerHoldUsd === undefined ? "None" : formatBalance(setup.riskPerHoldUsd), money: setup.riskPerHoldUsd !== undefined },

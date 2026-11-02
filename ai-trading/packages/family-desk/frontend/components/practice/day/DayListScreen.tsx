@@ -26,7 +26,6 @@ import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
   beforeOpen,
   canRescan,
-  datesHidden,
   dayCellText,
   dayCellTone,
   dayColumns,
@@ -155,7 +154,6 @@ function DaySkeleton() {
 function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () => void; failures: number }) {
   const router = useRouter();
   const ended = list.status === "ended";
-  const hidden = datesHidden(list.plan.spec) && !ended;
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The name a click is opening.
@@ -189,7 +187,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
     titleRef.current?.focus({ preventScroll: true });
   }, []);
   // The badge reads the day clock once practice has started, else the time the list was built (D-014).
-  useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
+  useReportPracticeChrome({ day: list.day, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
 
   // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
   const practicing = list.sessions.at(-1) ?? null;
@@ -316,7 +314,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   }
 
   const warning = listWarning(list);
-  const title = dayTitle(list, hidden);
+  const title = dayTitle(list);
   const setup = list.plan.spec.setup;
   const practiceTime = practiceWindow(list);
   // Day 5 of 5: there is no next day to open, so the button says what it does and goes to the plan's summary (D-096).
@@ -331,7 +329,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
         <div className={styles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={styles.title}>{title}</h1>
           <Badge tone="neutral">Practice day list</Badge>
-          {hidden && <Badge tone="neutral">{PRACTICE_COPY.dayDateHidden}</Badge>}
         </div>
         <div className={styles.actions}>
           {practicing && !ended && (
@@ -503,7 +500,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
             loading={peek.loading}
             failed={peek.data === null && peek.error !== null}
             onRetry={peek.refresh}
-            hideDates={datesHidden(list.plan.spec)}
           />
         </Dialog>
       )}

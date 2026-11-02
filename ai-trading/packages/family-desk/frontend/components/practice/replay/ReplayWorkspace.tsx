@@ -22,7 +22,7 @@ import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
 import { isSpeed, threadClock } from "@/lib/replay/clock";
 import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
-import { formatEtClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
+import { formatEtDateClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { threadPageHref } from "@/lib/replay/practiceTabs";
 import { openRailTab } from "@/lib/desk/rail";
@@ -32,7 +32,6 @@ import { placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
 import { whenReady } from "@/lib/desk/patience";
 import { endAnyDay } from "@/lib/replay/swingApi";
 import { portfolioRows } from "@/lib/replay/dayView";
-import { showDayDate, useDayDateShown } from "@/lib/replay/dateShown";
 import { readChartPrefs, togglePref, writeChartPrefs, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import { exitMark } from "@/lib/replay/markInput";
 import { entrySince, levelRows, markRows, openSide } from "@/lib/replay/marks";
@@ -110,7 +109,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const router = useRouter();
   const band = useShellBand();
   const { spec } = session;
-  const hidden = spec.hideDate === "yes";
   const ended = session.status === "ended";
   // A swing session (02p) belongs to a swing thread: the day strip, the Daily chart, the stop pause and the hold rules.
   const swing = isSwingSession(session);
@@ -164,14 +162,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   }, [full, setChartFocus]);
   // At the 1180 band the right rail is a tab strip; each tab opens its own drawer and none closes another (D-020).
   const [railOpen, setRailOpen] = useState<string[]>([]);
-  // "Show date" is the viewer's own choice for this day; the chart stays on clock ticks (D-023). The Summary's clock reads the same choice (D-174).
-  const [localShown, setLocalShown] = useState(false);
-  const daySaysShown = useDayDateShown(session.day_list_id);
-  const dateShown = localShown || daySaysShown;
-  const showDate = () => {
-    setLocalShown(true);
-    if (session.day_list_id !== null) showDayDate(session.day_list_id);
-  };
   const [bottomTab, setBottomTab] = useState<"marks" | "levels">("marks");
   const [bottomOpen, setBottomOpen] = useState<boolean | null>(null);
   const [dayBusy, setDayBusy] = useState(false);
@@ -202,9 +192,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const dayList = useDayPortfolio(swing ? null : dayListId, session.marks.length * 2 + (behind ? 1 : 0) + Math.floor(Date.parse(clockSeen) / 1000));
   const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: clock, openTrade: view.openTrade });
 
-  // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
-  const masked = hidden && !dateShown && !(ended && !swing);
-  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock), onShowDate: masked ? showDate : null });
+  useReportPracticeChrome({ day: spec.day, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock) });
 
   // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series. VWAP is the session's, built from
   // one-minute bars whatever the chart's interval (D-168), so the header, the left rail and the chart line agree on 1m, 5m and 15m.
@@ -217,8 +205,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const { daily, dailyForming } = view;
   const dailyBars = useMemo(() => {
     const block = dailyBlock({ daily, dailyForming });
-    return block === null ? null : dailyChartModel(block, hidden).bars;
-  }, [daily, dailyForming, hidden]);
+    return block === null ? null : dailyChartModel(block).bars;
+  }, [daily, dailyForming]);
   const indicatorBars = swing && chartMode === "daily" && dailyBars !== null ? { bars: dailyBars, interval: "1d", timeframe: "Daily" } : { bars, interval: view.interval, timeframe: view.interval };
 
   const openComposer = (next: Composer) => {
@@ -337,11 +325,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       });
   };
   const holdsOpen = stripHoldCount(view.strip);
-  const swingDay = swing && session.thread ? swingDayChip(session.thread, spec.day, hidden) : null;
+  const swingDay = swing && session.thread ? swingDayChip(session.thread, spec.day) : null;
   // The swing Daily view draws none of the intraday lines, so the settings show those groups switched off.
   const dailyView = swing && chartMode === "daily" && view.daily !== null;
 
-  const dayLabel = masked ? PRACTICE_COPY.hiddenDay : formatEtDay(spec.day);
+  const dayLabel = formatEtDay(spec.day);
   const bottomShown = bottomOpen ?? band === "1440";
   const realized = practicePnl(session.journal, null);
 
@@ -447,8 +435,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         // Read-only: the thread's time and whether it is running. Play or Pause, the speed and Skip day are on the Summary.
         <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
           <span>{PRACTICE_COPY.threadTime}</span>
-          <span data-testid="thread-clock-time">{formatEtClock(shownClock)}</span>
-          <span>{PRACTICE_COPY.clockReplayedShort}</span>
+          <span data-testid="thread-clock-time">{formatEtDateClock(shownClock)}</span>
           <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClosed : PRACTICE_COPY.clockStatePaused}</span>
           {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
         </p>
@@ -476,7 +463,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         </p>
       )}
       <div className={styles.chartSlot} data-testid="chart-slot">
-        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} hideDates={hidden} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
       <ChartToolbar
         symbol={spec.symbol}

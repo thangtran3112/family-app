@@ -15,7 +15,7 @@ const AMBER = "#FFB020";
  * the lookback plus the window, then the chart starts at the window start. After `end` the feed covers the whole day;
  * while a session is still open it holds only what is revealed, so nothing is unsealed early.
  */
-export function JournalChart({ session, feed, hideDates }: { session: ReplaySession; feed: ReplayFeed; hideDates: boolean }) {
+export function JournalChart({ session, feed }: { session: ReplaySession; feed: ReplayFeed }) {
   const model = useMemo(() => {
     const view = viewFromFeed(feed, session.spec.interval);
     const all = chartBars(view);
@@ -53,7 +53,6 @@ export function JournalChart({ session, feed, hideDates }: { session: ReplaySess
       levels={model.levels}
       markers={model.markers}
       volume
-      hideDates={hideDates}
       chrome="bare"
       height={440}
     />

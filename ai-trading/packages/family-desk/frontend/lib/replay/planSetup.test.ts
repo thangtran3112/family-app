@@ -46,7 +46,7 @@ test("the first day is her pick, else the recorded-universe default when the ser
 test("a draft becomes the contract's JSON: yes/no words, no null, no shares and no risk plan (the thread's, D-007)", () => {
   const spec = planDraftToSpec(ready()) as Record<string, unknown>;
   assert.deepEqual(spec.screen, { filters: [{ id: 4 }], listAt: "08:30", maxList: 30 });
-  assert.equal(spec.hideDates, "yes");
+  assert.equal(spec.hideDates, "no"); // the contract still wants the field; a date is always shown
   assert.deepEqual((spec.setup as Record<string, unknown>).window, { from: "09:30", to: "11:30" });
   assert.deepEqual(Object.keys(spec.setup as object), ["window", "session", "interval", "armed"]);
   // D-153: the field is required by the contract and always empty, even when a draft carries strategies from elsewhere.

@@ -5,8 +5,8 @@ import type { ClockAccount } from "./threadClock.ts";
 import type { PracticeThread, Thread, ThreadBrief, ThreadDay, ThreadToday } from "./threads.ts";
 
 // View logic of the practice-thread screens (02r): money text, the thread card, the weeks of the journal, the improvement
-// panel and its too-few-days caveat, and the summary tiles. Every dollar figure is SIMULATED. Dates stay hidden: a day is
-// "D3" and a weekday, never a calendar date.
+// panel and its too-few-days caveat, and the summary tiles. Every dollar figure is SIMULATED. A day is named by
+// number, weekday and date ("Day 3 · Wed 2026-03-11").
 
 const MINUS = "−";
 const ET = "America/New_York";
