@@ -83,7 +83,7 @@ export function PracticeBand() {
   const state = usePracticeChrome();
   return (
     <div className={styles.band}>
-      <span role="status" aria-label="Practice">{practiceBandText(state?.day ?? null, state?.scope === "days")}</span>
+      <span role="status" aria-label="Practice">{practiceBandText(state?.day ?? null)}</span>
       <span className={styles.bandNote}>
         <span>{PRACTICE_COPY.bandMarks}</span>
       </span>

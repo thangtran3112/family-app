@@ -127,3 +127,12 @@ test("the chart series from server rows has the same lines and panes as the brow
   assert.deepEqual(replay.panes.map((pane) => [pane.id, pane.series.map((item) => item.id)]), live.panes.map((pane) => [pane.id, pane.series.map((item) => item.id)]));
   assert.deepEqual(replay.overlays.map((overlay) => [overlay.id, overlay.values]), [["vwap", [null, null, 3]], ["ema9", [null, null, 1]], ["ema21", [null, null, 2]]]);
 });
+
+test("the forming candle reads the VWAP of the bar before it when the server has none yet (a 1m candle, whose minute has not closed)", () => {
+  const bars = barsFor((i) => 100 + i, 3);
+  const row = (i: number, vwap: number | null) => ({ t: bars[i]!.t, ema9: 1, ema21: 2, vwap, rsi14: 4, macd: 5, macd_signal: 6, macd_hist: 7 });
+  const table: IndicatorTable = { interval: "1m", asOfBar: bars[2]!.t, rows: [row(0, 100.2), row(1, 100.4), row(2, null)] };
+  assert.deepEqual(serverSeries(bars, table, "1m").vwap, [100.2, 100.4, null], "a closed bar, or no forming candle, keeps the server's null");
+  assert.deepEqual(serverSeries(bars, table, "1m", bars[2]!.t).vwap, [100.2, 100.4, 100.4], "the forming candle carries the last closed bar's");
+  assert.deepEqual(serverSeries(bars, { ...table, rows: [row(0, 100.2), row(1, 100.4)] }, "1m", bars[2]!.t).vwap, [100.2, 100.4, null], "no row for the candle at all stays unknown");
+});

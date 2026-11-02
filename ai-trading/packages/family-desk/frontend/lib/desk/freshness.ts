@@ -1035,9 +1035,9 @@ export const practiceText = (key: PracticeKey, values: Record<string, string | n
 /** A message line has no Try again button: the copy keeps its sentence and drops the " · Try again" tail that only an error block with a retry button can honour. */
 export const withoutRetryHint = (text: string): string => text.replace(/ · Try again$/, "");
 
-/** "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker"; `day` null on the hub, `pastDays` on a list of days. */
-export function practiceBandText(day: string | null, pastDays = false): string {
-  return day && !pastDays ? practiceText("band", { day: formatEtDay(day) }) : PRACTICE_COPY.bandHub;
+/** "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker"; `day` null on the hub and on the journals of whole threads. */
+export function practiceBandText(day: string | null): string {
+  return day ? practiceText("band", { day: formatEtDay(day) }) : PRACTICE_COPY.bandHub;
 }
 
 /** The top-bar badge during a replay: "Replay · Fri 2026-10-23 · 1:22:24 AM ET", the thread clock's own date (it can be the day after the session day). */

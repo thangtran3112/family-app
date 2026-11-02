@@ -20,8 +20,6 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { isSpeed, type Speed } from "@/lib/replay/clock";
-import { useShownClock } from "@/lib/replay/useShownClock";
 import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList } from "@/lib/replay/daily";
@@ -211,8 +209,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   // state of the exchange at that T; after the day's tape end it says so while T keeps counting.
   const threadTime = (landed ? read.thread_time : null) ?? list.thread_time ?? null;
   const market = (landed ? read.market : null) ?? list.market ?? null;
-  const clockRunning = liveClock.clock?.state === "running" && !liveClock.stale;
-  const clockSpeed = liveClock.clock !== null && isSpeed(liveClock.clock.speed) ? liveClock.clock.speed : 1;
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -336,7 +332,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
           <Badge tone="neutral">Practice day list</Badge>
         </div>
         {/* The badge reads the thread's time once practice has started, else the time the list was built (D-014). */}
-        <DayClock day={list.day} base={threadTime ?? list.clock ?? list.list_at} running={!ended && clockRunning} speed={clockSpeed} status={dayStatusLine(list)} show={!ended && list.clock !== null} market={market} />
+        <DayClock day={list.day} shown={(!ended ? liveClock.shown : null) ?? threadTime ?? list.clock ?? list.list_at} status={dayStatusLine(list)} show={!ended && list.clock !== null} market={market} />
         <div className={styles.actions}>
           {practicing && !ended && (
             <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{practiceText("planOpenDay", { n: threadDayNo(list.plan, list.day_no) })}</Button>
@@ -553,11 +549,10 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
 }
 
 /**
- * The thread's time on the day list: the line under the title, and the badge and status bar of the shell. Its own component, so the per-second tick re-renders this
- * line and not the table (ADR-0022, D-166). Past the day's tape end it says the market is closed while the time keeps counting.
+ * The thread's time on the day list: the line under the title, and the badge and status bar of the shell. `shown` is the Summary's own ticking clock (the same
+ * poll, held when the poll fails), so the two screens agree to the second. Past the day's tape end it says the market is closed while the time keeps counting.
  */
-function DayClock({ day, base, running, speed, status, show, market }: { day: string; base: string; running: boolean; speed: Speed; status: PracticeStatusLine; show: boolean; market: DayList["market"] }) {
-  const shown = useShownClock(base, running, speed);
+function DayClock({ day, shown, status, show, market }: { day: string; shown: string; status: PracticeStatusLine; show: boolean; market: DayList["market"] }) {
   useReportPracticeChrome({ day, playhead: shown, scope: "days", status });
   if (!show) return null;
   const closed = market?.phase === "closed";

@@ -175,7 +175,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const behind = view.behindClock && !ended;
   // The thread's one time: the payload's own `thread_time` (ADR-0022), uncapped, so past the tape it keeps counting while the chart's data stands still. A swing
   // or standalone session has none, and its time is its playhead (or the day clock a name was left behind).
-  const clock = viewClock(view);
+  // An ended session keeps the time it ended at; the day list it belonged to has moved on (the thread time is now a later day's).
+  const clock = ended ? view.revealedThrough : viewClock(view);
   // What a day thread's chart SHOWS of that time ticks every second between two polls; the readout, the status bar and the top-bar chip all read this one
   // value (D-166). `clock` stays the polled time for everything that prices or compares. While the polls fail (`api.stale`) the readout is held, as the Summary's is.
   const ticking = useShownClock(clock, followed && view.clockRunning && !api.stale, isSpeed(view.clockSpeed) ? view.clockSpeed : 1);
@@ -197,7 +198,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // EMA 9/21, VWAP, RSI and MACD are the server's, computed from the same cut as the price and the forming candle (ADR-0022): the browser computes none
   // of them and asks for no one-minute feed, so the header, the left rail and the chart cannot disagree on 1m, 5m and 15m.
   const bars = useMemo(() => chartBars(view), [view]);
-  const server = useMemo(() => serverSeries(bars, view.indicators, view.interval), [bars, view.indicators, view.interval]);
+  const server = useMemo(() => serverSeries(bars, view.indicators, view.interval, view.forming?.t ?? null), [bars, view.indicators, view.interval, view.forming]);
   const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval, "stock", server), [bars, view.interval, server]);
   const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
   // The left rail's indicators are read off what the chart shows: the intraday bars, or the rebased daily bars while a swing session is on Daily.

@@ -103,7 +103,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   const [revision, setRevision] = useState(0);
   // The followed chart is not being updated (`notUpdating`); `lastAnswer` is when the server last answered this screen.
   const [stalled, setStalled] = useState(false);
-  const lastAnswer = useRef(Date.now());
+  // Monotonic time (`performance.now`): a wall-clock change, or a test that fixes `Date`, must not stop the back-off or freeze the notice.
+  const lastAnswer = useRef(performance.now());
 
   // Refs mirror state for the timer and the queue, which outlive a render.
   const alive = useRef(true);
@@ -176,7 +177,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
             atEnd = atEnd || delta.at_end;
           }
         }
-        lastAnswer.current = Date.now();
+        lastAnswer.current = performance.now();
         setStalled(false);
         setSession(loaded);
         setIntervalState(loaded.spec.interval);
@@ -241,10 +242,11 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     async (target: AdvanceTarget, quiet = false): Promise<boolean> => {
       if (id === null) return false;
       try {
-        const delta = await advanceReplay(id, target, tape());
+        // A follow poll (`quiet`) gives up after the read timeout: a request that hangs must not hold the screen busy for good.
+        const delta = await advanceReplay(id, target, tape(), quiet ? { signal: AbortSignal.timeout(READ_TIMEOUT_MS) } : undefined);
         if (!alive.current) return false;
         setView((current) => (current ? applyAdvance(current, delta) : current));
-        lastAnswer.current = Date.now();
+        lastAnswer.current = performance.now();
         setStalled(false);
         if (delta.fills?.length) {
           // The tape filled working orders inside this advance: the entry marks, the orders' new state and the book behind them.
@@ -303,17 +305,18 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     syncFailed.current = { count: 0, at: 0 };
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      // No answer for STALE_AFTER_MS while the tab is in view: the screen says so (a poll that is only waiting out its back-off counts too).
-      if (notUpdating(0, Date.now() - lastAnswer.current)) setStalled(true);
+      // No answer for ten seconds while the tab is in view: the screen says so (a poll that is only waiting out its back-off counts too). A request of her own
+      // in flight (a re-read at another interval, an order) is the server working for her, not silence.
+      if (!(busy.current && !syncing.current) && notUpdating(0, performance.now() - lastAnswer.current)) setStalled(true);
       if (syncing.current || busy.current) return;
       const failed = syncFailed.current;
-      if (failed.count > 0 && Date.now() - failed.at < backoffMs(POLL_MS, failed.count)) return;
+      if (failed.count > 0 && performance.now() - failed.at < backoffMs(POLL_MS, failed.count)) return;
       syncing.current = true;
       void exec(() => advance({ sync: true }, true))
         .then((ok) => {
           if (ok === true) syncFailed.current = { count: 0, at: 0 };
           else if (ok === false) {
-            syncFailed.current = { count: failed.count + 1, at: Date.now() };
+            syncFailed.current = { count: failed.count + 1, at: performance.now() };
             if (notUpdating(failed.count + 1, 0)) setStalled(true);
           }
         })
@@ -323,7 +326,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
     }, POLL_MS);
     // A tab that was in the background did not poll: it is not "not updating", it was not asked. The count starts again when it is shown.
     const onVisible = () => {
-      if (document.visibilityState === "visible") lastAnswer.current = Date.now();
+      if (document.visibilityState === "visible") lastAnswer.current = performance.now();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -548,7 +551,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         try {
           const feed = await loadReplayFeed(id, tape());
           if (!alive.current) return;
-          lastAnswer.current = Date.now();
+          lastAnswer.current = performance.now();
+          setStalled(false);
           setView((current) => {
             const fresh = viewFromFeed(feed, nextInterval);
             // Never let a re-read move the playhead back.
