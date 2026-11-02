@@ -5,6 +5,7 @@ import { RailList, RailValue } from "@/components/ui/RailList";
 import type { ChartBar } from "@/lib/chart-data";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { indicatorGroups } from "@/lib/replay/indicatorsView";
+import type { SessionVwap } from "@/lib/replay/sessionVwap";
 import styles from "./replay.module.css";
 
 /**
@@ -12,8 +13,8 @@ import styles from "./replay.module.css";
  * says. The numbers are read off the bars shown on the chart, so they move as the replay does and never look ahead. `timeframe` names
  * the candle they are computed on ("15m", "Daily").
  */
-export function IndicatorsPanel({ bars, interval, timeframe }: { bars: readonly ChartBar[]; interval: string; timeframe: string }) {
-  const groups = useMemo(() => indicatorGroups(bars, interval), [bars, interval]);
+export function IndicatorsPanel({ bars, interval, timeframe, vwap }: { bars: readonly ChartBar[]; interval: string; timeframe: string; /** The session VWAP of these bars, built from one-minute bars (D-168); left out, it is computed from `bars`. */ vwap?: SessionVwap }) {
+  const groups = useMemo(() => indicatorGroups(bars, interval, vwap), [bars, interval, vwap]);
   return (
     <section className={styles.sessionSection} aria-label={PRACTICE_COPY.indicatorsTitle} data-testid="indicators-panel">
       <div className={styles.railHead}>

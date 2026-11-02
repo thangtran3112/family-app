@@ -136,12 +136,12 @@ export type VwapBar = { t: string; h: number; l: number; c: number; v: number; e
 const etClockFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 /**
- * Whether a futures bar starts in the 09:30-16:00 New York window, the only bars the backend's `session_vwap` counts
+ * Whether a bar starts in the 09:30-16:00 New York window: the regular session, the only bars the backend's `session_vwap` counts
  * (`annotate(bars, "future")` calls the overnight Globex session from 18:00 and the 16:00-17:00 window "pre" and "post").
- * The API never flags a futures bar `ext`, so the clock decides. ponytail: no calendar; a CME early close needs none,
- * because no bar follows it until Globex reopens at 18:00.
+ * The API never flags a futures bar `ext`, so the clock decides; the same clock settles a forming bar, which has no flag yet (D-168).
+ * ponytail: no calendar; a CME early close needs none, because no bar follows it until Globex reopens at 18:00.
  */
-function inRegularWindow(t: string): boolean {
+export function inRegularWindow(t: string): boolean {
   const clock = etClockFormat.format(new Date(t));
   return clock >= "09:30" && clock < "16:00";
 }
