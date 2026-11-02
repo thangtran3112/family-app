@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { deleteThread } from "@/lib/desk/replay";
+import { closeThread, deleteThread } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
 import type { PracticeThread } from "@/lib/replay/threads";
 import { threadName } from "@/lib/replay/threadView";
@@ -12,7 +12,9 @@ import styles from "./landing.module.css";
 
 /**
  * The Delete button of a thread row and its confirmation. Deleting removes the thread with its days and SIMULATED
- * history and cannot be undone, so it asks first. An open practice day is the server's plain 409, shown in the dialog.
+ * history and cannot be undone, so it asks first. A day thread's open day has no End day (ADR-0023) and the server deletes only a closed thread, so
+ * an active day thread is closed first: closing ends the open day itself, and a plan can be deleted mid-plan in one step. Any 409 the server still
+ * answers (a session still running, a swing thread's open day) is shown in the dialog in its own words.
  * `busy` is the table's shared flag (some row is opening a day): nothing can be deleted meanwhile. The question is a
  * `ui/ConfirmDialog`; it sits inside the row, and stops its clicks there, so they never reach the row's click that opens the thread page.
  * `plan` is the same delete on the thread's Summary, worded for the plan ("Delete plan"): a plan is its thread, it is never edited, and a
@@ -46,6 +48,7 @@ export function DeleteThread({
     setMessage(null);
     onBusy(true);
     try {
+      if (thread.mode === "day" && thread.status === "active") await closeThread(thread.id);
       await deleteThread(thread.id);
       onBusy(false);
       onDeleted(threadName(thread));

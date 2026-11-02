@@ -325,6 +325,8 @@ export const DayListSchema = z.object({
   universe: ListUniverseSchema,
   columns: z.array(ListColumnSchema),
   candidates: z.array(CandidateSchema),
+  /** The thread clock is before `list_at` (ADR-0023): the list is not out yet, with no names or counts, and no name can be opened or starred. */
+  list_pending: z.boolean(),
   watch: z.array(StarSchema),
   watch_check: WatchCheckSchema,
   clock: timestamp.nullable(),
