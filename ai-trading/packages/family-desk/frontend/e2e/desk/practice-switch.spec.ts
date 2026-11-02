@@ -1,9 +1,10 @@
-import type { BrowserContext, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { endDayFromSummary, stepBar } from "./clock-helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
 import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
+import { positionCells, positionRow } from "./position-table";
 import { backToDayList, placeOrder, replayRail } from "./swing-helpers";
 
 // Switching names on the shared day clock (02o-b2). The stub holds TSLA on Fri 2026-09-25, and three stand-in names that
@@ -32,6 +33,20 @@ async function portfolioPanel(page: Page) {
   await page.waitForURL(/\/practice\/thread\?id=\d+&tab=portfolio/);
   await expect(region).toBeVisible();
   return region;
+}
+
+/** A name's cells in the Portfolio tab's position table: each given column matches, once the table has read (the data lands a beat after the tab). */
+async function expectPosition(
+  portfolio: Locator,
+  symbol: string,
+  expected: { position?: RegExp | string; last?: RegExp | string; avg?: RegExp | string; total?: RegExp | string },
+) {
+  const columns = { position: "Position", last: "Last", avg: "Avg price", total: "Total P/L" } as const;
+  for (const [key, header] of Object.entries(columns) as [keyof typeof columns, string][]) {
+    const want = expected[key];
+    if (want === undefined) continue;
+    await expect.poll(async () => (await positionCells(portfolio, symbol))[header] ?? "", { message: `${symbol}'s ${header}` }).toMatch(typeof want === "string" ? new RegExp(`^${want}$`) : want);
+  }
 }
 
 /** From the Portfolio tab back onto a name's chart, through its row (the tab's way into a chart). */
@@ -95,7 +110,7 @@ test.describe("Practice: switching names", () => {
 
     // The Portfolio tab shows it (the chart itself shows none): TSLA is Long. Its row leads back onto the chart.
     let portfolio = await portfolioPanel(page);
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
+    await expectPosition(portfolio, "TSLA", { position: /^\d[\d,]*$/, avg: /^[\d,]+\.\d{2}$/ }); // a long: unsigned shares, the average price it was built at
     await openFromPortfolio(page, "TSLA");
 
     // Exit TSLA here; the next section opens LRCX at the clock TSLA reached. Holding several names at once has its own test below.
@@ -119,20 +134,20 @@ test.describe("Practice: switching names", () => {
     // A new Long on LRCX joins the portfolio; TSLA's row stays a plain switch (no "Close LRCX first").
     await placeOrder(page, "Buy");
     portfolio = await portfolioPanel(page);
-    await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
+    await expectPosition(portfolio, "LRCX", { position: /^\d[\d,]*$/, avg: /^[\d,]+\.\d{2}$/ });
     const tslaRow = portfolio.getByRole("button", { name: "Open TSLA" });
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText(/Close LRCX first/);
+    await expect(positionRow(portfolio, "TSLA")).not.toContainText(/Close LRCX first/);
     await openFromPortfolio(page, "LRCX");
     await placeOrder(page, "Close position");
     portfolio = await portfolioPanel(page);
-    await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText("Flat");
+    await expectPosition(portfolio, "LRCX", { position: "Flat" });
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
 
     // TSLA stayed at 9:33 while the clock moved on: its row says it is behind. Switching to it lifts it to the day clock (the
     // server adds the away span), so it can be marked at once.
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayBehind);
-    await expect(portfolio.locator("li")).toHaveCount(2);
+    await expect(positionRow(portfolio, "TSLA")).toContainText(PRACTICE_COPY.dayBehindShort);
+    await expect(portfolio.locator("tbody tr")).toHaveCount(2);
     await openFromPortfolio(page, "TSLA");
     await expect(playhead(page)).toHaveText(clock);
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
@@ -286,39 +301,32 @@ test.describe("Practice: switching names", () => {
     await stepBar(page);
     await expect(playhead(page)).toContainText("9:35");
 
-    // The Portfolio holds both names, each with its side, and its footer says how many are open and the combined total.
+    // The Portfolio holds both names, each with its side (signed shares: a short is negative), and its footer says how many are open and the combined total.
     const portfolio = await portfolioPanel(page);
-    const tsla = portfolio.locator('[data-symbol="TSLA"]');
-    const lrcx = portfolio.locator('[data-symbol="LRCX"]');
-    await expect(tsla).toContainText(/Long \d+ @ \$/);
-    await expect(lrcx).toContainText(/Short \d+ @ \$/);
-    await expect(tsla.getByRole("button", { name: "Exit TSLA" })).toBeVisible();
-    await expect(lrcx.getByRole("button", { name: "Exit LRCX" })).toBeVisible();
+    await expectPosition(portfolio, "TSLA", { position: /^\d[\d,]*$/ });
+    await expectPosition(portfolio, "LRCX", { position: /^−\d[\d,]*$/ });
+    await expect(positionRow(portfolio, "TSLA").getByRole("button", { name: "Exit TSLA" })).toBeVisible();
+    await expect(positionRow(portfolio, "LRCX").getByRole("button", { name: "Exit LRCX" })).toBeVisible();
     const total = portfolio.getByTestId("portfolio-total");
     await expect(total).toContainText(PRACTICE_COPY.dayPortfolioTotal);
     await expect(total).toContainText("2 open");
     await expect(total).toContainText("as of");
-    await expect(portfolio.getByTestId("portfolio-row-total")).toHaveCount(2);
-    // The head counts the open positions, and each row's arrow follows the sign of its P/L (up green, down red, none at zero).
+    // The head counts the open positions. Each row has a price, an average price, a value and a signed total (the short's value is negative);
+    // the day change against the prior close is a signed amount or a dash when the list holds no prior close for the name.
     await expect(portfolio.getByTestId("portfolio-count")).toHaveText("2 open positions");
-    for (const row of [tsla, lrcx]) {
-      const [pnl] = amounts(await row.getByTestId("portfolio-row-total").textContent());
-      await expect(row.getByTestId("portfolio-row-arrow")).toHaveText(pnl! > 0 ? "▲" : pnl! < 0 ? "▼" : "");
-      await expect(row.getByTestId("portfolio-row-change")).toHaveText(/^[+−]?\$[\d,]+\.\d{2}$/); // the stock's move since entry, per share
+    const money = /^[+−]?\$[\d,]+\.\d{2}$/;
+    for (const symbol of ["TSLA", "LRCX"]) {
+      await expectPosition(portfolio, symbol, { last: /^[\d,]+\.\d{2}$/, avg: /^[\d,]+\.\d{2}$/, total: money });
+      const cells = await positionCells(portfolio, symbol);
+      if ("Change" in cells) expect(cells.Change, `${symbol}'s day change`).toMatch(/^(—|[+−]?\$[\d,]+\.\d{2})$/);
+      if ("Value" in cells) expect(cells.Value, `${symbol}'s value`).toMatch(symbol === "LRCX" ? /^−\$[\d,]+\.\d{2}$/ : /^\$[\d,]+\.\d{2}$/);
     }
-    // The switch flips the price change and the P/L together: dollars to percent and back.
-    await portfolio.getByRole("radio", { name: "%" }).click();
-    await expect(portfolio.getByTestId("portfolio-row-total")).toHaveText([/^[+−]?\d+\.\d{2}%$/, /^[+−]?\d+\.\d{2}%$/]);
-    await expect(portfolio.getByTestId("portfolio-row-change")).toHaveText([/^[+−]?\d+\.\d{2}%$/, /^[+−]?\d+\.\d{2}%$/]);
-    await portfolio.getByRole("radio", { name: "$" }).click();
-    await expect(portfolio.getByTestId("portfolio-row-total")).toHaveText([/^[+−]?\$[\d,]+\.\d{2}$/, /^[+−]?\$[\d,]+\.\d{2}$/]);
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // a focused segment owns the arrow keys
     // The footer is read from the server after the clock settles, so it can trail the rows by one read: wait for it to agree.
     await expect
       .poll(async () => {
-        const rows = await portfolio.getByTestId("portfolio-row-total").allTextContents();
+        const rows = await Promise.all(["TSLA", "LRCX"].map(async (symbol) => (await positionCells(portfolio, symbol))["Total P/L"]));
         const [headline] = amounts(await total.textContent());
-        return Math.round(((headline ?? NaN) - rows.flatMap((text) => amounts(text)).reduce((sum, value) => sum + value, 0)) * 100);
+        return Math.round(((headline ?? NaN) - rows.flatMap((text) => amounts(text ?? "")).reduce((sum, value) => sum + value, 0)) * 100);
       }, { message: "the Day P/L is the two rows added up" })
       .toBe(0);
     await expect(portfolio.getByText(PRACTICE_COPY.threadSimulated).first()).toBeVisible();
@@ -336,9 +344,8 @@ test.describe("Practice: switching names", () => {
     await expect(portfolio).toBeVisible();
 
     // Exit TSLA from its row: it goes flat, books its trade, and one trade is left open. LRCX's chart opens from its row, still held.
-    await portfolio.locator('[data-symbol="TSLA"]').getByRole("button", { name: "Exit TSLA" }).click();
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("1 trade");
+    await positionRow(portfolio, "TSLA").getByRole("button", { name: "Exit TSLA" }).click();
+    await expectPosition(portfolio, "TSLA", { position: "Flat", total: /^[+−]?\$[\d,]+\.\d{2}$/ }); // flat, and the closed trade's result stays as its total
     await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
     await expect(portfolio.getByTestId("portfolio-count")).toHaveText("1 open position");
     await openFromPortfolio(page, "LRCX");
@@ -388,17 +395,17 @@ test.describe("Practice: switching names", () => {
 
     // On the Portfolio tab, TSLA opened after LRCX, but a crossed stop comes first.
     const portfolio = await portfolioPanel(page);
-    const rows = portfolio.locator("li[data-symbol]");
+    const rows = portfolio.locator("tbody tr");
     await expect(rows).toHaveCount(2);
-    await expect(rows.first()).toHaveAttribute("data-symbol", "TSLA");
+    await expect(rows.first()).toContainText("TSLA");
     await expect(rows.first()).toContainText(/Stop crossed \d{2}:\d{2}/);
-    await expect(rows.last()).toHaveAttribute("data-symbol", "LRCX");
+    await expect(rows.last()).toContainText("LRCX");
     await expect(rows.last()).not.toContainText("Stop crossed");
 
     // Exit from the row: TSLA goes flat, and LRCX's chart opens with no pause left to answer.
     await rows.first().getByRole("button", { name: "Exit TSLA" }).click();
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText("Stop crossed");
+    await expectPosition(portfolio, "TSLA", { position: "Flat" });
+    await expect(positionRow(portfolio, "TSLA")).not.toContainText("Stop crossed");
     await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
     await openFromPortfolio(page, "LRCX");
     await expect(toast).toHaveCount(0);
@@ -418,8 +425,8 @@ test.describe("Practice: switching names", () => {
     await expect(await marks(page)).toContainText("Practice exit");
     await expect(page.getByRole("alert").filter({ hasText: "TSLA crossed your stop" })).toHaveCount(0);
     const portfolio = await portfolioPanel(page);
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
-    await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
+    await expectPosition(portfolio, "TSLA", { position: "Flat" });
+    await expectPosition(portfolio, "LRCX", { position: /^\d[\d,]*$/ });
     await expectCleanScreen(page);
   });
 

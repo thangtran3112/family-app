@@ -9,6 +9,7 @@
 .topRow { display: grid; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); align-items: stretch; }
 
 .sectionHead { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.headBadges { display: inline-flex; align-items: center; gap: var(--space-2); }
 .place { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .placeLine { margin: 0; color: var(--color-text); font-size: var(--text-label); line-height: var(--line-label); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .reviewStep { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
