@@ -5,7 +5,8 @@ import { dayList, plan } from "./dailyFixtures.ts";
 import { MarkResultSchema, ReplaySessionSchema } from "./schemas.ts";
 import { markResult, session } from "./fixtures.ts";
 import { activeThread, closedThread, freshThread, thread, threadBrief } from "./threadFixtures.ts";
-import { ThreadBriefSchema, ThreadSchema, ThreadSummarySchema, ThreadsSchema } from "./threads.ts";
+import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
+import { ThreadBriefSchema, ThreadCapacitySchema, ThreadSchema, ThreadSummarySchema, ThreadsSchema } from "./threads.ts";
 
 test("the thread payloads parse, and the curve and daily rows agree with the stats", () => {
   assert.equal(ThreadSchema.parse(thread).daily.length, 8);
@@ -40,4 +41,12 @@ test("the daily card, the day list, the session and a mark carry the thread", ()
   assert.equal(ReplaySessionSchema.parse({ ...session, thread_id: 1, thread: threadBrief }).thread?.today_pnl_usd, 112);
   assert.equal(ReplaySessionSchema.parse(session).thread, null);
   assert.equal(MarkResultSchema.parse({ ...markResult, thread: threadBrief }).thread?.balance, 50123);
+});
+
+test("the day-trade slots parse, and their words are the server's sentence (ADR-0022)", () => {
+  assert.deepEqual(ThreadCapacitySchema.parse({ day_active: 7, day_max: 10 }), { day_active: 7, day_max: 10 });
+  assert.equal(ThreadCapacitySchema.safeParse({ day_active: "7", day_max: 10 }).success, false);
+  assert.equal(practiceText("daySlots", { active: 7, max: 10 }), "Day-trade slots 7 of 10");
+  assert.equal(practiceText("daySlotsFull", { max: 10 }), "All 10 day-trade slots are in use · close a day thread to start another", "the form says what the server's 409 says");
+  assert.equal(PRACTICE_COPY.daySlots.includes("{active}"), true);
 });

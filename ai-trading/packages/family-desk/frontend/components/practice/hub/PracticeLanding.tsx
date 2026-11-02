@@ -5,7 +5,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { loadThreads } from "@/lib/desk/replay";
+import { loadThreadCapacity, loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { PracticeThread } from "@/lib/replay/threads";
 import { NewPlanModal } from "./NewPlanModal";
@@ -30,6 +30,8 @@ export function PracticeLanding() {
   const threads = useDeskQuery("replay-threads", (signal) => loadThreads({ signal }), { revision });
   // The server lists every active thread first (newest first), then the closed ones.
   const rows = threads.data ?? [];
+  // The day-trade slots are shared by every user (ADR-0022): at most day_max active day threads at once. Read again whenever a thread changed.
+  const capacity = useDeskQuery("thread-capacity", (signal) => loadThreadCapacity({ signal }), { revision });
 
   return (
     <div className={hub.root}>
@@ -38,13 +40,21 @@ export function PracticeLanding() {
           <h1 className={hub.title}>Practice</h1>
           <p className={hub.hint}>{PRACTICE_COPY.threadsHint}</p>
         </div>
-        <Button variant="primary" disabled={threads.loading} onClick={() => {
-            setDeleted(null);
-            setModal({ thread: null });
-          }}
-        >
-          {PRACTICE_COPY.planNew}
-        </Button>
+        <div className={styles.headerActions}>
+          {capacity.data !== null && (
+            <span className={hub.hint} role="status" data-testid="day-slots" data-full={capacity.data.day_active >= capacity.data.day_max ? "true" : undefined}>
+              {practiceText("daySlots", { active: capacity.data.day_active, max: capacity.data.day_max })}
+            </span>
+          )}
+          {/* Swing threads use no slot, so the button stays: with every slot taken the Day choice in the form is off, with the reason, and Swing starts. */}
+          <Button variant="primary" disabled={threads.loading} onClick={() => {
+              setDeleted(null);
+              setModal({ thread: null });
+            }}
+          >
+            {PRACTICE_COPY.planNew}
+          </Button>
+        </div>
       </header>
       <div className={hub.body}>
         <p role="status" className={styles.notice}>{deleted === null ? "" : practiceText("threadDeleted", { name: deleted })}</p>
