@@ -13,7 +13,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer, model_validator
 
-from ai_trading.api.schemas.common import Stamp, SwingOptional
+from ai_trading.api.schemas.common import MarketOut, Stamp, SwingOptional
 from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
@@ -462,7 +462,15 @@ class AdvanceOut(SwingOptional):
     swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming", "fills", "thread_clock")
 
     revealed_through: datetime
-    day_clock: datetime | None  # the day list's shared clock; null for a standalone session
+    # The thread's one instant T (a day-thread session only; null for a standalone or swing session): the thread clock
+    # after it was settled for this request, NOT capped at the tape end and never extrapolated by the server. Every
+    # payload of the thread carries the same T for the same moment; the UI labels its numbers with it.
+    thread_time: datetime | None = None
+    # How far this payload's data runs: `min(thread_time, tape_end)` for an open day-thread session; equal to
+    # `revealed_through` for every other session.
+    data_through: datetime
+    market: MarketOut | None = None  # a day-thread session only: the phase at `thread_time` and the day's tape end
+    day_clock: datetime | None  # the day list's clock capped at this name's tape end; null for a standalone session
     behind_clock: bool  # this name's playhead is behind the day clock (the feed of a name she left)
     at_end: bool
     bars: list[ReplayBarOut]
@@ -942,6 +950,8 @@ class DayListOut(BaseModel):
     candidates: list[CandidateOut]
     watch: list[StarOut]
     clock: datetime | None
+    thread_time: datetime | None = None  # the thread's one instant T (the clock, after it was settled); null once ended
+    market: MarketOut | None = None  # the phase at `thread_time`; `last_bar_at` is null here (a name's frame names it)
     sessions: list[DaySessionOut]
     held_elsewhere: list[HeldElsewhereOut]
     day_pnl: DayPnlOut

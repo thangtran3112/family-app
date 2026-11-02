@@ -70,6 +70,26 @@ def tape_end(day: date) -> pd.Timestamp:
     return found.extended_close
 
 
+def market_block(
+    day: date, thread_time: pd.Timestamp, last_bar_at: pd.Timestamp | None, next_open_at: pd.Timestamp | None
+) -> dict[str, Any]:
+    """The exchange's state at the thread time T (uncapped) for the day the thread is on: which phase the session is
+    in, when the day's tape ends, when the last bar closed (None where the payload names no single name) and when the
+    next trading day's data starts (the day hands over there). "closed" is the night, the weekend, a holiday: the
+    day has no bars after its extended close, and none of them is carried across the gap."""
+    found = trading_session("stock", day)
+    assert found is not None
+    if found.extended_open <= thread_time < found.regular_open:
+        phase = "premarket"
+    elif found.regular_open <= thread_time < found.regular_close:
+        phase = "regular"
+    elif found.regular_close <= thread_time < found.extended_close:
+        phase = "after_hours"
+    else:
+        phase = "closed"
+    return {"phase": phase, "tape_end": found.extended_close, "last_bar_at": last_bar_at, "next_open_at": next_open_at}
+
+
 class PreparedSeries:
     """One (symbol, day, interval): see the module docstring. Built from the day's `DayInputs`; immutable."""
 
@@ -125,6 +145,11 @@ class PreparedSeries:
         """Every 1-minute bar closed by `through`, the lookback sessions included (what a metric row reads): a view."""
         high = int(self._minutes.index.searchsorted(self._clamp(through) - MINUTE, side="right"))
         return self._minutes.iloc[:high]
+
+    def last_bar_close(self, through: pd.Timestamp) -> pd.Timestamp | None:
+        """When the last 1-minute bar closed by `through` closed (None before the day's first bar)."""
+        closed = self.closed_minutes(through)
+        return None if closed.empty else closed.index[-1] + MINUTE
 
     def bars(self, through: pd.Timestamp) -> pd.DataFrame:
         """Display bars whose period has closed by `through`, with the lookback sessions: a copy."""

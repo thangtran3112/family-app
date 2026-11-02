@@ -138,6 +138,9 @@ class Ctx:
     )
     db: Session | None = field(default=None, repr=False)  # the request's session: a swing session reads its holds
     day_clock: pd.Timestamp | None = None  # the day list's shared clock; None for a standalone session
+    # The thread's one instant T: the day list's clock after it was settled, NOT capped at this name's tape end. A
+    # day-thread session only (None for a standalone or swing session).
+    thread_time: pd.Timestamp | None = None
     away: list[Span] = field(default_factory=list)  # the spans she was on another name (02o-b2)
     filling: int | None = None  # the working order being filled right now: its cash reserve is released as it fills
     _cache: dict[str, Any] = field(default_factory=dict)
@@ -376,6 +379,9 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         day_clock=None
         if day_list is None or day_list.revealed_through is None
         else min(_ts(day_list.revealed_through), window_end),
+        thread_time=None
+        if day_list is None or day_list.revealed_through is None or swing
+        else _ts(day_list.revealed_through),
         away=spans_of(row.away or []),
     )
 
@@ -849,6 +855,24 @@ def _clock_state(ctx: Ctx) -> dict[str, Any] | None:
     return {"running": True, "speed": day_list.clock_speed} if day_list is not None and day_list.clock_running else None
 
 
+def _next_start(ctx: Ctx) -> pd.Timestamp | None:
+    """When the thread's next trading day starts (the day hands over there); None on the plan's last day."""
+    if "next_start" not in ctx._cache:
+        from ai_trading.replay import plan as plan_mod  # plan imports this module: the lookup lives there
+
+        day_list = ctx.db.get(ReplayDayList, ctx.row.day_list_id) if ctx.db is not None else None
+        ctx._cache["next_start"] = None if day_list is None else plan_mod.next_day_start(ctx.db, day_list)
+    return ctx._cache["next_start"]
+
+
+def _market_of(ctx: Ctx, series: frames.PreparedSeries, data_through: pd.Timestamp) -> dict[str, Any] | None:
+    """`market` of a day-thread frame (None for a standalone or swing session): the phase at the thread's time T, the
+    tape end, the close of this name's last bar and when the next day's data starts."""
+    if ctx.thread_time is None:
+        return None
+    return frames.market_block(ctx.row.day, ctx.thread_time, series.last_bar_close(data_through), _next_start(ctx))
+
+
 def _frame(
     ctx: Ctx,
     *,
@@ -860,8 +884,13 @@ def _frame(
 ) -> dict[str, Any]:
     series = _series(ctx, width)
     price = last_price(ctx, through)
+    live = ctx.thread_time is not None and ctx.row.status != "ended"  # an open day-thread session follows the thread
+    data_through = min(ctx.thread_time, series.tape_end) if live and ctx.thread_time is not None else through
     return {
         "revealed_through": through,
+        "thread_time": ctx.thread_time,
+        "data_through": data_through,
+        "market": _market_of(ctx, series, data_through),
         "day_clock": ctx.day_clock,
         "behind_clock": ctx.day_clock is not None and through < ctx.day_clock,
         "at_end": through >= ctx.window_end,
@@ -1059,6 +1088,8 @@ def advance(
         if clock is None or target > clock:
             day_list.revealed_through = target.to_pydatetime()
             ctx.day_clock = target
+            if ctx.thread_time is not None:
+                ctx.thread_time = target
 
     fills: list[Mark] = []
     if target > previous:

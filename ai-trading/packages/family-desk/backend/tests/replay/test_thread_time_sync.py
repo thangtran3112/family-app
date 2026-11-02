@@ -44,6 +44,7 @@ from test_replay_switch import _feed, _mark, _names, _row
 from ai_trading.core.calendar import et
 from ai_trading.db.models import PracticePlan
 from ai_trading.replay import clock as clock_mod
+from ai_trading.replay import frames
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
 from ai_trading.replay.tape import Tape
@@ -183,7 +184,6 @@ def test_the_day_list_prices_an_opened_name_like_its_chart_inside_a_minute(
 # -- I1 (A3): one instant ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="A3: no payload carries thread_time yet")
 def test_every_surface_reports_the_thread_clock_as_its_time(db_session, user_id, svc, world, pinned) -> None:
     thread_id, row, gapper, flat = _night(db_session, user_id, svc, world)
     clock = clock_mod.read(db_session, user_id, thread_id, svc)["clock"]
@@ -203,7 +203,6 @@ def test_every_surface_reports_the_thread_clock_as_its_time(db_session, user_id,
     assert not wrong, f"every surface must name T={NIGHT}; these do not: {wrong}"
 
 
-@pytest.mark.xfail(strict=True, reason="A3: no payload carries data_through or market yet")
 def test_data_through_is_the_tape_end_on_every_name_payload(db_session, user_id, svc, world, pinned) -> None:
     thread_id, _, gapper, flat = _night(db_session, user_id, svc, world)
     for label, session_id in (("GAPPER", gapper.id), ("FLAT (legacy)", flat.id)):
@@ -213,7 +212,39 @@ def test_data_through_is_the_tape_end_on_every_name_payload(db_session, user_id,
         ):
             assert frame.get("data_through") == TAPE_END, (label, source)
             assert frame["market"]["phase"] == "closed" and frame["market"]["tape_end"] == TAPE_END, (label, source)
+            assert frame["market"]["last_bar_at"] == TAPE_END, (label, source)  # the 19:59 bar closes at 20:00
+            assert frame["market"]["next_open_at"] == et(DAYS[1], "09:30"), (label, source)
     assert clock_mod.read(db_session, user_id, thread_id, svc)["market"]["phase"] == "closed"
+
+
+def test_the_market_phase_follows_the_thread_time() -> None:
+    cases = {
+        "04:00": "premarket",
+        "09:29": "premarket",
+        "09:30": "regular",
+        "15:59": "regular",
+        "16:00": "after_hours",
+        "19:59": "after_hours",
+        "20:00": "closed",
+    }
+    for hhmm, phase in cases.items():
+        assert frames.market_block(DAYS[0], et(DAYS[0], hhmm), None, None)["phase"] == phase, hhmm
+    assert frames.market_block(DAYS[0], NIGHT, None, None)["phase"] == "closed"  # the night: no bars, no phase
+
+
+def test_a_paused_thread_returns_identical_payloads_on_repeated_reads(db_session, user_id, svc, world, pinned) -> None:
+    """I5 on the new fields: thread_time, data_through and market do not move between two reads at one instant."""
+    thread_id, row, gapper, _ = _night(db_session, user_id, svc, world)
+    first = (_sync(db_session, user_id, svc, gapper.id), _feed(db_session, user_id, svc, gapper.id))
+    second = (_sync(db_session, user_id, svc, gapper.id), _feed(db_session, user_id, svc, gapper.id))
+    for one, two in zip(first, second, strict=True):
+        assert (one["thread_time"], one["data_through"], one["market"]) == (
+            two["thread_time"],
+            two["data_through"],
+            two["market"],
+        )
+    assert clock_mod.read(db_session, user_id, thread_id, svc) == clock_mod.read(db_session, user_id, thread_id, svc)
+    assert _live(db_session, user_id, svc, row)["market"] == _live(db_session, user_id, svc, row)["market"]
 
 
 # -- RC3 (A4): a feed is cut at the thread's time ---------------------------------------------------------------------

@@ -58,6 +58,7 @@ from ai_trading.db.models import (
     UniverseSymbol,
 )
 from ai_trading.replay import days as days_mod
+from ai_trading.replay import frames as frames_mod
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import prep as prep_mod
 from ai_trading.replay import review as review_mod
@@ -1034,6 +1035,10 @@ def day_list_out(
         else row.candidates,
         "watch": row.watch,
         "clock": row.revealed_through,
+        "thread_time": row.revealed_through if clock is not None and not ended else None,
+        "market": frames_mod.market_block(row.day, clock, None, next_day_start(db, row))
+        if clock is not None and not ended
+        else None,
         # ponytail: `positions` loads one context per open position; batch the bar loads if
         # a day ever holds dozens
         "sessions": [
