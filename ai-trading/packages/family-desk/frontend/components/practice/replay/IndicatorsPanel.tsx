@@ -5,7 +5,7 @@ import { RailList, RailValue } from "@/components/ui/RailList";
 import type { ChartBar } from "@/lib/chart-data";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { ServerSeries } from "@/lib/desk/workspace";
-import { indicatorGroups } from "@/lib/replay/indicatorsView";
+import { indicatorGroups, indicatorsFootnote } from "@/lib/replay/indicatorsView";
 import styles from "./replay.module.css";
 
 /**
@@ -37,7 +37,7 @@ export function IndicatorsPanel({ bars, interval, timeframe, server }: { bars: r
           />
         </div>
       ))}
-      <p className={styles.footnote}>{PRACTICE_COPY.indicatorsFootnote}</p>
+      <p className={styles.footnote}>{indicatorsFootnote(interval)}</p>
     </section>
   );
 }
