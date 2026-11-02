@@ -338,3 +338,103 @@ def test_log_result_warns_on_a_failure_and_stays_quiet_otherwise(caplog, monkeyp
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
     assert [r.getMessage() for r in warnings] == ["job premarket_0830 failed (ok=False ran=True): boom"]
     assert [r.levelname for r in caplog.records] == ["WARNING", "DEBUG"]
+
+
+# -- the heartbeat proves the loop, not the job (deploy-scheduler-gate) -------------------------------
+
+
+class _Session:
+    def commit(self):
+        pass
+
+
+def _factory():
+    from contextlib import nullcontext
+
+    return lambda: nullcontext(_Session())
+
+
+def _age(path, seconds):
+    import os
+    import time
+
+    old = time.time() - seconds
+    os.utime(path, (old, old))
+
+
+def test_run_once_heartbeat_is_fresh_while_a_long_job_is_still_running(tmp_path, monkeypatch):
+    """A cold start whose first iteration runs one long job must not leave the heartbeat missing or
+    stale: the loop reached the iteration, so the healthcheck passes before the job returns."""
+    path = tmp_path / "heartbeat"
+    seen = {}
+    monkeypatch.setattr(scheduler, "seed_strip", lambda *a, **k: False)
+
+    def long_job(*a, **k):
+        seen["healthy_during_job"] = healthcheck.is_healthy(path)
+        return []
+
+    monkeypatch.setattr(scheduler, "run_due", long_job)
+
+    scheduler.run_once(_factory(), _FakeSources(), JobClock(), path)
+
+    assert seen["healthy_during_job"] is True
+
+
+def test_run_once_refreshes_a_stale_heartbeat_at_the_start_of_the_next_iteration(tmp_path, monkeypatch):
+    path = tmp_path / "heartbeat"
+    healthcheck.touch(path)
+    _age(path, healthcheck.FRESH_SECONDS + 60)  # the previous iteration ended long ago
+    assert healthcheck.is_healthy(path) is False
+    seen = {}
+    monkeypatch.setattr(scheduler, "seed_strip", lambda *a, **k: False)
+    monkeypatch.setattr(scheduler, "run_due", lambda *a, **k: seen.update(during=healthcheck.is_healthy(path)) or [])
+
+    scheduler.run_once(_factory(), _FakeSources(), JobClock(), path)
+
+    assert seen["during"] is True
+
+
+def test_run_once_touches_the_heartbeat_again_when_the_iteration_ends(tmp_path, monkeypatch):
+    """A job that runs for minutes ages the start touch; the end touch is what shows the iteration finished."""
+    path = tmp_path / "heartbeat"
+    monkeypatch.setattr(scheduler, "seed_strip", lambda *a, **k: False)
+
+    def slow_job(*a, **k):
+        _age(path, healthcheck.FRESH_SECONDS + 60)  # the job ate the whole freshness window
+        return []
+
+    monkeypatch.setattr(scheduler, "run_due", slow_job)
+
+    scheduler.run_once(_factory(), _FakeSources(), JobClock(), path)
+
+    assert healthcheck.is_healthy(path) is True
+
+
+def test_a_stopped_loop_goes_stale_after_the_freshness_window(tmp_path, monkeypatch):
+    """Nothing but the loop touches the heartbeat: once iterations stop, the healthcheck fails."""
+    path = tmp_path / "heartbeat"
+    monkeypatch.setattr(scheduler, "seed_strip", lambda *a, **k: False)
+    monkeypatch.setattr(scheduler, "run_due", lambda *a, **k: [])
+
+    scheduler.run_once(_factory(), _FakeSources(), JobClock(), path)
+    last = path.stat().st_mtime
+
+    assert healthcheck.is_healthy(path, now=last + 1) is True
+    assert healthcheck.is_healthy(path, now=last + healthcheck.FRESH_SECONDS + 1) is False
+
+
+def test_a_job_that_hangs_keeps_the_heartbeat_aging(tmp_path, monkeypatch):
+    """The start touch does not mask a hang: with no end touch the heartbeat still goes stale."""
+    path = tmp_path / "heartbeat"
+    monkeypatch.setattr(scheduler, "seed_strip", lambda *a, **k: False)
+
+    def hangs(*a, **k):
+        raise KeyboardInterrupt  # stands in for a process that never returns; the end touch never runs
+
+    monkeypatch.setattr(scheduler, "run_due", hangs)
+
+    with pytest.raises(KeyboardInterrupt):
+        scheduler.run_once(_factory(), _FakeSources(), JobClock(), path)
+
+    started = path.stat().st_mtime
+    assert healthcheck.is_healthy(path, now=started + healthcheck.FRESH_SECONDS + 1) is False
