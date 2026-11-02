@@ -105,9 +105,10 @@ test.describe("Practice: the thread clock", () => {
     await openDesk(page, summaryUrl(threadId));
     await expect(panel(page)).toBeVisible();
     await expect(page.getByText(/Open a stock from the Day list/)).toHaveCount(0);
-    for (const name of ["Play", "Skip day", "End day", "1x", "2x", "5x", "10x"]) await expect(panel(page).getByRole("button", { name, exact: true })).toBeEnabled();
-    for (const name of ["Step"]) await expect(panel(page).getByRole("button", { name, exact: true })).toHaveCount(0); // only Pause, the speed and Skip day change time
-    await expect(panel(page).getByRole("button", { name: /^Jump/ })).toHaveCount(0);
+    for (const name of ["Play", "Skip day", "1x", "2x", "5x", "10x"]) await expect(panel(page).getByRole("button", { name, exact: true })).toBeEnabled();
+    await expect(panel(page).getByRole("button", { name: PRACTICE_COPY.clockJumpGo, exact: true }), "Jump waits for a date and a time").toBeDisabled();
+    await expect(panel(page).getByRole("button", { name: /^End day/ }), "no End day (ADR-0023)").toHaveCount(0);
+    for (const name of ["Step"]) await expect(panel(page).getByRole("button", { name, exact: true })).toHaveCount(0); // only Pause, the speed, Skip day and Jump change time
     await expect(readout(page)).toHaveText(/^[A-Z][a-z]{2} \d{4}-\d{2}-\d{2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // the one format: weekday, ISO date, time to the second, zone
     const paused = await clockOf(page);
 
@@ -166,8 +167,8 @@ test.describe("Practice: the thread clock", () => {
     expect(Date.parse(body.clock)).toBeLessThanOrEqual(Date.parse(body.window_end)); // never past the window: nothing later is read
   });
 
-  // ADR-0022: the date is never hidden. The chart's readout, the chip and the Summary clock all name the thread's own date; the Summary's next session line and the End day question do too.
-  test("the chart, the chip and the Summary clock show the date, and so do the next session line and the End day question (ADR-0022)", async ({ page, context }) => {
+  // ADR-0022: the date is never hidden. The chart's readout, the chip and the Summary clock all name the thread's own date; the Summary's next session line and the Skip day question do too.
+  test("the chart, the chip and the Summary clock show the date, and so do the next session line and the Skip day question (ADR-0022)", async ({ page, context }) => {
     test.setTimeout(240_000);
     await startDayOnTsla(page, context);
     await expect(readout(page), "the chart's readout carries the date").toContainText("Fri 2026-09-25");
@@ -176,8 +177,9 @@ test.describe("Practice: the thread clock", () => {
     await page.waitForURL(THREAD_URL);
     await expect(readout(page), "the clock shows the date from the first read").toContainText("Fri 2026-09-25");
     await expect(page.getByTestId("thread-clock-next")).toContainText(/(Mon|Tue|Wed|Thu|Fri|Sat|Sun) 20\d\d-\d\d-\d\d/);
-    await panel(page).getByRole("button", { name: PRACTICE_COPY.clockEndDay }).click();
-    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toContainText("Fri 2026-09-25");
+    await expect(page.getByTestId("thread-clock-next"), "the next open, never the plan's Start at").toContainText(/ 9:30 AM ET/);
+    await panel(page).getByRole("button", { name: PRACTICE_COPY.clockSkipDay, exact: true }).click();
+    await expect(page.getByRole("group", { name: "Confirm skipping the day" })).toContainText("next market open");
   });
 
   test("nothing happens at the close: the clock flows through after-hours and the night, and the day hands over only at the next session's start", async ({ page, context }) => {
@@ -234,7 +236,7 @@ test.describe("Practice: the thread clock", () => {
     await expect(panel(page).getByText(/^Skipped/)).toBeVisible({ timeout: 90_000 });
 
     // Day 1 ended with its trade booked, and Day 2 is the open day: its clock stands at the day's start, paused as the old one was.
-    await expect(page.getByRole("link", { name: /^Start Trading$/ }).or(page.getByRole("button", { name: /^Start Day 2$/ }))).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("link", { name: /^Start Trading$/ }).or(page.getByRole("button", { name: /^Start Trading$/ }))).toBeVisible({ timeout: 90_000 });
     await expect(page.getByTestId("thread-clock-state")).toContainText(PRACTICE_COPY.clockStatePaused);
     await expect(readout(page)).toContainText(/ 9:3\d:\d{2} AM ET/);
     const days = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}`)).json();

@@ -1,7 +1,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
-import { endDayFromSummary, stepBar } from "./clock-helpers";
+import { skipDayToReview, stepBar } from "./clock-helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
 import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
 import { backToDayList, placeOrder, replayRail } from "./swing-helpers";
@@ -165,8 +165,8 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("link", { name: /^Start Trading$/ })).toBeVisible();
     await expectCleanScreen(page);
 
-    // The whole day ends together: every opened name scores.
-    await endDayFromSummary(page);
+    // The whole day ends together (Skip day): every opened name scores.
+    await skipDayToReview(page);
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
     await expectCleanScreen(page);
   });
@@ -264,7 +264,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByRole("heading", { name: symbol, level: 1 })).toBeVisible();
   }
 
-  test("two names hold open trades at once: the Portfolio shows 2 open and their combined total, a held name exits from the other chart, and End day names what it exits", async ({ page, context }) => {
+  test("two names hold open trades at once: the Portfolio shows 2 open and their combined total, a held name exits from the other chart, and Skip day says what it closes", async ({ page, context }) => {
     test.setTimeout(240_000);
     await startEveryNamePlan(page, context);
     const dayUrl = page.url();
@@ -343,12 +343,10 @@ test.describe("Practice: switching names", () => {
     await expect(portfolio.getByTestId("portfolio-count")).toHaveText("1 open position");
     await openFromPortfolio(page, "LRCX");
 
-    // The Summary asks before it exits what is still open, and names it.
-    await page.getByRole("tab", { name: "Summary" }).click();
-    await page.getByRole("button", { name: PRACTICE_COPY.clockEndDay, exact: true }).click();
-    const confirm = page.getByRole("group", { name: "Confirm ending the day" });
-    await expect(confirm).toContainText("Ending the day exits 1 open practice trade at the price you see now: LRCX");
-    await confirm.getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
+    // The Summary asks before it skips the day, and says what happens to what is still open (no End day, ADR-0023).
+    await skipDayToReview(page, async (ask) => {
+      await expect(ask).toContainText("every open position closes at the last price of that day's trading");
+    });
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
     await expectCleanScreen(page);
   });
@@ -514,8 +512,8 @@ test.describe("Practice: switching names", () => {
     await expect(list.getByRole("row", { name: /LRCX/ })).toHaveCount(1);
     await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new in this scan");
 
-    // Ending the day closes scanning and keeps the last scan's label on screen.
-    await endDayFromSummary(page);
+    // Skipping the day closes scanning and keeps the last scan's label on screen.
+    await skipDayToReview(page);
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan })).toHaveCount(0);
     await expect(label).toHaveText("Scan 2 · run at 9:37 AM ET · data through 9:22 AM");
