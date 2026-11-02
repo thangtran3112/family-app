@@ -4,6 +4,7 @@ import { BalanceCurve } from "@/components/practice/journal/thread/BalanceCurve"
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { PracticePlan } from "@/lib/replay/daily";
+import { useDayDateShown } from "@/lib/replay/dateShown";
 import { datesHidden, planCard } from "@/lib/replay/dayView";
 import type { Thread } from "@/lib/replay/threads";
 import { hasNoDays } from "@/lib/replay/threadView";
@@ -25,20 +26,26 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan, clock }: { su
   // The plan of this thread (a plan bound to another thread is not shown here), with its cursor: "Day 2 of 5 · next: Mon".
   const planHere = plan !== null && plan.thread_id === thread.id ? plan : null;
   const card = planCard(planHere);
+  // One account at the clock feeds the headline, the Today row and the clock card (D-169).
+  const account = closed ? null : (clock.clock?.account ?? null);
+  // The date shows once Show date was pressed on this day's chart band (D-174); no plan read yet counts as hidden: a date shown too early cannot be taken back (D-155).
+  const dateShown = useDayDateShown(clock.clock?.day_list_id ?? null);
+  const hidden = (planHere === null || datesHidden(planHere.spec)) && !dateShown;
+  // The data is still being prepared: the Today card says so, once (D-176).
+  const preparing = card.action === "none";
 
   return (
     <div className={o.grid}>
       <div className={o.main}>
-        <PlaceStrip summary={summary} planFinished={planHere?.finished === true} account={closed ? null : (clock.clock?.account ?? null)} />
-        {/* No plan read yet counts as hidden: a date shown too early cannot be taken back (D-155). */}
-        {!closed && <ThreadClockPanel api={clock} datesHidden={planHere === null || datesHidden(planHere.spec)} onSkipped={onChanged} />}
+        <PlaceStrip summary={summary} planFinished={planHere?.finished === true} account={account} />
+        {!closed && <ThreadClockPanel api={clock} datesHidden={hidden} onSkipped={onChanged} />}
         <div className={o.topRow}>
-          <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
+          <NextStep summary={summary} plan={plan} account={account} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (
             <section className={styles.panel} aria-label="Daily list plan">
               <h2 className={styles.panelTitle}>{PRACTICE_COPY.planTitle}</h2>
-              <p className={styles.dayLine}>{card.headline}</p>
-              {card.detail && <p className={hub.muted}>{card.detail}</p>}
+              {!preparing && <p className={styles.dayLine}>{card.headline}</p>}
+              {!preparing && card.detail && <p className={hub.muted}>{card.detail}</p>}
               <p className={hub.muted}>{planHere.filters.map((filter) => filter.name).join(" · ")}</p>
             </section>
           )}

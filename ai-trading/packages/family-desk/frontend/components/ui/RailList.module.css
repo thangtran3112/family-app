@@ -10,6 +10,7 @@
 .row:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .main { display: flex; min-width: 0; flex-direction: column; }
 .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sub { overflow: hidden; color: var(--color-muted); font-size: var(--text-meta); text-overflow: ellipsis; white-space: nowrap; }
+/* The line under the name wraps and is never cut (D-171): a status that reads "· A…" says nothing. Only the name takes an ellipsis. */
+.sub { overflow-wrap: anywhere; color: var(--color-muted); font-size: var(--text-meta); }
 .value { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-2); white-space: nowrap; }
 .tone { color: var(--tone); }
