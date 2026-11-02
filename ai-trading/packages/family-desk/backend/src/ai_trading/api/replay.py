@@ -24,12 +24,13 @@ the trimmed R0 fixture (`replay/fixture.py`); the services themselves run unchan
 
 import logging
 import threading
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 from ai_trading_common.errors import ProviderError
 from ai_trading_common.registry import DataSources
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -279,7 +280,6 @@ def advance_session(
     session_id: int,
     body: AdvanceIn,
     request: Request,
-    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
@@ -301,9 +301,7 @@ def advance_session(
     if frame.get(
         "thread_clock"
     ):  # a running clock may have reached the next session: hand over now, not when the Summary is next opened
-        _roll_closed_day(
-            db, request, background, services, lambda: clock_mod.roll_of_session(db, user.id, session_id, services)
-        )
+        _roll_closed_day(db, request, services, lambda: clock_mod.roll_of_session(db, user.id, session_id, services))
     return frame
 
 
@@ -406,13 +404,26 @@ def end_session(
 # -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
 
 
-def _roll_closed_day(db: Session, request: Request, background: BackgroundTasks, services: Services, roll) -> None:
+def _detach(task: Callable[..., None], *args: Any) -> None:
+    """Run a slow job (a prep, a re-scan) on its own thread, never as a FastAPI `BackgroundTasks` entry.
+
+    FastAPI closes a yield dependency (`get_session`: commit and close) only AFTER the response and its background
+    tasks. A request that read a running thread clock after it queued its task (`settle_day` takes the day list's row
+    lock) therefore kept that lock until the task ended, and a re-scan, which needs the same lock, waited on a request
+    that was waiting for it: a deadlock Postgres cannot see. Every poll of the thread then queued behind the lock, each
+    holding a pooled connection and a worker thread, until no route could get one (Cloudflare 524 on every
+    `/api/desk/*`, 500 on the polls that timed out of the pool). A detached thread leaves the request to end at once.
+    The caller has committed what the task reads (the task has its own session)."""
+    threading.Thread(target=task, args=args, name=task.__name__, daemon=True).start()
+
+
+def _roll_closed_day(db: Session, request: Request, services: Services, roll) -> None:
     """Run `roll` (the day hands over when the clock reaches the next trading day's start) and, when the next day's data
     still needs preparing, start that prep the way every open does."""
     opened = _call(roll)
     if opened is not None and opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
-        background.add_task(_prep_in_background, request.app, services, opened.plan.id)
+        _detach(_prep_in_background, request.app, services, opened.plan.id)
 
 
 def _prep_in_background(app: Any, services: Services, plan_id: int) -> None:
@@ -458,7 +469,6 @@ def _pool_prep_in_background(
 @router.get("/daily", response_model=DailyOut)
 def get_daily(
     request: Request,
-    background: BackgroundTasks,
     thread_id: int | None = Query(default=None, alias="threadId", ge=1),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
@@ -472,7 +482,7 @@ def get_daily(
     stale = _call(plan_mod.restart_stale_prep, db, user.id, services.now(), thread_id)
     if stale is not None:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
-        background.add_task(_prep_in_background, request.app, services, stale.id)
+        _detach(_prep_in_background, request.app, services, stale.id)
     return _call(plan_mod.hub, db, user.id, thread_id)
 
 
@@ -499,7 +509,6 @@ def get_daily(
 )
 def open_next(
     request: Request,
-    background: BackgroundTasks,
     raw: Any = Depends(_json_body),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
@@ -532,10 +541,10 @@ def open_next(
         thread_id = thread.id
     opened = _call(plan_mod.open_next, db, user.id, services, thread_id)
     if started or opened.restart_prep:
-        # The task runs on its own session while this request's one is still open (FastAPI closes a yield dependency
-        # after the response and its background tasks), so the plan must be committed before the task can see it.
+        # The task runs on its own session while this request's one is still open, so the plan must be committed
+        # before the task can see it.
         db.commit()
-        background.add_task(_prep_in_background, request.app, services, opened.plan.id)
+        _detach(_prep_in_background, request.app, services, opened.plan.id)
     out = {
         "plan": plan_mod.plan_out(db, opened.plan),
         "day_list_id": None if opened.day_list is None else opened.day_list.id,
@@ -588,7 +597,6 @@ def relist_day_list(
     day_list_id: int,
     body: DayRelistIn,
     request: Request,
-    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
@@ -600,7 +608,7 @@ def relist_day_list(
     opened = _call(plan_mod.relist, db, user.id, day_list_id, body.listAt, services)
     if opened.restart_prep:
         db.commit()  # see `open_next`: the task runs on its own session
-        background.add_task(_prep_in_background, request.app, services, opened.plan.id)
+        _detach(_prep_in_background, request.app, services, opened.plan.id)
     return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
 
 
@@ -635,7 +643,6 @@ def _rescan_in_background(app: Any, services: Services, day_list_id: int, run: s
 def rescan_day(
     day_list_id: int,
     request: Request,
-    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
@@ -650,7 +657,7 @@ def rescan_day(
     run = _call(plan_mod.start_rescan, db, user.id, day_list_id, services)
     if run is not None:
         db.commit()  # see `open_next`: the task runs on its own session
-        background.add_task(_rescan_in_background, request.app, services, day_list_id, run)
+        _detach(_rescan_in_background, request.app, services, day_list_id, run)
     return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
 
 
@@ -683,7 +690,6 @@ def end_day(
 )
 def create_thread(
     request: Request,
-    background: BackgroundTasks,
     raw: Any = Depends(_json_body),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
@@ -701,14 +707,13 @@ def create_thread(
         return threads_mod.detail(db, row)
     row, plan = _call(swing_mod.create_thread, db, user.id, spec, services)
     db.commit()  # the prep runs on its own session: the plan must be visible to it
-    background.add_task(_prep_in_background, request.app, services, plan.id)
+    _detach(_prep_in_background, request.app, services, plan.id)
     return threads_mod.detail(db, row)
 
 
 @router.post("/threads/swing-universe", response_model=SwingUniversePreviewOut)
 def preview_swing_universe(
     request: Request,
-    background: BackgroundTasks,
     body: SwingUniversePreviewIn,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
@@ -730,7 +735,7 @@ def preview_swing_universe(
     result = _call(swing_mod.preview, db, user.id, req, services)
     db.commit()  # the preview cached bars through this session; the background prep and the next call read them
     if result.pending:
-        background.add_task(_pool_prep_in_background, request.app, services, user.id, req, result.pending)
+        _detach(_pool_prep_in_background, request.app, services, user.id, req, result.pending)
     return {**result.body, "label": result.body["survivorship"], "pending_symbols": len(result.pending)}
 
 
@@ -831,7 +836,6 @@ def get_thread_fills(
 def get_thread_clock(
     thread_id: int,
     request: Request,
-    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
@@ -840,7 +844,7 @@ def get_thread_clock(
     starts, and the simulated account at that time (balance, open P/L, equity). A running clock is brought to now
     first, so this is the answer whether or not anyone was looking in between. A clock that reached the next trading
     day's start hands the day over first (the answer is then the next day's). Poll it; it is idempotent."""
-    _roll_closed_day(db, request, background, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
+    _roll_closed_day(db, request, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
     return _call(clock_mod.read, db, user.id, thread_id, services)
 
 
@@ -849,7 +853,6 @@ def control_thread_clock(
     thread_id: int,
     body: ClockIn,
     request: Request,
-    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
@@ -868,7 +871,7 @@ def control_thread_clock(
         to=body.to,
         step=body.step,
     )
-    _roll_closed_day(db, request, background, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
+    _roll_closed_day(db, request, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
     return _call(clock_mod.read, db, user.id, thread_id, services)
 
 
@@ -876,7 +879,6 @@ def control_thread_clock(
 def skip_thread_day(
     thread_id: int,
     request: Request,
-    background: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
@@ -887,7 +889,7 @@ def skip_thread_day(
     ended, opened = _call(clock_mod.skip_day, db, user.id, thread_id, services)
     if opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
-        background.add_task(_prep_in_background, request.app, services, opened.plan.id)
+        _detach(_prep_in_background, request.app, services, opened.plan.id)
     return {
         "ended_day_list_id": ended.id,
         "next_day_list_id": None if opened.day_list is None else opened.day_list.id,

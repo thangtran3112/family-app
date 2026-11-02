@@ -24,6 +24,7 @@ from ai_trading_common.registry import DataSources
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai_trading.alerts.runtime import tick
@@ -61,10 +62,16 @@ from ai_trading.notify.telegram import TelegramChannel
 
 logger = logging.getLogger(__name__)
 
+#: What one request may wait on the database before it fails (see `db.engine.make_engine`). A row lock another request
+#: holds is normally released in milliseconds; 10 s is far past any honest holder and well inside Cloudflare's 100 s.
+#: A request left idle inside its transaction for 5 minutes is a leak: Postgres ends it and frees what it locked.
+LOCK_TIMEOUT_MS = 10_000
+IDLE_IN_TRANSACTION_MS = 300_000
 TICK_INTERVAL_SECONDS = 60.0
 DISPATCH_INTERVAL_SECONDS = 10.0
 
 _DATABASE_URL_VAR = "DESK_RUNTIME_DATABASE_URL"
+_LOCK_NOT_AVAILABLE = "55P03"  # Postgres: lock_timeout expired
 
 
 def _build_channels(env: dict[str, str]) -> dict[str, Channel]:
@@ -112,7 +119,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     tasks: list[asyncio.Task[None]] = []
     database_url = os.environ.get(_DATABASE_URL_VAR)
     if database_url:
-        app.state.session_factory = make_session_factory(make_engine(database_url))
+        app.state.session_factory = make_session_factory(
+            make_engine(database_url, lock_timeout_ms=LOCK_TIMEOUT_MS, idle_in_transaction_ms=IDLE_IN_TRANSACTION_MS)
+        )
         app.state.health_engine = make_health_check_engine(database_url)
         app.state.data_sources = DataSources.from_env()
         channels = _build_channels(dict(os.environ))
@@ -147,6 +156,16 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="ai-trading-desk", lifespan=_lifespan)
+
+
+@app.exception_handler(OperationalError)
+def _busy_database(request: Request, exc: OperationalError) -> JSONResponse:
+    """A row lock that did not free within `LOCK_TIMEOUT_MS` is a plain 503 the screens already retry on, not a 500.
+    Any other database error stays the 500 it was."""
+    if getattr(exc.orig, "sqlstate", None) != _LOCK_NOT_AVAILABLE:
+        raise exc
+    return JSONResponse({"detail": "The Desk is busy · try again"}, status_code=503, headers={"Retry-After": "2"})
+
 
 for _router_module in (
     watchlists,
