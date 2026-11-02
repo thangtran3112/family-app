@@ -68,7 +68,7 @@ test("rows keep the server's order, show the ET clock and the day number, and ne
   const rows = fillRows([sell, fill(), fill({ id: 8, source: "auto", day: "2026-04-01", closes: 20, opens: 0 })], dayLabels(thread));
   assert.deepEqual(rows[0], { key: "10", day: "Day 3 · Wed", time: "10:40 AM", symbol: "TSLA", action: "Sell", shares: "100", price: "212.25", effect: "Closed" });
   assert.deepEqual(rows[1], { key: "9", day: "Day 3 · Wed", time: "10:07 AM", symbol: "TSLA", action: "Buy", shares: "100", price: "210.50", effect: "Opened or added" });
-  assert.equal(rows[2]!.effect, "Closed (auto, window end)");
+  assert.equal(rows[2]!.effect, "Closed (auto, day end)");
   assert.equal(rows[2]!.day, "—", "a day the thread does not list is a dash, not the date");
   for (const row of rows) assert.doesNotMatch(Object.values(row).join(" "), /\d{4}-\d{2}-\d{2}/);
   assert.deepEqual(fillRows([], dayLabels(thread)), []);

@@ -370,8 +370,9 @@ def test_the_thread_clock_routes_play_sync_skip_and_refuse(world, db_session) ->
     ]
     paused = client.get(clock_url, headers=auth_headers()).json()
     assert paused["state"] == "paused" and pd.Timestamp(paused["clock"]) == et(DAYS[0], "09:30")
-    assert pd.Timestamp(paused["window_end"]) == et(DAYS[0], "11:30")
-    assert paused["account"]["equity_usd"] == 50_000.0 and paused["pause"] is None
+    assert pd.Timestamp(paused["window_end"]) == et(DAYS[0], "16:00")  # the market's close
+    assert pd.Timestamp(paused["focus_end"]) == et(DAYS[0], "11:30")  # her window: a mark, not an end
+    assert paused["account"]["equity_usd"] == 50_000.0 and "pause" not in paused
 
     # Requests are the contract: something to do, known fields only, a speed from the chips.
     for body in ({}, {"speed": 3}, {"bogus": 1}, {"running": "later"}):

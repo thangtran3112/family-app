@@ -175,17 +175,17 @@ def test_relisting_applies_the_new_plan_rules(db_session, user_id, svc, list_at,
     assert caught.value.status == 422
 
 
-def test_a_relist_that_would_close_the_window_is_refused(db_session, user_id, svc) -> None:
+def test_a_relist_past_her_focus_mark_moves_the_mark_out_instead_of_refusing(db_session, user_id, svc) -> None:
     plan = _early_plan(db_session, user_id, svc)
     plan.spec = {**plan.spec, "setup": {**plan.spec["setup"], "window": {"from": "09:30", "to": "10:00"}}}
     db_session.commit()
     row = _open(db_session, user_id, svc).day_list
-    assert _out(db_session, user_id, svc, row.id)["relist"] is None  # nothing to offer: the window ends at 10:00
-    with pytest.raises(ReplayProblem) as caught:
-        plan_mod.relist(db_session, user_id, row.id, "10:00", svc)
-    assert (caught.value.path, caught.value.message) == ("listAt", "window.from must be before window.to")
+    offer = _out(db_session, user_id, svc, row.id)["relist"]
+    assert offer is not None and offer["list_at"] == "10:00"  # her 10:00 focus mark does not limit the list time
+    plan_mod.relist(db_session, user_id, row.id, "10:00", svc)
     db_session.refresh(plan)
-    assert plan.spec["screen"]["listAt"] == "08:30"  # a refused relist changes nothing
+    assert plan.spec["screen"]["listAt"] == "10:00"
+    assert plan.spec["setup"]["window"] == {"from": "10:00", "to": "16:00"}  # the mark moved out to the session's end
 
 
 def test_a_day_under_way_or_on_a_replaced_plan_cannot_be_relisted(db_session, user_id, svc) -> None:
