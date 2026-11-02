@@ -335,7 +335,8 @@ def test_the_first_list_has_the_gapper_priced_at_the_0814_bar_and_counts_what_it
         "Only 1 of the 3 scanned symbols met Gap up or Gap down"
         " · loosen a filter in the Screener to widen the next days' lists"
     ]
-    assert out["review"] is None and out["journal"] is None and out["clock"] is None
+    assert out["review"] is None and out["journal"] is None
+    assert out["clock"] == et(DAYS[0], "09:30")  # the day's clock stands at its start before any name is opened
 
 
 def test_days_open_in_order_one_at_a_time_and_a_split_makes_no_false_gap(db_session, user_id, svc) -> None:
@@ -455,7 +456,7 @@ def test_stars_must_be_on_the_list_at_most_five_and_carry_the_clock(db_session, 
     starred = plan_mod.patch_day_list(
         db_session, user_id, row.id, svc, watch=["GAPPER"], notes="x", rating=None, fields={"watch", "notes"}
     )
-    assert starred.watch == [{"symbol": "GAPPER", "starred_clock": et(DAYS[0], "08:30").isoformat()}]
+    assert starred.watch == [{"symbol": "GAPPER", "starred_clock": et(DAYS[0], "09:30").isoformat()}]  # the day clock
     assert starred.notes == "x"
     cleared = plan_mod.patch_day_list(
         db_session, user_id, row.id, svc, watch=[], notes=None, rating=None, fields={"watch"}
@@ -594,7 +595,7 @@ def test_nothing_the_list_serves_before_the_day_ends_is_later_than_the_cut(db_se
     assert prices and max(prices) <= through  # every price and bar is cut at 08:15, a quarter hour short of the list
     clocks: list[pd.Timestamp] = []
     _timestamps(out["watch"], clocks)
-    assert clocks and max(clocks) <= list_at  # a star carries the list time, not a later one
+    assert clocks and max(clocks) <= pd.Timestamp(out["clock"])  # a star carries the day clock, never a later time
     assert out["review"] is None and out["journal"] is None
     assert out["peek"]["minutes"] and out["peek"]["minutes"][-1]["t"] < pd.Timestamp(out["data_through"])
     assert out["peek"]["daily"][-1]["t"] < DAYS[0]  # through the previous session, never the day
@@ -655,7 +656,7 @@ def test_end_day_unseals_the_review_and_ranks_the_candidates_by_move_from_the_li
     session_mod.place_mark(db_session, user_id, started.id, svc, {"schemaVersion": 1, "kind": "long_entry"})
     ended = plan_mod.end_day(db_session, user_id, row.id, svc)
     db_session.commit()
-    assert ended.status == "ended" and ended.revealed_through == et(DAYS[0], "16:00")
+    assert ended.status == "ended" and ended.revealed_through == et(DAYS[0], "20:00")  # the end of the day's tape
     out = plan_mod.day_list_out(db_session, user_id, row.id, svc)
     review = out["review"]
     gapper = review["rows"][0]

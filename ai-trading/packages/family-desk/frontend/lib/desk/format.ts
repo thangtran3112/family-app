@@ -48,6 +48,13 @@ export function formatEtClock(iso: string | null): string {
   return p.hour ? `${p.hour}:${p.minute}:${p.second} ${p.dayPeriod} ET` : EMPTY_VALUE;
 }
 
+/** "Mon, Oct 26 · 10:11:42 AM ET": the thread clock, a full date and the time of day to the second (`seconds: false` drops them). */
+export function formatEtDateClock(iso: string | null, { seconds = true }: { seconds?: boolean } = {}): string {
+  if (!iso) return EMPTY_VALUE;
+  const p = partsOf(iso, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...(seconds ? { second: "2-digit" as const } : {}), hour12: true });
+  return p.hour ? `${p.weekday}, ${p.month} ${p.day} · ${p.hour}:${p.minute}${seconds ? `:${p.second}` : ""} ${p.dayPeriod} ET` : EMPTY_VALUE;
+}
+
 /** "2026-10-23 15:45": the mocks' `time_et` text. */
 export function formatEtStamp(iso: string | null): string {
   if (!iso) return EMPTY_VALUE;

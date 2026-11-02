@@ -2533,7 +2533,7 @@
       },
       "ClockIn": {
         "additionalProperties": false,
-        "description": "Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with\nits UTC offset). Any mix, at least one; a step or jump is forward only and stops at the close.",
+        "description": "Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with\nits UTC offset). Any mix, at least one; a step or jump is forward only. The Summary's board sends `running` and\n`speed`; `step` and `to` are for tests and tools.",
         "properties": {
           "running": {
             "anyOf": [
@@ -14777,7 +14777,7 @@
         "type": "object"
       },
       "ThreadClockOut": {
-        "description": "The day-trade thread's clock (ADR-0018). `clock` is the simulated time at `server_now` (a running clock was\nsettled before this was built); a client may extrapolate it with `speed` between polls but never owns it.",
+        "description": "The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a\nrunning clock was settled before this was built); a client may extrapolate it with `speed` between polls but never\nowns it. It runs through the close, the night and the weekend with no end of its own.",
         "properties": {
           "account": {
             "anyOf": [
@@ -14839,6 +14839,18 @@
             "title": "Label",
             "type": "string"
           },
+          "next_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Start"
+          },
           "running": {
             "title": "Running",
             "type": "boolean"
@@ -14861,7 +14873,6 @@
           "state": {
             "enum": [
               "no_day",
-              "listed",
               "paused",
               "running"
             ],
@@ -14908,6 +14919,7 @@
           "window_start",
           "window_end",
           "focus_end",
+          "next_start",
           "server_now",
           "account",
           "label"
@@ -21023,7 +21035,7 @@
     },
     "/api/desk/replay/threads/{thread_id}/clock": {
       "get": {
-        "description": "The day thread's clock now (ADR-0018): its state, speed, the simulated time, the window, why it stopped, and the\nsimulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is the\nanswer whether or not anyone was looking in between. A clock that reached the close rolls the day over first (the\nanswer is then the next day's). Poll it; it is idempotent.",
+        "description": "The day thread's clock now (ADR-0018): its state, speed, the simulated time, the day's tape, when the next day\nstarts, and the simulated account at that time (balance, open P/L, equity). A running clock is brought to now\nfirst, so this is the answer whether or not anyone was looking in between. A clock that reached the next trading\nday's start hands the day over first (the answer is then the next day's). Poll it; it is idempotent.",
         "operationId": "get_thread_clock_api_desk_replay_threads__thread_id__clock_get",
         "parameters": [
           {
@@ -21064,7 +21076,7 @@
         ]
       },
       "post": {
-        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it one bar or to the next signal, or jump\nit to a time. Forward only; a step or jump stops at the close like Play does. 409 before the day\nhas started. Time then runs on the server until she pauses it, and the day rolls over at the close.",
+        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), or (tests, tools) step it a bar or to the next\nsignal, or jump it to a time. Forward only. 409 without an open day. Time then runs on the server until she pauses\nit, through the close and the night; the day hands over at the next trading day's start.",
         "operationId": "control_thread_clock_api_desk_replay_threads__thread_id__clock_post",
         "parameters": [
           {
@@ -21328,7 +21340,7 @@
     },
     "/api/desk/replay/threads/{thread_id}/skip-day": {
       "post": {
-        "description": "Skip to the next day: the clock runs to the close, the day ends (every open position flattens at that close)\nand the next day's list opens. The next list may wait on its data (`next_day_list_id` null): poll the hub then.",
+        "description": "Skip to the next day: the clock jumps to the next trading day's start (over the night and the weekend), the day\nends (every open position flattens at its tape's end) and the next day's list opens with the clock there. The next\nlist may wait on its data (`next_day_list_id` null): poll the hub then.",
         "operationId": "skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post",
         "parameters": [
           {

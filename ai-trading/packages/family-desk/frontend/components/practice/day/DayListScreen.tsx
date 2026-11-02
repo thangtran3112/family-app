@@ -364,7 +364,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
               <h2 className={styles.sectionTitle}>Candidates</h2>
             </div>
             <p className={styles.muted} data-testid="open-hint">
-              {list.clock === null ? (list.relist ? PRACTICE_COPY.dayOpenRelistHint : PRACTICE_COPY.dayOpenHint) : practiceText("daySwitchHint", { time: formatEtTimeZone(list.clock) })}
+              {list.sessions.length === 0 ? (list.relist ? PRACTICE_COPY.dayOpenRelistHint : PRACTICE_COPY.dayOpenHint) : practiceText("daySwitchHint", { time: formatEtTimeZone(list.clock) })}
             </p>
             {live && liveAt && (
               <p className={styles.muted} data-testid="live-note">

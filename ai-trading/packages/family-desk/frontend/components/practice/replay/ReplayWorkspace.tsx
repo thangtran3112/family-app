@@ -414,7 +414,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         />
       )}
       {followed && (
-        // Read-only: the thread's time and whether it is running. Pause, speed, Step, Jump and Skip day are on the Summary.
+        // Read-only: the thread's time and whether it is running. Play or Pause, the speed and Skip day are on the Summary.
         <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
           <span>{PRACTICE_COPY.threadTime}</span>
           <span data-testid="thread-clock-time">{formatEtClock(clock)}</span>

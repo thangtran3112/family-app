@@ -214,7 +214,9 @@ def test_end_day_flattens_every_open_trade_at_the_clock(db_session, user_id, svc
     ledger = db_session.query(PracticeLedger).filter_by(thread_id=gapper.thread_id).all()
     assert sorted((r.symbol, float(r.pnl_usd)) for r in ledger) == [("FLAT", 20.0), ("GAPPER", 0.0), ("SPLITTER", -4.0)]
     day = plan_mod.get_day_list(db_session, user_id, row.id)
-    assert day.status == "ended" and day.revealed_through == _at("16:00")  # unsealed to the close after the flatten
+    assert day.status == "ended" and day.revealed_through == _at(
+        "20:00"
+    )  # unsealed to the end of the tape after the flatten
     assert day.journal["trades"] == 3 and day.journal["pnl_usd"] == 16.0
     assert (day.journal["wins"], day.journal["losses"], day.journal["scratches"]) == (1, 1, 1)
 

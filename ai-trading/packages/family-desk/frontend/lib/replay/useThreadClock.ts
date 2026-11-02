@@ -19,7 +19,7 @@ export type ThreadClockApi = {
   clock: ThreadClock | null;
   /** The clock label right now: the server's time moved on by the wall time since the last poll. */
   shown: string | null;
-  /** Set when the market closed on its own since the last answer: the day that ended and where the next one stands. Cleared once the next day starts. */
+  /** Set when the clock reached the next session on its own since the last answer: the day that ended and where the next one stands. Stays until she skips a day or leaves the page: the next day is already open and running. */
   rolled: string | null;
   /** Counts up whenever the server's clock or state changed, so a screen that prices things at the clock can read again. */
   revision: number;
@@ -30,10 +30,6 @@ export type ThreadClockApi = {
   play: () => Promise<boolean>;
   pause: () => Promise<boolean>;
   setSpeed: (speed: Speed) => Promise<boolean>;
-  step: () => Promise<boolean>;
-  nextSignal: () => Promise<boolean>;
-  jumpBy: (minutes: number) => Promise<boolean>;
-  jumpTo: (iso: string) => Promise<boolean>;
   skipDay: () => Promise<SkipDay | null>;
   refresh: () => void;
 };
@@ -63,13 +59,12 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     }
   }, []);
 
-  // The market closing is not a button: the server ends the day and opens the next. An answer whose open day is another one than the last
-  // answer's (and that no Skip day of this screen caused) is that roll, and the screen says so once.
+  // The clock reaching the next session is not a button: the server ends the day and opens the next. An answer whose open day is another one than the last
+  // answer's (and that no Skip day of this screen caused) is that hand-over, and the screen says so once.
   const follow = useCallback(
     (clock: ThreadClock) => {
       const before = day.current;
       if (before !== null && clock.day_list_id !== before.id) setRolled(rolledText(before.no, clock));
-      else if (clock.state === "running" || clock.state === "paused") setRolled(null);
       day.current = clock.day_list_id === null ? null : { id: clock.day_list_id, no: clock.day_no };
       take(clock);
     },
@@ -168,10 +163,6 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       play: () => command({ running: true }),
       pause: () => command({ running: false }),
       setSpeed: (speed: Speed) => command({ speed }),
-      step: () => command({ step: "bar" }),
-      nextSignal: () => command({ step: "next_signal" }),
-      jumpBy: (minutes: number) => command({ to: new Date(Date.parse(shown ?? clockNow?.clock ?? new Date().toISOString()) + minutes * 60_000).toISOString() }),
-      jumpTo: (iso: string) => command({ to: iso }),
       skipDay,
       refresh: () => void read(),
     }),

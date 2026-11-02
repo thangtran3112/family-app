@@ -438,6 +438,34 @@ class Opened:
     restart_prep: bool = False  # the prep died with its process: the caller starts it again
 
 
+@dataclass(frozen=True)
+class ClockCarry:
+    """The thread clock handed to the day that follows (the clock reached the next session, or she skipped to it): the
+    new day's clock starts exactly where the old one was, with the same speed and Play state, so the gap to real time
+    does not change."""
+
+    at: datetime
+    running: bool
+    speed: int
+
+
+def day_start(plan: PracticePlan, day: date) -> pd.Timestamp:
+    """When practice on `day` begins: the plan's "Start at" time. It is where a day's clock starts when no clock is
+    handed over, and the moment the clock reaches it is when the day before hands over."""
+    return et(day, plan.spec["setup"]["window"]["from"])
+
+
+def next_day_start(db: Session, day_list: ReplayDayList) -> pd.Timestamp | None:
+    """The start of the plan's next trading day after `day_list`'s, or None for the plan's last day. The thread clock
+    hands over to that day when it gets there (`clock.roll`); the weekend, a holiday and the night are ordinary time
+    in between."""
+    plan = db.get(PracticePlan, day_list.plan_id)
+    assert plan is not None
+    days = plan_days(plan.first_day, plan.spec["sessions"])
+    index = days.index(day_list.day) + 1 if day_list.day in days else len(days)
+    return day_start(plan, days[index]) if index < len(days) else None
+
+
 def _filter_inputs(
     db: Session, plan: PracticePlan, universe: list[str] | None = None, pinned: dict[int, int] | None = None
 ) -> list[FilterInput]:
@@ -578,11 +606,15 @@ def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, stor
     }
 
 
-def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = None) -> Opened:
+def open_next(
+    db: Session, user_id: int, svc: Services, thread_id: int | None = None, carry: ClockCarry | None = None
+) -> Opened:
     """The current day list while it is not over; else the next day's list, built now on today's Desk universe
     (D-011). While the plan's data is not ready the result carries no list and the plan's prep progress says why.
     Every day done: no list. `thread_id` names the thread (else her most recent day thread); a swing thread continues
-    its own calendar (`swing.open_next`)."""
+    its own calendar (`swing.open_next`). The new day's clock starts at its "Start at" time, paused, unless `carry`
+    hands over a running clock (the thread clock reached this day: it does not restart). No name has to be opened for
+    the clock to exist: it belongs to the thread, and Play is on the Summary."""
     if thread_id is not None and threads_mod.get_thread(db, user_id, thread_id).mode == "swing":
         return _swing().open_next(db, user_id, svc, thread_id)
     plan = active_plan(db, user_id, thread_id=thread_id, lock=True)
@@ -610,11 +642,15 @@ def open_next(db: Session, user_id: int, svc: Services, thread_id: int | None = 
         day_no=index + 1,
         **_list_fields(db, plan, day, svc, store, now),
         watch=[],
-        revealed_through=None,
+        revealed_through=(day_start(plan, day) if carry is None else pd.Timestamp(carry.at)).to_pydatetime(),
         status="listed",
-        clock_speed=1
+        clock_speed=carry.speed
+        if carry is not None
+        else 1
         if latest is None
         else latest.clock_speed,  # the speed she chose carries to the next day (ADR-0018)
+        clock_running=carry is not None and carry.running,
+        clock_anchor_at=svc.wall() if carry is not None and carry.running else None,
         journal=None,
         review=None,
         notes=None,
@@ -681,6 +717,15 @@ def relist(db: Session, user_id: int, day_list_id: int, list_at: str, svc: Servi
             setattr(row, key, value)
         row.watch = [w for w in row.watch if w["symbol"] in on_list]
         row.updated_at = now
+        # A list built at a time is read at that time: the clock cannot be earlier than the list it shows (no look
+        # ahead). A re-list past the clock moves it there; it is the one place a re-list changes time, and only on a
+        # day she has not practised. A clock already past the new start stays where it is.
+        session_mod.settle_locked(db, svc, row)
+        start = day_start(plan, row.day)
+        if row.revealed_through is None or _utc(row.revealed_through) < start:
+            row.revealed_through = start.to_pydatetime()
+            if row.clock_running:
+                row.clock_anchor_at = svc.wall()
     db.flush()
     return Opened(plan, row, restart_prep=restart)
 
@@ -715,7 +760,7 @@ def _session_brief(
     (its next advance catches it up), whether it holds an open position (one average-cost position per name), and its
     P/L: the closed trades booked so far and the open position marked at `last` (the price at the day clock) with when
     play paused on its stop. A swing session passes no `book` (its holds are read elsewhere)."""
-    clock = None if row.revealed_through is None else _utc(row.revealed_through)
+    clock = None if row.revealed_through is None else min(_utc(row.revealed_through), session_mod.window_end_of(s))
     closed, open_ = book if book is not None else ([], None)
     position = journal_mod.open_trade_out(open_, last)
     if position is not None and s.stop_hit_at is not None:
@@ -1348,21 +1393,30 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     if thread.status == "closed":
         raise ReplayProblem(threads_mod.CLOSED_THREAD, path="threadId", status=409)
     created = session_mod.create(
-        db, user_id, _session_spec(plan, row.day, symbol, thread), svc, day_list=row, thread_id=thread.id
+        db,
+        user_id,
+        _session_spec(plan, row.day, symbol, thread),
+        svc,
+        day_list=row,
+        thread_id=thread.id,
+        extended_tape=True,
     )
     if row.status == "listed":
         row.status = "practicing"
     row.updated_at = svc.now()
     if row.revealed_through is None or _utc(created.revealed_through) > _utc(row.revealed_through):
         row.revealed_through = created.revealed_through
-    elif created.status == "active" and _utc(created.revealed_through) < _utc(row.revealed_through):
+    else:
         # A name opened earlier fell behind the shared day clock while she played another one. Returning to it lifts it
-        # to the clock, as an `advance` does: what lies between is revealed but was never in front of her (an away
+        # to the clock, as an `advance` does, as far as its tape goes (the clock runs on through the night and the
+        # weekend; a name has no bars there): what lies between is revealed but was never in front of her (an away
         # span), and every advance scanned all open trades' stops, so nothing is skipped by the lift.
-        created.away = add_span(list(created.away or []), _utc(created.revealed_through), _utc(row.revealed_through))
-        # A working order the tape reached inside that span fills at its bar, like a watched one (ADR-0019).
-        session_mod.fill_away_orders(db, svc, created, _utc(created.revealed_through), _utc(row.revealed_through))
-        created.revealed_through, created.updated_at = row.revealed_through, svc.now()
+        lift = min(_utc(row.revealed_through), session_mod.window_end_of(created))
+        if created.status == "active" and _utc(created.revealed_through) < lift:
+            created.away = add_span(list(created.away or []), _utc(created.revealed_through), lift)
+            # A working order the tape reached inside that span fills at its bar, like a watched one (ADR-0019).
+            session_mod.fill_away_orders(db, svc, created, _utc(created.revealed_through), lift)
+            created.revealed_through, created.updated_at = lift.to_pydatetime(), svc.now()
     db.flush()
     return created
 
@@ -1428,7 +1482,7 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
             session_mod.refresh_journal(db, user_id, s.id, svc)
             db.refresh(s)
     setup = plan.spec["setup"]
-    close = session_mod.market_close(row.day, setup["session"])
+    close = session_mod.market_close(row.day, "extended")  # the day's tape ends with the extended session
     close = session_mod.window_end_of(sessions[0]) if sessions else close
     focus_end = et(row.day, setup["window"]["to"])  # her practice window: the review's yardstick, not the day's end
     store = svc.store_factory(db)

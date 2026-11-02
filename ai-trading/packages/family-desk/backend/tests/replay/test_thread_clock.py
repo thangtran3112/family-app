@@ -1,21 +1,27 @@
-"""The day-trade thread's server-side clock (ADR-0018): it runs on wall time with nobody there, settles lazily on every
-read, never stops for a crossed stop or for her own practice window, runs to the exchange close and rolls the day over
-there, steps and jumps forward only, carries the account at the clock, lets a name she is on follow it without changing
-the away rules, and Skip day runs to the close and opens the next day.
+"""The day-trade thread's server-side clock (ADR-0018): real time, shifted. It runs on wall time with nobody there,
+exists from the moment the day opens (no name has to be opened), settles lazily on every read, and never stops: not
+for a crossed stop, not for her practice window, not for the close, the night or the weekend. At 1x the gap between
+the thread's time and real time stays constant; only Pause, the speed and Skip day change it. The day list hands over
+to the next trading day when the clock reaches that day's start, carrying the clock. Steps and jumps are forward only,
+the account is read at the clock, a name she is on follows it as far as its tape goes, and Skip day jumps to the
+next start.
 Real Postgres; the synthetic world of `tests/daily_world.py` (GAPPER 110 from the open to 11:30, then 100; FLAT 50 all
-day). The wall clock is a list the test moves, injected as `Services.wall`, so "the user is logged out for an hour" is
-one line.
+day; flat bars 04:00 to 20:00 each session, none overnight). The wall clock is a list the test moves, injected as
+`Services.wall`, so "the user is logged out for an hour" is one line.
 
-Her practice window is 09:30 to 11:30 ET on 2026-09-28: a focus mark. The market runs 09:30 to 16:00."""
+Her practice window is 09:30 to 11:30 ET on 2026-09-28: a focus mark. The tape runs 04:00 to 20:00; the next day starts
+at 09:30 on 2026-09-29."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pandas as pd
 import pytest
 from daily_world import DAYS, NOW, make_thread
 from test_day_positions import _at, _bend
+from test_replay_plan import _first_list, _plan
 from test_replay_switch import _mark, _names, _row
 
+from ai_trading.core.calendar import et
 from ai_trading.db.models import PracticeLedger, PracticePlan, ReplayDayList, User
 from ai_trading.replay import clock as clock_mod
 from ai_trading.replay import plan as plan_mod
@@ -111,51 +117,130 @@ def test_a_speed_change_settles_the_time_that_passed_at_the_old_speed(db_session
     assert caught.value.path == "speed"
 
 
-def test_the_clock_runs_past_her_window_to_the_close_and_the_day_rolls_over(
+def _gap(wall: list, out: dict) -> pd.Timedelta:
+    """Real time minus the thread's time: the offset that must not change while the clock runs at 1x."""
+    return pd.Timestamp(wall[0]) - out["clock"]
+
+
+def test_the_clock_exists_before_any_name_is_opened_and_plays_from_the_summary(db_session, user_id, svc, wall) -> None:
+    make_thread(db_session, user_id)
+    row = _first_list(db_session, user_id, svc)
+    thread_id = _thread_id(db_session, row)
+    listed = _read(db_session, user_id, svc, thread_id)
+    assert (listed["state"], listed["day_no"], listed["clock"]) == ("paused", 1, _at("09:30"))  # no name opened yet
+    assert listed["next_start"] == et(DAYS[1], "09:30") and listed["account"]["positions"] == 0
+
+    played = _control(db_session, user_id, svc, thread_id, running=True, speed=2)
+    assert played["state"] == "running"
+    wall[0] += timedelta(minutes=10)
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("09:50")
+    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "listed"  # still no name
+
+
+def test_the_clock_flows_through_the_close_the_night_and_into_the_next_session(
     db_session, user_id, svc, wall, world
 ) -> None:
     _bend(world, "GAPPER", "10:00", None, open=113.0, high=113.0, low=113.0, close=113.0)
     thread_id, row, gapper = _started(db_session, user_id, svc)
     bought = _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=10)["mark"]["price"]
     started = _read(db_session, user_id, svc, thread_id)
-    assert started["window_end"] == _at("16:00")  # the market's close
+    assert started["window_end"] == _at("20:00")  # the tape: the extended session, not the 16:00 close
     assert started["focus_end"] == _at("11:30")  # her window: a mark, not a stop
+    assert started["next_start"] == et(DAYS[1], "09:30")
 
     _control(db_session, user_id, svc, thread_id, running=True, speed=10)
     wall[0] += timedelta(minutes=18)  # 180 market minutes at 10x: an hour past her 11:30 mark
     past = _read(db_session, user_id, svc, thread_id)
-    assert (past["clock"], past["state"], past["running"]) == (_at("12:30"), "running", True)
-    assert clock_mod.roll(db_session, user_id, thread_id, svc) is None  # short of the close: nothing to roll
-    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "practicing"
+    assert (past["clock"], past["state"]) == (_at("12:30"), "running")
+    _control(db_session, user_id, svc, thread_id, speed=1)
+    offset = _gap(wall, past)
 
-    wall[0] += timedelta(hours=3)  # nobody home: the market ran into the close
+    def at(hours: float, label: str):
+        wall[0] += timedelta(hours=hours)
+        opened = clock_mod.roll(db_session, user_id, thread_id, svc)
+        db_session.commit()
+        out = _read(db_session, user_id, svc, thread_id)
+        assert _gap(wall, out) == offset, label  # never a jump: real time minus thread time is constant at 1x
+        return opened, out
+
+    opened, closing = at(3.5, "close")  # 16:00
+    assert (closing["clock"], closing["state"], closing["day_no"], opened) == (_at("16:00"), "running", 1, None)
+    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "practicing"  # nothing happened at the close
+    assert closing["account"]["open_pnl_usd"] == 10 * (113.0 - bought) and closing["account"]["positions"] == 1
+
+    opened, after_hours = at(1.0, "after hours")  # 17:00: the clock is in the extended session, bars show
+    assert after_hours["clock"] == _at("17:00") and opened is None
+    frame = _sync(db_session, user_id, svc, gapper.id)
+    assert frame["revealed_through"] == _at("17:00") and frame["day_clock"] == _at("17:00") and not frame["at_end"]
+    assert any(bar["ext"] and bar["t"] >= _at("16:00") for bar in frame["bars"])  # after-hours bars are shown
+
+    opened, night = at(4.0, "night")  # 21:00: past the tape's end, still the same day, nothing new to show
+    assert night["clock"] == _at("21:00") and opened is None and night["day_no"] == 1
+    frame = _sync(db_session, user_id, svc, gapper.id)
+    assert frame["revealed_through"] == _at("20:00") and frame["day_clock"] == _at("20:00")  # the tape ends at 20:00
+    assert frame["behind_clock"] is False and frame["at_end"] is True
+    assert frame["bars"][-1]["t"] + pd.Timedelta(minutes=5) == _at("20:00")  # the rest of the tape, and not a bar more
+    assert _sync(db_session, user_id, svc, gapper.id)["bars"] == []  # the night adds none
+    assert night["account"]["open_pnl_usd"] == 10 * (113.0 - bought)  # the position waits, priced at the last print
+
+    opened, premarket = at(7.0, "premarket")  # Tue 04:00: a new calendar date, still day 1's list
+    assert premarket["clock"] == et(DAYS[1], "04:00") and opened is None and premarket["day_no"] == 1
+
+    opened, open_ = at(5.5, "next session")  # Tue 09:30: the next session's start; the day hands over, clock unchanged
+    assert opened is not None and opened.day_list is not None
+    assert (open_["clock"], open_["day_no"], open_["state"], open_["speed"]) == (et(DAYS[1], "09:30"), 2, "running", 1)
+    ended = plan_mod.get_day_list(db_session, user_id, row.id)
+    assert ended.status == "ended" and ended.revealed_through == _at("20:00") and ended.clock_running is False
+    (booked,) = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
+    assert (booked.shares, float(booked.exit_price)) == (10, 113.0)  # flattened at the end of day 1's tape
+    assert float(booked.pnl_usd) == round(10 * (113.0 - bought), 2)
+    assert opened.day_list.day_no == 2 and opened.day_list.status == "listed" and opened.day_list.clock_running is True
+
+
+def test_the_weekend_is_ordinary_time_the_clock_passes_through(db_session, user_id, svc, wall) -> None:
+    friday = DAYS[4]  # Fri 2026-10-02; the plan's next day is Mon 2026-10-05
+    make_thread(db_session, user_id)
+    plan_mod.run_prep(db_session, svc, _plan(db_session, user_id, svc, firstDay=friday.isoformat()).id)
+    row = plan_mod.open_next(db_session, user_id, svc).day_list
+    db_session.commit()
+    thread_id = _thread_id(db_session, row)
+    assert _read(db_session, user_id, svc, thread_id)["next_start"] == et(date(2026, 10, 5), "09:30")
+    start = et(friday, "09:30")
+    _control(db_session, user_id, svc, thread_id, running=True)
+    first = _read(db_session, user_id, svc, thread_id)
+    assert first["clock"] == start
+    offset = _gap(wall, first)
+    for hours, label in ((6.5, "Fri close"), (24, "Sat 16:00"), (24, "Sun 16:00"), (16.5, "Mon 08:30")):
+        wall[0] += timedelta(hours=hours)
+        assert clock_mod.roll(db_session, user_id, thread_id, svc) is None  # the next session has not started
+        out = _read(db_session, user_id, svc, thread_id)
+        assert (out["state"], out["day_no"], _gap(wall, out)) == ("running", 1, offset), label
+    assert out["clock"] == et(date(2026, 10, 5), "08:30")  # Saturday and Sunday went by at 1x, in order
+
+
+def test_a_clock_that_ran_for_days_unwatched_hands_over_day_by_day(db_session, user_id, svc, wall, world) -> None:
+    _bend(world, "GAPPER", "10:00", None, open=113.0, high=113.0, low=113.0, close=113.0)
+    thread_id, row, gapper = _started(db_session, user_id, svc)
+    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=10)
+    _control(db_session, user_id, svc, thread_id, running=True, speed=5)
+    wall[0] += timedelta(hours=18)  # 90 market hours at 5x: Mon 09:30 + 3 days 18 hours = Fri 03:30
     opened = clock_mod.roll(db_session, user_id, thread_id, svc)
     db_session.commit()
     assert opened is not None and opened.day_list is not None
-    ended = plan_mod.get_day_list(db_session, user_id, row.id)
-    assert ended.status == "ended" and ended.revealed_through == _at("16:00") and ended.clock_running is False
-    (booked,) = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
-    assert (booked.shares, float(booked.exit_price)) == (10, 113.0)  # flattened at the close
-    assert float(booked.pnl_usd) == round(10 * (113.0 - bought), 2)
-    assert opened.day_list.day_no == 2 and opened.day_list.status == "listed"
-    assert opened.day_list.clock_speed == 10  # the speed carries over
-    now = _read(db_session, user_id, svc, thread_id)
-    assert (now["state"], now["day_no"], now["clock"]) == ("listed", 2, None)
-    assert clock_mod.roll(db_session, user_id, thread_id, svc) is None  # nothing left to roll: the next day is listed
+    assert opened.day_list.day_no == 4 and opened.day_list.day == DAYS[3]  # Mon, Tue (a Pass) and Wed ended; Thu is up
+    out = _read(db_session, user_id, svc, thread_id)
+    assert out["clock"] == _at("09:30") + pd.Timedelta(hours=90) and out["running"] and out["speed"] == 5
+    days = {d.day_no: d.status for d in db_session.query(ReplayDayList).filter_by(plan_id=row.plan_id)}
+    assert days == {1: "ended", 2: "ended", 3: "ended", 4: "listed"}
+    assert db_session.query(PracticeLedger).filter_by(thread_id=thread_id).count() == 1  # only day 1 traded
 
 
-def test_a_paused_clock_never_rolls_and_a_step_to_the_close_does(db_session, user_id, svc, wall) -> None:
+def test_a_paused_clock_never_hands_over_however_long_it_waits(db_session, user_id, svc, wall) -> None:
     thread_id, row, _ = _started(db_session, user_id, svc)
-    wall[0] += timedelta(hours=9)  # paused: wall time passing moves nothing
+    wall[0] += timedelta(days=9)  # paused: wall time passing moves nothing
     assert clock_mod.roll(db_session, user_id, thread_id, svc) is None
     assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("09:30")
-
-    jumped = _control(db_session, user_id, svc, thread_id, to=_at("17:00").to_pydatetime())
-    assert jumped["clock"] == _at("16:00") and jumped["running"] is False  # the close, not her 11:30 mark
-    assert _control(db_session, user_id, svc, thread_id, running=True)["running"] is False  # nothing left to run
-    assert clock_mod.roll(db_session, user_id, thread_id, svc) is not None
-    db_session.commit()
-    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "ended"
+    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "practicing"
 
 
 def test_a_crossed_stop_flags_the_position_and_the_clock_runs_on(db_session, user_id, svc, wall, world) -> None:
@@ -182,8 +267,8 @@ def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_i
     )
     db_session.commit()
     _control(db_session, user_id, svc, thread_id, running=True, speed=10)
-    wall[0] += timedelta(hours=1)  # logged out: nobody syncs FLAT while the market runs to the close
-    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("16:00")
+    wall[0] += timedelta(hours=1)  # logged out: nobody syncs FLAT while the market runs on (ten hours at 10x)
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("19:30")
 
     ended, _ = clock_mod.skip_day(db_session, user_id, thread_id, svc)
     db_session.commit()
@@ -192,7 +277,7 @@ def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_i
     assert (order["status"], order["fill_price"], order["reason"]) == ("filled", 49.5, None)  # not "The day ended"
     (entry, exit_) = session_mod._load_marks(db_session, flat.id)
     assert (entry.kind, entry.price, entry.at) == ("long_entry", 49.5, _at("10:21"))  # at its bar, inside the span
-    assert (exit_.kind, exit_.price, exit_.at) == ("long_exit", 50.0, _at("16:00"))  # flattened at the close
+    assert (exit_.kind, exit_.price, exit_.at) == ("long_exit", 50.0, _at("20:00"))  # flattened at the tape's end
     (booked,) = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
     assert (booked.shares, float(booked.pnl_usd)) == (10, 5.0)  # the balance moved without her
 
@@ -233,7 +318,7 @@ def test_the_balance_follows_the_open_positions_as_the_clock_runs(db_session, us
 # -- step and jump ------------------------------------------------------------------------------------------------
 
 
-def test_step_and_jump_move_the_clock_forward_only_and_a_running_clock_keeps_running(
+def test_step_and_jump_move_the_clock_forward_only_and_nothing_clamps_them_at_the_close(
     db_session, user_id, svc, wall
 ) -> None:
     thread_id, _, _ = _started(db_session, user_id, svc)
@@ -241,7 +326,9 @@ def test_step_and_jump_move_the_clock_forward_only_and_a_running_clock_keeps_run
     assert _control(db_session, user_id, svc, thread_id, to=_at("09:50").to_pydatetime())["clock"] == _at("09:50")
     assert _control(db_session, user_id, svc, thread_id, to=_at("09:40").to_pydatetime())["clock"] == _at("09:50")
     assert _control(db_session, user_id, svc, thread_id, to=_at("13:00").to_pydatetime())["clock"] == _at("13:00")
-    assert _control(db_session, user_id, svc, thread_id, to=_at("17:00").to_pydatetime())["clock"] == _at("16:00")
+    assert _control(db_session, user_id, svc, thread_id, to=_at("17:00").to_pydatetime())["clock"] == _at("17:00")
+    overnight = et(DAYS[1], "03:00")
+    assert _control(db_session, user_id, svc, thread_id, to=overnight.to_pydatetime())["clock"] == overnight
     with pytest.raises(ReplayProblem) as caught:
         _control(db_session, user_id, svc, thread_id, to=pd.Timestamp("2026-09-28T10:00:00").to_pydatetime())
     assert caught.value.message == "Send the time with its UTC offset"
@@ -258,7 +345,7 @@ def test_step_from_a_running_clock_keeps_it_running(db_session, user_id, svc, wa
     assert out["clock"] == _at("09:35") and out["running"] is True and out["state"] == "running"
 
 
-def test_the_clock_needs_a_day_that_has_started(db_session, user_id, svc) -> None:
+def test_the_clock_needs_an_open_day(db_session, user_id, svc) -> None:
     make_thread(db_session, user_id)
     thread = plan_mod.threads_mod.active_thread(db_session, user_id)
     with pytest.raises(ReplayProblem) as caught:
@@ -332,7 +419,7 @@ def test_a_stranger_gets_not_found_before_anything_settles_or_moves(db_session, 
 # -- skip day -----------------------------------------------------------------------------------------------------
 
 
-def test_skip_day_runs_to_the_close_flattens_the_position_and_opens_the_next_day(
+def test_skip_day_jumps_to_the_next_start_flattens_the_position_and_opens_the_next_day(
     db_session, user_id, svc, wall, world
 ) -> None:
     _bend(world, "GAPPER", "10:00", None, open=113.0, high=113.0, low=113.0, close=113.0)
@@ -342,23 +429,32 @@ def test_skip_day_runs_to_the_close_flattens_the_position_and_opens_the_next_day
 
     ended, opened = clock_mod.skip_day(db_session, user_id, thread_id, svc)
     db_session.commit()
-    assert ended.id == row.id and ended.status == "ended" and ended.revealed_through == _at("16:00")
+    assert ended.id == row.id and ended.status == "ended" and ended.revealed_through == _at("20:00")
     ledger = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
     pnl = round(10 * (113.0 - bought), 2)
-    assert [(e.shares, float(e.exit_price), float(e.pnl_usd)) for e in ledger] == [
-        (10, 113.0, pnl)
-    ]  # exited at the close
+    assert [(e.shares, float(e.exit_price), float(e.pnl_usd)) for e in ledger] == [(10, 113.0, pnl)]  # tape's end
     assert opened.day_list is not None and opened.day_list.id != row.id and opened.day_list.status == "listed"
     assert opened.day_list.day_no == 2 and opened.day_list.clock_speed == 5  # the speed she chose carries over
     out = _read(db_session, user_id, svc, thread_id)
-    assert out["state"] == "listed" and out["day_list_id"] == opened.day_list.id and out["clock"] is None
+    assert (out["state"], out["day_list_id"], out["clock"]) == ("paused", opened.day_list.id, et(DAYS[1], "09:30"))
     assert out["account"]["balance"] == 50_000.0 + pnl  # the new balance, from the ledger
 
-    # A day she never started is a Pass: skip books nothing and opens the one after.
+    # A day she never started is a Pass: skip books nothing and opens the one after, the clock at its start.
     skipped, after = clock_mod.skip_day(db_session, user_id, thread_id, svc)
     db_session.commit()
     assert skipped.id == opened.day_list.id and skipped.status == "ended" and after.day_list.day_no == 3
+    assert after.day_list.revealed_through == et(DAYS[2], "09:30")
     assert db_session.query(PracticeLedger).filter_by(thread_id=thread_id).count() == 1
+
+
+def test_skip_day_keeps_a_running_clock_running_at_the_next_start(db_session, user_id, svc, wall) -> None:
+    thread_id, row, _ = _started(db_session, user_id, svc)
+    _control(db_session, user_id, svc, thread_id, running=True, speed=2)
+    _, opened = clock_mod.skip_day(db_session, user_id, thread_id, svc)
+    db_session.commit()
+    assert opened.day_list.clock_running is True and opened.day_list.clock_speed == 2
+    wall[0] += timedelta(minutes=30)  # the new day's clock runs from its start, as the old one did
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == et(DAYS[1], "10:30")
 
 
 def test_skip_day_ends_a_running_clock_with_a_flagged_stop(db_session, user_id, svc, wall, world) -> None:
@@ -368,6 +464,6 @@ def test_skip_day_ends_a_running_clock_with_a_flagged_stop(db_session, user_id, 
     _mark(db_session, user_id, svc, flat.id, "long_entry", shares=10, stopPrice=49.0)
     _control(db_session, user_id, svc, thread_id, running=True)
     ended, _ = clock_mod.skip_day(db_session, user_id, thread_id, svc)
-    assert ended.status == "ended" and ended.clock_running is False and ended.revealed_through == _at("16:00")
+    assert ended.status == "ended" and ended.clock_running is False and ended.revealed_through == _at("20:00")
     assert float(db_session.query(PracticeLedger).filter_by(thread_id=thread_id).one().exit_price) == 50.0
     assert DAYS[0] == row.day  # the stop crossed at 10:21 did not matter to the skip

@@ -179,10 +179,13 @@ def market_close(day: date, kind: str) -> pd.Timestamp:
 
 
 def window_end_of(row: ReplaySession) -> pd.Timestamp:
-    """Where the market's day ends for this session. The plan's `window.to` is her own focus mark and never a stop, so
-    a session that is still open runs to the exchange close (also the sessions saved before that rule, whose stored
-    end is her old mark). An ended session keeps the time it was ended at: its exits and journal were booked there."""
-    return _ts(row.window_end) if row.status == "ended" else market_close(row.day, row.spec["session"])
+    """Where this session's tape ends. An ended session keeps the time it was ended at (its exits and journal were
+    booked there). An open one runs to the later of its stored end and the close of its own session kind, so a
+    day-thread session (stored with the extended close, after-hours included) shows what the past data has, and a
+    session saved before the close rule (whose stored end was her old focus mark) still runs to the exchange close."""
+    if row.status == "ended":
+        return _ts(row.window_end)
+    return max(_ts(row.window_end), market_close(row.day, row.spec["session"]))
 
 
 def jsonable(value: Any) -> Any:
@@ -350,6 +353,7 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
     inputs = svc.history.day_inputs(store, row.symbol, row.day)
     swing = _is_swing(db, row)
     day_list = db.get(ReplayDayList, row.day_list_id) if row.day_list_id is not None else None
+    window_end = window_end_of(row)
     return Ctx(
         row=row,
         svc=svc,
@@ -360,12 +364,16 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         plan=_plan_of(row.spec),
         interval=row.spec["interval"],
         window_start=_ts(row.window_start),
-        window_end=window_end_of(row),
+        window_end=window_end,
         through=_ts(row.revealed_through),
         day_trades=[] if swing else _day_trades(db, row),  # a swing journal is scored weekly, not by day rules
         swing=swing,
         db=db,
-        day_clock=None if day_list is None or day_list.revealed_through is None else _ts(day_list.revealed_through),
+        # The thread clock runs on past a name's tape (the night, the weekend): the name follows it only as far as it
+        # has bars, so it is never "behind" a clock it cannot reach.
+        day_clock=None
+        if day_list is None or day_list.revealed_through is None
+        else min(_ts(day_list.revealed_through), window_end),
         away=spans_of(row.away or []),
     )
 
@@ -626,6 +634,7 @@ def create(
     day_list: ReplayDayList | None = None,
     thread_id: int | None = None,
     tape_feed: str | None = None,
+    extended_tape: bool = False,
 ) -> ReplaySession:
     """A new active session at the window start (idempotent per active symbol and day), or the existing one.
 
@@ -639,8 +648,9 @@ def create(
     check_day(day, now)
     # Her `window.to` is a focus mark kept in the spec; the session itself runs to the exchange close.
     start, _focus = window_bounds(day, dumped["window"]["from"], dumped["window"]["to"])
-    end = market_close(day, dumped["session"])
-    check_window(day, end, now)
+    asked_end = market_close(day, dumped["session"])
+    check_window(day, asked_end, now)
+    end = market_close(day, "extended") if extended_tape else asked_end
 
     existing = db.execute(
         select(ReplaySession).where(
@@ -928,21 +938,21 @@ def _flag_stops(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timest
 
 
 def move_clock(db: Session, svc: Services, day_list: ReplayDayList, target: pd.Timestamp) -> pd.Timestamp:
-    """Move the thread's day clock forward to `target`, clamped to the exchange close (the caller holds the day-list
-    lock). Nothing but the close ends a move: a crossed stop is flagged on its position (`_flag_stops`) and the clock
-    goes on. Reaching the close stops the run (`clock.roll` takes the day over, not her). No session's playhead moves
-    here: a name is lifted to the clock when she is on it (`advance`), never written while she is not."""
-    sessions = _sessions_of_day(db, day_list.id)
-    if not sessions or day_list.revealed_through is None or day_list.status == "ended":
+    """Move the thread's clock forward to `target` (the caller holds the day-list lock). The clock is real time shifted:
+    it has no end of its own. It runs on through the close, after-hours, overnight and the weekend; the day list hands
+    over to the next day only when the clock reaches that day's start (`clock.roll`), and nothing here stops it. A
+    crossed stop is flagged on its position (`_flag_stops`) and the clock goes on. No session's playhead moves here: a
+    name is lifted to the clock when she is on it (`advance`), never written while she is not."""
+    if day_list.revealed_through is None or day_list.status == "ended":
         return _ts(day_list.revealed_through) if day_list.revealed_through is not None else _ts(svc.now())
-    window_end = window_end_of(sessions[0])
     previous = _ts(day_list.revealed_through)
-    target = min(max(_ts(target), previous), window_end)
-    if target > previous:
-        _flag_stops(db, context(db, svc, sessions[0]), previous, target)
+    target = max(_ts(target), previous)
+    sessions = _sessions_of_day(db, day_list.id)
+    if sessions and target > previous:
+        ctx = context(db, svc, sessions[0])
+        _flag_stops(db, ctx, previous, min(target, ctx.window_end))  # bars exist up to the name's tape end
+    target = target.floor("us")  # a settled clock is a float of seconds: drop the nanoseconds Postgres cannot hold
     day_list.revealed_through, day_list.updated_at = target.to_pydatetime(), svc.now()
-    if target >= window_end:
-        day_list.clock_running, day_list.clock_anchor_at = False, None
     db.flush()
     return target
 
@@ -950,11 +960,11 @@ def move_clock(db: Session, svc: Services, day_list: ReplayDayList, target: pd.T
 def settle_locked(db: Session, svc: Services, day_list: ReplayDayList) -> None:
     """Bring a running thread clock to now (ADR-0018): `clock + speed x (now - anchor)`, through `move_clock`, then a
     fresh anchor. Called with the day-list lock held, by every request that reads or acts on the clock, so the clock is
-    a function of wall time and survives a closed screen, a logout and a restart. A paused clock, a day not under way,
-    or a request that arrives with the anchor in the future (clock skew) changes nothing."""
+    a function of wall time and survives a closed screen, a logout and a restart. A paused clock, an ended day, or a
+    request that arrives with the anchor in the future (clock skew) changes nothing."""
     if (
         not day_list.clock_running
-        or day_list.status != "practicing"
+        or day_list.status == "ended"
         or day_list.revealed_through is None
         or day_list.clock_anchor_at is None
     ):

@@ -182,11 +182,17 @@ def test_a_second_rescan_at_the_same_clock_starts_nothing(db_session, user_id, s
 
 def test_a_rescan_needs_a_day_clock_and_a_day_that_is_not_over(db_session, user_id, svc) -> None:
     row = _first_list(db_session, user_id, svc)
+    assert row.revealed_through == et(DAYS[0], "09:30")  # the clock exists from the day's start: no name needed
+    row.revealed_through = None  # a day stored before that rule has none until it is read
+    db_session.commit()
     with pytest.raises(ReplayProblem) as early:
         plan_mod.start_rescan(db_session, user_id, row.id, svc)
     assert early.value.status == 409 and early.value.message.startswith("Practice a name first")
-    plan_mod.start_session(db_session, user_id, row.id, "GAPPER", svc)
-    assert _scan(db_session, user_id, row, svc) is not None
+    row.revealed_through = et(DAYS[0], "09:30").to_pydatetime()
+    db_session.commit()
+    assert (
+        _scan(db_session, user_id, row, svc) is not None
+    )  # a list is re-scanned at the clock before any name is opened
     plan_mod.end_day(db_session, user_id, row.id, svc)
     db_session.commit()
     with pytest.raises(ReplayProblem) as late:
