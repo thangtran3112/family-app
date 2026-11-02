@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
 import { WeekSchema } from "./swingApi.ts";
 import { weekClosed, weekRows, weekToDate } from "./swingFixtures.ts";
+import { WEEK_TEXT } from "./weekScreen.ts";
 import {
   filterQualityLine,
   focusUntradedLines,
@@ -196,4 +198,22 @@ test("every string the week helpers build avoids the Practice banned words", () 
   built.push(startWeekAction({ next: "week_review", week_no: 2 }, 1)!.label);
   for (const text of built) if (text !== null) assert.equal(containsPracticeBannedTerm(text), false, text);
   assert.ok(built.length > 80);
+});
+
+test("a hold carried into week 2 reads its result since entry, and the column says so (D-178)", () => {
+  // Week 2: the tiles are this week's change (+$429.00), the hold entered on Day 1 has made +$831.00 since then (Week 1's +$402.00 is in it).
+  const hold = { ...weekClosed.review.holds[1]!, symbol: "S04", entry_day_no: 1, days_held: 10, pnl_usd: 831 };
+  const review = {
+    ...weekClosed.review,
+    week: { week_no: 2, label: "Week 2", first_day_no: 6, last_day_no: 10 },
+    tiles: { ...weekClosed.review.tiles, realized_usd: 0, unrealized_change_usd: 429, equity_change_usd: 429 },
+    holds: [hold],
+  };
+  assert.equal(tile(weekTiles(review, true), "unrealized").value, "+$429.00");
+  assert.equal(tile(weekTiles(review, true), "equity_change").value, "+$429.00");
+  const [row] = weekHoldRows(review);
+  assert.deepEqual([row!.pnl, row!.pnlTone, row!.entry.startsWith("Day 1 ")], ["+$831.00", "up", true]);
+  assert.equal(WEEK_TEXT.holdPnl, "P/L since entry");
+  // The table's column is that label, not a bare "P/L" under a table called "Holds this week".
+  assert.match(readFileSync(new URL("../../components/practice/week/WeekHoldsTable.tsx", import.meta.url), "utf8"), /key: "pnl", label: WEEK_TEXT\.holdPnl/);
 });

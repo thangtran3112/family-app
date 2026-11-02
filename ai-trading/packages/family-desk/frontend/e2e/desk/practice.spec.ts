@@ -5,7 +5,7 @@ import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/fr
 import { defaultDraft, draftToSpec, type SetupDraft } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
 import { endDayFromSummary, stepBar, stepSession } from "./clock-helpers";
-import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
+import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, expectTableFits, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread } from "./hub-helpers";
 import { backToDayList, openNextDay, placeOrder, replayRail, send } from "./swing-helpers";
 
@@ -438,6 +438,10 @@ test.describe("Practice", () => {
     for (const label of ["In at", "Out at", "Held", "P/L", "Return"]) await expect(trades.getByRole("columnheader", { name: label })).toBeVisible(); // D-142: time, hold time and return each get a column
     await expect(review).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("row")).toHaveCount(2); // header + TSLA
+    // D-173: both review tables hold their pane at either width, so no header ("Low after open") and no value is cut; the ranking table drops Range, then Move to close.
+    await expectTableFits(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }));
+    await expectTableFits(trades);
+    for (const name of ["Rank", "Symbol", "List price", "Move to window end", "High after open", "Low after open"]) await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("columnheader", { name })).toBeVisible();
     await expect(review).toContainText("Practice universe");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(`Day 1 of 5 · ${formatEtDay(DAY)}`); // nothing left to spoil
     await expectCleanScreen(page);
