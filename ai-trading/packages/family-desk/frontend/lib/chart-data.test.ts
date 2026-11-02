@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachPinchZoom, chartTime, candlestickData, currentValue, lineData, pinchFactor, pinnedRange, zoomedRange } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, currentValue, lineData, pinchFactor, pinnedRange, rightOffsetOption, zoomedRange } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -267,4 +267,18 @@ test("a followed replay chart opens on the session's first bar while the reveale
   assert.deepEqual(pinnedRange(45, 40, 35, 10), { from: 40, to: 75 }, "5 bars in: still the session's first bar at the left edge");
   assert.deepEqual(pinnedRange(66, 40, 35, 10), { from: 40, to: 75 }, "26 bars in: the newest bar and its pad still fit");
   assert.equal(pinnedRange(67, 40, 35, 10), null, "27 bars in: the pad no longer fits, so the chart follows the newest bar");
+});
+
+test("a followed replay chart does not pin back to the open once she has zoomed out or scrolled back to the lookback", () => {
+  assert.deepEqual(pinnedRange(45, 40, 35, 10, 40), { from: 40, to: 75 }, "still at the open: pinned as before");
+  assert.deepEqual(pinnedRange(45, 40, 35, 10, 39.6), { from: 40, to: 75 }, "within half a bar of the open counts as the open");
+  assert.equal(pinnedRange(45, 40, 130, 10, -60), null, "a week-wide view that starts in the lookback keeps its left edge");
+  assert.equal(pinnedRange(45, 40, 35, 10, 12), null, "scrolled back into the lookback: the next bar must not take her back to the open");
+});
+
+test("the right offset is sent to the time scale once, not on every data update (the library scrolls to it each time it is set)", () => {
+  assert.deepEqual(rightOffsetOption(null, 10), { rightOffset: 10 }, "first draw");
+  assert.deepEqual(rightOffsetOption(10, 10), {}, "a data update leaves her scroll position alone");
+  assert.deepEqual(rightOffsetOption(0, 0), {}, "a chart that does not follow is left alone too");
+  assert.deepEqual(rightOffsetOption(0, 10), { rightOffset: 10 }, "a chart that starts following takes its offset");
 });

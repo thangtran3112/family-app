@@ -254,7 +254,7 @@ test.describe("Practice thread overview", () => {
       });
       if (here) order.push(`${here.tag} ${here.text}`.trim());
     }
-    expect(order).toEqual([expect.stringMatching(/^A .*thread #\d+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
+    expect(order).toEqual([expect.stringMatching(/^A (Day|Swing) thread · .+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
     await link.focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");

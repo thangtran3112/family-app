@@ -22,6 +22,9 @@ const PriceSchema = z.number().positive().max(1_000_000);
 // A derived dollar figure: signed, bounded so a bad row cannot overflow the curve.
 const UsdSchema = z.number().min(-1_000_000_000).max(1_000_000_000);
 const PercentSchema = z.int().min(0).max(100);
+// The entry size a thread's tickets open at (D-042): a whole number from 1; the top is the column's width, not a cap
+// (see replay-session-v1.ts). Absent means the thread has not set one.
+const SharesSchema = z.int().min(1).max(2_147_483_647);
 const CountSchema = z.int().min(0).max(1_000_000);
 const plainText = (min: number, max: number) =>
   z.string().min(min).max(max).regex(/^[ -~ -퟿-￿]+$/);
@@ -107,9 +110,10 @@ export const PracticeThreadCreateV1Schema = z
   .superRefine(swingMatchesMode)
   .meta({ id: "PracticeThreadCreateV1" });
 
-// Edits the plan while the thread is active. The starting balance and the mode never change.
+// Edits the plan and the entry size while the thread is active; what is left out is cleared. The starting balance, the
+// mode and the name never change (the server gives every thread its own name when it starts).
 export const PracticeThreadPatchV1Schema = z
-  .strictObject({ schemaVersion: SchemaVersionSchema, plan: PracticeThreadPlanSchema })
+  .strictObject({ schemaVersion: SchemaVersionSchema, plan: PracticeThreadPlanSchema, shares: SharesSchema.optional() })
   .meta({ id: "PracticeThreadPatchV1" });
 
 // Derived from the ledger and the day lists, never stored twice. `winRate` is 0..1 and absent with
@@ -137,10 +141,13 @@ export const PracticeThreadV1Schema = z
   .strictObject({
     schemaVersion: SchemaVersionSchema,
     id: IdSchema,
+    // Distinct among her threads (D-069): "Day thread · Oct 15", and "(2)" on the second of that day.
+    name: plainText(1, 60),
     mode: ThreadModeSchema,
     startingBalance: StartingBalanceSchema,
     status: z.enum(["active", "closed"]),
     plan: PracticeThreadPlanSchema,
+    shares: SharesSchema.optional(),
     swing: SwingSetupV1Schema.optional(),
     createdAt: UtcTimestampSchema,
     closedAt: UtcTimestampSchema.optional(),

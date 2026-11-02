@@ -41,9 +41,9 @@ test("money is dollars and cents with the sign as the cue, and never prints NaN 
 });
 
 test("the thread card reads in plain words", () => {
-  assert.equal(threadName(activeThread.thread), "October thread #1");
-  assert.equal(threadName({ ...activeThread.thread, mode: "swing" }), "October swing thread #1", "a swing thread never reads like the day thread of its month (D-069)");
-  assert.notEqual(threadName({ ...activeThread.thread, id: 2 }), threadName(activeThread.thread), "D-077: two threads of one mode and month never read the same");
+  assert.equal(threadName(activeThread.thread), "Day thread · Oct 5", "D-069: the name is the one the server stored, not one worked out from the month");
+  assert.equal(threadName({ name: "Swing thread · Oct 5" }), "Swing thread · Oct 5");
+  assert.equal(threadName({ name: "Day thread · Oct 5 (2)" }), "Day thread · Oct 5 (2)", "a second thread of the day reads apart from the first");
   assert.equal(threadStartedText(activeThread.thread), "Started Oct 5");
   assert.equal(startedWithText(activeThread.thread), "Started with $50,000 · +$123.00 so far");
   assert.equal(startedWithText(freshThread.thread), "Started with $50,000 · no change yet");
@@ -119,9 +119,11 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
 });
 
 test("the plan recap reads yes, no and none in plain words, and no thread copy trips the banned-term check", () => {
-  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["You set it on each entry", "Yes", "Yes", "$600", "3"]);
-  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["You set it on each entry", "No", "No", "None", "None"]);
-  assert.equal(planRows(activeThread.thread.plan)[0]?.label, "Shares per trade", "D-042: the recap has a Shares row; the thread plan holds no count, so it says who sets it");
+  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["Not set", "Yes", "Yes", "$600", "3"]);
+  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["Not set", "No", "No", "None", "None"]);
+  assert.equal(planRows(activeThread.thread.plan)[0]?.label, "Shares per trade", "D-042: the recap has a Shares row");
+  assert.equal(planRows(activeThread.thread.plan, "day", 1500)[0]?.value, "1,500", "D-042: a thread that set its entry size reads the number");
+  assert.equal(planRows(activeThread.thread.plan, "swing", 200)[0]?.value, "You set it on each entry", "a swing thread has no share count: each hold is sized from its cash");
   const built = [
     briefLine(threadBrief),
     startedWithText(activeThread.thread),

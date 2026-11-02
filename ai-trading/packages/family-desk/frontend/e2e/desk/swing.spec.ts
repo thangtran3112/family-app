@@ -613,7 +613,7 @@ test.describe("Swing practice", () => {
     expect(refused.status()).toBe(409);
     expect(JSON.stringify(await refused.json())).toContain("End Day 3 first");
     await openDesk(page, `/practice/journal?thread=${threadId}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("thread ·");
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
     await shot(page, "swing-journal");
     const refusing = await railSection(page, "Thread details", PRACTICE_COPY.threadClose); // D-040: Close thread is its own section of the rail

@@ -29,6 +29,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1, PracticeThreadV1
+from ai_trading.core.calendar import ET
 from ai_trading.db.models import (
     PracticeHold,
     PracticeLedger,
@@ -43,6 +44,7 @@ from ai_trading.replay.session import ReplayProblem, Services
 
 SIMULATED_LABEL = "Simulated money · practice only, never a real account"
 SWING_CLOSED = "Swing threads are not open yet · start a day thread"
+SWING_SHARES = "A swing thread sizes each hold from its cash · the share count is for day threads"
 NO_THREAD = "Start a practice thread first · it holds your simulated balance and risk plan"
 CLOSED_THREAD = "Your practice thread is closed · start a new thread to keep practising"
 DAY_OPEN = "End today's practice day before closing the thread · its simulated trades are not scored yet"
@@ -146,11 +148,32 @@ def check_new_thread(dumped: dict[str, Any]) -> None:
     _check_plan(dumped["plan"], dumped["startingBalance"])
 
 
+def thread_name(db: Session, user_id: int, mode: str, now: datetime) -> str:
+    """The new thread's own name (D-069): "Day thread · Oct 15" or "Swing thread · Oct 15" after the mode and the ET day
+    it starts, and "(2)", "(3)" ... on a later thread of hers with that name, so no two of her threads read alike.
+    Migration 0020 names the threads that already exist in the same words.
+
+    ponytail: no lock, so two creates of one owner in the same instant could pick the same name; it is only a label,
+    and a unique index plus a retry is the upgrade if that ever shows."""
+    started = now.astimezone(ET)
+    base = f"{'Swing' if mode == 'swing' else 'Day'} thread · {started:%b} {started.day}"
+    taken = set(
+        db.execute(
+            select(PracticeThread.name).where(
+                PracticeThread.owner_user_id == user_id, PracticeThread.name.startswith(base, autoescape=True)
+            )
+        ).scalars()
+    )
+    candidates = (base, *(f"{base} ({n})" for n in range(2, len(taken) + 3)))
+    return next(name for name in candidates if name not in taken)
+
+
 def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime) -> PracticeThread:
-    """Write the thread row (`dumped` passed `check_new_thread`)."""
+    """Write the thread row (`dumped` passed `check_new_thread`), under a name of its own."""
     plan = dumped["plan"]
     row = PracticeThread(
         owner_user_id=user_id,
+        name=thread_name(db, user_id, dumped["mode"], now),
         mode=dumped["mode"],
         starting_balance=Decimal(dumped["startingBalance"]),
         stop_note_on_entry=plan["stopNoteOnEntry"],
@@ -171,10 +194,12 @@ def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime)
 def patch_thread(
     db: Session, user_id: int, thread_id: int, spec: PracticeThreadPatchV1, now: datetime
 ) -> PracticeThread:
-    """Replace the plan while the thread is active. A limit left out is cleared."""
+    """Replace the plan and the entry size while the thread is active. A limit or a size left out is cleared."""
     row = get_thread(db, user_id, thread_id, lock=True)
     if row.status == "closed":
         raise ReplayProblem("This thread is closed · its plan can no longer change", path="plan", status=409)
+    if spec.shares is not None and row.mode != "day":
+        raise ReplayProblem(SWING_SHARES, path="shares")
     plan = spec.model_dump(mode="json", by_alias=True, exclude_none=True)["plan"]
     _check_plan(plan, row.starting_balance)
     row.stop_note_on_entry = plan["stopNoteOnEntry"]
@@ -182,6 +207,7 @@ def patch_thread(
     row.max_loss_usd = plan.get("maxLossUsd")
     row.max_trades = plan.get("maxTrades")
     row.plan_note = plan.get("planNote")
+    row.shares = spec.shares
     row.updated_at = now
     db.flush()
     return row
@@ -401,6 +427,7 @@ def _contract(db: Session, thread: PracticeThread, stats: dict[str, Any]) -> Pra
     doc: dict[str, Any] = {
         "schemaVersion": 1,
         "id": thread.id,
+        "name": thread.name,
         "mode": thread.mode,
         "startingBalance": int(thread.starting_balance),
         "status": thread.status,
@@ -408,6 +435,8 @@ def _contract(db: Session, thread: PracticeThread, stats: dict[str, Any]) -> Pra
         "createdAt": utc_z(thread.created_at),
         "stats": stats,
     }
+    if thread.shares is not None:
+        doc["shares"] = thread.shares
     if thread.closed_at is not None:
         doc["closedAt"] = utc_z(thread.closed_at)
     if thread.mode == "swing":  # the contract's `swing` block is the setup the plan row froze (R2)
@@ -587,4 +616,5 @@ __all__ = (
     "resolve_for_plan",
     "session_plan",
     "summary",
+    "thread_name",
 )

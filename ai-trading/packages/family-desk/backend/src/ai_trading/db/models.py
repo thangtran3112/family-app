@@ -718,11 +718,17 @@ class PracticeThread(Base):
         ),
         CheckConstraint("max_trades IS NULL OR max_trades BETWEEN 1 AND 50", name="ck_practice_threads_max_trades"),
         CheckConstraint("(status = 'closed') = (closed_at IS NOT NULL)", name="ck_practice_threads_closed_at"),
+        CheckConstraint("shares IS NULL OR shares >= 1", name="ck_practice_threads_shares"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     mode: Mapped[str] = mapped_column(String, nullable=False)  # "day" | "swing" (swing is unused until 02p)
+    # Her threads' own labels (Alembic 0020, D-069): "Day thread · Oct 15", "(2)" on the second of that day. Written
+    # once, when the thread starts (`replay/threads.thread_name`); nothing renames it yet.
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # The entry size a day thread's tickets open at (Alembic 0020, D-042); null = not set, the day session default.
+    shares: Mapped[int | None] = mapped_column(Integer)
     starting_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     # The risk plan (PracticeThreadPlanV1): "yes" | "no" flags as the contract spells them.
     stop_note_on_entry: Mapped[str] = mapped_column(String, nullable=False)
