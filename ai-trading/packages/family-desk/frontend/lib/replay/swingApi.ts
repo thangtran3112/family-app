@@ -4,6 +4,7 @@ import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "../
 import {
   DayListSchema,
   DaySessionSchema,
+  HeldElsewhereSchema,
   ListColumnSchema,
   PeekDailyBarSchema,
   PeekLevelsSchema,
@@ -182,6 +183,7 @@ export const SwingDayListSchema = z.object({
   holds: z.array(HoldSchema),
   free_cash_usd: finite.nullable(),
   sessions: z.array(DaySessionSchema),
+  held_elsewhere: z.array(HeldElsewhereSchema),
   universe: SwingUniverseSchema,
   /** The survivorship and hindsight label every swing screen shows. */
   label: z.string(),

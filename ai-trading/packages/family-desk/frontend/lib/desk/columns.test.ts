@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BOARD_PRIORITIES, columnFromSpec, columnsForBand, droppedKeys, withPriorities, type Board, type ColumnSpec } from "./columns.ts";
+import { BOARD_PRIORITIES, columnFromSpec, droppedKeys, withPriorities, type Board, type ColumnSpec } from "./columns.ts";
 
 const dashboard = ["symbol", "last", "change_pct", "rvol_10d", "vs_vwap_pct", "bias_label"].map((key) => ({ key }));
 const screener = ["symbol", "last", "change_pct", "volume", "rvol_10d", "atr_pct_14", "gap_pct_open", "rsi_14", "vs_vwap_pct", "matched_since"].map((key) => ({ key }));
 const watchlist = ["symbol", "last", "change_pct", "rvol_10d", "bias_label", "tags"].map((key) => ({ key }));
 
-test("each board drops its declared columns at 1180 and keeps all at 1440", () => {
+test("each board declares which columns may drop and in what order (lowest first)", () => {
   const cases: Array<[Board, { key: string }[], string[]]> = [
     ["dashboard", dashboard, ["vs_vwap_pct", "rvol_10d"]],
     ["screener", screener, ["matched_since", "atr_pct_14", "volume"]],
@@ -18,14 +18,17 @@ test("each board drops its declared columns at 1180 and keeps all at 1440", () =
     // The swing board (02p d1) registers here instead of keeping its own DROPPED_AT_1180 table.
     ["boardView", ["star", "symbol", "prior_close", "chg_5d_pct", "avg_dollar_volume_20d", "vs_50d_avg_pct", "rsi_14", "matches", "earnings"].map((key) => ({ key })), ["avg_dollar_volume_20d", "vs_50d_avg_pct", "chg_5d_pct", "rsi_14"]],
     ["fundBrief", ["symbol", "rating", "eps_rev_30d_pct", "confidence", "upside_pct"].map((key) => ({ key })), ["eps_rev_30d_pct", "confidence"]],
+    // The Trades fills table (D-157): the effect goes first, then the day.
+    ["threadFills", ["day", "time", "symbol", "action", "shares", "price", "effect"].map((key) => ({ key })), ["effect", "day"]],
+    // The day list (D-157): the match time, the filter names, volume, gap and vs VWAP, then prev close drop; price, prev RVOL, prev change, ATR % and RSI never do.
+    ["practiceList", ["symbol", "filters", "list_price", "price_now", "change_now", "prev_close", "prev_rvol", "prev_change_pct", "atr_pct_14", "rsi_14", "earnings", "volume", "gap_pct_open", "vs_vwap_pct", "matched_since"].map((key) => ({ key })), ["matched_since", "filters", "volume", "gap_pct_open", "vs_vwap_pct", "prev_close"]],
   ];
   for (const [board, columns, dropped] of cases) {
     const prioritized = withPriorities(columns, board);
     assert.deepEqual(droppedKeys(prioritized), dropped, `${board} drop order`);
-    assert.equal(columnsForBand(prioritized, "1440").length, columns.length);
-    const kept = columnsForBand(prioritized, "1180").map((column) => column.key);
-    assert.deepEqual(kept, columns.map((column) => column.key).filter((key) => !dropped.includes(key)));
-    for (const key of dropped) assert.equal(kept.includes(key), false);
+    assert.equal(prioritized.length, columns.length, "declaring a priority never removes a column");
+    const never = prioritized.filter((column) => column.priority === undefined).map((column) => column.key);
+    assert.deepEqual(never, columns.map((column) => column.key).filter((key) => !dropped.includes(key)), `${board} keeps the rest`);
   }
 });
 

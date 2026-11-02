@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ScreenerFiltersSchema, ScreenerResultsSchema, ScreenerUniverseSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
-import { columnsForBand, droppedKeys } from "./columns.ts";
+import { droppedKeys } from "./columns.ts";
 import {
   NEW_FILTER_SPEC,
   QUICK_FILTERS,
@@ -47,12 +47,12 @@ test("the filter in the URL wins, else the first; junk params read as none", () 
   assert.deepEqual(["x", "0", "-2", "1.5", null].map(filterIdFromParam), [null, null, null, null, null]);
 });
 
-test("columns follow table_columns and drop matched since, ATR %, volume at 1180", () => {
+test("columns follow table_columns and may drop matched since, ATR %, volume in a narrow pane", () => {
   const columns = resultColumns(results.table_columns);
   assert.deepEqual(columns.map((c) => c.key), results.table_columns.map((c) => c.key));
   const dropped = droppedKeys(columns);
   assert.ok(dropped.every((key) => ["matched_since", "atr_pct_14", "volume"].includes(key)));
-  assert.deepEqual(columns.filter((c) => !dropped.includes(c.key)).map((c) => c.key), columnsForBand(columns, "1180").map((c) => c.key));
+  assert.deepEqual(dropped, ["matched_since", "atr_pct_14", "volume"].filter((key) => columns.some((c) => c.key === key)), "the declared drop order: since, then ATR %, then volume");
   assert.equal(columns.find((c) => c.format === "time")?.align, "left");
 });
 

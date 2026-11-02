@@ -1,4 +1,4 @@
-import { test, expect, prepareDesk, openDesk, setScenario, expectCleanScreen, watchApi, MIDDAY } from "./helpers";
+import { test, expect, prepareDesk, openDesk, setScenario, expectCleanScreen, expectDropsInOrder, watchApi, MIDDAY } from "./helpers";
 import type { Locator, Page } from "@playwright/test";
 import { COPY } from "../../lib/desk/freshness.ts";
 
@@ -32,12 +32,9 @@ test.describe("alerts list, detail, actions, log and bell", () => {
     await openDesk(page, "/alerts");
     await expectCleanScreen(page);
     const table = page.getByRole("table", { name: "Alert strategies" });
-    // Frequency and Channels carry a drop priority, so they are the columns that leave at 1180.
-    await expect(table.getByRole("columnheader")).toHaveText(
-      isNarrow()
-        ? ["Name", "Source", "Trigger", "Status", "Last fired", "Actions"]
-        : ["Name", "Source", "Trigger", "Frequency", "Channels", "Status", "Last fired", "Actions"],
-    );
+    // Frequency and Channels carry a drop priority: they are the columns that leave when the pane is too narrow for them (Channels first), and the rest stay.
+    for (const name of ["Name", "Source", "Trigger", "Status", "Last fired", "Actions"]) await expect(table.getByRole("columnheader", { name, exact: true })).toHaveCount(1);
+    await expectDropsInOrder(table, ["Channels", "Frequency"]);
     // Default sort is last fired, newest first; the draft that never fired comes last.
     await expect(table.locator("tbody tr td:first-child")).toHaveText([
       "Hammer 15m near S1",

@@ -1,16 +1,21 @@
 import { formatEtClock, formatEtTimeZone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
+import type { DayList } from "./daily.ts";
+import { beforeOpen, listTime } from "./dayView.ts";
 
 // The status bar's own line on a Practice route (D-043): where the prices come from, what the screen waits for, and the
 // clock it stands at. The shell shows it in place of its live-quotes line, which does not apply to past days.
 
 export type PracticeStatusLine = { left: readonly string[]; right: readonly string[] };
 
-/** The day list: "Prices: Alpaca SIP · past days | Day lists built before the open ... List built 8:30 AM ET | Would-fire signals only". */
-export function dayStatusLine(list: { list_at: string }): PracticeStatusLine {
+/**
+ * The day list: "Prices: Alpaca SIP · past days | Day lists built before the open ... List built 8:30 AM ET | Would-fire signals only".
+ * One list time (D-165): after a re-scan it is the scan's clock, and "built before the open" goes once the day clock is past the open.
+ */
+export function dayStatusLine(list: Pick<DayList, "list_at" | "rescan" | "clock">): PracticeStatusLine {
   return {
-    left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusDayLists],
-    right: [practiceText("statusListBuilt", { listAt: formatEtTimeZone(list.list_at) }), PRACTICE_COPY.statusSignals],
+    left: [PRACTICE_COPY.statusPricesPast, ...(beforeOpen(list.clock) ? [PRACTICE_COPY.statusDayLists] : [])],
+    right: [practiceText("statusListBuilt", { listAt: formatEtTimeZone(listTime(list)) }), PRACTICE_COPY.statusSignals],
   };
 }
 

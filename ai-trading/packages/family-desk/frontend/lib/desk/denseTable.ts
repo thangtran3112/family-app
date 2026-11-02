@@ -38,3 +38,41 @@ export function columnLayout(column: { kind?: ColumnKind; fill?: boolean; trunca
   if (minWidth === undefined) return { fill, truncate, style: undefined };
   return { fill, truncate, style: truncate && !fill ? { width: minWidth, minWidth, maxWidth: minWidth } : { minWidth } };
 }
+
+// -- pane fit (D-157) ---------------------------------------------------------------------------------------------------------
+// A table that does not fit its pane drops columns, lowest `priority` first, before it ever clips or scrolls a value. The pane is the
+// table's own container, not the viewport. DenseTable measures each column's natural width and calls this with the pane's width.
+
+/** One column as DenseTable measured it: `max` is its width with the header on one line, `min` with the header wrapped to its longest word. A value never wraps. */
+export type ColumnWidth = { key: string; priority?: number; max: number; min: number };
+
+/** What fits the pane: the keys to hide, whether the headers wrap to get there, and whether the table fits at all (false: only the columns without a priority are left and they still overflow). */
+export type ColumnFit = { hidden: string[]; wrap: boolean; fits: boolean };
+
+/** Hide columns lowest priority first (the rightmost of equal priorities first) until the rest fit `pane`; `reserved` is the width of what never drops (the actions cell). */
+function dropUntilFit(columns: readonly ColumnWidth[], reserved: number, pane: number, size: "max" | "min"): { hidden: string[]; fits: boolean } {
+  const order = columns
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) => column.priority !== undefined)
+    .sort((a, b) => a.column.priority! - b.column.priority! || b.index - a.index);
+  const hidden: string[] = [];
+  let width = reserved + columns.reduce((sum, column) => sum + column[size], 0);
+  for (const { column } of order) {
+    if (width <= pane) break;
+    hidden.push(column.key);
+    width -= column[size];
+  }
+  return { hidden, fits: width <= pane };
+}
+
+/**
+ * The columns a pane holds. First with every header on one line: drop columns by priority until the rest fit. If the columns without a priority
+ * overflow even then, the headers may wrap, and the drop starts again from the full set at the wrapped widths: a header is the one text that
+ * wraps, and only when nothing else is left to give. Whatever stays is whole.
+ */
+export function fitColumns(columns: readonly ColumnWidth[], reserved: { max: number; min: number }, pane: number): ColumnFit {
+  const natural = dropUntilFit(columns, reserved.max, pane, "max");
+  if (natural.fits) return { hidden: natural.hidden, wrap: false, fits: true };
+  const wrapped = dropUntilFit(columns, reserved.min, pane, "min");
+  return { hidden: wrapped.hidden, wrap: true, fits: wrapped.fits };
+}

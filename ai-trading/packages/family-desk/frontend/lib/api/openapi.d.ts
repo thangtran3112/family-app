@@ -3141,6 +3141,8 @@ export interface components {
             day_pnl: components["schemas"]["DayPnlOut"];
             /** Ended At */
             ended_at: string | null;
+            /** Held Elsewhere */
+            held_elsewhere: components["schemas"]["HeldElsewhereOut"][];
             /** Id */
             id: number;
             journal: components["schemas"]["DayJournalOut"] | null;
@@ -3915,6 +3917,23 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HeldElsewhereOut
+         * @description A name open in another day list (another thread's day, a swing day) or in a standalone session, on this day. The
+         *     one-open-session-per-name-and-day rule refuses it here, so the day list shows it open there, not "not opened".
+         */
+        HeldElsewhereOut: {
+            /** Day List Id */
+            day_list_id: number | null;
+            /** Session Id */
+            session_id: number;
+            /** Symbol */
+            symbol: string;
+            /** Thread Id */
+            thread_id: number | null;
+            /** Thread Name */
+            thread_name: string | null;
         };
         /**
          * HoldOut
@@ -6453,6 +6472,8 @@ export interface components {
             ended_at: string | null;
             /** Free Cash Usd */
             free_cash_usd: number | null;
+            /** Held Elsewhere */
+            held_elsewhere: components["schemas"]["HeldElsewhereOut"][];
             /** Holds */
             holds: components["schemas"]["HoldOut"][];
             /** Id */

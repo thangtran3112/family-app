@@ -482,6 +482,10 @@ test.describe("Practice: switching names", () => {
     // The scan IS the list: its label sits with the list's counts, and there is no second table beside it.
     const label = page.getByTestId("rescan-label");
     await expect(label).toHaveText("Scan 1 · run at 9:35 AM ET · data through 9:20 AM");
+    // D-165: one list time. The note and the status line say the scan's clock too, and "built before the open" went with the open.
+    await expect(page.getByTestId("live-note")).toContainText("fixed at the 9:35 AM ET list");
+    await expect(page.getByLabel("Status")).toContainText("List built 9:35 AM ET");
+    await expect(page.getByLabel("Status")).not.toContainText("Day lists built before the open");
     await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new in this scan");
     await expect(label).not.toContainText("2026"); // dates stay hidden
     await expect(page.getByRole("table", { name: "Re-scan" })).toHaveCount(0);
