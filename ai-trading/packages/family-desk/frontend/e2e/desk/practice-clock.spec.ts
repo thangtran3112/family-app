@@ -7,7 +7,7 @@ import { placeOrder } from "./swing-helpers";
 
 // The day thread's clock lives on the server (ADR-0018): it keeps running when she leaves a chart for the Portfolio, closes the
 // page or signs out; its controls are on the Summary and nowhere else; Skip day runs it to the close and opens the next day; and
-// the account is priced at the clock. The stub holds TSLA on Fri 2026-09-25, replayed 09:30 to 09:40 ET: ten market minutes, so
+// the account is priced at the clock; her plan's window is a mark, and the market's close rolls the day over. The stub holds TSLA on Fri 2026-09-25, replayed 09:30 to 09:40 ET: ten market minutes, so
 // at 5x the whole window is two wall minutes. Every step below is real wall time against the real server.
 
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
@@ -122,6 +122,30 @@ test.describe("Practice: the thread clock", () => {
     expect(Date.parse(body.account.as_of)).toBe(Date.parse(body.clock));
     expect(Date.parse(body.clock)).toBeGreaterThan(Date.parse(body.window_start));
     expect(Date.parse(body.clock)).toBeLessThanOrEqual(Date.parse(body.window_end)); // never past the window: nothing later is read
+  });
+
+  test("her practice window is only a mark: the market closes at 4:00 PM, and reaching the close rolls the day over with nothing to press", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    const threadId = await startDayOnTsla(page, context);
+    await placeOrder(page, "Buy");
+    await page.getByRole("tab", { name: "Summary" }).click();
+    await page.waitForURL(THREAD_URL);
+
+    // The plan's window ends long before the market does: the track carries it as a mark, and the clock's own end is the close.
+    const before = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/clock`)).json();
+    expect(Date.parse(before.focus_end)).toBeLessThan(Date.parse(before.window_end));
+    expect(new Date(before.window_end).toISOString()).toMatch(/T20:00:00\.000Z$/); // 4:00 PM ET
+    await expect(page.getByTestId("thread-clock-focus")).toBeAttached();
+
+    // Jump to the close: no "the clock reached the close" prompt and no End day to press. The day ended and Day 2 is listed.
+    await panel(page).getByRole("button", { name: /^Jump/ }).click();
+    await page.getByRole("dialog", { name: "Jump forward" }).getByRole("button", { name: /^To the close/ }).click();
+    await expect(page.getByTestId("thread-clock-rolled")).toContainText(/^Day 1 closed with the market/, { timeout: 30_000 });
+    await expect(page.getByTestId("thread-clock-state")).toContainText(PRACTICE_COPY.clockStateListed);
+    await expect(page.getByText(/reached the close/)).toHaveCount(0);
+    const fills = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/fills`)).json();
+    expect(fills.fills.map((f: { action: string; source: string }) => [f.action, f.source])).toEqual([["sell", "auto"], ["buy", "her"]]);
+    await expectCleanScreen(page);
   });
 
   test("Skip day runs to the close, closes the position at it and opens the next day", async ({ page, context }) => {

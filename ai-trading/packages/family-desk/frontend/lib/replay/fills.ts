@@ -66,5 +66,5 @@ export const fillRows = (fills: readonly Fill[], labels: ReadonlyMap<string, str
     action: fill.action === "buy" ? "Buy" : "Sell",
     shares: formatNumber(fill.shares, 0),
     price: formatPrice(fill.price),
-    effect: `${fillEffect(fill)}${fill.source === "auto" ? " (auto, window end)" : ""}`,
+    effect: `${fillEffect(fill)}${fill.source === "auto" ? " (auto, day end)" : ""}`,
   }));

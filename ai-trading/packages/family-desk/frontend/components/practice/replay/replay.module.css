@@ -72,6 +72,7 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .timelineFill { height: 100%; border-radius: var(--radius-full); background: var(--color-hairline); }
 .tick { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--color-text); }
 .tick[data-kind="signal"] { background: var(--color-amber); }
+.tick[data-kind="focus"] { background: var(--color-muted); }
 .jump { display: inline-flex; }
 .menu { display: flex; flex-direction: column; padding: var(--space-1); }
 .menuItem { display: flex; min-height: var(--size-lg); align-items: center; justify-content: space-between; gap: var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); text-align: left; cursor: pointer; }

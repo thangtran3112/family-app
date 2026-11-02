@@ -653,7 +653,7 @@ def test_end_day_unseals_the_review_and_ranks_the_candidates_by_move_from_the_li
     session_mod.place_mark(db_session, user_id, started.id, svc, {"schemaVersion": 1, "kind": "long_entry"})
     ended = plan_mod.end_day(db_session, user_id, row.id, svc)
     db_session.commit()
-    assert ended.status == "ended" and ended.revealed_through == et(DAYS[0], "11:30")
+    assert ended.status == "ended" and ended.revealed_through == et(DAYS[0], "16:00")
     out = plan_mod.day_list_out(db_session, user_id, row.id, svc)
     review = out["review"]
     gapper = review["rows"][0]

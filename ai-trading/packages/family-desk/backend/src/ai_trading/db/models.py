@@ -667,7 +667,7 @@ class ReplayDayList(Base):
     clock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default=text("1"))
     clock_anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    clock_pause: Mapped[Any | None] = mapped_column(JSONB)  # why a running clock stopped: a crossed stop or the close
+    clock_pause: Mapped[Any | None] = mapped_column(JSONB)  # unused: nothing but Pause stops the clock
 
 
 class ReplayDayScan(Base):

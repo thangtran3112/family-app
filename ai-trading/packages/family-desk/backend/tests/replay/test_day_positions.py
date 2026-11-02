@@ -155,45 +155,34 @@ def test_a_realized_trade_changes_the_buying_power_and_a_stop_is_never_needed(db
 # -- the stop pause over every open name ----------------------------------------------------------------------------
 
 
-def test_advance_pauses_at_first_stop_crossing_of_any_open_name(db_session, user_id, svc, world) -> None:
+def test_advance_flags_every_crossed_stop_of_any_open_name_and_never_pauses(db_session, user_id, svc, world) -> None:
     _bend(world, "FLAT", "10:20", "10:21", low=48.5)  # crosses a stop at 49 in the 10:20 bar
     _bend(world, "SPLITTER", "10:40", "10:41", low=98.0)  # crosses a stop at 99 in the 10:40 bar
     make_thread(db_session, user_id)
     row, gapper = _names(db_session, user_id, svc, "FLAT", "SPLITTER")
     _advance(db_session, user_id, svc, gapper.id, "09:35")
-    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)  # no stop: never pauses
+    _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=5)  # no stop: nothing to flag
     flat, _ = _enter(db_session, user_id, svc, row, "FLAT", shares=10, stopPrice=49.0)
     splitter, _ = _enter(db_session, user_id, svc, row, "SPLITTER", shares=10, stopPrice=99.0)
 
-    # She is on SPLITTER; FLAT's stop is the first one crossed, so play stops at the close of its 10:20 bar.
-    first = _advance(db_session, user_id, svc, splitter.id, "11:00")
-    assert first["paused"] == {
-        "symbol": "FLAT",
-        "stop_price": 49.0,
-        "at": _at("10:21"),
-        "price": 50.0,
-        "kind": "cross",
-        "also": [],
-    }
-    assert first["revealed_through"] == _at("10:21")
-    assert plan_mod.get_day_list(db_session, user_id, row.id).revealed_through == _at("10:21")  # the day clock
-    assert _row(db_session, flat.id).stop_hit_at == _at("10:21") and _row(db_session, splitter.id).stop_hit_at is None
+    # She is on SPLITTER and plays to 11:00 in one move. Both stops were crossed on the way (FLAT's on another name):
+    # each is flagged at its own bar, and the time goes on to where she asked. A stop is information, not a brake.
+    moved = _advance(db_session, user_id, svc, splitter.id, "11:00")
+    assert moved["paused"] is None and moved["revealed_through"] == _at("11:00")
+    assert plan_mod.get_day_list(db_session, user_id, row.id).revealed_through == _at("11:00")  # the day clock
+    assert _row(db_session, flat.id).stop_hit_at == _at("10:21")
+    assert _row(db_session, splitter.id).stop_hit_at == _at("10:41")
     held = _sessions(db_session, user_id, svc, row)
     assert held["FLAT"]["position"]["stop_hit_at"] == _at("10:21")
-    assert "stop_hit_at" not in {k for k, v in held["SPLITTER"]["position"].items() if v is not None}
+    assert held["SPLITTER"]["position"]["stop_hit_at"] == _at("10:41")
 
-    # She exits from the toast: the name is resumed (lifted to the clock) and exited, which clears the flag.
+    # She exits FLAT when she gets to it (the name is lifted to the clock first), which clears its flag.
     exited = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
-    assert exited.revealed_through == _at("10:21")
+    assert exited.revealed_through == _at("11:00")
     _mark(db_session, user_id, svc, flat.id, "long_exit")
     assert _row(db_session, flat.id).stop_hit_at is None
-
-    # The name she is on pauses on its own stop too, and a flagged stop never pauses twice.
-    second = _advance(db_session, user_id, svc, splitter.id, "11:00")
-    assert second["paused"]["symbol"] == "SPLITTER" and second["paused"]["at"] == _at("10:41")
-    assert second["revealed_through"] == _at("10:41")
-    third = _advance(db_session, user_id, svc, splitter.id, "11:00")
-    assert third["paused"] is None and third["revealed_through"] == _at("11:00")
+    again = _advance(db_session, user_id, svc, splitter.id, "11:30")
+    assert again["paused"] is None and again["revealed_through"] == _at("11:30")  # past her window mark, too
 
 
 # -- End day flattens every open trade ------------------------------------------------------------------------------
@@ -225,7 +214,7 @@ def test_end_day_flattens_every_open_trade_at_the_clock(db_session, user_id, svc
     ledger = db_session.query(PracticeLedger).filter_by(thread_id=gapper.thread_id).all()
     assert sorted((r.symbol, float(r.pnl_usd)) for r in ledger) == [("FLAT", 20.0), ("GAPPER", 0.0), ("SPLITTER", -4.0)]
     day = plan_mod.get_day_list(db_session, user_id, row.id)
-    assert day.status == "ended" and day.revealed_through == _at("11:30")  # the window unseals after the flatten
+    assert day.status == "ended" and day.revealed_through == _at("16:00")  # unsealed to the close after the flatten
     assert day.journal["trades"] == 3 and day.journal["pnl_usd"] == 16.0
     assert (day.journal["wins"], day.journal["losses"], day.journal["scratches"]) == (1, 1, 1)
 

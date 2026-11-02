@@ -632,7 +632,7 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
     entry: formatPrice(line.entry_price),
     entryTime: formatEtTime(line.entry_at),
     exit: formatPrice(line.exit_price),
-    exitTime: `${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, window end)" : ""}`,
+    exitTime: `${formatEtTime(line.exit_at)}${line.exit_source === "auto" ? " (auto, day end)" : ""}`,
     held: heldText(line.entry_at, line.exit_at),
     pnl: formatSignedUsd(line.pnl_usd, { cents: true }),
     ret: returnText(line.pnl_usd, line.entry_price * line.shares),
