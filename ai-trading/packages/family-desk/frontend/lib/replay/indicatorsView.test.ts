@@ -90,3 +90,12 @@ test("the rail on 150 real TSLA minute bars reads the session VWAP of the regula
     ema21: ["370.26", "Price above"],
   });
 });
+
+test("VWAP says in words when the one-minute bars it is built from are not there, and never 'Warming up' for that (D-168)", () => {
+  const bars = barsFor((i) => 100 + i, 40);
+  assert.deepEqual([row(indicatorGroups(bars, "15m", { values: null, status: "loading" }), "vwap").value, row(indicatorGroups(bars, "15m", { values: null, status: "loading" }), "vwap").state], ["—", "Reading 1-minute bars"]);
+  assert.equal(row(indicatorGroups(bars, "15m", { values: null, status: "unavailable" }), "vwap").state, "1-minute bars unavailable");
+  const ready = indicatorGroups(bars, "15m", { values: bars.map(() => 123.45), status: "ready" });
+  assert.equal(row(ready, "vwap").value, "123.45", "the value comes from the session VWAP, not from these bars");
+  assert.notEqual(row(ready, "vwap").state, "Warming up");
+});

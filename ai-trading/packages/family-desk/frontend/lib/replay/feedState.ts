@@ -14,6 +14,7 @@ import type {
   StripRow,
   TapeFeed,
 } from "./schemas.ts";
+import { inRegularWindow } from "../indicators.ts";
 import { ms } from "./time.ts";
 
 // What the browser holds of a replay: only what the server has revealed. This module merges `feed` and
@@ -185,7 +186,9 @@ export function withHoldMarker(view: ReplayView, hold: Pick<Hold, "status" | "si
 
 /** The chart's bars: closed bars plus the forming one (replacing a closed bar with the same start). */
 export function chartBars(view: Pick<ReplayView, "bars" | "forming">): ReplayBar[] {
-  return view.forming ? mergeBars(view.bars, [{ ...view.forming, ext: view.bars.at(-1)?.ext ?? false }]) : view.bars;
+  // The forming bar's session comes from its own start time, not from the bar before it: the bar that starts at 9:30 follows a pre-market
+  // bar but is the first regular one (it would otherwise read "extended hours" and hold the VWAP at "—" until the next bar, D-168).
+  return view.forming ? mergeBars(view.bars, [{ ...view.forming, ext: !inRegularWindow(view.forming.t) }]) : view.bars;
 }
 
 /**
