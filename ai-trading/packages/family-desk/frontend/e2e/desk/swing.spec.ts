@@ -165,9 +165,8 @@ test.describe("Swing practice", () => {
     // A buy on S01 with no stop (a stop is optional); too many shares says what the cash covers, and nothing else limits a size.
     const practice = await replayRail(page, "Practice");
     await practice.getByLabel("Quantity").fill("1000");
-    await practice.getByRole("button", { name: "Buy" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
-    await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
+    await expect(practice.getByText(/^Exceeds buying power · this order costs \$[\d,]+, buying power is \$50,000$/)).toBeVisible();
+    await expect(practice.getByRole("button", { name: "Buy" }), "Buy stays off while the order does not fit").toBeDisabled();
     await practice.getByLabel("Quantity").fill("100");
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();

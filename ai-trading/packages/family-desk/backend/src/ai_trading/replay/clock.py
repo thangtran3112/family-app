@@ -105,6 +105,7 @@ def _account(
         "balance": balance,
         "open_pnl_usd": pnl["open_usd"],
         "equity_usd": journal_mod.usd_sum([balance, pnl["open_usd"]]),
+        "buying_power_usd": session_mod.day_buying_power(db, thread, day.id, books=books),
         "day_pnl_usd": pnl["total_usd"],
         "positions": pnl["open_count"],
         "as_of": clock,

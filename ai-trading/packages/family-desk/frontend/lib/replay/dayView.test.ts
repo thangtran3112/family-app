@@ -26,7 +26,6 @@ import {
   listHeaderText,
   listWarning,
   moveText,
-  nameActionLabel,
   ordinal,
   peekDailyBars,
   peekOffsets,
@@ -754,8 +753,7 @@ test("each trade row carries its hold time and its return on the position; the t
   assert.equal(tradeTotalRow({ trades: 2, pnl_usd: 10 }).ret, "", "no lines, no return");
 });
 
-test("Resume belongs to the thread's day, never to one name: a name's button says Practice or Switch, and a day session resumes through its day", () => {
-  assert.deepEqual([nameActionLabel(false), nameActionLabel(true)], ["Open", "Switch"]);
+test("Resume belongs to the thread's day, never to one name: a day session resumes through its day", () => {
   assert.equal(sessionResumeHref({ id: 9, day_list_id: 42 }), "/practice/day?id=42", "a day-list session resumes the whole day, on its shared clock");
   assert.equal(sessionResumeHref({ id: 9, day_list_id: null }), "/practice/replay?id=9", "a standalone session has no day to resume through");
 });

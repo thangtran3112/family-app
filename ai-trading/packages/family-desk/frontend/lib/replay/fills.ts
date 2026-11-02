@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { components } from "../api/openapi.js";
 import { clientOf, deskPath, readInit, type RequestOptions } from "../desk/api.ts";
-import { EMPTY_VALUE, formatEtTime, formatNumber, formatPrice } from "../desk/format.ts";
+import { EMPTY_VALUE, formatEtClock, formatNumber, formatPrice } from "../desk/format.ts";
 import { practiceText } from "../desk/freshness.ts";
 import type { Thread } from "./threads.ts";
 
@@ -61,7 +61,7 @@ export const fillRows = (fills: readonly Fill[], labels: ReadonlyMap<string, str
   fills.map((fill) => ({
     key: String(fill.id),
     day: labels.get(fill.day) ?? EMPTY_VALUE,
-    time: formatEtTime(fill.at),
+    time: formatEtClock(fill.at), // to the second, like the thread clock the fill was stamped by
     symbol: fill.symbol,
     action: fill.action === "buy" ? "Buy" : "Sell",
     shares: formatNumber(fill.shares, 0),

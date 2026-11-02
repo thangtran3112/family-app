@@ -13,6 +13,7 @@ import {
   headlineFigure,
   improvementOf,
   planRows,
+  realizedToday,
   startedWithText,
   threadName,
   threadStartedText,
@@ -191,4 +192,13 @@ test("the plan recap counts per week for a swing thread (D-083)", () => {
 test("the summary caption mentions an open day only when one is open (D-134)", () => {
   assert.match(summaryHintText(true), /today's day is still open$/);
   assert.equal(summaryHintText(false), "Wins and losses count practice trades");
+});
+
+test("the part of the balance that today has realized and the end-of-day curve does not count yet is named, and only when there is one", () => {
+  const lastDay = thread.curve.at(-1)!.balance;
+  const withToday = { ...thread, thread: { ...thread.thread, stats: { ...thread.thread.stats, balance: lastDay + 2 } } };
+  assert.equal(realizedToday(withToday), 2);
+  assert.equal(realizedToday({ ...withToday, thread: { ...thread.thread, stats: { ...thread.thread.stats, balance: lastDay } } }), null);
+  assert.equal(realizedToday(freshThread), null);
+  assert.equal(realizedToday({ ...withToday, curve: [] }), null);
 });

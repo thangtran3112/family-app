@@ -5,7 +5,7 @@ import type { ReactNode, Ref } from "react";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { adherenceStat, overviewDayRows, threadProgress, type EquityDays, type OverviewDayRow } from "@/lib/replay/overviewView";
 import type { Thread, ThreadSummary } from "@/lib/replay/threads";
 import type { ClockAccount } from "@/lib/replay/threadClock";
@@ -61,6 +61,9 @@ export function PlaceStrip({ summary, planFinished = false, account = null, chil
         <SimulatedBadge />
       </p>
       {live && <p className={hub.muted} data-testid="thread-balance-open">{`${PRACTICE_COPY.clockAccountOpen} ${formatDayResult(account.open_pnl_usd)} at the clock · ${PRACTICE_COPY.clockAccountBalance} ${formatBalance(account.balance)}`}</p>}
+      {account !== null && (
+        <p className={hub.muted} data-testid="thread-buying-power">{practiceText("buyingPowerLine", { label: PRACTICE_COPY.clockAccountBuyingPower, amount: formatBalance(account.buying_power_usd) })}</p>
+      )}
       <p className={hub.muted}>{startedWithText(thread, summary.swing)}</p>
       {children}
       <p className={o.placeLine}>{progress.sub === PRACTICE_COPY.landingProgressNoDays ? progress.main : `${progress.main} · ${progress.sub}`}</p>

@@ -16,8 +16,8 @@ import { FactList } from "@/components/ui/FactList";
 
 const AMBER = "#FFB020";
 const PEEK_TABS_ID = "peek-view";
-/** The chart's height in the drawer: tall enough to tell levels apart, short enough to keep the facts in view on a laptop. */
-const PEEK_CHART_HEIGHT = 400;
+/** The chart's height in the drawer: tall enough to tell levels apart, short enough that the chart, its legend and the three fact rows fit a 768 px laptop without scrolling. */
+const PEEK_CHART_HEIGHT = 320;
 
 /** The levels are `plain` lines: the legend under the title names them, so no tag prints over the candles or over a level close in price. */
 function levelLines(peek: Peek, view: "daily" | "today"): MarketChartLevel[] {

@@ -90,6 +90,17 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .newestMark + .bottomToggle { margin-left: var(--space-2); }
 /* One fixed height, empty or full: a new mark scrolls inside it and never moves the chart (D-146). Newest first, so the top rows show. */
 .bottomBody { height: 72px; overflow-y: auto; padding: var(--space-2) var(--space-4); }
+/* A row that is still below the fold says so: a shade at the edge that has more behind it. It shows only while that edge can scroll (the "local" layers cover it at the end). */
+.bottomBody {
+  background:
+    linear-gradient(var(--color-ground) 30%, transparent) center top,
+    linear-gradient(transparent, var(--color-ground) 70%) center bottom,
+    radial-gradient(farthest-side at 50% 0, rgb(255 255 255 / 0.12), transparent) center top,
+    radial-gradient(farthest-side at 50% 100%, rgb(255 255 255 / 0.12), transparent) center bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 20px, 100% 20px, 100% 8px, 100% 8px;
+  background-attachment: local, local, scroll, scroll;
+}
 
 /* Left rail: technical indicators on top, the tape below */
 .session { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
@@ -111,6 +122,9 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .fields, .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 .summary { margin: 0; color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); font-variant-numeric: tabular-nums; }
 .submit { width: 100%; }
+/* The ticket's own error lines (cost over the buying power; an order the server did not take): always mounted so a screen reader hears them. */
+.ticketError { margin: 0; color: var(--color-down); font-size: var(--text-meta); line-height: var(--line-meta); }
+.ticketError:empty { position: absolute; } /* out of the column (no gap) yet still rendered, so a screen reader hears the first message */
 .sectionTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .footRow { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 .composer { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: var(--space-2); }

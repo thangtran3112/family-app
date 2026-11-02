@@ -73,7 +73,7 @@ export function PortfolioPanel({ dayListId, query }: { dayListId: number; query:
       await placeMark(session.id, built.mark);
       query.refresh();
     } catch (error) {
-      setMessage(problemMessage(error, PRACTICE_COPY.markError));
+      setMessage(problemMessage(error, PRACTICE_COPY.orderError));
     } finally {
       setBusy(null);
     }
@@ -108,7 +108,7 @@ export function PortfolioPanel({ dayListId, query }: { dayListId: number; query:
           <span>{PRACTICE_COPY.dayPortfolioTotal}</span>
           <span className={toneClass(footer.total)}>{formatSignedUsd(footer.total, { cents: true })}</span>
           <span className={styles.muted}>{footer.split}</span>
-          <span className={styles.muted}>{footer.openOf} · {footer.asOf}</span>
+          <span className={styles.muted}>{footer.openOf} · {query.connection === "reconnecting" ? practiceText("dayPortfolioNotUpdated", { time: formatEtTimeZone(day.day_pnl.as_of) }) : footer.asOf}</span>
         </p>
       )}
       {message && <p className={styles.problem} role="alert">{message}</p>}
@@ -156,7 +156,7 @@ function PortfolioRowView({ row, unit, inert, busy, onOpen, onExit }: { row: Por
         aria-current={row.current ? "true" : undefined}
         aria-disabled={!row.current && disabled ? "true" : undefined}
         aria-busy={busy === row.symbol ? "true" : undefined}
-        aria-label={practiceText("daySwitch", { symbol: row.symbol })}
+        aria-label={practiceText("dayOpen", { symbol: row.symbol })}
         aria-describedby={bodyId}
         onClick={() => {
           if (!row.current && !disabled) onOpen();

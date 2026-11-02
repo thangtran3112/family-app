@@ -40,7 +40,10 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
   const finished = swing?.action.kind === "none";
   // A day plan whose last day has ended: its summary sits above the one action, "Start a new plan" (D-096).
   const planDone = !closed && thread.mode === "day" && plan !== null && plan.thread_id === thread.id && plan.finished;
-  const title = closed ? PRACTICE_COPY.threadClosedTitle : swing ? PRACTICE_COPY.overviewNext : view.label;
+  // A day is listed but not started: the card shows the last ended day's result, and its button opens the listed one. The title says "Next step"
+  // and the result keeps its own "Last day" label, so the card never reads "Last day" above a button that says "Open Day 3".
+  const showsLastDay = !swing && today !== null && view.label === PRACTICE_COPY.threadLastDay;
+  const title = closed ? PRACTICE_COPY.threadClosedTitle : swing || showsLastDay ? PRACTICE_COPY.overviewNext : view.label;
   // A day under way may hold open trades: the server prices them at the day clock (the day list's `day_pnl`).
   const live = useDeskQuery(`thread-open:${today?.day_list_id}`, (signal) => loadDayList(today?.day_list_id ?? 0, {}, { signal }), {
     enabled: !closed && today?.status === "practicing",
@@ -97,7 +100,7 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
               preparingHint
             ) : fresh ? (
               PRACTICE_COPY.threadPageFresh
-            ) : swing ? (
+            ) : swing || showsLastDay ? (
               <>
                 <span className={hub.muted}>{`${view.label}: `}</span>
                 {result}

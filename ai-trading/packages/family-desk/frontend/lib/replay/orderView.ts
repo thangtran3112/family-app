@@ -17,6 +17,6 @@ export function orderNames(list: Names, find: string): OrderName[] {
     .filter(({ symbol }) => symbol.toUpperCase().includes(needle))
     .map(({ symbol }) => {
       const session = sessions.get(symbol);
-      return { symbol, status: session === undefined ? "" : session.has_open_trade ? PRACTICE_COPY.orderStatusHolding : PRACTICE_COPY.orderStatusOpened };
+      return { symbol, status: session === undefined ? PRACTICE_COPY.orderStatusNone : session.has_open_trade ? PRACTICE_COPY.orderStatusHolding : PRACTICE_COPY.orderStatusOpened };
     });
 }

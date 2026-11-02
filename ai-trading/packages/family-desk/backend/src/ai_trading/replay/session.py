@@ -1530,10 +1530,24 @@ def _day_free_cash(db: Session, row: ReplaySession, skip: int | None = None) -> 
         realized = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed])
         reserved = _reserved_cash([row], lambda _: (None, 0) if open_ is None else (open_.side, open_.shares), skipped)
         return round(DEFAULT_STARTING_BALANCE + realized - held - reserved, 2)
-    opens = {sid: open_ for sid, (_, open_) in day_books(db, row.day_list_id).items() if open_ is not None}
+    return day_buying_power(db, thread, row.day_list_id, skipped)
+
+
+def day_buying_power(
+    db: Session,
+    thread: PracticeThread,
+    day_list_id: int,
+    skipped: tuple[int, int] | None = None,
+    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]] | None = None,
+) -> float:
+    """A day thread's buying power on one of its days: the thread's balance less the entry notional of the day's open
+    positions and less the cash its working orders hold back. The one figure the cash check enforces (`_day_free_cash`)
+    and the Summary shows (`clock._account`, which passes the `books` it already read)."""
+    books = day_books(db, day_list_id) if books is None else books
+    opens = {sid: open_ for sid, (_, open_) in books.items() if open_ is not None}
     held = sum(t.entry_price * t.shares for t in opens.values())
     reserved = _reserved_cash(
-        _sessions_of_day(db, row.day_list_id),
+        _sessions_of_day(db, day_list_id),
         lambda s: (None, 0) if s.id not in opens else (opens[s.id].side, opens[s.id].shares),
         skipped,
     )

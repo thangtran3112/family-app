@@ -11,6 +11,8 @@
 /* Generic rows and lists */
 .list { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
 .row { display: flex; min-width: 0; min-height: 24px; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding-block: 2px; font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+/* The Levels tab: the rows run across the panel in columns, so every level shows inside its one fixed height instead of hiding below the fold. */
+.levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); column-gap: var(--space-4); }
 .wrap { flex-wrap: wrap; }
 .between { justify-content: space-between; }
 .label { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
