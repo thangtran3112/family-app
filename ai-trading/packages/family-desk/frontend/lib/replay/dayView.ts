@@ -70,6 +70,15 @@ export function listBuiltText(list: Pick<DayList, "list_at" | "data_through">): 
   return practiceText("dayListBuilt", { listAt: formatEtTimeZone(list.list_at), through: formatEtTime(list.data_through) });
 }
 
+/** The regular session opens at this ET wall time. */
+const REGULAR_OPEN = "09:30";
+
+/** The one time the list reads at (D-165): the clock a re-scan ran at once one has replaced the list, else the time the list was built. Every line about "the list" says this. */
+export const listTime = (list: Pick<DayList, "list_at" | "rescan">): string => list.rescan?.as_of ?? list.list_at;
+
+/** The day clock has not reached the regular open; a day with no clock yet counts. Only then is "built before the open" true to say. */
+export const beforeOpen = (clock: string | null): boolean => clock === null || etHhMm(clock) < REGULAR_OPEN;
+
 /** The Desk universe is capped at this many names by dollar volume (the backend's `MAX_UNIVERSE`). */
 export const UNIVERSE_CAP = 250;
 
@@ -226,6 +235,24 @@ const CLOCK_METRICS = new Set(["last", "change_pct", "volume", "rvol_10d", "gap_
 export function liveState(list: Pick<DayList, "candidates">): { today: boolean } | null {
   const lives = list.candidates.flatMap((row) => (row.live ? [row.live] : []));
   return lives.length === 0 ? null : { today: lives.some((live) => live.today) };
+}
+
+/** How the table follows the day clock. `today`: the regular session has opened at the clock, so the metric columns move too, not only the price. `pending`: the read at the clock has not landed yet. */
+export type FollowState = { today: boolean; pending: boolean };
+
+/**
+ * Whether the table follows the day clock, and how far. It does from the clock's start until the day ends (ADR-0018), so its columns are the settled set
+ * from the first paint (D-159): until the read at the clock lands, the columns the clock moves are there with `pending` cells, never missing, and nothing
+ * re-lays out when it lands. `today` is the read's own once it is in; before it, the clock's own estimate (a regular bar closes a minute after the open).
+ */
+export function followState(
+  list: Pick<DayList, "status" | "clock">,
+  rows: Pick<DayList, "candidates">,
+  read: { landed: boolean; failed: boolean },
+): FollowState | null {
+  // No clock yet, a finished day, or no names (the empty state shows, not a table): nothing follows the clock.
+  if (list.status === "ended" || list.clock === null || rows.candidates.length === 0) return null;
+  return { today: liveState(rows)?.today ?? etHhMm(list.clock) > REGULAR_OPEN, pending: !read.landed && !read.failed };
 }
 
 /** "Prev volume" and "Volume" both read "Volume now" once they follow the clock. */

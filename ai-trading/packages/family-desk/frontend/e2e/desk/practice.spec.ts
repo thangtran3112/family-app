@@ -323,12 +323,13 @@ test.describe("Practice", () => {
     if (test.info().project.name === "desktop-1180") await page.keyboard.press("Escape");
     await expect(page.getByRole("list", { name: "Filters" }).getByRole("listitem").first()).toHaveAttribute("data-active", "true");
     await expect(page.getByText("Chosen at setup")).toBeVisible();
-    for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label })).toBeVisible();
+    for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label, exact: true })).toBeVisible(); // exact: "vs prev close % now" is a column from the first paint (D-159)
     // D-136: no name reports before the open, so there is no Earnings column of dashes to scroll past.
     await expect(table.getByRole("columnheader", { name: "Earnings" })).toHaveCount(0);
     // D-043: the day list's own status line.
-    await expect(page.getByLabel("Status")).toContainText("Day lists built before the open");
+    // D-165: the day's clock starts at the open, so "built before the open" is already not true to say; the list time is still the build time (no re-scan).
     await expect(page.getByLabel("Status")).toContainText("List built 8:30 AM ET");
+    await expect(page.getByLabel("Status")).not.toContainText("Day lists built before the open");
     await expect(page.locator("body")).not.toContainText(DAY);
     await expectCleanScreen(page);
 
@@ -945,12 +946,28 @@ test.describe("Practice day list · fix wave 5S", () => {
   test("the Day list's prices follow the thread clock: the table is read at the clock from the day's start, with no name opened, and the moving columns say \"now\"", async ({ page, context }) => {
     test.setTimeout(180_000);
     const api = watchApi(page);
+    // D-159: every distinct column set the Candidates table shows, in order, from the first paint.
+    await page.addInitScript(() => {
+      const sets: string[] = [];
+      (window as unknown as { daySets: string[] }).daySets = sets;
+      const watch = () => {
+        const head = document.querySelector('table[aria-label="Candidates"] thead');
+        const headers = head ? [...head.querySelectorAll("th")].map((th) => th.textContent?.trim()).join("|") : "";
+        if (headers && sets.at(-1) !== headers) sets.push(headers);
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    });
     await openDayList(page, context);
     const table = page.getByRole("table", { name: "Candidates" });
     // The clock exists from the day's start: the table is read at it before any name is opened.
     await expect(page.getByTestId("live-note")).toContainText(/follows? the day clock/);
     await expect(table.getByRole("columnheader", { name: "Price now" })).toBeVisible();
     expect(api.paths().filter((path) => /day-lists\/\d+\?.*live=true/.test(path)).length, "the table asks for the clock's prices").toBeGreaterThan(0);
+    // D-159: the read has landed (a price, not a placeholder or a dash) and the table never added, dropped or relabelled a column on the way.
+    const firstNow = await table.getByRole("columnheader").evaluateAll((headers) => headers.findIndex((header) => header.textContent?.trim() === "Price now"));
+    await expect(table.getByRole("row", { name: /TSLA/ }).getByRole("cell").nth(firstNow)).toHaveText(/^\d[\d,]*\.\d{2}$/);
+    expect(await page.evaluate(() => (window as unknown as { daySets: string[] }).daySets), "one column set from the first paint").toHaveLength(1);
 
     await table.getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);

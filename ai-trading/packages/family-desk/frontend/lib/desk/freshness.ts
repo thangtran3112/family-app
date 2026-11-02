@@ -449,6 +449,7 @@ export const PRACTICE_COPY = {
   daySwitchHint: "A name opens at the day clock, {time}. What it did earlier is on its chart and is not scored.",
   dayLiveNote: "Columns marked \"now\" follow the day clock, {clock}, and nothing later than it. The rest are fixed at the {list} list: price at list, prev close, since, ATR %, RSI and earnings.",
   dayLiveNotePre: "Price now follows the day clock, {clock}. Every other column is fixed at the {list} list until the market opens.",
+  dayLiveNoteOpen: "Price now follows the day clock, {clock}. Every other column is fixed at the {list} list.",
   dayPortfolio: "Portfolio",
   indicatorsTitle: "Technical indicators",
   indicatorsFootnote: "Read from the bars shown on the chart, up to the replay time. Nothing here looks ahead. VWAP is the session's, from 1-minute bars, on every chart interval.",

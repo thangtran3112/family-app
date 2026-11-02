@@ -24,6 +24,7 @@ import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
+  beforeOpen,
   canRescan,
   datesHidden,
   dayCellText,
@@ -31,10 +32,13 @@ import {
   dayColumns,
   dayRouteProblem,
   dayTitle,
+  type FollowState,
   filtersNote,
   filtersText,
+  followState,
   listBuiltText,
   listCountsText,
+  listTime,
   listWarning,
   liveState,
   practiceWindow,
@@ -201,10 +205,12 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   });
   // A read from before a re-scan or a re-list is not this list's names any more: until the new read lands, the snapshot shows.
   const read = atClock.data;
-  const rows = !ended && read !== null && read.data_through === list.data_through && read.rescan?.seq === list.rescan?.seq ? read.candidates : list.candidates;
-  const live = liveState({ candidates: rows });
+  const landed = read !== null && read.data_through === list.data_through && read.rescan?.seq === list.rescan?.seq;
+  const rows = !ended && landed ? read.candidates : list.candidates;
+  // The table follows the clock from the day's start, so its columns are the settled set from the first paint; the cells the read fills wait as placeholders (D-159).
+  const live = followState(list, { candidates: rows }, { landed, failed: atClock.error !== null });
   const columns = columnsOf(list, live);
-  const liveAt = rows.find((row) => row.live)?.live?.at ?? null;
+  const liveAt = rows.find((row) => row.live)?.live?.at ?? list.clock;
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -376,7 +382,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
             </p>
             {live && liveAt && (
               <p className={styles.muted} data-testid="live-note">
-                {practiceText(live.today ? "dayLiveNote" : "dayLiveNotePre", { clock: formatEtTimeZone(liveAt), list: formatEtTimeZone(list.list_at) })}
+                {practiceText(live.today ? "dayLiveNote" : beforeOpen(list.clock) ? "dayLiveNotePre" : "dayLiveNoteOpen", { clock: formatEtTimeZone(liveAt), list: formatEtTimeZone(listTime(list)) })}
               </p>
             )}
             <DenseTable
@@ -529,7 +535,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   );
 }
 
-function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColumn<Candidate>[] {
+function columnsOf(list: DayList, live: FollowState | null): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
@@ -550,6 +556,8 @@ function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColu
       // No name was checked (every cell a dash): the column would be a row of dashes to scroll past (D-136).
       hideWhenEmpty: column.format === "earnings",
       render: (row) => {
+        // The read at the clock has not landed: the column is here, its value is on its way (D-159).
+        if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} />;
         const text = dayCellText(column, row);
         if (column.format === "earnings") return row.earnings_state === "reported" ? <Badge tone="warn">{text}</Badge> : text;
         const tone = dayCellTone(column, row);
