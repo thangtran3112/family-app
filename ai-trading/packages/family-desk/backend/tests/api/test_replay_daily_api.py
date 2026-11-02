@@ -307,7 +307,10 @@ def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) ->
     behind = client.get(f"{BASE}/sessions/{gapper['id']}", headers=auth_headers()).json()
     assert behind["behind_clock"] is True and behind["revealed_through"] == at("10:00")
     feed = client.get(f"{BASE}/sessions/{gapper['id']}/feed", headers=auth_headers()).json()
-    assert feed["behind_clock"] is True and feed["revealed_through"] == at("10:00")
+    # The feed of an open day-thread name is read at the thread's time (10:30), not at the stored playhead (10:00, which
+    # the session read above still reports and which stays the write gate: the name is behind the clock).
+    assert feed["behind_clock"] is True
+    assert feed["revealed_through"] == at("10:30") and feed["thread_time"] == at("10:30")
     refused = client.post(
         f"{BASE}/sessions/{gapper['id']}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
     )

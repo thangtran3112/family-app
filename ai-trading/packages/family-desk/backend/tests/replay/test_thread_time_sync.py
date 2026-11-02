@@ -47,6 +47,7 @@ from ai_trading.replay import clock as clock_mod
 from ai_trading.replay import frames
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
+from ai_trading.replay.session import ReplayProblem
 from ai_trading.replay.tape import Tape
 
 NIGHT = et(DAYS[0], "20:00") + pd.Timedelta(hours=5)  # 01:00 ET on the next calendar date
@@ -250,7 +251,6 @@ def test_a_paused_thread_returns_identical_payloads_on_repeated_reads(db_session
 # -- RC3 (A4): a feed is cut at the thread's time ---------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="A4: the feed cuts at the name's stored playhead")
 def test_a_name_that_was_not_synced_shows_the_tape_through_its_end(db_session, user_id, svc, world, pinned) -> None:
     """RC3: the feed cut at the name's stored playhead (09:30, nobody synced it), not at the thread's time."""
     _, _, gapper, flat = _night(db_session, user_id, svc, world)
@@ -263,6 +263,33 @@ def test_a_name_that_was_not_synced_shows_the_tape_through_its_end(db_session, u
         assert _row(db_session, session_id).revealed_through == stored, "a GET never writes the playhead"
     flat_out = _feed(db_session, user_id, svc, flat.id)
     assert flat_out["last"]["price"] == 52.0 and flat_out["behind_clock"] is True  # still not markable until a sync
+
+
+def test_a_stale_name_is_read_at_the_thread_time_never_past_it_and_still_cannot_be_marked(
+    db_session, user_id, svc, world, pinned
+) -> None:
+    """A4 acceptance: the playhead is 09:30, the clock 14:00. The feed returns bars through 14:00 and nothing later
+    (every bar after T is bent to 999), the stored playhead is untouched by the GET, and a mark waits for an advance."""
+    _bend(world, "FLAT", "14:00", None, open=999.0, high=999.0, low=999.0, close=999.0)
+    make_thread(db_session, user_id)
+    row, _ = _names(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    thread_id = db_session.get(PracticePlan, row.plan_id).thread_id
+    at = et(DAYS[0], "14:00")
+    clock_mod.control(db_session, user_id, thread_id, svc, running=None, speed=None, to=at.to_pydatetime(), step=None)
+    db_session.commit()
+
+    out = _feed(db_session, user_id, svc, flat.id)
+    assert out["revealed_through"] == at and out["data_through"] == at and out["thread_time"] == at
+    assert out["bars"][-1]["t"] + pd.Timedelta(minutes=5) == at
+    assert max(bar["h"] for bar in out["bars"]) < 999.0 and out["forming"] is None
+    assert out["last"]["price"] == 50.0 and out["levels"]["session_high"] == 50.0
+    assert _row(db_session, flat.id).revealed_through == et(DAYS[0], "09:30")  # a GET moves nothing
+    with pytest.raises(ReplayProblem) as caught:
+        _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)
+    assert caught.value.message == "This name is behind the day clock · catch up before you mark"
+    _sync(db_session, user_id, svc, flat.id)
+    assert _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)["mark"]["at"] == at
 
 
 # -- what stays true (guards, green before and after) ------------------------------------------------------------------

@@ -892,7 +892,7 @@ def _frame(
         "data_through": data_through,
         "market": _market_of(ctx, series, data_through),
         "day_clock": ctx.day_clock,
-        "behind_clock": ctx.day_clock is not None and through < ctx.day_clock,
+        "behind_clock": ctx.day_clock is not None and ctx.through < ctx.day_clock,
         "at_end": through >= ctx.window_end,
         "bars": bars,
         "forming": series.forming(through),
@@ -1160,14 +1160,26 @@ def feed(
     min_notional: int = 0,
 ) -> dict[str, Any]:
     """Everything revealed so far at `interval`: the lookback for warm-up, the revealed window, the last minute of
-    prints, the released signals (all of them once the session has ended). Never past `revealed_through`."""
+    prints, the released signals (all of them once the session has ended). Never past `revealed_through`, except that an
+    open day-thread session is read at the thread's time T (cut at its tape end): see the comment below."""
     row = get_row(db, user_id, session_id)
     settle_day(db, svc, row.day_list_id)
     ctx = context(db, svc, row)
     name = interval or ctx.interval
     width = INTERVAL_MINUTES[name]
-    through = ctx.window_end if row.status == "ended" else ctx.through
-    ctx.through = through
+    if row.status == "ended":
+        through = ctx.through = ctx.window_end
+    elif ctx.thread_time is not None:
+        # An open day-thread session reads at the thread's time T (cut at its tape end), never at its own stored
+        # playhead: a name nobody synced shows the same bars, price and levels as the Summary's clock. The playhead
+        # stays where it is (a GET writes nothing) and so does `behind_clock`, the write gate: marks and orders still
+        # wait for an advance to lift the name. What lies between the playhead and T is shown but was never in front of
+        # her, so a signal inside it reads as unseen, exactly as the lift will record it.
+        through = max(ctx.through, min(ctx.thread_time, ctx.window_end))
+        if ctx.through < through:
+            ctx.away = [*ctx.away, (ctx.through, through)]
+    else:
+        through = ctx.through
     display = _series(ctx, width).bars(through)
     display = display.tail(LOOKBACK_BARS_MAX + len(display[display.index >= ctx.window_start]))
     prints = _prints_block(
