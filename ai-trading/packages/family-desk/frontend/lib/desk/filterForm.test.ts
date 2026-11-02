@@ -20,6 +20,7 @@ import {
 import { choiceOf, OPERAND_CATALOG, operandFor } from "./operands.ts";
 import { NEW_FILTER_SPEC } from "./screenerView.ts";
 import { parseFilterSpec } from "../spec/parse.ts";
+import { problemLine } from "./problems.ts";
 
 const dir = new URL("../../../contracts/templates/filters/", import.meta.url);
 const templates = readdirSync(dir).filter((file) => file.endsWith(".json")).map((file) => ({
@@ -133,4 +134,13 @@ test("Create filter with the days box blank saves 20; an edit keeps its blank, a
   assert.equal((formToNewSpec({ ...form, avgVolumeDays: " 30 " }).liquidity as Record<string, number>).avgVolumeDays, 30, "a number she typed is kept");
   assert.equal("avgVolumeDays" in (formToSpec(form).liquidity as object), false, "an edit does not add it: shipped filters round-trip unchanged");
   assert.equal(formToNewSpec({ ...form, minAvgVolume: "" }).liquidity !== undefined && "avgVolumeDays" in (formToNewSpec({ ...form, minAvgVolume: "" }).liquidity as object), false, "no volume floor: the days mean nothing");
+});
+
+test("D-205: the error summary names Average volume days as its control does, for 3 and for 61 (D-197's neighbour)", () => {
+  for (const [days, message] of [["3", "Must be 5 or more."], ["61", "Must be 60 or less."]] as const) {
+    const parsed = FilterStrategySpecV1Schema.safeParse(formToSpec({ ...specToForm(parseFilterSpec(NEW_FILTER_SPEC)!), avgVolumeDays: days }));
+    assert.equal(parsed.success, false, days);
+    const lines = parsed.success ? [] : parsed.error.issues.map((issue) => problemLine({ path: issue.path.join("."), message: issue.message }));
+    assert.deepEqual(lines, [`Average volume days: ${message}`], days);
+  }
 });

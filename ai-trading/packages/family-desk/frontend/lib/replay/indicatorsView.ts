@@ -50,6 +50,11 @@ function lineState(line: number | null, price: number | null): Pick<IndicatorRow
   return { state: "Price at", tone: "neutral" };
 }
 
+/** The rail's note: the VWAP sentence only on the intraday views, where the rail has a VWAP row; the Daily view has none (D-203). */
+export function indicatorsFootnote(interval: string): string {
+  return interval === "1d" ? PRACTICE_COPY.indicatorsFootnoteDaily : PRACTICE_COPY.indicatorsFootnote;
+}
+
 /**
  * RSI (14) and MACD (12, 26, 9) first, then VWAP and the two EMAs against the last price. VWAP is intraday only, so the daily view
  * (`interval` "1d") leaves it out. A value that has not warmed up yet reads "—" and says so; nothing is filled in. `server` is the server's

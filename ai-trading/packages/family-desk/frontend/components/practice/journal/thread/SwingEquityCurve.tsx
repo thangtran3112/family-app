@@ -2,6 +2,7 @@
 
 import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { useChartBox } from "@/lib/desk/useChartBox";
 import { HUB_SWING_COPY, endLabelSpots, placeLabel, startNoteSpot, swingCurveLayout, swingCurveSummary, type CurveLabel } from "@/lib/replay/hubSwing";
 import type { Box } from "@/lib/replay/threadChart";
 import type { SwingState } from "@/lib/replay/threads";
@@ -17,7 +18,8 @@ const BOX: Box = { width: 760, height: 240, left: 76, right: 24, top: 16, bottom
  * name the lines so the key below is a repeat, not the only cue.
  */
 export function SwingEquityCurve({ state, startingBalance }: { state: SwingState; startingBalance: number }) {
-  const layout = swingCurveLayout(state.equity_series, startingBalance, state.days, BOX);
+  const [ref, box] = useChartBox(BOX);
+  const layout = swingCurveLayout(state.equity_series, startingBalance, state.days, box);
   const { plot, now } = layout;
   const bottom = plot.y + plot.height;
   const summary = swingCurveSummary(state.equity_series, startingBalance, formatBalance);
@@ -35,9 +37,9 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
   const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, endLabels, lines);
 
   return (
-    <div className={styles.stack}>
+    <div ref={ref} className={styles.stack}>
       <MiniChartFrame
-        box={BOX}
+        box={box}
         label={summary}
         yTicks={layout.ticks.map((tick) => ({ key: tick.value, y: tick.y, label: formatAxisDollars(tick.value) }))}
         start={{ y: layout.startY, note }}

@@ -7,11 +7,12 @@ const NOUNS: Record<string, string> = { "watch.universe.symbols": "symbol", "the
 const noun = (path: string) => NOUNS[path] ?? "item";
 const group = (text: string, pattern: RegExp) => pattern.exec(text)?.[1];
 
-/** Contract sentences that name a schema path, as plain words. Matched whole, after pydantic's "Value error, " prefix. */
+/** Contract sentences as plain words: the ones that name a schema path, and the regular-hours window rule (it names no path). Matched whole, after pydantic's "Value error, " prefix. */
 const PATH_SENTENCES: Readonly<Record<string, string>> = {
   "window.from must be before window.to": "Start at must be before the 4:00 PM close",
   "window.from must be at or after screen.listAt": "Start at must be at or after List time",
   "screen.listAt must be between 04:30 and 15:30 ET": "List time must be between 4:30 AM and 3:30 PM",
+  "a regular-session window must stay inside 09:30-16:00 ET": "Start at must be between 9:30 AM and 4:00 PM",
 };
 
 /** Pydantic (server) and Zod (client) wording for the same mistake maps to one sentence. Anything else is already English and passes through. */
