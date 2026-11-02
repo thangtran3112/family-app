@@ -79,10 +79,10 @@ test("improvement stays a caveat until two weeks each have three practice days",
   assert.match(few.caveat?.reason ?? "", /week 2 has 2 practice days so far/);
   const noneLatest = improvementOf(weeksOf([...threadDays.slice(0, 5), threadDays[6]!]));
   assert.match(noneLatest.caveat?.reason ?? "", /week 2 has no practice days so far/);
-  assert.match(noneLatest.compared?.intro ?? "", /week 2, no practice days so far/);
+  assert.equal(noneLatest.compared, null, "a week with no practice day has nothing to set beside week 1: no table, only the caveat (D-041)");
   assert.deepEqual(few.compared?.rows.map((row) => [row.label, row.first, row.latest]), [
     ["Day results", "+$33.00", "+$90.00"],
-    ["Days won", "2 of 4", "1 of 2"],
+    ["Win rate (days)", "50% (2 of 4)", "50% (1 of 2)"],
     ["Adherence", "75%", "92%"],
     ["Days practiced", "4", "2"],
   ]);

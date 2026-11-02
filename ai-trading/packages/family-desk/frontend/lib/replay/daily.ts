@@ -46,6 +46,8 @@ export const PracticePlanSchema = z.object({
   next_day: z.iso.date().nullable(),
   next_weekday: WeekdaySchema.nullable(),
   next_day_no: finite.int().nullable(),
+  /** Every block day's weekday, day 1 first: the block ladder labels each row with it (D-018). */
+  weekdays: z.array(WeekdaySchema),
   finished: z.boolean(),
   prep: PlanPrepSchema,
 }) satisfies z.ZodType<components["schemas"]["PracticePlanOut"]>;
@@ -130,7 +132,8 @@ export const CandidateSchema = z.object({
   /** The previous session's own RVOL and change %, before or after the open (D-018). */
   prev_rvol: metric,
   prev_change_pct: metric,
-  reported_before_open: z.boolean(),
+  /** `reported` before the open, `none` when the name's report history was read and holds none, null when it was not checked (D-018). */
+  earnings_state: z.enum(["reported", "none"]).nullable(),
   metrics: z.record(z.string(), metric),
   /** A re-scan added it: the list before the scan did not hold it. False on a list no re-scan has touched. */
   new_since_list: z.boolean(),

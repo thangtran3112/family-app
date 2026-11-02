@@ -151,19 +151,6 @@ class ThreadFillsOut(BaseModel):
     fills: list[FillOut]
 
 
-class ClockPauseOut(BaseModel):
-    """Why a running clock stopped: a stop crossed on an open name (`kind: "stop"`, with the name, the stop, the price
-    an Exit would book and `crossing` "cross" or "gap") or the window end (`kind: "close"`)."""
-
-    kind: Literal["stop", "close"]
-    at: datetime
-    symbol: str | None = None
-    stop_price: FiniteFloat | None = None
-    price: FiniteFloat | None = None
-    crossing: Literal["cross", "gap"] | None = None
-    also: list[str] = []
-
-
 class ClockAccountOut(BaseModel):
     """The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its
     cost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. Computed on the server, never past the
@@ -182,23 +169,23 @@ class ThreadClockOut(BaseModel):
     settled before this was built); a client may extrapolate it with `speed` between polls but never owns it."""
 
     thread_id: int
-    state: Literal["no_day", "listed", "paused", "running", "at_close"]
+    state: Literal["no_day", "listed", "paused", "running"]
     day_list_id: int | None
     day_no: int | None
     running: bool
     speed: Literal[1, 2, 5, 10]
     clock: datetime | None
     window_start: datetime | None
-    window_end: datetime | None
+    window_end: datetime | None  # the exchange close: the only time the clock ends on its own
+    focus_end: datetime | None  # where her plan's practice window ends: a mark on the timeline, never a stop
     server_now: datetime
-    pause: ClockPauseOut | None
     account: ClockAccountOut | None
     label: str
 
 
 class ClockIn(BaseModel):
     """Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
-    its UTC offset). Any mix, at least one; a step or jump is forward only and stops at a crossed stop or the close."""
+    its UTC offset). Any mix, at least one; a step or jump is forward only and stops at the close."""
 
     model_config = ConfigDict(extra="forbid")
 

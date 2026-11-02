@@ -106,7 +106,7 @@ export async function shot(page: Page, name: string, tall = true) {
   await page.setViewportSize(size);
 }
 
-/** The workspace's right rail section `section` ("Practice", "Tape"): stacked at 1440, a drawer behind the strip at 1180 (opened here). */
+/** The workspace's right rail section `section` ("Practice", "Signals"): stacked at 1440, a drawer behind the strip at 1180 (opened here). */
 export async function replayRail(page: Page, section: string) {
   if (test.info().project.name !== "desktop-1180") return page.getByRole("complementary", { name: "Replay context" });
   const tab = page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: section });

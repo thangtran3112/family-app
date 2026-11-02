@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRACTICE_COPY } from "../desk/freshness.ts";
 import type { Speed } from "./clock.ts";
 import { problemMessage } from "./setup.ts";
-import { commandThreadClock, extrapolate, loadThreadClock, skipThreadDay, type ClockCommand, type SkipDay, type ThreadClock } from "./threadClock.ts";
+import { commandThreadClock, extrapolate, loadThreadClock, rolledText, skipThreadDay, type ClockCommand, type SkipDay, type ThreadClock } from "./threadClock.ts";
 
 // The Summary's view of the day thread's server-side clock (ADR-0018). RECOMMENDATION, polling: the server settles the clock lazily on
 // every read, so a poll is one idempotent request and needs no connection, and no-lookahead rules out pricing a balance in the browser
@@ -19,6 +19,8 @@ export type ThreadClockApi = {
   clock: ThreadClock | null;
   /** The clock label right now: the server's time moved on by the wall time since the last poll. */
   shown: string | null;
+  /** Set when the market closed on its own since the last answer: the day that ended and where the next one stands. Cleared once the next day starts. */
+  rolled: string | null;
   /** Counts up whenever the server's clock or state changed, so a screen that prices things at the clock can read again. */
   revision: number;
   loading: boolean;
@@ -44,7 +46,9 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(threadId !== null);
+  const [rolled, setRolled] = useState<string | null>(null);
   const seen = useRef<string>("");
+  const day = useRef<{ id: number; no: number | null } | null>(null);
   const alive = useRef(true);
 
   const take = useCallback((clock: ThreadClock) => {
@@ -59,11 +63,24 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     }
   }, []);
 
+  // The market closing is not a button: the server ends the day and opens the next. An answer whose open day is another one than the last
+  // answer's (and that no Skip day of this screen caused) is that roll, and the screen says so once.
+  const follow = useCallback(
+    (clock: ThreadClock) => {
+      const before = day.current;
+      if (before !== null && clock.day_list_id !== before.id) setRolled(rolledText(before.no, clock));
+      else if (clock.state === "running" || clock.state === "paused") setRolled(null);
+      day.current = clock.day_list_id === null ? null : { id: clock.day_list_id, no: clock.day_no };
+      take(clock);
+    },
+    [take],
+  );
+
   const read = useCallback(
     async (signal?: AbortSignal) => {
       if (threadId === null) return;
       try {
-        take(await loadThreadClock(threadId, { signal }));
+        follow(await loadThreadClock(threadId, { signal }));
       } catch {
         if (alive.current && !signal?.aborted) {
           setError(PRACTICE_COPY.clockLoadError);
@@ -71,7 +88,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
         }
       }
     },
-    [threadId, take],
+    [threadId, follow],
   );
 
   useEffect(() => {
@@ -107,7 +124,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       if (threadId === null) return false;
       setBusy(true);
       try {
-        take(await commandThreadClock(threadId, body));
+        follow(await commandThreadClock(threadId, body));
         return true;
       } catch (failure) {
         if (alive.current) setError(problemMessage(failure, PRACTICE_COPY.clockActionError));
@@ -116,7 +133,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
         if (alive.current) setBusy(false);
       }
     },
-    [threadId, take],
+    [threadId, follow],
   );
 
   const skipDay = useCallback(async (): Promise<SkipDay | null> => {
@@ -124,6 +141,8 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     setBusy(true);
     try {
       const result = await skipThreadDay(threadId);
+      day.current = result.clock.day_list_id === null ? null : { id: result.clock.day_list_id, no: result.clock.day_no };
+      setRolled(null);
       take(result.clock);
       return result;
     } catch (failure) {
@@ -140,6 +159,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     () => ({
       clock: clockNow,
       shown,
+      rolled,
       revision,
       loading,
       error,
@@ -155,6 +175,6 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       skipDay,
       refresh: () => void read(),
     }),
-    [clockNow, shown, revision, loading, error, busy, command, skipDay, read],
+    [clockNow, shown, rolled, revision, loading, error, busy, command, skipDay, read],
   );
 }

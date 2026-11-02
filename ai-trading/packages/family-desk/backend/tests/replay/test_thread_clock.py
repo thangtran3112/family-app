@@ -1,10 +1,12 @@
 """The day-trade thread's server-side clock (ADR-0018): it runs on wall time with nobody there, settles lazily on every
-read, stops at a crossed stop and at the close, steps and jumps forward only, carries the account at the clock, lets a
-name she is on follow it without changing the away rules, and Skip day runs to the close and opens the next day.
-Real Postgres; the synthetic world of `tests/daily_world.py` (GAPPER 110 from the open, FLAT 50 all day). The wall
-clock is a list the test moves, injected as `Services.now`, so "the user is logged out for an hour" is one line.
+read, never stops for a crossed stop or for her own practice window, runs to the exchange close and rolls the day over
+there, steps and jumps forward only, carries the account at the clock, lets a name she is on follow it without changing
+the away rules, and Skip day runs to the close and opens the next day.
+Real Postgres; the synthetic world of `tests/daily_world.py` (GAPPER 110 from the open to 11:30, then 100; FLAT 50 all
+day). The wall clock is a list the test moves, injected as `Services.wall`, so "the user is logged out for an hour" is
+one line.
 
-The window is 09:30 to 11:30 ET on 2026-09-28."""
+Her practice window is 09:30 to 11:30 ET on 2026-09-28: a focus mark. The market runs 09:30 to 16:00."""
 
 from datetime import timedelta
 
@@ -84,7 +86,7 @@ def test_a_running_clock_moves_with_wall_time_while_nobody_is_there(db_session, 
     wall[0] += timedelta(minutes=10)
     back = _read(db_session, user_id, svc, thread_id)
     assert back["clock"] == _at("09:30") + pd.Timedelta(minutes=50) and back["state"] == "running"
-    assert back["server_now"] == wall[0] and back["pause"] is None
+    assert back["server_now"] == wall[0] and "pause" not in back
     assert plan_mod.get_day_list(db_session, user_id, row.id).revealed_through == back["clock"]  # stored, not computed
 
     # Reading twice at the same instant moves nothing (the settle is idempotent), and a pause freezes the settled time.
@@ -109,36 +111,64 @@ def test_a_speed_change_settles_the_time_that_passed_at_the_old_speed(db_session
     assert caught.value.path == "speed"
 
 
-def test_the_clock_stops_at_the_close_and_the_day_is_not_ended_for_her(db_session, user_id, svc, wall) -> None:
-    thread_id, row, _ = _started(db_session, user_id, svc)
-    _control(db_session, user_id, svc, thread_id, running=True, speed=10)
-    wall[0] += timedelta(hours=3)  # nobody home; ten hours of market at 10x
-    out = _read(db_session, user_id, svc, thread_id)
-    assert out["clock"] == _at("11:30") == out["window_end"]
-    assert (out["state"], out["running"], out["pause"]["kind"]) == ("at_close", False, "close")
-    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "practicing"  # she ends it, or skips it
-    with pytest.raises(ReplayProblem) as caught:
-        _control(db_session, user_id, svc, thread_id, running=True)
-    assert caught.value.status == 409 and caught.value.path == "running"
-
-
-def test_a_crossed_stop_stops_the_clock_while_she_is_away_and_play_continues_past_it(
+def test_the_clock_runs_past_her_window_to_the_close_and_the_day_rolls_over(
     db_session, user_id, svc, wall, world
 ) -> None:
+    _bend(world, "GAPPER", "10:00", None, open=113.0, high=113.0, low=113.0, close=113.0)
+    thread_id, row, gapper = _started(db_session, user_id, svc)
+    bought = _mark(db_session, user_id, svc, gapper.id, "long_entry", shares=10)["mark"]["price"]
+    started = _read(db_session, user_id, svc, thread_id)
+    assert started["window_end"] == _at("16:00")  # the market's close
+    assert started["focus_end"] == _at("11:30")  # her window: a mark, not a stop
+
+    _control(db_session, user_id, svc, thread_id, running=True, speed=10)
+    wall[0] += timedelta(minutes=18)  # 180 market minutes at 10x: an hour past her 11:30 mark
+    past = _read(db_session, user_id, svc, thread_id)
+    assert (past["clock"], past["state"], past["running"]) == (_at("12:30"), "running", True)
+    assert clock_mod.roll(db_session, user_id, thread_id, svc) is None  # short of the close: nothing to roll
+    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "practicing"
+
+    wall[0] += timedelta(hours=3)  # nobody home: the market ran into the close
+    opened = clock_mod.roll(db_session, user_id, thread_id, svc)
+    db_session.commit()
+    assert opened is not None and opened.day_list is not None
+    ended = plan_mod.get_day_list(db_session, user_id, row.id)
+    assert ended.status == "ended" and ended.revealed_through == _at("16:00") and ended.clock_running is False
+    (booked,) = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
+    assert (booked.shares, float(booked.exit_price)) == (10, 113.0)  # flattened at the close
+    assert float(booked.pnl_usd) == round(10 * (113.0 - bought), 2)
+    assert opened.day_list.day_no == 2 and opened.day_list.status == "listed"
+    assert opened.day_list.clock_speed == 10  # the speed carries over
+    now = _read(db_session, user_id, svc, thread_id)
+    assert (now["state"], now["day_no"], now["clock"]) == ("listed", 2, None)
+    assert clock_mod.roll(db_session, user_id, thread_id, svc) is None  # nothing left to roll: the next day is listed
+
+
+def test_a_paused_clock_never_rolls_and_a_step_to_the_close_does(db_session, user_id, svc, wall) -> None:
+    thread_id, row, _ = _started(db_session, user_id, svc)
+    wall[0] += timedelta(hours=9)  # paused: wall time passing moves nothing
+    assert clock_mod.roll(db_session, user_id, thread_id, svc) is None
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("09:30")
+
+    jumped = _control(db_session, user_id, svc, thread_id, to=_at("17:00").to_pydatetime())
+    assert jumped["clock"] == _at("16:00") and jumped["running"] is False  # the close, not her 11:30 mark
+    assert _control(db_session, user_id, svc, thread_id, running=True)["running"] is False  # nothing left to run
+    assert clock_mod.roll(db_session, user_id, thread_id, svc) is not None
+    db_session.commit()
+    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "ended"
+
+
+def test_a_crossed_stop_flags_the_position_and_the_clock_runs_on(db_session, user_id, svc, wall, world) -> None:
     _bend(world, "FLAT", "10:20", "10:21", low=48.5)  # crosses a stop at 49 in the 10:20 bar
     thread_id, row, _ = _started(db_session, user_id, svc, "FLAT")
     flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
     _mark(db_session, user_id, svc, flat.id, "long_entry", shares=10, stopPrice=49.0)
     _control(db_session, user_id, svc, thread_id, running=True, speed=10)
-    wall[0] += timedelta(hours=1)
+    wall[0] += timedelta(minutes=20)  # 200 market minutes: well past the 10:21 crossing
     out = _read(db_session, user_id, svc, thread_id)
-    assert out["clock"] == _at("10:21") and out["running"] is False and out["state"] == "paused"
-    assert (out["pause"]["kind"], out["pause"]["symbol"], out["pause"]["stop_price"]) == ("stop", "FLAT", 49.0)
+    assert (out["clock"], out["running"], out["state"]) == (_at("12:50"), True, "running")  # time did not stop
     assert _row(db_session, flat.id).stop_hit_at == _at("10:21")  # the stop never exits: it flags the position
-    resumed = _control(db_session, user_id, svc, thread_id, running=True)
-    assert resumed["running"] is True and resumed["pause"] is None
-    wall[0] += timedelta(hours=1)
-    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("11:30")  # the flagged stop does not pause twice
+    assert len(session_mod.open_positions(db_session, row.id)) == 1  # and the position is still open
 
 
 def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_is_booked_at_the_day_end(
@@ -153,7 +183,7 @@ def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_i
     db_session.commit()
     _control(db_session, user_id, svc, thread_id, running=True, speed=10)
     wall[0] += timedelta(hours=1)  # logged out: nobody syncs FLAT while the market runs to the close
-    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("11:30")
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("16:00")
 
     ended, _ = clock_mod.skip_day(db_session, user_id, thread_id, svc)
     db_session.commit()
@@ -162,7 +192,7 @@ def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_i
     assert (order["status"], order["fill_price"], order["reason"]) == ("filled", 49.5, None)  # not "The day ended"
     (entry, exit_) = session_mod._load_marks(db_session, flat.id)
     assert (entry.kind, entry.price, entry.at) == ("long_entry", 49.5, _at("10:21"))  # at its bar, inside the span
-    assert (exit_.kind, exit_.price, exit_.at) == ("long_exit", 50.0, _at("11:30"))  # flattened at the close
+    assert (exit_.kind, exit_.price, exit_.at) == ("long_exit", 50.0, _at("16:00"))  # flattened at the close
     (booked,) = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
     assert (booked.shares, float(booked.pnl_usd)) == (10, 5.0)  # the balance moved without her
 
@@ -210,7 +240,8 @@ def test_step_and_jump_move_the_clock_forward_only_and_a_running_clock_keeps_run
     assert _control(db_session, user_id, svc, thread_id, step="bar")["clock"] == _at("09:35")
     assert _control(db_session, user_id, svc, thread_id, to=_at("09:50").to_pydatetime())["clock"] == _at("09:50")
     assert _control(db_session, user_id, svc, thread_id, to=_at("09:40").to_pydatetime())["clock"] == _at("09:50")
-    assert _control(db_session, user_id, svc, thread_id, to=_at("13:00").to_pydatetime())["clock"] == _at("11:30")
+    assert _control(db_session, user_id, svc, thread_id, to=_at("13:00").to_pydatetime())["clock"] == _at("13:00")
+    assert _control(db_session, user_id, svc, thread_id, to=_at("17:00").to_pydatetime())["clock"] == _at("16:00")
     with pytest.raises(ReplayProblem) as caught:
         _control(db_session, user_id, svc, thread_id, to=pd.Timestamp("2026-09-28T10:00:00").to_pydatetime())
     assert caught.value.message == "Send the time with its UTC offset"
@@ -311,7 +342,7 @@ def test_skip_day_runs_to_the_close_flattens_the_position_and_opens_the_next_day
 
     ended, opened = clock_mod.skip_day(db_session, user_id, thread_id, svc)
     db_session.commit()
-    assert ended.id == row.id and ended.status == "ended" and ended.revealed_through == _at("11:30")
+    assert ended.id == row.id and ended.status == "ended" and ended.revealed_through == _at("16:00")
     ledger = db_session.query(PracticeLedger).filter_by(thread_id=thread_id).all()
     pnl = round(10 * (113.0 - bought), 2)
     assert [(e.shares, float(e.exit_price), float(e.pnl_usd)) for e in ledger] == [
@@ -330,13 +361,13 @@ def test_skip_day_runs_to_the_close_flattens_the_position_and_opens_the_next_day
     assert db_session.query(PracticeLedger).filter_by(thread_id=thread_id).count() == 1
 
 
-def test_skip_day_runs_through_a_crossed_stop_and_ends_a_running_clock(db_session, user_id, svc, wall, world) -> None:
+def test_skip_day_ends_a_running_clock_with_a_flagged_stop(db_session, user_id, svc, wall, world) -> None:
     _bend(world, "FLAT", "10:20", "10:21", low=48.5)
     thread_id, row, _ = _started(db_session, user_id, svc, "FLAT")
     flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
     _mark(db_session, user_id, svc, flat.id, "long_entry", shares=10, stopPrice=49.0)
     _control(db_session, user_id, svc, thread_id, running=True)
     ended, _ = clock_mod.skip_day(db_session, user_id, thread_id, svc)
-    assert ended.status == "ended" and ended.clock_running is False and ended.revealed_through == _at("11:30")
+    assert ended.status == "ended" and ended.clock_running is False and ended.revealed_through == _at("16:00")
     assert float(db_session.query(PracticeLedger).filter_by(thread_id=thread_id).one().exit_price) == 50.0
-    assert DAYS[0] == row.day  # the stop crossed at 10:21 did not pause the skip
+    assert DAYS[0] == row.day  # the stop crossed at 10:21 did not matter to the skip

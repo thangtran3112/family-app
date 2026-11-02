@@ -19,7 +19,7 @@ export function DayLeftPanel({ list }: DayLeftPanelProps) {
         <details className={styles.sideSection} open={blockOpenByDefault(list.of) ? true : undefined}>
           <summary className={styles.sideSummary}><h2 className={styles.sideTitle}>{practiceText("dayBlockTitle", { of: list.of })}</h2></summary>
           <ul className={styles.ladder}>
-            {blockLadder(list, list.plan.day_offset).map((row) => (
+            {blockLadder(list, list.plan.day_offset, list.plan.weekdays).map((row) => (
               <li key={row.n} className={styles.ladderRow} data-state={row.state}>
                 <span className={styles.ladderMark} aria-hidden="true">{row.state === "ended" ? "✓" : row.state === "open" ? "●" : "○"}</span>
                 <span className={styles.ladderDay}>{row.weekday ? `Day ${row.n + list.plan.day_offset} · ${row.weekday}` : `Day ${row.n + list.plan.day_offset}`}</span>
