@@ -2,7 +2,7 @@
 
 import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { HUB_SWING_COPY, startNoteSpot, swingCurveLayout, swingCurveSummary, type CurveLabel } from "@/lib/replay/hubSwing";
+import { HUB_SWING_COPY, endLabelSpots, placeLabel, startNoteSpot, swingCurveLayout, swingCurveSummary, type CurveLabel } from "@/lib/replay/hubSwing";
 import type { Box } from "@/lib/replay/threadChart";
 import type { SwingState } from "@/lib/replay/threads";
 import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
@@ -21,19 +21,18 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
   const { plot, now } = layout;
   const bottom = plot.y + plot.height;
   const summary = swingCurveSummary(state.equity_series, startingBalance, formatBalance);
-  // The higher figure's label sits above its point and the other below, so two close lines do not print on each other. A label
-  // never goes below a point that rests on the bottom tick: that is the row of the day labels ("Balance $50,000.00" ran into "D5", D-123).
+  // The two series as lines of points: the end labels and the start note keep off them (D-181) as well as off each other.
+  const lines = [layout.days.map((point) => ({ x: point.x, y: point.equityY })), layout.days.map((point) => ({ x: point.x, y: point.balanceY }))];
+  // The higher figure's label prefers a spot above its point and the other below, so two close lines do not print on each other; each
+  // label then keeps inside the plot box and off both series, so a point on the bottom tick never pushes one into the day labels (D-123).
   const equityAbove = now !== null && now.equity >= now.balance;
-  const below = (y: number) => y + 16 < bottom - 6;
-  const endLabels: CurveLabel[] =
-    now === null
-      ? []
-      : [
-          { x: now.x - 8, y: now.equityY + (!equityAbove && below(now.equityY) ? 16 : -8), text: `${HUB_SWING_COPY.curveEquity} ${formatBalance(now.equity)}`, anchor: "end" },
-          { x: now.x - 8, y: now.balanceY + (equityAbove && below(now.balanceY) ? 16 : -8), text: `${HUB_SWING_COPY.curveBalance} ${formatBalance(now.balance)}`, anchor: "end" },
-        ];
-  // The start note moves off the end labels when the balance sits near its start ("Starting balance" printed over "Balance $25,000.00" on a live thread).
-  const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, endLabels);
+  const equityLabel =
+    now === null ? null : placeLabel(endLabelSpots({ x: now.x, y: now.equityY }, `${HUB_SWING_COPY.curveEquity} ${formatBalance(now.equity)}`, equityAbove), { plot, lines });
+  const balanceLabel =
+    now === null ? null : placeLabel(endLabelSpots({ x: now.x, y: now.balanceY }, `${HUB_SWING_COPY.curveBalance} ${formatBalance(now.balance)}`, !equityAbove), { plot, lines, others: equityLabel ? [equityLabel] : [] });
+  const endLabels: CurveLabel[] = [equityLabel, balanceLabel].filter((label): label is CurveLabel => label !== null);
+  // The start note moves off the end labels and the lines ("Starting balance" printed over "Balance $25,000.00" on a live thread, and the dashed Equity line and its markers crossed it).
+  const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, endLabels, lines);
 
   return (
     <div className={styles.stack}>
@@ -58,11 +57,11 @@ export function SwingEquityCurve({ state, startingBalance }: { state: SwingState
         {layout.xTicks.map((tick, index) => (
           <text key={tick.label} x={tick.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{tick.label}</text>
         ))}
-        {endLabels[0] && (
-          <text x={endLabels[0].x} y={endLabels[0].y} textAnchor="end" className={styles.equityLabel}>{endLabels[0].text}</text>
+        {equityLabel && (
+          <text x={equityLabel.x} y={equityLabel.y} textAnchor={equityLabel.anchor} className={styles.equityLabel}>{equityLabel.text}</text>
         )}
-        {endLabels[1] && (
-          <text x={endLabels[1].x} y={endLabels[1].y} textAnchor="end" className={styles.nowLabel}>{endLabels[1].text}</text>
+        {balanceLabel && (
+          <text x={balanceLabel.x} y={balanceLabel.y} textAnchor={balanceLabel.anchor} className={styles.nowLabel}>{balanceLabel.text}</text>
         )}
       </MiniChartFrame>
       <ul role="list" className={styles.keyList}>
