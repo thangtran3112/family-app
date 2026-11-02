@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
 import type { components } from "../api/openapi.js";
-import { OpenTradeSchema, ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
+import { MarketSchema, OpenTradeSchema, ReplayStampSchema, SessionStatusSchema } from "./schemas.ts";
 import { ThreadBriefSchema, ThreadSummarySchema } from "./threads.ts";
 
 // Response shapes of the daily-list practice endpoints (02o-b v1), checked against the generated OpenAPI the way
@@ -271,7 +271,6 @@ const DayJournalSchema = z.object({
 export const ReviewRowSchema = z.object({
   symbol: z.string(),
   list_price: finite,
-  window_end_price: metric,
   move_pct: metric,
   close_price: metric,
   close_move_pct: metric,
@@ -290,7 +289,6 @@ const SelectionSchema = z.object({
 
 const ReviewSchema = z.object({
   day: z.iso.date(),
-  dates_hidden: z.boolean(),
   window_end: timestamp,
   of: finite.int(),
   rows: z.array(ReviewRowSchema),
@@ -330,6 +328,9 @@ export const DayListSchema = z.object({
   watch: z.array(StarSchema),
   watch_check: WatchCheckSchema,
   clock: timestamp.nullable(),
+  /** The thread time of this read, uncapped (ADR-0022); the day list's time label. Null for a list read outside a running thread. */
+  thread_time: timestamp.nullish(),
+  market: MarketSchema.nullish(),
   sessions: z.array(DaySessionSchema),
   held_elsewhere: z.array(HeldElsewhereSchema),
   day_pnl: DayPnlSchema,

@@ -19,8 +19,6 @@ export type SetupDraft = {
   symbol: string;
   /** "YYYY-MM-DD", or "" until a day is picked. */
   day: string;
-  /** Picked from the notable list while dates are hidden: the date stays masked and the session is stored with `hideDate: "yes"`. */
-  dayHidden: boolean;
   session: "regular" | "extended";
   from: string;
   to: string;
@@ -31,7 +29,6 @@ export type SetupDraft = {
 export const defaultDraft = (): SetupDraft => ({
   symbol: "",
   day: "",
-  dayHidden: false,
   session: "regular",
   ...REGULAR_WINDOW,
   interval: "5m",
@@ -43,13 +40,10 @@ export function withSession(draft: SetupDraft, session: SetupDraft["session"]): 
   return { ...draft, session, ...(session === "regular" ? REGULAR_WINDOW : EXTENDED_WINDOW) };
 }
 
-/** A notable-day row fills symbol and day; while dates are hidden the day is masked and flagged. */
-export function withNotableDay(draft: SetupDraft, day: Pick<ReplayDay, "symbol" | "day">, datesHidden: boolean): SetupDraft {
-  return { ...draft, symbol: day.symbol, day: day.day, dayHidden: datesHidden };
-}
+/** A notable-day row fills symbol and day. */
+export const withNotableDay = (draft: SetupDraft, day: Pick<ReplayDay, "symbol" | "day">): SetupDraft => ({ ...draft, symbol: day.symbol, day: day.day });
 
-/** A date she typed is shown, never masked. */
-export const withTypedDay = (draft: SetupDraft, day: string): SetupDraft => ({ ...draft, day, dayHidden: false });
+export const withTypedDay = (draft: SetupDraft, day: string): SetupDraft => ({ ...draft, day });
 
 export function toggleArmed(armed: readonly ArmedRef[], ref: ArmedRef): ArmedRef[] {
   const has = armed.some((item) => item.source === ref.source && item.id === ref.id);
@@ -74,7 +68,7 @@ export function draftToSpec(draft: SetupDraft): unknown {
     shares: SESSION_SHARES,
     armed: draft.armed.map(({ source, id }) => ({ source, id })),
     plan: NEUTRAL_PLAN,
-    hideDate: draft.dayHidden ? "yes" : "no",
+    hideDate: "no", // the contract still wants the field; a date is always shown (ADR-0022), so the server ignores it
   };
 }
 
@@ -96,7 +90,6 @@ export function fieldOfPath(path: string): SetupField {
   switch (first) {
     case "symbol": case "day": case "window": case "interval": case "armed": return first;
     case "session": return "window";
-    case "hideDate": return "day";
     default: return "form";
   }
 }

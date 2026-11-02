@@ -33,9 +33,9 @@ import {
   trustedSwingState,
   type PrepStep,
 } from "@/lib/replay/boardView";
-import { isStarred, peekDailyBars, peekOffsets, toggledStars } from "@/lib/replay/dayView";
+import { isStarred, toggledStars } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
-import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingBoardTitle, swingDatesHidden } from "@/lib/replay/swing";
+import { boardCellText, boardCellTone, earningsText, freeCashText, holdsOpenText, passDayPrompt, swingBoardTitle } from "@/lib/replay/swing";
 import { formatBalance } from "@/lib/replay/threadView";
 import { continueSwingThread, endAnyDay, isSwingDayList, loadAnyDayList, patchAnyDayList, type BoardRow, type SwingDayList, type SwingPeek, type SwingPlan } from "@/lib/replay/swingApi";
 import dayStyles from "../day/day.module.css";
@@ -76,9 +76,8 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
 
   const ended = list.status === "ended";
   const threadId = list.thread?.id ?? list.plan.thread_id;
-  // The thread knows the dates rule and where the calendar goes next. Until it answers, dates stay hidden.
+  // The thread knows where the calendar goes next.
   const thread = useDeskQuery(`swing-thread:${threadId}`, (signal) => loadThread(threadId ?? 0, { signal }), { enabled: threadId !== null });
-  const hidden = swingDatesHidden(thread.data?.thread.swing);
   // Right after Pass the thread is read again; until that answer lands the old one (still on Day N) offers nothing.
   const swingState = trustedSwingState(thread);
 
@@ -87,7 +86,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   });
   const peekData = peek.data !== null && isSwingDayList(peek.data) ? peek.data.peek : null;
 
-  useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? dayOpenClock(list.day) });
+  useReportPracticeChrome({ day: list.day, playhead: list.clock ?? dayOpenClock(list.day) });
 
   useEffect(() => {
     mounted.current = true;
@@ -203,7 +202,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
       <PracticeTabs threadId={threadId} active="day" mode="swing" />
       <header className={dayStyles.header}>
         <div className={dayStyles.titleRow}>
-          <h1 ref={titleRef} tabIndex={-1} className={dayStyles.title}>{swingBoardTitle(list, hidden)}</h1>
+          <h1 ref={titleRef} tabIndex={-1} className={dayStyles.title}>{swingBoardTitle(list)}</h1>
           <Badge tone="neutral">{practiceText("swingWeek", { n: list.week_no })}</Badge>
           <Badge tone="neutral">{ended ? PRACTICE_COPY.swingDayOver : PRACTICE_COPY.swingAsOfPriorClose}</Badge>
         </div>
@@ -305,7 +304,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
         {!ended && (
           <section className={dayStyles.section} aria-label="Peek">
             <h2 className={dayStyles.sectionTitle}>{PRACTICE_COPY.dayPeek}</h2>
-            <BoardPeek symbol={selected} peek={peekData} loading={peek.loading} failed={peek.data === null && peek.error !== null} onRetry={peek.refresh} hideDates={hidden} />
+            <BoardPeek symbol={selected} peek={peekData} loading={peek.loading} failed={peek.data === null && peek.error !== null} onRetry={peek.refresh} />
           </section>
         )}
       </div>
@@ -420,17 +419,13 @@ function BoardPeek({
   loading,
   failed,
   onRetry,
-  hideDates,
 }: {
   symbol: string | null;
   peek: SwingPeek | null;
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
-  hideDates: boolean;
 }) {
-  const bars = useMemo(() => (peek ? peekDailyBars(peek.daily, hideDates) : []), [peek, hideDates]);
-  const rowLabels = useMemo(() => (hideDates ? peekOffsets(bars.length) : undefined), [bars, hideDates]);
   const levels = useMemo<MarketChartLevel[]>(
     () => (peek ? PEEK_LEVELS.map((key) => ({ label: LEVEL_LABELS[key], price: peek.levels[key] ?? null, style: "dotted" as const })) : []),
     [peek],
@@ -441,7 +436,7 @@ function BoardPeek({
   return (
     <div className={dayStyles.peek}>
       <h3 className={dayStyles.peekTitle}>{peek.symbol}</h3>
-      <MarketChart symbol={peek.symbol} interval="1d" bars={bars} quality="eod" asOf={null} levels={levels} volume hideDates={hideDates} rowLabels={rowLabels} chrome="bare" height={260} />
+      <MarketChart symbol={peek.symbol} interval="1d" bars={peek.daily} quality="eod" asOf={null} levels={levels} volume chrome="bare" height={260} />
       <p className={dayStyles.muted}>{PRACTICE_COPY.swingBoardPeek}</p>
     </div>
   );

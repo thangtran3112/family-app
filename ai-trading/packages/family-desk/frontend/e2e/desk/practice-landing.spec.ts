@@ -121,15 +121,18 @@ test.describe("Practice landing", () => {
     // No "Preset" pills: a filter row is its checkbox, its name and its rule (D-076, M-06).
     await expect(filters).not.toContainText(/Preset|Yours/);
 
-    // The rest of the form is on screen: dates (with the recorded-day note), days, hide dates, list time and size, interval, window.
+    // The rest of the form is on screen: dates (with the recorded-day note), days, list time and size, interval, window.
     await expect(dialog.getByTestId("first-day-note")).toBeVisible();
     await expect(dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio")).toHaveText(["5", "10", "20", "30"]);
     await expect(dialog.getByText("Names a day"), "a day opens any list name: no cap to pick").toHaveCount(0);
-    await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planHideDates }).getByRole("radio", { name: "Yes" })).toBeChecked();
+    await expect(dialog.getByText(/hide dates/i), "ADR-0022: no Hide dates choice").toHaveCount(0);
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt }).getByRole("radio")).toHaveCount(3);
     await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planInterval })).toBeVisible();
-    for (const label of [PRACTICE_COPY.planWindowFrom, PRACTICE_COPY.planWindowTo]) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
+    await expect(dialog.getByLabel(PRACTICE_COPY.planWindowFrom, { exact: true })).toBeVisible();
+    // The day has no end of its own to pick, and no hidden-day or practice-window words anywhere in the form.
+    await expect(dialog.getByLabel(/focus until/i)).toHaveCount(0);
+    await expect(dialog).not.toContainText(/practice window|hidden day|show date/i);
     // D-076: no Arm strategies, no Risk plan.
     await expect(dialog.getByRole("group", { name: "Arm strategies" })).toHaveCount(0);
     await expect(dialog.getByLabel("Max loss ($)")).toHaveCount(0);
@@ -188,16 +191,17 @@ test.describe("Practice landing", () => {
     }
     await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceNone);
     await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceMeaning);
-    // The daily plan of this thread, with its armed filter; the dates stay hidden.
+    // The daily plan of this thread, with its armed filter; nothing is hidden (ADR-0022).
     const plan = page.getByRole("region", { name: "Daily list plan" });
     await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 }); // the data is prepared in the background first
     await expect(plan).toContainText("Any close");
-    await expect(page.locator("body")).not.toContainText("2026-09-25");
+    await expect(page.locator("body")).not.toContainText(/hidden day|show date|dates hidden/i);
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
     await expectCleanScreen(page);
 
     await openFirstDay(page);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri 2026-09-25"); // the actual date of the day (ADR-0022)
+    await expect(page.getByTestId("day-clock-time")).toHaveText(/^[A-Z][a-z]{2} 2026-\d{2}-\d{2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // and the thread's actual date and time
     // The day screen wears the thread's tab strip: Summary is the way back to the thread's page, the back link goes to the thread list.
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", "/practice");
     await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
@@ -341,7 +345,7 @@ test.describe("New plan modal redesign", () => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
     const groups = await segmentedGroups(dialog);
-    expect(groups.length).toBeGreaterThanOrEqual(5); // mode, days, hide dates, list time, interval
+    expect(groups.length).toBeGreaterThanOrEqual(4); // mode, days, list time, interval
     for (const group of groups) {
       expect(group.overflow, `${group.name}: scrollWidth <= clientWidth`).toBeLessThanOrEqual(0);
       expect(group.poke, `${group.name}: no button outside its box`).toBeLessThanOrEqual(0.5);
@@ -356,15 +360,15 @@ test.describe("New plan modal redesign", () => {
     expect(firstDay.x).toBeCloseTo(listSize.x, 0);
     // D-152: a segmented control is as wide as its column, so its edges meet the text controls' above and below it.
     const group = async (name: string) => (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
-    const to = (await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).boundingBox())!;
-    for (const name of [PRACTICE_COPY.planDays, PRACTICE_COPY.planInterval]) {
-      expect((await group(name)).width, `${name}: as wide as the Window to box in its column`).toBeCloseTo(to.width, 0);
-      expect((await group(name)).x, `${name}: starts at the right column`).toBeCloseTo(to.x, 0);
-    }
+    const days = await group(PRACTICE_COPY.planDays);
+    const interval = await group(PRACTICE_COPY.planInterval);
+    expect(interval.width, "Days and Chart interval are one column wide").toBeCloseTo(days.width, 0);
+    expect(interval.x, "Days and Chart interval start at the same edge").toBeCloseTo(days.x, 0);
+    expect(days.x, "the right column starts after the First day box").toBeGreaterThan(firstDay.x + firstDay.width);
   });
 
   // D-152: the swing settings sit on the same two-column grid, so each segmented control is as wide as its column and starts at
-  // that column's edge. The grid fills row by row (First day | Sessions, Hide dates | Interval, Risk per hold | Tape), so the first
+  // that column's edge. The grid fills row by row (First day | Sessions, Interval | Risk per hold, Tape), so the first
   // column's edge is the First day box and the second's is the Sessions box.
   test("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
     const dialog = await openNewPlan(page);
@@ -374,9 +378,8 @@ test.describe("New plan modal redesign", () => {
     expect(right.width, "two equal columns").toBeCloseTo(left.width, 0);
     expect(right.x, "the Sessions box is in the second column").toBeGreaterThan(left.x + left.width);
     const columns = [
-      { name: PRACTICE_COPY.swingHideDates, column: left, side: "first" },
-      { name: PRACTICE_COPY.swingInterval, column: right, side: "second" },
-      { name: PRACTICE_COPY.swingTape, column: right, side: "second" },
+      { name: PRACTICE_COPY.swingInterval, column: left, side: "first" },
+      { name: PRACTICE_COPY.swingTape, column: left, side: "first" },
     ];
     for (const { name, column, side } of columns) {
       const box = (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;

@@ -3,7 +3,7 @@ import { expect, expectBacktestChrome, expectCleanScreen, openDesk, prepareDesk,
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { formatBalance, formatDayResult } from "../../lib/replay/threadView.ts";
 import { START_BUTTON, clickNewPlan, createThreadByApi, openNewPlan, openRow, THREAD_URL } from "./hub-helpers";
-import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, backToDayList, createSwingThread, enterByApi, expectNoDates, get, markByApi, openNextDay, placeOrder, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
+import { DAY_ISO, FIRST_DAY, REPLAY, SYMBOLS, backToDayList, createSwingThread, enterByApi, get, markByApi, openNextDay, placeOrder, railSection, replayRail, send, shot, swingRow, watchSwingAnswers, type Json } from "./swing-helpers";
 
 const BOARD_URL = /\/practice\/day\?id=\d+/;
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
@@ -94,9 +94,8 @@ test.describe("Swing practice", () => {
         { timeout: 60_000 },
       )
       .toBe(true);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 15 · Mon");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 15 · Mon 2026-09-14");
     await expect(page.getByRole("table", { name: "Universe" }).getByRole("row")).toHaveCount(13);
-    await expectNoDates(page);
   });
   test("Day 1: the board, two stars, the workspace, a long and a short, the messages, and End day", async ({ page, context }) => {
     test.setTimeout(120_000);
@@ -106,9 +105,9 @@ test.describe("Swing practice", () => {
     await swingRow(page).getByRole("button", { name: "Continue Day 1" }).click();
     await page.waitForURL(BOARD_URL);
 
-    // The board: 12 names with their source tags, the survivorship label, no review, no list chips, no dates.
-    // D-139: the title is the day and weekday; the week and the state are chips and the money is in the strip below.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Day 1 of 15 · Mon");
+    // The board: 12 names with their source tags, the survivorship label, no review, no list chips.
+    // D-139: the title is the day, weekday and date; the week and the state are chips and the money is in the strip below.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Day 1 of 15 · Mon 2026-09-14");
     await expect(page.getByText("Week 1", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("as of the prior close", { exact: true })).toBeVisible();
     const moneyStrip = page.getByRole("group", { name: "Practice thread" });
@@ -122,7 +121,6 @@ test.describe("Swing practice", () => {
     await expect(page.getByText(/^List at /)).toHaveCount(0);
     await expect(page.getByText(PRACTICE_COPY.dayNoNames)).toHaveCount(0);
     await expect(page.getByText("No practice holds open")).toBeVisible();
-    await expectNoDates(page);
     await shot(page, "swing-board");
     await expectCleanScreen(page);
 
@@ -139,7 +137,6 @@ test.describe("Swing practice", () => {
     await page.getByRole("button", { name: "Start Day 1" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
-    await expectNoDates(page);
 
     // The day strip: the two focus names; the tape is off and says so.
     const strip = page.getByRole("region", { name: "Day strip" });
@@ -147,7 +144,7 @@ test.describe("Swing practice", () => {
     await expect(strip.getByRole("button", { name: /^S01, focus name/ })).toHaveAttribute("aria-current", "true");
     await expect(strip.getByRole("button", { name: /^S04, focus name/ })).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.swingTapeOff).first()).toBeVisible();
-    await expect(page.getByText("Day 1 of 15 · Week 1 · Mon")).toBeVisible();
+    await expect(page.getByText("Day 1 of 15 · Week 1 · Mon 2026-09-14")).toBeVisible();
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText("Balance $50,000.00 · Equity $50,000.00 · Free cash $50,000.00");
     await expect(page.getByRole("group", { name: "Practice thread" })).toContainText(PRACTICE_COPY.threadSimulated);
     // M5: every rail section with dollars is labelled SIMULATED (the strip's hold P/L, the plan's week limits).
@@ -172,7 +169,6 @@ test.describe("Swing practice", () => {
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();
     await expect(strip.getByRole("button", { name: /^S01, practice hold/ })).toContainText("Long 100");
     await shot(page, "swing-workspace", false);
-    await expectNoDates(page);
     await expectCleanScreen(page);
 
     // Switch to S04 from the strip (the S01 hold stays open) and enter a short.
@@ -211,7 +207,6 @@ test.describe("Swing practice", () => {
     await confirm.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
     await page.waitForURL(BOARD_URL);
     await expect(page.getByText("Day over", { exact: true }).first()).toBeVisible(); // D-139: the state is a chip beside the title
-    await expectNoDates(page);
     await shot(page, "swing-day-ended");
     const summary = page.getByRole("region", { name: "Day summary" });
     await expect(summary).toContainText("6 · 0"); // six entries, no exit: nothing is credited yet
@@ -235,7 +230,7 @@ test.describe("Swing practice", () => {
     await expect(row).toContainText("2 holds open");
     await row.getByRole("button", { name: "Continue Day 2" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 15 · Tue");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 15 · Tue 2026-09-15");
     const holds = page.getByRole("table", { name: "Practice holds" });
     await expect(holds.getByRole("row")).toHaveCount(3);
 
@@ -250,12 +245,11 @@ test.describe("Swing practice", () => {
     await expect(summary).toContainText("$50,000"); // nothing was exited: the balance did not move
     await expect(summary).toContainText("0 · 0");
     await shot(page, "swing-day-passed");
-    await expectNoDates(page);
 
     // Day 3: a watched day. No star is needed: Start Day 3 opens the first practice hold.
     await page.getByRole("button", { name: "Continue Day 3" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 3 of 15 · Wed");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 3 of 15 · Wed 2026-09-16");
     await page.getByRole("button", { name: "Start Day 3" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
@@ -297,16 +291,14 @@ test.describe("Swing practice", () => {
     const ended = page.getByRole("region", { name: "Day summary" });
     await expect(ended).toContainText("0 · 1");
     await expect(page.getByRole("table", { name: "Practice holds" }).getByRole("row", { name: /^S01/ })).toContainText("Exit Day 3");
-    await expectNoDates(page);
     await shot(page, "swing-day-exit");
 
     // C1: Day 3 has ended but the thread goes on. Its journal (the landing no longer lists sessions: opened by id, the newest S01
-    // one) names the day by number and weekday, in the title, the Practice band and the badge: one date would give every later day's.
+    // one) names the day by number, weekday and date, in the title, the Practice band and the badge.
     const sessions = (await get(context, "/sessions?limit=20")) as Json[];
     await openDesk(page, `/practice/journal?id=${sessions.find((row) => row.symbol === "S01")!.id}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(/^S01 · Day \d of 15 · Week 1 · (Mon|Tue|Wed) · attempt 1 · Practice journal$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/^S01 · Day \d of 15 · Week 1 · (Mon|Tue|Wed) 2026-09-\d\d · attempt 1 · Practice journal$/);
     await expect(page.getByRole("heading", { name: "Chart", level: 2 })).toBeVisible();
-    await expectNoDates(page);
     await shot(page, "swing-session-journal");
   });
   test("the S03 split morning keeps a carried hold's P/L, and the S02 gap through a stop pauses the first advance", async ({ page, context }) => {
@@ -322,7 +314,7 @@ test.describe("Swing practice", () => {
     // Day 6, Mon: S03 splits 2 for 1 before the open. The board says so and the carried hold's P/L did not change.
     const dayList = await openNextDay(context, threadId);
     await openDesk(page, `/practice/day?id=${dayList}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Mon");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Mon 2026-09-21");
     const holds = page.getByRole("table", { name: "Practice holds" });
     const row = holds.getByRole("row", { name: /^S03/ });
     await expect(row).toContainText("200");
@@ -338,8 +330,7 @@ test.describe("Swing practice", () => {
     await page.getByRole("group", { name: "Confirm passing the day" }).getByRole("button", { name: "Pass this day" }).click();
     await page.getByRole("button", { name: "Continue Day 7" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Tue");
-    await expectNoDates(page);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Tue 2026-09-22");
     await page.getByRole("button", { name: "Start Day 7" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "S02", level: 1 })).toBeVisible();
@@ -358,7 +349,6 @@ test.describe("Swing practice", () => {
     await expect(page.getByText(/^Playing at/)).toHaveCount(0);
     await expect(strip.getByRole("button", { name: /^S02, practice hold/ })).toHaveAttribute("data-amber", "true");
     await shot(page, "swing-stop-pause", false);
-    await expectNoDates(page);
     await expectCleanScreen(page);
 
     // Exit books a normal exit at the revealed price.
@@ -380,7 +370,6 @@ test.describe("Swing practice", () => {
     await expect(summary).toContainText("0 · 1");
     await expect(summary.getByRole("list", { name: "Stop crossings" })).toContainText(/^S02 crossed its stop at 09:3\d/);
     await expect(summary).toContainText(formatDayResult(exited.pnl_usd));
-    await expectNoDates(page);
   });
   test("Week 1 review: tiles, tables, heat strip, notes that persist, and Start Week 2; the open week is Week to date", async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -416,7 +405,6 @@ test.describe("Swing practice", () => {
     await expect(page.getByText("Days 1 to 5", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Fixed universe · 12 symbols chosen today/)).toBeVisible();
     await shot(page, "swing-week");
-    await expectNoDates(page);
     await expectCleanScreen(page);
 
     // The tiles and the sentence are the API's own numbers.
@@ -466,8 +454,7 @@ test.describe("Swing practice", () => {
     // Start Week 2 opens Day 6's board.
     await page.getByRole("button", { name: "Start Week 2" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Mon");
-    await expectNoDates(page);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 6 of 15 · Mon 2026-09-21");
 
     // The open week reads "to date": after Day 6 the board links to it.
     await page.getByRole("button", { name: "Pass this day" }).click();
@@ -479,7 +466,6 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("button", { name: /^Start Week/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveCount(0); // Day 7 has no board yet
     await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`); // D-088, D-089: back to the thread's page, not the journal
-    await expectNoDates(page);
 
     // Once Day 7 is open, the same review goes back to its board.
     const dayList7 = await openNextDay(context, threadId);
@@ -487,7 +473,7 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("link", { name: "Back to Day 7" })).toHaveAttribute("href", `/practice/day?id=${dayList7}`);
     await page.getByRole("link", { name: "Back to Day 7" }).click();
     await page.waitForURL(BOARD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Tue");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 7 of 15 · Tue 2026-09-22");
   });
   test("acceptance: nothing past the day clock reaches the browser, a carried hold hand-checks, and the thread closes at the last close", async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -521,11 +507,10 @@ test.describe("Swing practice", () => {
     await toggle.getByRole("button", { name: "Daily", exact: true }).click();
     const dailyChart = page.getByRole("region", { name: "S01 1d market chart" });
     await expect(dailyChart).toBeVisible();
-    // M4: with dates hidden the chart's data table names its rows "D-1" ... "Today", not stand-in times of day.
+    // The chart's data table names its rows by their real day ("Fri 2026-09-18"), the forming candle last.
     await dailyChart.getByText(/^Chart data table/).click();
-    await expect(dailyChart.getByRole("rowheader", { name: "Today" })).toBeVisible();
-    await expect(dailyChart.getByRole("rowheader", { name: "D-1", exact: true })).toBeVisible();
-    await expect(dailyChart.getByRole("rowheader", { name: /AM|PM/ })).toHaveCount(0);
+    await expect(dailyChart.getByRole("rowheader", { name: /^[A-Z][a-z]{2} 20\d\d-\d\d-\d\d$/ }).last()).toBeVisible();
+    await expect(dailyChart.getByRole("rowheader", { name: /^Today$|^D-\d+$/ })).toHaveCount(0);
     await toggle.getByRole("button", { name: "5m", exact: true }).click();
     await expect(page.getByRole("region", { name: "S01 5m market chart" })).toBeVisible();
     await toggle.getByRole("button", { name: "15m", exact: true }).click();
@@ -535,7 +520,6 @@ test.describe("Swing practice", () => {
     await toggle.getByRole("button", { name: "Daily", exact: true }).click();
     await expect(page.getByRole("region", { name: "S04 1d market chart" })).toBeVisible();
     await toggle.getByRole("button", { name: "15m", exact: true }).click();
-    await expectNoDates(page);
     await expectCleanScreen(page);
 
     // Everything the browser was told stops at the day clock.
@@ -654,7 +638,6 @@ test.describe("Swing practice", () => {
     const closed = await get(context, `/threads/${threadId}`);
     expect(closed.thread.status).toBe("closed");
     expect(closed.thread.stats.balance).toBeCloseTo(50_000 + holds.reduce((sum, hold) => sum + hold.pnl_usd, 0), 1);
-    await expectNoDates(page);
   });
   test("a stop pause on another name: Exit on the toast books that name's exit and shows it", async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -682,7 +665,6 @@ test.describe("Swing practice", () => {
     const closed = (await get(context, `/threads/${threadId}/holds?status=closed`)).holds as Json[];
     expect(closed.map((hold) => hold.symbol)).toEqual(["S02"]);
     expect(closed[0]!.exit_price).toBeLessThan(86);
-    await expectNoDates(page);
   });
   test("a name left behind the day clock comes back at the clock: from the strip and from Open Day, and a mark is accepted", async ({ page, context }) => {
     test.setTimeout(120_000);
@@ -736,6 +718,5 @@ test.describe("Swing practice", () => {
     await expect(page.getByRole("alert").filter({ hasText: "behind the day clock" })).toHaveCount(0);
     const closed = (await get(context, `/threads/${threadId}/holds?status=closed`)).holds as Json[];
     expect(closed.map((hold) => hold.symbol)).toEqual(["S01"]);
-    await expectNoDates(page);
   });
 });

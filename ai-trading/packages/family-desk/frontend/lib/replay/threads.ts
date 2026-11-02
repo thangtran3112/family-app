@@ -102,9 +102,16 @@ export const ThreadSchema = ThreadSummarySchema.extend({
 
 export const ThreadsSchema = z.array(ThreadSummarySchema);
 
+/** The day-trade slots, shared by every user: at most `day_max` active day threads at once (ADR-0022). Swing threads use none. */
+export const ThreadCapacitySchema = z.object({
+  day_active: finite.int(),
+  day_max: finite.int(),
+}) satisfies z.ZodType<components["schemas"]["ThreadCapacityOut"]>;
+
 export type ThreadBrief = z.infer<typeof ThreadBriefSchema>;
 export type ThreadToday = z.infer<typeof ThreadTodaySchema>;
 export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
+export type ThreadCapacity = z.infer<typeof ThreadCapacitySchema>;
 export type ThreadDay = z.infer<typeof ThreadDaySchema>;
 export type CurvePoint = z.infer<typeof CurvePointSchema>;
 export type Thread = z.infer<typeof ThreadSchema>;

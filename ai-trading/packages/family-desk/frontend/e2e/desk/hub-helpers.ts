@@ -38,13 +38,12 @@ export type NewPlan = {
   maxLoss?: string;
   maxTrades?: string;
   note?: string;
-  /** A new thread asks for a stop on every entry by default and refuses an entry without one (D-060); `startThread` sets No unless a spec is about stops. */
+  /** The server still takes a plan that asks for a stop (a legacy row); the form no longer asks. `startThread` sets No unless a spec is about stops (D-060). */
   stop?: boolean;
   /** The saved filter to tick; defaults to "Any close", which `startThread` saves first. */
   filter?: string;
   /** Days of the plan: 5, 10, 20 or 30. */
   days?: string;
-  to?: string;
   interval?: "1m" | "5m" | "15m";
   /** The modal replaces an active thread's plan: no balance or risk plan to fill. */
   replace?: boolean;
@@ -63,13 +62,12 @@ export async function clickNewPlan(page: Page): Promise<Locator> {
   return dialog;
 }
 
-/** Fills the day-trading half of the modal: the balance, one filter, the stub day, `days` days, the window to `to` on `interval`. */
+/** Fills the day-trading half of the modal: the balance, one filter, the stub day, `days` days, on `interval`. The day has no end of its own: the stub holds bars to 09:40 and the clock carries on after them. */
 export async function fillNewPlan(dialog: Locator, plan: NewPlan = {}) {
   if (!plan.replace && plan.balance) await dialog.getByLabel("Starting balance").fill(plan.balance);
   await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: plan.filter ?? "Any close" }).check();
   await dialog.locator('input[type="date"]').fill(DAY);
   await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: plan.days ?? "5", exact: true }).click();
-  await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).fill(plan.to ?? "09:40");
   await dialog.getByRole("radiogroup", { name: "Chart interval" }).getByRole("radio", { name: plan.interval ?? "1m", exact: true }).click();
 }
 

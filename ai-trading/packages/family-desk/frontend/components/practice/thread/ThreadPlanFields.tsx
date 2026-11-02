@@ -6,7 +6,7 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { ThreadDraft, ThreadProblems } from "@/lib/replay/threadSetup";
 import styles from "./thread.module.css";
 
-/** The risk plan of a practice thread (02r, D-007): stop on every entry, trade only on a signal, max loss, max trades and a
+/** The risk plan of a practice thread (02r, D-007): trade only on a signal, max loss, max trades and a
  *  note. The journal's Edit plan form uses it (the New plan modal no longer asks for a risk plan, D-076); the parent owns the
  *  draft. `idPrefix` keeps the ids unique when two forms are on screen. `perWeek` (a swing thread, 02p) labels max loss and
  *  max trades as weekly and leaves out Shares, which is a day thread's entry size (D-042). */
@@ -27,7 +27,6 @@ export function ThreadPlanFields({
   return (
     <div className={styles.group}>
       <div className={styles.row}>
-        <YesNo id={id("stop")} label={PRACTICE_COPY.threadStopOnEntry} value={draft.stopNoteOnEntry} error={problems.stopNoteOnEntry} onChange={(stopNoteOnEntry) => onDraft({ ...draft, stopNoteOnEntry })} />
         <YesNo id={id("signal")} label={PRACTICE_COPY.threadSignalOnly} value={draft.tradeOnlyOnSignal} error={problems.tradeOnlyOnSignal} onChange={(tradeOnlyOnSignal) => onDraft({ ...draft, tradeOnlyOnSignal })} />
       </div>
       {!perWeek && (

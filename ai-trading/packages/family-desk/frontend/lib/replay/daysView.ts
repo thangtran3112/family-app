@@ -1,14 +1,12 @@
 import { formatEtDay, formatNumber, formatSignedPct } from "../desk/format.ts";
-import { PRACTICE_COPY } from "../desk/freshness.ts";
 import type { ReplayDay } from "./schemas.ts";
 
-// The notable-days table (02o decision 3, §a2): spoiler-free by construction. The API never sends a day's change,
-// range or close, and the date itself is masked by a render rule until "Show dates" is on.
+// The notable-days table (02o decision 3, §a2): the API never sends a day's change, range or close, and the date is always shown (ADR-0022).
 
 export const dayKey = (row: Pick<ReplayDay, "symbol" | "day">) => `${row.symbol}:${row.day}`;
 
-/** "Tue 2026-04-07", or "Hidden day" while dates are off. The weekday column stays (the plan keeps it). */
-export const dayCell = (row: Pick<ReplayDay, "day">, showDates: boolean): string => (showDates ? formatEtDay(row.day) : PRACTICE_COPY.hiddenDay);
+/** "Tue 2026-04-07". */
+export const dayCell = (row: Pick<ReplayDay, "day">): string => formatEtDay(row.day);
 
 /** "Gap down 6.2%", "Heavy volume", "Earnings"; an unknown tag reads as its words. */
 export function tagLabel(tag: string, gapPct: number | null): string {

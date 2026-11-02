@@ -15,7 +15,7 @@ import { FactList } from "@/components/ui/FactList";
 import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
-import { formatClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk/format";
+import { formatClock, formatEtDateClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
@@ -26,7 +26,6 @@ import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
   beforeOpen,
   canRescan,
-  datesHidden,
   dayCellText,
   dayCellTone,
   dayColumns,
@@ -40,7 +39,7 @@ import {
   listTime,
   listWarning,
   liveState,
-  practiceWindow,
+  practiceStart,
   rescanCounts,
   rescanCurrent,
   rescanLabel,
@@ -54,7 +53,7 @@ import {
 import { heldBlocked, heldHref, heldWhere } from "@/lib/replay/orderView";
 import { routeId } from "@/lib/replay/routeId";
 import { problemMessage } from "@/lib/replay/setup";
-import { dayStatusLine } from "@/lib/replay/statusLine";
+import { dayStatusLine, type PracticeStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
@@ -155,7 +154,6 @@ function DaySkeleton() {
 function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () => void; failures: number }) {
   const router = useRouter();
   const ended = list.status === "ended";
-  const hidden = datesHidden(list.plan.spec) && !ended;
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The name a click is opening.
@@ -188,9 +186,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
   }, []);
-  // The badge reads the day clock once practice has started, else the time the list was built (D-014).
-  useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
-
   // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
   const practicing = list.sessions.at(-1) ?? null;
   // The list is a snapshot of the list time; the day clock runs on the server (ADR-0018). Once the clock has started, the table is read again with
@@ -210,6 +205,10 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   const live = followState(list, { candidates: rows }, { landed, failed: atClock.error !== null });
   const columns = columnsOf(list, live);
   const liveAt = rows.find((row) => row.live)?.live?.at ?? list.clock;
+  // The thread's one time T, as the latest read answered it (ADR-0022): the label, the chip and the Summary's clock all read it, so they agree. The market is the
+  // state of the exchange at that T; after the day's tape end it says so while T keeps counting.
+  const threadTime = (landed ? read.thread_time : null) ?? list.thread_time ?? null;
+  const market = (landed ? read.market : null) ?? list.market ?? null;
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -316,9 +315,9 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   }
 
   const warning = listWarning(list);
-  const title = dayTitle(list, hidden);
+  const title = dayTitle(list);
   const setup = list.plan.spec.setup;
-  const practiceTime = practiceWindow(list);
+  const dayStart = practiceStart(list);
   // Day 5 of 5: there is no next day to open, so the button says what it does and goes to the plan's summary (D-096).
   // A re-scan with nothing to scan from (no list and no name, so no day clock) is a dead end: it is not offered (D-094).
   const showRescan = ended ? list.rescan !== null : list.candidates.length > 0 || list.rescan !== null;
@@ -331,8 +330,9 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
         <div className={styles.titleRow}>
           <h1 ref={titleRef} tabIndex={-1} className={styles.title}>{title}</h1>
           <Badge tone="neutral">Practice day list</Badge>
-          {hidden && <Badge tone="neutral">{PRACTICE_COPY.dayDateHidden}</Badge>}
         </div>
+        {/* The badge reads the thread's time once practice has started, else the time the list was built (D-014). */}
+        <DayClock day={list.day} shown={(!ended ? liveClock.shown : null) ?? threadTime ?? list.clock ?? list.list_at} status={dayStatusLine(list)} show={!ended && list.clock !== null} market={market} />
         <div className={styles.actions}>
           {practicing && !ended && (
             <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{practiceText("planOpenDay", { n: threadDayNo(list.plan, list.day_no) })}</Button>
@@ -387,9 +387,11 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
             </p>
             {live && liveAt && (
               <p className={styles.muted} data-testid="live-note">
-                {practiceText(live.today ? "dayLiveNote" : beforeOpen(list.clock) ? "dayLiveNotePre" : "dayLiveNoteOpen", { clock: formatEtTimeZone(liveAt), list: formatEtTimeZone(listTime(list)) })}
+                {practiceText(live.today ? "dayLiveNote" : beforeOpen(list.clock) ? "dayLiveNotePre" : "dayLiveNoteOpen", { clock: threadTime ? formatEtDateClock(threadTime, { seconds: false }) : formatEtTimeZone(liveAt), list: formatEtTimeZone(listTime(list)) })}
               </p>
             )}
+            {/* A failed read at the clock says so and offers a retry; the columns that follow the clock stay empty until it lands, never silently dashes. */}
+            {atClock.error !== null && !landed && <ErrorBlock message={PRACTICE_COPY.dayLiveError} onRetry={atClock.refresh} />}
             <DenseTable
               caption="Candidates"
               columns={withPriorities(columns, "practiceList")}
@@ -503,7 +505,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
             loading={peek.loading}
             failed={peek.data === null && peek.error !== null}
             onRetry={peek.refresh}
-            hideDates={datesHidden(list.plan.spec)}
           />
         </Dialog>
       )}
@@ -531,7 +532,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
                             : []),
                         ]
                       : []),
-                    { id: "window", label: "Practice window", value: `${practiceTime.from}–${practiceTime.to} ET` },
+                    { id: "starts", label: PRACTICE_COPY.dayStarts, value: `${formatClock(dayStart)} ET` },
                     { id: "chart", label: "Chart", value: setup.interval },
                     ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan, "day", thread.data.thread.shares).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
                     ...(ended ? [{ id: "day", label: "Day", value: formatEtDay(list.day) }] : []),
@@ -544,6 +545,24 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
         ]}
       />
     </div>
+  );
+}
+
+/**
+ * The thread's time on the day list: the line under the title, and the badge and status bar of the shell. `shown` is the Summary's own ticking clock (the same
+ * poll, held when the poll fails), so the two screens agree to the second. Past the day's tape end it says the market is closed while the time keeps counting.
+ */
+function DayClock({ day, shown, status, show, market }: { day: string; shown: string; status: PracticeStatusLine; show: boolean; market: DayList["market"] }) {
+  useReportPracticeChrome({ day, playhead: shown, scope: "days", status });
+  if (!show) return null;
+  const closed = market?.phase === "closed";
+  return (
+    <p className={styles.muted} data-testid="day-clock">
+      <span>{PRACTICE_COPY.threadTime} · </span>
+      <span data-testid="day-clock-time">{formatEtDateClock(shown)}</span>
+      {closed && market && <span data-testid="market-closed">{` · ${practiceText("marketClosed", { time: formatEtTimeZone(market.tape_end) })}`}</span>}
+      {closed && market?.next_open_at != null && <span data-testid="market-next-open">{` · ${practiceText("marketNextOpen", { when: formatEtDateClock(market.next_open_at, { seconds: false }) })}`}</span>}
+    </p>
   );
 }
 

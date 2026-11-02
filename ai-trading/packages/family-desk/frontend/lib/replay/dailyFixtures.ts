@@ -147,12 +147,11 @@ export const endedDayList: DayList = {
   },
   review: {
     day: "2026-03-10",
-    dates_hidden: true,
     window_end: "2026-03-10T15:30:00Z",
     of: 2,
     rows: [
-      { symbol: "SMCI", list_price: 41.12, window_end_price: 42.4, move_pct: 3.11, close_price: 43, close_move_pct: 4.57, high_pct: 4.2, low_pct: -0.4, range_pct: 4.6, rank: 1, picked: "traded" },
-      { symbol: "ANET", list_price: 96.4, window_end_price: 96.1, move_pct: -0.31, close_price: 95, close_move_pct: -1.45, high_pct: 0.5, low_pct: -0.9, range_pct: 1.4, rank: 2, picked: null },
+      { symbol: "SMCI", list_price: 41.12, move_pct: 3.11, close_price: 43, close_move_pct: 4.57, high_pct: 4.2, low_pct: -0.4, range_pct: 4.6, rank: 1, picked: "traded" },
+      { symbol: "ANET", list_price: 96.4, move_pct: -0.31, close_price: 95, close_move_pct: -1.45, high_pct: 0.5, low_pct: -0.9, range_pct: 1.4, rank: 2, picked: null },
     ],
     selection: { picks: [{ symbol: "SMCI", kind: "traded", move_pct: 3.11, rank: 1 }], median_move_pct: 1.4, picks_avg_move_pct: 3.11 },
   },

@@ -38,7 +38,6 @@ export const HUB_SWING_COPY = {
   curveEquity: "Equity",
   curveSummary: "Balance and equity at the close of each day. Starts at {start}, balance now {balance}, equity now {equity}.",
     noDaysYet: "No finished day yet · the curve starts after Day 1 ends",
-  dateHidden: "dates hidden",
 } as const;
 
 type HubSwingKey = keyof typeof HUB_SWING_COPY;

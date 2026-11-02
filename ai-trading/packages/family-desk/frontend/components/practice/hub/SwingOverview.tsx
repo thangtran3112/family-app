@@ -10,7 +10,7 @@ import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import type { PracticePlan } from "@/lib/replay/daily";
 import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
 import { overviewWeekRows, type OverviewWeekRow } from "@/lib/replay/overviewView";
-import { freeCashText, swingCardView, swingDatesHidden } from "@/lib/replay/swing";
+import { freeCashText, swingCardView } from "@/lib/replay/swing";
 import { loadWeeks } from "@/lib/replay/swingApi";
 import type { Thread } from "@/lib/replay/threads";
 import { formatBalance, planRows } from "@/lib/replay/threadView";
@@ -34,7 +34,7 @@ const WEEK_COLUMNS = (): DenseColumn<OverviewWeekRow>[] => [
 /**
  * The overview of a swing thread (5R): where it is (balance, week, day), the one next step (Continue Day n, or the owed week
  * review first), the weeks, the ended days, the equity curve, and the plan and stats at the side (the open holds are the Portfolio tab). Every dollar is
- * SIMULATED; a day is a number and a weekday, never a date.
+ * SIMULATED; a day is a number, a weekday and a date.
  */
 export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; plan: PracticePlan | null; onChanged: () => void }) {
   const { thread, swing: state } = summary;
@@ -44,7 +44,6 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
   const weeks = useDeskQuery(`swing-weeks:${stamp}`, (signal) => loadWeeks(thread.id, { signal }));
   if (!state || !card) return null; // the page opens this only for a thread that carries its swing state
 
-  const setup = thread.swing;
   const curve = state.equity_series.length > 0;
 
   return (
@@ -93,7 +92,6 @@ export function SwingOverview({ summary, plan, onChanged }: { summary: Thread; p
         <section className={styles.panel} aria-label={PRACTICE_COPY.overviewPlanCaption}>
           <h2 className={styles.panelTitle}>{PRACTICE_COPY.overviewPlanTitle}</h2>
           <p className={styles.dayLine}>{card.title}</p>
-          {setup && swingDatesHidden(setup) && <p className={hub.muted}>{HUB_SWING_COPY.dateHidden}</p>}
           <FactList facts={planRows(thread.plan, "swing").map((row) => ({ id: row.id, label: row.label, value: row.value }))} />
         </section>
         <StatsPanel thread={thread} />

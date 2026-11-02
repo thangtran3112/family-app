@@ -41,14 +41,6 @@ export function SwingSetupSection({
           <Field id="swing-sessions" label={PRACTICE_COPY.swingSessions} note={calendarLine(draft)} error={problems.sessions}>
             <NumberInput fill inputMode="numeric" min={MIN_SESSIONS} max={MAX_SESSIONS} step={1} value={draft.sessions} onChange={(event) => onDraft({ ...draft, sessions: event.target.value })} />
           </Field>
-          <Field id="swing-hide" label={PRACTICE_COPY.swingHideDates} group note={PRACTICE_COPY.planHideDatesHint} error={problems.hideDates}>
-            <Segmented
-              fill
-              value={draft.hideDates ? "yes" : "no"}
-              options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
-              onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
-            />
-          </Field>
           <Field id="swing-interval" label={PRACTICE_COPY.swingInterval} group error={problems.interval}>
             <Segmented
               fill

@@ -15,7 +15,6 @@ export const DAY_ISO = [
   "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25",
   "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02",
 ];
-export const DATE_TEXT = /20\d\d-\d\d-\d\d/;
 export const REPLAY = `${origin}/api/desk/replay`;
 
 /** A parsed answer of the replay API (the shapes are the generated `openapi.d.ts`; a spec reads only what it checks). */
@@ -49,7 +48,7 @@ export async function createSwingThread(
   const swing = {
     firstDay: FIRST_DAY,
     sessions: options.sessions ?? 15,
-    hideDates: "yes",
+    hideDates: "no",
     universe: preview.rows.map((row: Json) => ({ symbol: row.symbol, source: row.source })),
     interval: "15m",
     tape: "off",
@@ -88,11 +87,6 @@ export async function enterByApi(
     shares: entry.shares ?? 100,
     ...(entry.stopPrice !== undefined ? { stopPrice: entry.stopPrice } : {}),
   });
-}
-
-/** The page shows no calendar date (02p: dates stay hidden for the whole session screens). */
-export async function expectNoDates(page: Page) {
-  await expect(page.locator("body")).not.toContainText(DATE_TEXT);
 }
 
 /** A screenshot of the whole scrolling screen: the desk shell scrolls inside its frame, so the viewport is made tall for it. */

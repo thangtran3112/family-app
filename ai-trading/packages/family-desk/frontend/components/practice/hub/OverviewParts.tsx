@@ -113,7 +113,7 @@ const DAY_COLUMNS: DenseColumn<OverviewDayRow>[] = [
   { key: "balance", label: "Balance", align: "right", render: (row) => row.balance },
 ];
 
-/** One row per ended day, the newest first: day number and weekday (never a date), practiced or skipped, trades, result, adherence and the balance. Each day opens its board. */
+/** One row per ended day, the newest first: day number, weekday and date, practiced or skipped, trades, result, adherence and the balance. Each day opens its board. */
 export function DaysSection({ daily, equity }: { daily: Thread["daily"]; equity?: EquityDays }) {
   return (
     <section className={`${styles.panel} ${o.tablePanel}`} aria-label={PRACTICE_COPY.overviewDaysTitle}>

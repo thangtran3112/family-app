@@ -20,16 +20,13 @@ import type { ClockAccount } from "./threadClock.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
-// node tests cover it. Dates are returned by the API and hidden here by a render rule, as in 02o.
+// node tests cover it. A day is always named with its date (ADR-0022).
 
 /** "name" or "names" for a count. */
 export const nameWord = (count: number): string => (count === 1 ? "name" : "names");
 
 
-/** The plan hides dates (the weekday stays). */
-export const datesHidden = (plan: Pick<PracticePlan["spec"], "hideDates">): boolean => plan.hideDates === "yes";
-
-const dayName = (weekday: string, day: string | null, hidden: boolean): string => (hidden || day === null ? weekday : formatEtDay(day));
+const dayName = (weekday: string, day: string | null): string => (day === null ? weekday : formatEtDay(day));
 
 /** A day's number in its thread (D-047): a plan counts its own days from 1, and a plan that replaced another comes after the
  *  days the thread had already ended. This is the number the journal gives the same day (`n`). */
@@ -42,9 +39,9 @@ export function dayNumberText(plan: Pick<PracticePlan, "day_offset" | "sessions"
     : practiceText("planDayInThread", { day: threadDayNo(plan, planDayNo), planDay: planDayNo, of: plan.sessions });
 }
 
-/** "Day 7 of 20 · Tue", or "Day 7 of 20 · Tue 2026-03-03" with dates shown. */
-export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"> & { plan: Pick<PracticePlan, "day_offset"> }, hidden: boolean): string {
-  return `${dayNumberText({ day_offset: list.plan.day_offset, sessions: list.of }, list.day_no)} · ${dayName(list.weekday, list.day, hidden)}`;
+/** "Day 7 of 20 · Tue 2026-03-03". */
+export function dayTitle(list: Pick<DayList, "day_no" | "of" | "weekday" | "day"> & { plan: Pick<PracticePlan, "day_offset"> }): string {
+  return `${dayNumberText({ day_offset: list.plan.day_offset, sessions: list.of }, list.day_no)} · ${dayName(list.weekday, list.day)}`;
 }
 
 /** "List at 8:30 AM ET from data through 8:15 AM · 118 of 131 scanned · 34 matched, showing 30" (kept whole for the plain-text reads). */
@@ -98,10 +95,9 @@ export const sourceNote = (list: Pick<DayList, "data_through">): string => pract
 /** "Chosen at setup · a name that passes either one is listed", or just "Chosen at setup" for one filter. */
 export const filtersNote = (count: number): string => (count > 1 ? PRACTICE_COPY.dayFiltersNote : PRACTICE_COPY.dayFiltersNoteOne);
 
-/** The thread's risk plan in one sentence: "stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day". */
-export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades">): string {
+/** The thread's risk plan in one sentence: "trade only on a signal, max loss $600, up to 3 trades a day". */
+export function riskPlanText(plan: Pick<ThreadPlan, "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades">): string {
   const parts = [
-    plan.stopNoteOnEntry === "yes" ? "stop on every entry" : null,
     plan.tradeOnlyOnSignal === "yes" ? "trade only on a signal" : null,
     plan.maxLossUsd === undefined ? null : `max loss $${plan.maxLossUsd.toLocaleString("en-US")}`,
     plan.maxTrades === undefined ? null : `up to ${plan.maxTrades} ${plan.maxTrades === 1 ? "trade" : "trades"} a day`,
@@ -163,7 +159,6 @@ export type PlanCard = { headline: string; detail: string | null; action: PlanCa
 /** The hub card: "Day 7 of 20 · next: Tue" with Continue, the data-preparing line, or the empty state. */
 export function planCard(plan: PracticePlan | null): PlanCard {
   if (plan === null) return { headline: PRACTICE_COPY.planNone, detail: null, action: "new" };
-  const hidden = datesHidden(plan.spec);
   const failed = plan.prep.failed > 0 ? practiceText("planFailedSome", { failed: plan.prep.failed }) : null;
   if (plan.finished) return { headline: practiceText("planDone", { of: plan.sessions }), detail: failed, action: "new" };
   const current = plan.current;
@@ -184,7 +179,7 @@ export function planCard(plan: PracticePlan | null): PlanCard {
       action: "none",
     };
   }
-  const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day, hidden) })}`;
+  const next = plan.next_weekday === null ? "" : ` · ${practiceText("planNext", { weekday: dayName(plan.next_weekday, plan.next_day) })}`;
   // The day just ended is said as done, and Continue opens the next one: the same list the review's "Next day" opens.
   const done = current === null ? null : practiceText("planDayDone", { day: threadDayNo(plan, current.day_no) });
   return {
@@ -593,9 +588,6 @@ export const moveText = (value: number | null): string => (value === null ? EMPT
 
 export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practiced" : row.picked === "starred" ? "Starred" : "");
 
-/** "Day finished" (the date follows it on the same line) when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
-export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string | null => (review.dates_hidden ? PRACTICE_COPY.reviewDayFinished : null);
-
 /** "Your day: 1 practice trade · +$1,565.00", dollars and cents. */
 export function journalLine(journal: Pick<DayJournal, "trades" | "pnl_usd">): string {
   const trades = journal.trades === 1 ? "1 practice trade" : `${journal.trades} practice trades`;
@@ -645,11 +637,11 @@ export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd"> & 
   tone: changeToneAt(journal.pnl_usd, 2),
 });
 
-/** The practice window of a day: the plan's window, but not before the list time, so a re-list moves its start (D-144). Both are ET "HH:MM". */
-export function practiceWindow(list: { list_at: string; plan: { spec: { setup: { window: { from: string; to: string } } } } }): { from: string; to: string } {
-  const { from, to } = list.plan.spec.setup.window;
+/** When the day starts: the plan's "Start at", but not before the list time, so a re-list moves it (D-144). ET "HH:MM". The day has no end of its own. */
+export function practiceStart(list: { list_at: string; plan: { spec: { setup: { window: { from: string } } } } }): string {
+  const { from } = list.plan.spec.setup.window;
   const listed = etHhMm(list.list_at);
-  return { from: listed > from ? listed : from, to };
+  return listed > from ? listed : from;
 }
 
 /** One row per closed trade: the entry and exit price with the ET time, the shares, and the P/L to the cent. */
@@ -672,7 +664,7 @@ export function tradeLineRows(journal: Pick<DayJournal, "lines">): TradeLineRow[
 
 // ---- Peek ----------------------------------------------------------------------------------------------------
 
-/** `count` weekday dates ending 2001-01-05 + count: a stand-in timeline for a daily chart whose real dates are hidden. */
+/** `count` weekday dates from 2001-01-01: a stand-in timeline that only spaces the bars of a chart whose API carries no dates (the week's equity series). It is never printed. */
 export function syntheticDays(count: number): string[] {
   const out: string[] = [];
   const date = new Date(Date.UTC(2001, 0, 1, 12));
@@ -682,15 +674,3 @@ export function syntheticDays(count: number): string[] {
   }
   return out;
 }
-
-type PeekDaily = { t: string; o: number; h: number; l: number; c: number; v: number };
-
-/** Daily bars for the chart; with dates hidden, real dates give way to a stand-in timeline (the last bar's date would name the day). */
-export function peekDailyBars(bars: readonly PeekDaily[], hidden: boolean): PeekDaily[] {
-  if (!hidden) return [...bars];
-  const days = syntheticDays(bars.length);
-  return bars.map((bar, index) => ({ ...bar, t: days[index]! }));
-}
-
-/** A hidden Peek chart's row labels for a screen reader: "D-3", "D-2", "D-1" (every bar is before the day; the last is the prior close). */
-export const peekOffsets = (count: number): string[] => Array.from({ length: count }, (_, index) => `D-${count - index}`);
