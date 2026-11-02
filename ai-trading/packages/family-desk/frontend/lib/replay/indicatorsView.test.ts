@@ -4,7 +4,8 @@ import test from "node:test";
 import type { Bars } from "../api/schemas.ts";
 import { buildChartSeries, type IndicatorId } from "../desk/workspace.ts";
 import type { IndicatorTable } from "./feedState.ts";
-import { indicatorGroups, rsiState } from "./indicatorsView.ts";
+import { PRACTICE_COPY } from "../desk/freshness.ts";
+import { indicatorGroups, indicatorsFootnote, rsiState } from "./indicatorsView.ts";
 import { serverSeries } from "./serverIndicators.ts";
 
 // 60 one-minute bars from 9:30 ET on 2026-10-15 (13:30 UTC), closing along `close(i)`.
@@ -135,4 +136,16 @@ test("the forming candle reads the VWAP of the bar before it when the server has
   assert.deepEqual(serverSeries(bars, table, "1m").vwap, [100.2, 100.4, null], "a closed bar, or no forming candle, keeps the server's null");
   assert.deepEqual(serverSeries(bars, table, "1m", bars[2]!.t).vwap, [100.2, 100.4, 100.4], "the forming candle carries the last closed bar's");
   assert.deepEqual(serverSeries(bars, { ...table, rows: [row(0, 100.2), row(1, 100.4)] }, "1m", bars[2]!.t).vwap, [100.2, 100.4, null], "no row for the candle at all stays unknown");
+});
+
+test("the rail's note names VWAP only where the rail has a VWAP row; the Daily view has none (D-203)", () => {
+  const rows = (interval: string) => indicatorGroups(barsFor((i) => 100 + i, 40), interval).flatMap((group) => group.rows.map((item) => item.id));
+  assert.ok(rows("1m").includes("vwap"), "an intraday rail has the row");
+  assert.ok(!rows("1d").includes("vwap"), "the Daily rail has none");
+  assert.equal(indicatorsFootnote("1m"), PRACTICE_COPY.indicatorsFootnote, "intraday: unchanged");
+  assert.match(indicatorsFootnote("15m"), /VWAP is the session's, from 1-minute bars, on every chart interval\./);
+  const daily = indicatorsFootnote("1d");
+  assert.doesNotMatch(daily, /VWAP/);
+  assert.match(daily, /^Read from the bars shown on the chart, up to the replay time\./, "the 'Read from the bars shown…' sentence stays");
+  assert.ok(PRACTICE_COPY.indicatorsFootnote.startsWith(daily), "the Daily note is the intraday one without its VWAP sentence");
 });

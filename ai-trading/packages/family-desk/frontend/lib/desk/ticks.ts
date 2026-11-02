@@ -47,3 +47,16 @@ export function fitsWhole(x: number, text: string, fontPx: number, anchor: Label
   const [left, right] = labelSpan(x, text, fontPx, anchor);
   return left >= lo && right <= hi;
 }
+
+/** The narrowest a chart is drawn (viewBox units): below it the plot has no room left for its labels. */
+export const MIN_CHART_WIDTH = 320;
+
+/**
+ * The box a small SVG chart is drawn in for a column `column` px wide (D-202). The SVG fills its column, so a viewBox wider than the column
+ * scales every label down with it: a 760-unit box in a 548 px column printed its 11 px labels at 7.9 px. Draw the chart at the column's own
+ * width instead (one unit a pixel, the type at its size) and let the layout thin its labels out; a column wider than the box keeps the box.
+ * `column` null (not measured yet) gives the box as it is. Rounded down, so the type never lands under its size for a part of a pixel.
+ */
+export function fitBox<T extends { width: number }>(box: T, column: number | null): T {
+  return column === null ? box : { ...box, width: Math.max(MIN_CHART_WIDTH, Math.min(box.width, Math.floor(column))) };
+}

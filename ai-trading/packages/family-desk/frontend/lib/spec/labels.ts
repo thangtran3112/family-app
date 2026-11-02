@@ -14,6 +14,8 @@ const PARAMS: Record<string, string> = {
   atrMultiple: "ATR multiple", r: "R multiple",
   maxTradesPerDay: "Max trades per day", maxOpenPositions: "Max open positions", maxPositionUsd: "Max position size ($)",
   pauseAfterDailyLossUsd: "Pause after daily loss ($)", cooldownMinutes: "Cooldown (minutes)", flatBy: "Flat by (ET)",
+  // The screener's liquidity floor and rank, as its controls label them (D-205: the error summary reads the same table).
+  minPrice: "Minimum price ($)", minAvgVolume: "Minimum average volume", avgVolumeDays: "Average volume days", by: "Rank by",
 };
 
 /** When a strategy checks, in menu order: the one list every form and view reads (a screen never spells these ids itself). */

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fitsWhole, labelSpan, niceTicks, textWidth } from "./ticks.ts";
+import { MIN_CHART_WIDTH, fitBox, fitsWhole, labelSpan, niceTicks, textWidth } from "./ticks.ts";
 
 test("ticks are round (1, 2, 5 times a power of ten), ascending, and cover the data", () => {
   assert.deepEqual(niceTicks(49753, 50123, { minStep: 1 }), [49700, 49800, 49900, 50000, 50100, 50200]);
@@ -45,4 +45,23 @@ test("a label is kept whole or left out: the edge of the axis never cuts one (D-
   // A y label ends at the gutter's right edge: too long for the gutter, it is left out.
   assert.equal(fitsWhole(68, "$51,500", 11, "end", 0, 760), true);
   assert.equal(fitsWhole(68, "$1,000,000.00", 11, "end", 0, 760), false);
+});
+
+test("a chart is drawn at its column's width, so its type keeps its size when the column narrows (D-202)", () => {
+  // The journal's balance curve: a 760-unit box, 11 px labels. The SVG fills its column, so a label's size on screen is its size times column / box width.
+  const BOX = { width: 760, height: 240, left: 76, right: 24, top: 16, bottom: 36 };
+  const onScreen = (box: { width: number }, column: number) => (11 * column) / box.width;
+  // 1180 with a drawer open: a 580 px centre column leaves the chart 548 px. The fixed box shrank every label to 7.9 px, under the 11 px floor.
+  assert.equal(onScreen(BOX, 548).toFixed(1), "7.9");
+  assert.equal(fitBox(BOX, 548).width, 548);
+  assert.ok(onScreen(fitBox(BOX, 548), 548) >= 11, "drawn at 548 units, 548 px wide: 11 px");
+  // A column that is not a whole number of pixels never rounds the box up past it (that would scale the type under 11 px again).
+  assert.ok(onScreen(fitBox(BOX, 548.6), 548.6) >= 11);
+  // A wide column keeps the box and its look: the type grows with the screen, as before (11.7 px at 1440).
+  assert.deepEqual(fitBox(BOX, 806), BOX);
+  assert.equal(onScreen(fitBox(BOX, 806), 806).toFixed(1), "11.7");
+  // Only the width changes, and never below what the plot needs; a column nobody has measured yet draws the box as it was.
+  assert.deepEqual({ ...fitBox(BOX, 548), width: 760 }, BOX);
+  assert.equal(fitBox(BOX, 200).width, MIN_CHART_WIDTH);
+  assert.deepEqual(fitBox(BOX, null), BOX);
 });
