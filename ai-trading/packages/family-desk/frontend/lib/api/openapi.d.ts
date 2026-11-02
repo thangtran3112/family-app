@@ -804,9 +804,10 @@ export interface paths {
         put?: never;
         /**
          * End Day
-         * @description End the day: the open practice trade exits at the last price, the window unseals, and the list review
-         *     (every candidate's move from its list price) is stored and served. Idempotent. A swing day exits nothing: the open
-         *     holds are marked at the close, and a day with no session is a Pass.
+         * @description End a swing day: the open holds are marked at the close, the window unseals, and the list review (every
+         *     candidate's move from its list price) is stored and served. Idempotent. A day-trade day has no manual end (409 while
+         *     it is open): it ends when the thread clock reaches the next open, by itself, by a skip or by a jump
+         *     (`POST /threads/{id}/clock`, `POST /threads/{id}/skip-day`), and the review is stored then.
          */
         post: operations["end_day_api_desk_replay_day_lists__day_list_id__end_post"];
         delete?: never;
@@ -1171,7 +1172,8 @@ export interface paths {
         /**
          * Delete Thread
          * @description Delete the thread and everything under it: its ledger, plans, day lists, sessions and (swing) holds and weeks. An
-         *     open practice day is a 409 (end it first), like closing. It cannot be undone; a thread that is not hers is a 404.
+         *     open practice day is a 409 (close the thread first: that ends the day). It cannot be undone; a thread that is not
+         *     hers is a 404.
          */
         delete: operations["delete_thread_api_desk_replay_threads__thread_id__delete"];
         options?: never;
@@ -1195,17 +1197,20 @@ export interface paths {
         /**
          * Get Thread Clock
          * @description The day thread's clock now (ADR-0018): its state, speed, the simulated time, the day's tape, when the next day
-         *     starts, and the simulated account at that time (balance, open P/L, equity). A running clock is brought to now
-         *     first, so this is the answer whether or not anyone was looking in between. A clock that reached the next trading
-         *     day's start hands the day over first (the answer is then the next day's). Poll it; it is idempotent.
+         *     opens (the exchange's open, `next_start`), the latest time the clock can be jumped to (`jump_limit`), and the
+         *     simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is
+         *     the answer whether or not anyone was looking in between. A clock that reached the open that ends the day hands
+         *     it over first (the answer is then the next day's, or `no_day` after the plan's last). Poll it; it is idempotent.
          */
         get: operations["get_thread_clock_api_desk_replay_threads__thread_id__clock_get"];
         put?: never;
         /**
          * Control Thread Clock
-         * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), or (tests, tools) step it a bar or to the next
-         *     signal, or jump it to a time. Forward only. 409 without an open day. Time then runs on the server until she pauses
-         *     it, through the close and the night; the day hands over at the next trading day's start.
+         * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:
+         *     `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (a time already
+         *     past leaves the clock where it is) and no later than `jump_limit` (422 on `to` beyond it). 409 without an open
+         *     day. Time then runs on the server until she pauses it, through the close and the night; the day hands over at the
+         *     next trading day's open, and a jump across several opens hands over day by day.
          */
         post: operations["control_thread_clock_api_desk_replay_threads__thread_id__clock_post"];
         delete?: never;
@@ -1225,9 +1230,10 @@ export interface paths {
         put?: never;
         /**
          * Close Thread
-         * @description Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end
-         *     it first). A swing thread's open holds exit at the last ended close and its open week is frozen with its review.
-         *     Idempotent.
+         * @description Close the thread: its daily plan is archived and its plan and balance freeze. A day thread's open practice day
+         *     ends with it (its open positions book at the clock and its review is stored: there is no manual End day); a swing
+         *     thread's open day is a 409 (End Day first), and its open holds exit at the last ended close and its open week is
+         *     frozen with its review. Idempotent.
          */
         post: operations["close_thread_api_desk_replay_threads__thread_id__close_post"];
         delete?: never;
@@ -1310,9 +1316,11 @@ export interface paths {
         put?: never;
         /**
          * Skip Thread Day
-         * @description Skip to the next day: the clock jumps to the next trading day's start (over the night and the weekend), the day
-         *     ends (every open position flattens at its tape's end) and the next day's list opens with the clock there. The next
-         *     list may wait on its data (`next_day_list_id` null): poll the hub then.
+         * @description Skip to the next day: the clock jumps to the next trading day's market open, 9:30 ET and never the plan's "Start
+         *     at" time (over the night and the weekend), the day ends (every open position flattens at its tape's end and its
+         *     review is stored) and the next day's list opens with the clock there. On the plan's last day the clock jumps to
+         *     the open after it, the day ends and no day opens (`next_day_list_id` null). The next list may also wait on its
+         *     data (null): poll the hub then.
          */
         post: operations["skip_thread_day_api_desk_replay_threads__thread_id__skip_day_post"];
         delete?: never;
@@ -2745,9 +2753,8 @@ export interface components {
         };
         /**
          * ClockIn
-         * @description Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
-         *     its UTC offset). Any mix, at least one; a step or jump is forward only. The Summary's board sends `running` and
-         *     `speed`; `step` and `to` are for tests and tools.
+         * @description Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a date and
+         *     time with its UTC offset, no later than `jump_limit`). Any mix, at least one; a step or jump is forward only.
          */
         ClockIn: {
             /** Running */
@@ -3182,6 +3189,11 @@ export interface components {
              * Format: date-time
              */
             list_at: string;
+            /**
+             * List Pending
+             * @default false
+             */
+            list_pending: boolean;
             market?: components["schemas"]["MarketOut"] | null;
             /** Notes */
             notes: string | null;
@@ -7004,6 +7016,8 @@ export interface components {
             day_no: number | null;
             /** Focus End */
             focus_end: string | null;
+            /** Jump Limit */
+            jump_limit: string | null;
             /** Label */
             label: string;
             market?: components["schemas"]["MarketOut"] | null;
