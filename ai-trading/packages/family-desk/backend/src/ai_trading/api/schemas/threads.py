@@ -189,7 +189,8 @@ class ThreadClockOut(BaseModel):
     window_start: datetime | None
     window_end: datetime | None  # the end of the day's tape (extended close): the clock runs on past it
     focus_end: datetime | None  # where her plan's practice window ends: a mark on the timeline, never a stop
-    next_start: datetime | None  # when the next trading day starts and the day hands over; null on the plan's last day
+    next_start: datetime | None  # the exchange's open (9:30 ET) that ends this day and hands over; set on the last too
+    jump_limit: datetime | None  # the latest time the clock can be jumped to: where the plan's last day ends
     market: MarketOut | None = None  # the exchange's phase at `clock` (`last_bar_at` is null: a name's frame has it)
     server_now: datetime
     account: ClockAccountOut | None
@@ -197,9 +198,8 @@ class ThreadClockOut(BaseModel):
 
 
 class ClockIn(BaseModel):
-    """Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a time with
-    its UTC offset). Any mix, at least one; a step or jump is forward only. The Summary's board sends `running` and
-    `speed`; `step` and `to` are for tests and tools."""
+    """Play or pause (`running`), the speed, and a step or jump (`step` one bar or to the next signal; `to` a date and
+    time with its UTC offset, no later than `jump_limit`). Any mix, at least one; a step or jump is forward only."""
 
     model_config = ConfigDict(extra="forbid")
 

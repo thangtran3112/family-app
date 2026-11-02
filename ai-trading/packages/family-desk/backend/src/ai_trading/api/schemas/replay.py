@@ -970,6 +970,7 @@ class DayListOut(BaseModel):
     universe: ListUniverseOut
     columns: list[ListColumnOut]
     candidates: list[CandidateOut]
+    list_pending: bool = False  # the clock is before `list_at`: the list is not out (no names or counts), none opens
     watch: list[StarOut]
     clock: datetime | None
     thread_time: datetime | None = None  # the thread's one instant T (the clock, after it was settled); null once ended
