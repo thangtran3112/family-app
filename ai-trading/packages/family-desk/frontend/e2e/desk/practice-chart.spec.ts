@@ -153,6 +153,28 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(tooltip).toHaveCount(0);
   });
 
+  // D-201: every move over the plot re-rendered the chart's 6,000-row data table, a main-thread stall of about 0.55 s a move at 1m (0.19 s at 5m,
+  // 0.06 s at 15m). The ceiling is generous (a long task is 50 ms or more; the fixed page has none, the old one 7 s in twelve moves) so a loaded machine
+  // does not trip it. The legend must change along the sweep, or the moves never reached a bar and the test would pass without exercising anything.
+  test("moving the pointer over a 1m chart (6,000 bars) does not hold the page", async ({ page }) => {
+    await stepBars(page, 3);
+    const plot = (await page.locator("section[aria-label='TSLA 1m market chart'] canvas").first().boundingBox())!;
+    const title = page.getByText(/^TSLA · 1m · O /);
+    await page.evaluate(() => {
+      const tasks: number[] = [];
+      (window as unknown as { __longTasks: number[] }).__longTasks = tasks;
+      new PerformanceObserver((list) => list.getEntries().forEach((entry) => tasks.push(entry.duration))).observe({ entryTypes: ["longtask"] });
+    });
+    const titles = new Set<string>();
+    for (let i = 0; i < 12; i++) {
+      await page.mouse.move(plot.x + plot.width * (0.1 + 0.8 * (i / 11)), plot.y + plot.height * (0.35 + 0.2 * ((i % 4) / 3)));
+      titles.add(await title.innerText());
+    }
+    expect(titles.size, "the legend follows the crosshair across the sweep").toBeGreaterThan(1);
+    const stalled = await page.evaluate(() => (window as unknown as { __longTasks: number[] }).__longTasks.reduce((sum, ms) => sum + ms, 0));
+    expect(stalled, "main-thread time in long tasks over twelve moves, ms").toBeLessThan(1000);
+  });
+
   // A trackpad pinch reaches the page as ctrl+wheel events of a few px each. lightweight-charts' own handler turned 30 of them
   // (2 px) into a 1.06x zoom; the chart now takes them at the fingers' pace (about 1.8x), anchored under the cursor.
   test("a trackpad pinch (ctrl+wheel, 2 px an event) zooms the chart at the fingers' pace, not a tenth of it", async ({ page }) => {

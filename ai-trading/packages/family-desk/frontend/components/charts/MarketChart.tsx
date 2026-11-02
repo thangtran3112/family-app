@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { chartPalette } from "@/lib/desk/chartPalette";
 import type {
   HistogramData,
@@ -219,6 +219,27 @@ function histogramData(
     return { ...point, color: point.value < 0 ? negativeColor : positiveColor };
   });
 }
+
+/**
+ * The chart's data table: every bar as a row, for screen readers and keyboard users. It depends on the bars alone, so it is memoised: a crosshair
+ * move re-renders `MarketChart` (the level tooltip, the legend above it) many times a second, and 6,000 rows of formatted cells cost ~0.5 s a pass,
+ * a main-thread stall on every move of the replay chart (D-201).
+ */
+const ChartDataTable = memo(function ChartDataTable({ bars, rowLabels }: { bars: ChartBar[]; rowLabels?: readonly string[] }) {
+  return (
+    <details className={styles.dataTable}>
+      <summary>Chart data table · {bars.length} source bars</summary>
+      <div className={styles.tableScroll}>
+        <table>
+          <thead><tr><th scope="col">Time (ET)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
+          <tbody>{bars.map((bar, index) => (
+            <tr key={`${bar.t}-${index}`}><th scope="row">{rowLabels?.[index] ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </details>
+  );
+});
 
 export function MarketChart({
   symbol,
@@ -757,17 +778,7 @@ export function MarketChart({
         )))}
       </div>}
       <div className={styles.footerRow}>
-      <details className={styles.dataTable}>
-        <summary>Chart data table · {bars.length} source bars</summary>
-        <div className={styles.tableScroll}>
-          <table>
-            <thead><tr><th scope="col">Time (ET)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
-            <tbody>{bars.map((bar, index) => (
-              <tr key={`${bar.t}-${index}`}><th scope="row">{rowLabels?.[index] ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
-            ))}</tbody>
-          </table>
-        </div>
-      </details>
+      <ChartDataTable bars={bars} rowLabels={rowLabels} />
       <footer className={styles.chartFooter}><a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></footer>
       </div>
     </section>
