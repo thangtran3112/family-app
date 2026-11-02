@@ -13,19 +13,23 @@ on a name, (c) `History._lru` of 8 days evicting. Probed here against this code 
     `cut_frames` and returns the last extended-hours close (`test_the_day_list_prices_every_name_overnight`, green on
     dev). So no rule in the live path turns a night clock into "no data", and the dashes are not a logic defect.
   * Candidate (c) as written is wrong: the live path never touches `History._lru` (that LRU serves `day_inputs`, the
-    session path). It reads `minutes_loader`, which calls `History.minute_bars` for the day and 14 prior sessions of
-    EVERY listed name on EVERY read, and `minute_bars` has no memory cache: each read is names x 15 blob fetches and
-    decodes (15 per name, counted in `test_a_live_read_decodes_names_times_sessions_blobs`; 48 names = 720 per read).
-    Measured on a tmpfs Postgres with `DbBlobStore` and the synthetic FLAT-like bars (which compress far better than
-    a real 10,500-row day): a 48-name `day_list_out(live=True)` took 3.6 s, six reads in a row, 0 of 48 `live` null.
+    session path). It read `minutes_loader`, which calls `History.minute_bars` for the day and 14 prior sessions of
+    EVERY listed name on EVERY read, and `minute_bars` has no memory cache: 15 blob decodes a name (counted on dev; 48
+    names = 720 per read).
+  * Measured on a tmpfs Postgres with `DbBlobStore` and the synthetic FLAT-like bars (48 names, `day_list_out(live=
+    True)`, 0 of 48 `live` null at any point): dev 3.6 s per read, six reads in a row. A2 replaced the decodes with
+    prepared series and it was still 2.8 s: cProfile put the rest in `metric_row`, about 55 ms a name per read (a
+    strftime over every minute bar and a rolling pivot in `rvol_intraday`), so the decodes were about a quarter of the
+    cost and the metric row about three quarters. A7 computes the metric row once per closed minute and name and warms
+    it: 0.03 s a read (`test_day_warm.py` counts the blobs and the metric rows of a warm 49-name read).
   * So the real trigger is (a), produced by that per-read cost: `DayListScreen` re-reads the whole live list every clock
-    minute (and on each re-scan), each read decodes ~720 blobs from Postgres, and a request that is slow, contended
-    (`settle_day` takes the day-list row lock on a running clock) or cut off leaves the screen with no `live` block,
-    which it draws as dashes. (b) is a per-name `None` and cannot blank a whole list. A2 reads the prepared series from
-    memory (`test_a_warm_live_read_decodes_no_minute_blobs`).
+    minute (and on each re-scan), each read burned seconds of CPU on the request thread (more on real 10,500-row days
+    than on these flat bars), and a request that is slow, contended (`settle_day` takes the day-list row lock on a
+    running clock) or cut off leaves the screen with no `live` block, which it draws as dashes. (b) is a per-name
+    `None` and cannot blank a whole list.
   Not provable from here: the owner's production database and a captured failing response are out of reach of a
   sandboxed checkout (and no ad-hoc production reads are allowed), so (a) is established from the code path and the
-  measured per-read cost, not from a captured 5xx. A2/A7 remove the cost (one prepared series per name, in memory).
+  measured per-read cost, not from a captured 5xx or a timing taken on production data.
 
 **Invariants (plan §2.1).** I1 one instant: `thread_time` is T on every payload. I2 one tape end: `data_through` is
 `min(T, 20:00)` for every name of the day, legacy rows included. I3 one price: the chart, the day list's `live` block,
