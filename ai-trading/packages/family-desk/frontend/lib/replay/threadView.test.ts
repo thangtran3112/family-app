@@ -181,6 +181,17 @@ test("a swing thread with open holds leads with what is realized and what the op
   assert.equal(startedWithText({ startingBalance: 50000, stats: { ...activeThread.thread.stats, balance: 50000 } }, { holds_open: 0, equity_usd: 50000 }), "Started with $50,000 · no change yet");
 });
 
+// D-170: a day thread with a position open at the clock gets the same treatment as a swing thread with holds open.
+test("a day thread with a position open says what is realized and the open P/L, not \"no change yet\" (D-170)", () => {
+  const flat = { startingBalance: 50000, stats: { ...activeThread.thread.stats, balance: 50000 } };
+  assert.equal(startedWithText(flat, null, { balance: 50000, positions: 1, open_pnl_usd: -222 }), "Started with $50,000 · realized $0.00 · open P/L −$222.00");
+  assert.equal(startedWithText(flat, null, { balance: 50200, positions: 2, open_pnl_usd: 31.5 }), "Started with $50,000 · realized +$200.00 · open P/L +$31.50", "realized is the account's balance, read with the open P/L");
+  // A realized change alone, or nothing open, keeps the old sentences.
+  assert.equal(startedWithText({ ...flat, stats: { ...flat.stats, balance: 50123 } }, null, { balance: 50123, positions: 0, open_pnl_usd: 0 }), "Started with $50,000 · +$123.00 so far");
+  assert.equal(startedWithText(flat, null, { balance: 50000, positions: 0, open_pnl_usd: 0 }), "Started with $50,000 · no change yet");
+  assert.equal(startedWithText(flat, null, null), "Started with $50,000 · no change yet");
+});
+
 // D-083: the swing modal and journal say per week; the overview's recap said "a day".
 test("the plan recap counts per week for a swing thread (D-083)", () => {
   const swing = planRows(activeThread.thread.plan, "swing");

@@ -16,6 +16,7 @@ import { formatSignedUsd } from "../desk/mask.ts";
 import type { OpenTrade } from "./schemas.ts";
 import { etHhMm, ms } from "./time.ts";
 import { formatDayResult } from "./threadView.ts";
+import type { ClockAccount } from "./threadClock.ts";
 import type { ThreadPlan, ThreadToday } from "./threads.ts";
 
 // Daily-list practice, view logic (02o-b v1): what the hub card, the day screen and the review say. Pure, so the
@@ -496,6 +497,11 @@ export function endDayExitText(rows: readonly (Pick<PortfolioRow, "symbol" | "ho
 /** "2 open +$200.00": the hub's Today line, after the realized result; null with no open trade. */
 export const openTodayText = (pnl: Pick<DayPnl, "open_count" | "open_usd">): string | null =>
   pnl.open_count === 0 ? null : practiceText("threadTodayOpen", { count: pnl.open_count, pnl: formatDayResult(pnl.open_usd) });
+
+/** The Today row's open figure (D-169): the clock account the headline and the Equity figure are built from, so one open P/L feeds all of them.
+ *  null with no open position. */
+export const openAtClock = (account: Pick<ClockAccount, "positions" | "open_pnl_usd"> | null): Pick<DayPnl, "open_count" | "open_usd"> | null =>
+  account === null || account.positions === 0 ? null : { open_count: account.positions, open_usd: account.open_pnl_usd };
 
 /** "Long 100 @ $812.40 · 9:40 AM" for a held name (the entry time when the payload has it), "Flat" for one with no open trade. */
 export const positionText = (row: Pick<PortfolioRow, "position">): string => {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDeskApiClient } from "../api/client.ts";
 import { formatEtClock } from "../desk/format.ts";
@@ -126,4 +127,19 @@ test("one visible clock: the readout, the status bar and the chip read the same 
   assert.equal(replayBadgeText("2026-09-25", shown, true), "Replay · hidden day · 9:32 AM ET");
   // Paused: no second reading of the polled value moves it.
   assert.equal(extrapolate({ clock: "2026-09-25T13:32:05Z", running: false, speed: 10, state: "paused" }, 2000), "2026-09-25T13:32:05Z");
+});
+
+test("the status bar and the chip are reported in the commit that draws the readout, from the same value (D-172)", () => {
+  const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+  const workspace = source("../../components/practice/replay/ReplayWorkspace.tsx");
+  // One value feeds all three: the readout, the chip's playhead and the status line.
+  assert.match(workspace, /<span data-testid="thread-clock-time">\{formatEtClock\(shownClock\)\}<\/span>/);
+  assert.match(workspace, /useReportPracticeChrome\(\{[^}]*playhead: shownClock, status: replayStatusLine\(session\.tape_feed, shownClock\)/);
+  // The report is a layout effect (a passive one ran after the chart's effects and the paint, so the footer trailed the readout by about
+  // 400 ms), and it reads only the setter, so a report does not re-render the screen that made it.
+  const chrome = source("../../components/shell/desktop/PracticeChrome.tsx");
+  const report = chrome.slice(chrome.indexOf("export function useReportPracticeChrome"), chrome.indexOf("export function PracticeBand"));
+  assert.doesNotMatch(report, /useEffect|usePracticeChrome|StateContext/);
+  assert.equal((report.match(/useLayoutEffect\(/g) ?? []).length, 3);
+  assert.match(report, /useSetter\(\)/);
 });
