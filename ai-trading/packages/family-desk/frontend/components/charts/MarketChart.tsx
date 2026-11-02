@@ -28,6 +28,7 @@ import {
   lineData,
   paneHeights,
   pinnedRange,
+  rightOffsetOption,
   seriesMarkers,
   shadingData,
   volumeData,
@@ -263,6 +264,7 @@ export function MarketChart({
   const crosshairCallback = useRef(onCrosshair);
   const fitKey = useRef<string | null>(null);
   const lastIndex = useRef(-1);
+  const rightOffset = useRef<number | null>(null);
   const paneSignature = useRef("");
   const paneLayout = useRef(panes);
   const [ready, setReady] = useState(false);
@@ -393,6 +395,7 @@ export function MarketChart({
       markerPlugin.current = null;
       fitKey.current = null;
       lastIndex.current = -1;
+      rightOffset.current = null;
       paneSignature.current = "";
       overlayMap.clear();
       paneMap.clear();
@@ -427,17 +430,20 @@ export function MarketChart({
 
     const dayName = moneyAxis ? new Map(bars.map((bar, index) => [timeId(chartTime(bar.t)), moneyAxis.days[index] ?? ""])) : null;
     const timeLabel = dayName ? (time: Time) => dayName.get(timeId(time)) ?? "" : hideDates ? formatChartClock : formatChartTime;
+    // The right offset goes in only when it changes: the library scrolls to it every time it is set, so setting it on each data update snapped a chart she had scrolled back to the newest bar.
+    const wantedOffset = follow ? FOLLOW_RIGHT_PAD : 0;
     currentChart.applyOptions({
       timeScale: {
         timeVisible: interval !== "1d" && interval !== "1w",
         tickMarkFormatter: dayName || !(follow || hideDates || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates),
-        rightOffset: follow ? FOLLOW_RIGHT_PAD : 0,
+        ...rightOffsetOption(rightOffset.current, wantedOffset),
       },
       localization: {
         timeFormatter: timeLabel,
         ...(moneyAxis ? { priceFormatter: moneyAxis.label, tickmarksPriceFormatter: (prices: readonly number[]) => prices.map(moneyAxis.tick) } : {}),
       },
     });
+    rightOffset.current = wantedOffset;
     if (moneyAxis) currentChart.priceScale("right").applyOptions({ scaleMargins: { top: 0.12, bottom: 0.14 } });
 
     const wantedOverlays = new Set(overlays.map(({ id }) => id));
@@ -598,8 +604,7 @@ export function MarketChart({
       currentChart.timeScale().setVisibleLogicalRange(keepRange);
     } else if (follow && atNewest) {
       // The view keeps its zoom: pinned to the session's first bar while the revealed bars fit in it, else it scrolls with the newest bar.
-      const span = visible === null ? null : visible.to - visible.from;
-      const pinned = sessionStart === undefined || span === null ? null : pinnedRange(count, sessionStart, span, FOLLOW_RIGHT_PAD);
+      const pinned = sessionStart === undefined || visible === null ? null : pinnedRange(count, sessionStart, visible.to - visible.from, FOLLOW_RIGHT_PAD, visible.from);
       if (pinned) currentChart.timeScale().setVisibleLogicalRange(pinned);
       else currentChart.timeScale().scrollToRealTime();
     }
