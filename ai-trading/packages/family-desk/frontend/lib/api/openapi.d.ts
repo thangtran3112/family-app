@@ -1098,8 +1098,9 @@ export interface paths {
          * Create Thread
          * @description Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
          *     risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
-         *     each with its own plan and balance. A swing thread freezes its universe and calendar here, after the days, the data
-         *     and the arms check out (every rejection is a plain problem), and starts preparing its bars in the background.
+         *     each with its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
+         *     she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
+         *     check out (every rejection is a plain problem), and starts preparing its bars in the background.
          */
         post: operations["create_thread_api_desk_replay_threads_post"];
         delete?: never;
@@ -1155,8 +1156,9 @@ export interface paths {
         head?: never;
         /**
          * Patch Thread
-         * @description Replace the risk plan while the thread is active (a closed thread is a 409). It applies from the next session:
-         *     a session already started keeps the plan it began with.
+         * @description Replace the risk plan and the entry size (`shares`, a day thread only; left out clears it) while the thread is
+         *     active (a closed thread is a 409). It applies from the next session: a session already started keeps the plan and
+         *     the size it began with.
          */
         patch: operations["patch_thread_api_desk_replay_threads__thread_id__patch"];
         trace?: never;
