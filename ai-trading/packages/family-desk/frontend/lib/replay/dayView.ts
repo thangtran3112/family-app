@@ -593,9 +593,6 @@ export const moveText = (value: number | null): string => (value === null ? EMPT
 
 export const pickedLabel = (row: Pick<ReviewRow, "picked">): string => (row.picked === "traded" ? "Practiced" : row.picked === "starred" ? "Starred" : "");
 
-/** "Day finished" (the date follows it on the same line) when the plan hid the date while the day ran, else null (the date was never hidden: D-029). */
-export const dayFinishedLine = (review: Pick<DayReview, "dates_hidden">): string | null => (review.dates_hidden ? PRACTICE_COPY.reviewDayFinished : null);
-
 /** "Your day: 1 practice trade · +$1,565.00", dollars and cents. */
 export function journalLine(journal: Pick<DayJournal, "trades" | "pnl_usd">): string {
   const trades = journal.trades === 1 ? "1 practice trade" : `${journal.trades} practice trades`;

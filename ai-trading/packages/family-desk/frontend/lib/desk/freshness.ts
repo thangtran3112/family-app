@@ -549,7 +549,6 @@ export const PRACTICE_COPY = {
   reviewTitle: "How the list moved",
   reviewNote: "Moves are from each name's list price, not from the open",
   reviewRankNote: "Ranked by move from list price to the end of your practice window, biggest gain first",
-  reviewDayFinished: "Day finished",
   reviewSelection: "Your names moved {moves} · list median {median} · ranked {ranks} of {of}",
   reviewDayTitle: "Your day",
   reviewDayNone: "No practice trades this day",

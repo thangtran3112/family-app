@@ -3,6 +3,7 @@ import type { components } from "../api/openapi.js";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "../desk/api.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { SPEEDS, type Speed } from "./clock.ts";
+import { MarketSchema } from "./schemas.ts";
 import { ms } from "./time.ts";
 
 // The day-trade thread's clock as the Summary sees it (ADR-0018). The clock, the positions and the balance live on the server; this
@@ -37,6 +38,7 @@ export const ThreadClockSchema = z.object({
   focus_end: timestamp.nullable(),
   next_start: timestamp.nullable(),
   server_now: timestamp,
+  market: MarketSchema.nullish(),
   account: ClockAccountSchema.nullable(),
   label: z.string(),
 }) satisfies z.ZodType<components["schemas"]["ThreadClockOut"]>;

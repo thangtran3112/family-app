@@ -85,7 +85,6 @@ export const sessionSummary = {
   day: "2026-04-07",
   attempt: 1,
   status: "active",
-  hide_date: "no",
   revealed_through: "2026-04-07T14:07:00Z",
   window_end: "2026-04-07T20:00:00Z",
   trades: 1,
@@ -97,6 +96,7 @@ export const sessionSummary = {
 export const delta = {
   revealed_through: "2026-04-07T14:07:12Z",
   day_clock: null,
+  data_through: "2026-04-07T14:07:12Z",
   behind_clock: false,
   at_end: false,
   bars: [{ t: "2026-04-07T14:00:00Z", o: 187.2, h: 187.6, l: 186.95, c: 187.41, v: 1203344, ext: false }],

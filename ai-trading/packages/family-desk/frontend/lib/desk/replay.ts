@@ -13,7 +13,7 @@ import {
   type ReplayInterval,
 } from "../replay/schemas.ts";
 import { DailySchema, DayListSchema, OpenNextSchema, UniverseDaysSchema } from "../replay/daily.ts";
-import { ThreadSchema, ThreadsSchema } from "../replay/threads.ts";
+import { ThreadCapacitySchema, ThreadSchema, ThreadsSchema } from "../replay/threads.ts";
 import { clientOf, deskPath, jsonInit, readInit, type RequestOptions } from "./api.ts";
 
 // Loaders for the Practice endpoints (02o §b1): one function per route. Replay screens use only these; they never
@@ -128,6 +128,10 @@ export const endDay = (id: number, options?: RequestOptions) =>
 
 /** Her threads, the active ones first, each with its plan, stats and today (the hub's "Your practice threads"). */
 export const loadThreads = (options?: RequestOptions) => clientOf(options)(deskPath("/replay/threads"), ThreadsSchema, readInit(options));
+
+/** The day-trade slots in use across all users (the hub's "Day-trade slots n of 10"). */
+export const loadThreadCapacity = (options?: RequestOptions) =>
+  clientOf(options)(deskPath("/replay/threads/capacity"), ThreadCapacitySchema, readInit(options));
 
 /** One thread: plan, stats, the daily P/L rows (one per ended day) and the balance curve, all read back from the ledger. */
 export const loadThread = (id: number, options?: RequestOptions) => clientOf(options)(deskPath(`/replay/threads/${id}`), ThreadSchema, readInit(options));

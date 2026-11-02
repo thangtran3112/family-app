@@ -6,7 +6,7 @@ import { withPriorities } from "@/lib/desk/columns";
 import { formatEtDay, formatPrice } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { DayJournal, DayReview, ReviewRow } from "@/lib/replay/daily";
-import { dayBalanceText, dayFinishedLine, dayRecordText, journalLine, moveText, pickedLabel, selectionText, tradeLineRows, tradeTotalRow, type TradeLineRow } from "@/lib/replay/dayView";
+import { dayBalanceText, dayRecordText, journalLine, moveText, pickedLabel, selectionText, tradeLineRows, tradeTotalRow, type TradeLineRow } from "@/lib/replay/dayView";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { UniverseFootnote } from "./UniverseFootnote";
 import styles from "./day.module.css";
@@ -46,7 +46,6 @@ const TRADE_COLUMNS: DenseColumn<TradeLineRow>[] = [
  *  only exists once the day has ended; a plan that hid the date says the day is finished and shows it here (D-029). */
 export function ReviewPanel({ review, journal, footnote }: { review: DayReview; journal: DayJournal | null; footnote: string }) {
   const selection = selectionText(review);
-  const finished = dayFinishedLine(review);
   const balance = journal === null ? null : dayBalanceText(journal);
   // No scroll-to-self on mount (D-091 had one; D-189 removed it). The candidates table is gone once the day ended, so the review is already in view,
   // and `scrollIntoView` only scrolled the main region by its whole range (24 px at 1180), which hid the tab strip under the amber band.
@@ -55,7 +54,7 @@ export function ReviewPanel({ review, journal, footnote }: { review: DayReview; 
   return (
     <section className={styles.section} aria-label="How the list moved">
       <h2 className={styles.sectionTitle}>{PRACTICE_COPY.reviewTitle}</h2>
-      {finished && <p className={styles.line}>{`${finished} · ${formatEtDay(review.day)}`}</p>}
+      <p className={styles.line}>{formatEtDay(review.day)}</p>
       {empty ? (
         <>
           <EmptyBlock title={PRACTICE_COPY.reviewEmpty} />

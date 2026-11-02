@@ -431,7 +431,6 @@ test.describe("Practice", () => {
     const review = page.getByRole("region", { name: PRACTICE_COPY.reviewTitle });
     await expect(review).toBeVisible();
     await expect(review).toContainText("Your names moved");
-    await expect(review).toContainText(PRACTICE_COPY.reviewDayFinished); // D-029: the finished day shows its date, and says so
     await expect(review).toContainText(PRACTICE_COPY.reviewRankNote); // D-031: signed, biggest gain first
     const trades = review.getByRole("table", { name: "Your practice trades" });
     await expect(trades).toBeVisible(); // D-032: a line per trade

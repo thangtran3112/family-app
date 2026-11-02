@@ -250,6 +250,11 @@
               }
             ]
           },
+          "data_through": {
+            "format": "date-time",
+            "title": "Data Through",
+            "type": "string"
+          },
           "day_clock": {
             "anyOf": [
               {
@@ -286,6 +291,16 @@
               }
             ]
           },
+          "indicators": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndicatorsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "last": {
             "anyOf": [
               {
@@ -298,6 +313,16 @@
           },
           "levels": {
             "$ref": "#/components/schemas/ReplayLevelsOut"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "open_trade": {
             "anyOf": [
@@ -379,10 +404,23 @@
                 "type": "null"
               }
             ]
+          },
+          "thread_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Time"
           }
         },
         "required": [
           "revealed_through",
+          "data_through",
           "day_clock",
           "behind_clock",
           "at_end",
@@ -3785,6 +3823,16 @@
             "title": "List At",
             "type": "string"
           },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notes": {
             "anyOf": [
               {
@@ -3895,6 +3943,18 @@
                 "type": "null"
               }
             ]
+          },
+          "thread_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Time"
           },
           "universe": {
             "$ref": "#/components/schemas/ListUniverseOut"
@@ -4431,6 +4491,11 @@
               }
             ]
           },
+          "data_through": {
+            "format": "date-time",
+            "title": "Data Through",
+            "type": "string"
+          },
           "day_clock": {
             "anyOf": [
               {
@@ -4467,6 +4532,16 @@
               }
             ]
           },
+          "indicators": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IndicatorsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "interval": {
             "enum": [
               "1m",
@@ -4488,6 +4563,16 @@
           },
           "levels": {
             "$ref": "#/components/schemas/ReplayLevelsOut"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "open_trade": {
             "anyOf": [
@@ -4570,6 +4655,18 @@
               }
             ]
           },
+          "thread_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Time"
+          },
           "window_start": {
             "format": "date-time",
             "title": "Window Start",
@@ -4578,6 +4675,7 @@
         },
         "required": [
           "revealed_through",
+          "data_through",
           "day_clock",
           "behind_clock",
           "at_end",
@@ -6922,6 +7020,145 @@
         "title": "IncomeOut",
         "type": "object"
       },
+      "IndicatorRowOut": {
+        "description": "The indicators of one bar (`t` is its open), computed on the server from the same cut as the bars, the price and\nthe forming candle. A value that has not warmed up is null, never filled.",
+        "properties": {
+          "ema21": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema21"
+          },
+          "ema9": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema9"
+          },
+          "macd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macd"
+          },
+          "macd_hist": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macd Hist"
+          },
+          "macd_signal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macd Signal"
+          },
+          "rsi14": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi14"
+          },
+          "t": {
+            "format": "date-time",
+            "title": "T",
+            "type": "string"
+          },
+          "vwap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap"
+          }
+        },
+        "required": [
+          "t",
+          "ema9",
+          "ema21",
+          "vwap",
+          "rsi14",
+          "macd",
+          "macd_signal",
+          "macd_hist"
+        ],
+        "title": "IndicatorRowOut",
+        "type": "object"
+      },
+      "IndicatorsOut": {
+        "description": "`rows` are the indicators of the bars this payload carries (an advance: the new bars; a feed: every returned bar)\nand then of the forming candle, whose close is the price. `as_of_bar` is the open of the last bar included.",
+        "properties": {
+          "as_of_bar": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Bar"
+          },
+          "interval": {
+            "enum": [
+              "1m",
+              "5m",
+              "15m"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/IndicatorRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "interval",
+          "as_of_bar",
+          "rows"
+        ],
+        "title": "IndicatorsOut",
+        "type": "object"
+      },
       "JournalOut": {
         "description": "Live while the session is active (realized plus the open trade marked at the playhead); final after\n`end`. `signals_vs_trades` and the 15/30-minute changes look past the playhead, so they are empty until\nthe session has ended.",
         "properties": {
@@ -8362,6 +8599,58 @@
           "options"
         ],
         "title": "MarketDataClassOut",
+        "type": "object"
+      },
+      "MarketOut": {
+        "description": "The exchange's state at the thread time (a day thread's payloads): `phase`, when the day's tape ends, when the\nlast bar of the name closed (null where the payload names no single name), and when the next trading day's data\nstarts (null on the plan's last day). After `tape_end` the day has no bars: nothing is filled across the gap.",
+        "properties": {
+          "last_bar_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Bar At"
+          },
+          "next_open_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Open At"
+          },
+          "phase": {
+            "enum": [
+              "premarket",
+              "regular",
+              "after_hours",
+              "closed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "tape_end": {
+            "format": "date-time",
+            "title": "Tape End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase",
+          "tape_end",
+          "last_bar_at",
+          "next_open_at"
+        ],
+        "title": "MarketOut",
         "type": "object"
       },
       "MarketStripTileOut": {
@@ -11081,14 +11370,6 @@
             ],
             "title": "Day List Id"
           },
-          "hide_date": {
-            "enum": [
-              "yes",
-              "no"
-            ],
-            "title": "Hide Date",
-            "type": "string"
-          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -11155,7 +11436,6 @@
           "day",
           "attempt",
           "status",
-          "hide_date",
           "revealed_through",
           "window_end",
           "trades",
@@ -11454,12 +11734,8 @@
         "type": "object"
       },
       "ReviewOut": {
-        "description": "Every candidate's move from its list price to the window end and the close, ranked by the signed move to the\nwindow end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen\nhid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029).",
+        "description": "Every candidate's move from its list price to the regular close, ranked by the signed move, biggest gain\nfirst. `window_end` is the yardstick the moves were measured to (the regular close; a day ended earlier keeps its\nown). Only present once the day ended. `day` is the finished day's date, always shown\n(a plan's `hideDates` is accepted and ignored).",
         "properties": {
-          "dates_hidden": {
-            "title": "Dates Hidden",
-            "type": "boolean"
-          },
           "day": {
             "format": "date",
             "title": "Day",
@@ -11487,7 +11763,6 @@
         },
         "required": [
           "day",
-          "dates_hidden",
           "window_end",
           "of",
           "rows",
@@ -11597,23 +11872,11 @@
           "symbol": {
             "title": "Symbol",
             "type": "string"
-          },
-          "window_end_price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Window End Price"
           }
         },
         "required": [
           "symbol",
           "list_price",
-          "window_end_price",
           "move_pct",
           "close_price",
           "close_move_pct",
@@ -14852,6 +15115,25 @@
         "title": "ThreadBriefOut",
         "type": "object"
       },
+      "ThreadCapacityOut": {
+        "description": "The day-trade slots, shared by every user: at most `day_max` active day threads at once. Closing a day thread\nfrees a slot; swing threads do not use one.",
+        "properties": {
+          "day_active": {
+            "title": "Day Active",
+            "type": "integer"
+          },
+          "day_max": {
+            "title": "Day Max",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day_active",
+          "day_max"
+        ],
+        "title": "ThreadCapacityOut",
+        "type": "object"
+      },
       "ThreadClockOut": {
         "description": "The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a\nrunning clock was settled before this was built); a client may extrapolate it with `speed` between polls but never\nowns it. It runs through the close, the night and the weekend with no end of its own.",
         "properties": {
@@ -14914,6 +15196,16 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "next_start": {
             "anyOf": [
@@ -20907,7 +21199,7 @@
         ]
       },
       "post": {
-        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,\neach with its own plan and balance, and its own `name` (the server gives it one: \"Day thread \u00b7 Oct 15\", \"(2)\" when\nshe already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms\ncheck out (every rejection is a plain problem), and starts preparing its bars in the background.",
+        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day\nthreads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each\nthread has its own plan and balance, and its own `name` (the server gives it one: \"Day thread \u00b7 Oct 15\", \"(2)\" when\nshe already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms\ncheck out (every rejection is a plain problem), and starts preparing its bars in the background.",
         "operationId": "create_thread_api_desk_replay_threads_post",
         "requestBody": {
           "content": {
@@ -20933,6 +21225,28 @@
           }
         },
         "summary": "Create Thread",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/api/desk/replay/threads/capacity": {
+      "get": {
+        "description": "The day-trade slots in use across all users and the most there can be (10). Declared before\n`/threads/{thread_id}`, which would otherwise read \"capacity\" as an id.",
+        "operationId": "thread_capacity_api_desk_replay_threads_capacity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadCapacityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Thread Capacity",
         "tags": [
           "replay"
         ]

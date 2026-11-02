@@ -9,7 +9,6 @@ import {
   cellText,
   cellTone,
   dayBalanceText,
-  dayFinishedLine,
   dayRecordText,
   dayCellText,
   dayCellTone,
@@ -222,9 +221,7 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
   assert.deepEqual(tradeLineRows({ lines: [] }), []);
 });
 
-test("the review says the day is finished when the plan hid its date, and says nothing otherwise (D-029)", () => {
-  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished");
-  assert.equal(dayFinishedLine({ dates_hidden: false }), null);
+test("the review ranks the list by the move from the list price", () => {
   assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to the end of your practice window, biggest gain first");
 });
 
@@ -248,7 +245,6 @@ test("the strings the day screens build contain no banned term", () => {
     dayRecordText(meta),
     dayBalanceText(meta)!,
     PRACTICE_COPY.reviewRankNote,
-    PRACTICE_COPY.reviewDayFinished,
     PRACTICE_COPY.reviewDayHint,
     PRACTICE_COPY.reviewDayNone,
     ...tradeLineRows(meta).flatMap((row) => [row.entry, row.exit, row.pnl]),
