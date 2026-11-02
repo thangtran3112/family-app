@@ -75,6 +75,12 @@ def previous_session(asset: Asset, day: date) -> date:
     return _calendar(asset).date_to_session(label, direction="previous").date()
 
 
+def next_session(asset: Asset, day: date) -> date:
+    """The trading day after `day` (`day` itself need not be a trading day)."""
+    label = pd.Timestamp(day) + pd.Timedelta(days=1)
+    return _calendar(asset).date_to_session(label, direction="next").date()
+
+
 def annotate(bars: pd.DataFrame, asset: Asset) -> pd.DataFrame:
     """Adds `day` (trading day) and `phase` ("pre", "regular", "post") to 1-minute bars.
 

@@ -208,6 +208,30 @@ def test_every_surface_reports_the_thread_clock_as_its_time(db_session, user_id,
     assert not wrong, f"every surface must name T={NIGHT}; these do not: {wrong}"
 
 
+def test_a_jump_lands_every_surface_on_the_jumped_instant(db_session, user_id, svc, world, pinned) -> None:
+    """I1 after the user's own clock action: a Jump to 14:07 moves the clock, the account, the day list's prices and
+    each open name's chart to that one instant, none of them ahead of it."""
+    make_thread(db_session, user_id)
+    row, gapper = _names(db_session, user_id, svc)
+    thread_id = db_session.get(PracticePlan, row.plan_id).thread_id
+    target = et(DAYS[0], "14:07")
+    out = clock_mod.control(
+        db_session, user_id, thread_id, svc, running=None, speed=None, to=target.to_pydatetime(), step=None
+    )
+    db_session.commit()
+    listed = _live(db_session, user_id, svc, row)
+    frame = _sync(db_session, user_id, svc, gapper.id)
+    seen = {
+        "clock": out["clock"],
+        "account": out["account"]["as_of"],
+        "day list": listed["thread_time"],
+        "chart": frame["thread_time"],
+        "chart playhead": frame["revealed_through"],
+        "price": pd.Timestamp(_candidate(listed, "GAPPER")["live"]["at"]),
+    }
+    assert {label: at for label, at in seen.items() if at != target} == {}, f"every surface must name {target}"
+
+
 def test_data_through_is_the_tape_end_on_every_name_payload(db_session, user_id, svc, world, pinned) -> None:
     thread_id, _, gapper, flat = _night(db_session, user_id, svc, world)
     for label, session_id in (("GAPPER", gapper.id), ("FLAT (legacy)", flat.id)):

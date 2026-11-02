@@ -4,7 +4,7 @@ list serves. Real Postgres (`scripts/test-db.sh`); the history comes from an in-
 
 import json
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 import pytest
@@ -681,3 +681,16 @@ def test_ending_a_day_with_no_practice_still_gives_the_review(db_session, user_i
     assert (
         out["status"] == "ended" and out["journal"]["sessions"] == [] and out["review"]["rows"][0]["move_pct"] == -5.66
     )
+
+
+def test_a_day_ends_at_the_exchange_open_not_at_the_plans_start_at(db_session, user_id, svc) -> None:
+    """`day_start` is where the plan's first day begins (her "Start at" 10:00); the day after it, and the end of the
+    plan, are the exchange's open at 09:30."""
+    from types import SimpleNamespace
+
+    plan = _plan(db_session, user_id, svc, setup={"window": {"from": "10:00", "to": "11:30"}})
+    row = SimpleNamespace(plan_id=plan.id, day=DAYS[0])
+    assert plan_mod.day_start(plan, DAYS[0]) == et(DAYS[0], "10:00")
+    assert plan_mod.next_day_start(db_session, row) == et(DAYS[1], "09:30")
+    row.day = DAYS[4]  # the plan's last day (Fri 2026-10-02) ends at the next open, Monday's
+    assert plan_mod.next_day_start(db_session, row) == plan_mod.plan_end(plan) == et(date(2026, 10, 5), "09:30")

@@ -711,10 +711,11 @@ def end_day(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """End the day: the open practice trade exits at the last price, the window unseals, and the list review
-    (every candidate's move from its list price) is stored and served. Idempotent. A swing day exits nothing: the open
-    holds are marked at the close, and a day with no session is a Pass."""
-    _call(plan_mod.end_day, db, user.id, day_list_id, services)
+    """End a swing day: the open holds are marked at the close, the window unseals, and the list review (every
+    candidate's move from its list price) is stored and served. Idempotent. A day-trade day has no manual end (409 while
+    it is open): it ends when the thread clock reaches the next open, by itself, by a skip or by a jump
+    (`POST /threads/{id}/clock`, `POST /threads/{id}/skip-day`), and the review is stored then."""
+    _call(plan_mod.end_day_by_hand, db, user.id, day_list_id, services)
     return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
 
 
@@ -839,9 +840,10 @@ def close_thread(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Close the thread: its daily plan is archived and its plan and balance freeze. An open practice day is a 409 (end
-    it first). A swing thread's open holds exit at the last ended close and its open week is frozen with its review.
-    Idempotent."""
+    """Close the thread: its daily plan is archived and its plan and balance freeze. A day thread's open practice day
+    ends with it (its open positions book at the clock and its review is stored: there is no manual End day); a swing
+    thread's open day is a 409 (End Day first), and its open holds exit at the last ended close and its open week is
+    frozen with its review. Idempotent."""
     row = _call(threads_mod.close_thread, db, user.id, thread_id, services.now(), services)
     return threads_mod.detail(db, row)
 
@@ -851,7 +853,8 @@ def delete_thread(
     thread_id: int, user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)
 ) -> Response:
     """Delete the thread and everything under it: its ledger, plans, day lists, sessions and (swing) holds and weeks. An
-    open practice day is a 409 (end it first), like closing. It cannot be undone; a thread that is not hers is a 404."""
+    open practice day is a 409 (close the thread first: that ends the day). It cannot be undone; a thread that is not
+    hers is a 404."""
     _call(threads_mod.delete_thread, db, user.id, thread_id)
     return Response(status_code=204)
 
@@ -892,9 +895,10 @@ def get_thread_clock(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """The day thread's clock now (ADR-0018): its state, speed, the simulated time, the day's tape, when the next day
-    starts, and the simulated account at that time (balance, open P/L, equity). A running clock is brought to now
-    first, so this is the answer whether or not anyone was looking in between. A clock that reached the next trading
-    day's start hands the day over first (the answer is then the next day's). Poll it; it is idempotent."""
+    opens (the exchange's open, `next_start`), the latest time the clock can be jumped to (`jump_limit`), and the
+    simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is
+    the answer whether or not anyone was looking in between. A clock that reached the open that ends the day hands
+    it over first (the answer is then the next day's, or `no_day` after the plan's last). Poll it; it is idempotent."""
     _roll_closed_day(db, request, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
     return _call(clock_mod.read, db, user.id, thread_id, services)
 
@@ -908,9 +912,11 @@ def control_thread_clock(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), or (tests, tools) step it a bar or to the next
-    signal, or jump it to a time. Forward only. 409 without an open day. Time then runs on the server until she pauses
-    it, through the close and the night; the day hands over at the next trading day's start."""
+    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:
+    `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (a time already
+    past leaves the clock where it is) and no later than `jump_limit` (422 on `to` beyond it). 409 without an open
+    day. Time then runs on the server until she pauses it, through the close and the night; the day hands over at the
+    next trading day's open, and a jump across several opens hands over day by day."""
     _call(
         clock_mod.control,
         db,
@@ -934,9 +940,11 @@ def skip_thread_day(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Skip to the next day: the clock jumps to the next trading day's start (over the night and the weekend), the day
-    ends (every open position flattens at its tape's end) and the next day's list opens with the clock there. The next
-    list may wait on its data (`next_day_list_id` null): poll the hub then."""
+    """Skip to the next day: the clock jumps to the next trading day's market open, 9:30 ET and never the plan's "Start
+    at" time (over the night and the weekend), the day ends (every open position flattens at its tape's end and its
+    review is stored) and the next day's list opens with the clock there. On the plan's last day the clock jumps to
+    the open after it, the day ends and no day opens (`next_day_list_id` null). The next list may also wait on its
+    data (null): poll the hub then."""
     ended, opened = _call(clock_mod.skip_day, db, user.id, thread_id, services)
     if opened.restart_prep:
         db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
