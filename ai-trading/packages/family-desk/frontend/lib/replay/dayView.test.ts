@@ -367,15 +367,16 @@ test("the table follows the day clock only when a read carries live blocks, and 
   assert.deepEqual(liveState(atClock({ ...liveSmci, today: false })), { today: false });
   assert.deepEqual(dayColumns(atClock(liveSmci)).map((column) => column.live), dayColumns(dayList).map(() => undefined), "without a state the columns are the list's own");
   const columns = dayColumns(atClock(liveSmci), { today: true });
-  assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "RVOL now", "Change % now", "Earnings", "Volume now", "Since"]);
-  assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now", "prev_rvol", "prev_change_pct", "volume"]);
+  assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Volume now", "Since"]);
+  // Prev RVOL and Prev change % stay the previous session's own figures (D-018): they never relabel to the clock's
+  assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now", "volume"]);
   const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
   const [smci, anet] = atClock(liveSmci).candidates;
   // moving columns read the clock's values; the list-time ones keep the list's
   assert.equal(dayCellText(byKey.price_now!, smci!), "44.50");
   assert.equal(dayCellText(byKey.change_now!, smci!), "+17.41%");
-  assert.equal(dayCellText(byKey.prev_rvol!, smci!), "3.20×");
-  assert.equal(dayCellText(byKey.prev_change_pct!, smci!), "+17.41%");
+  assert.equal(dayCellText(byKey.prev_rvol!, smci!), "1.10×");
+  assert.equal(dayCellText(byKey.prev_change_pct!, smci!), "+1.20%");
   assert.equal(dayCellText(byKey.list_price!, smci!), "41.12");
   assert.equal(dayCellText(byKey.prev_close!, smci!), "37.90");
   assert.equal(dayCellText(byKey.matched_since!, smci!), "8:30 AM");
