@@ -5224,12 +5224,16 @@ export interface components {
              * @enum {string}
              */
             mode: "day" | "swing";
+            /** Name */
+            name: string;
             plan: components["schemas"]["PracticeThreadPlanV1"];
             /**
              * Schemaversion
              * @constant
              */
             schemaVersion: 1;
+            /** Shares */
+            shares?: number | null;
             /** Startingbalance */
             startingBalance: number;
             stats: components["schemas"]["PracticeThreadStatsV1"];

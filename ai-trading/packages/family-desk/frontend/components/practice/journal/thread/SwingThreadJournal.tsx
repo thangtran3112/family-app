@@ -50,7 +50,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
   if (!state) return null; // the screen only opens this for a thread that carries its swing state
 
   const balance = formatBalance(stats.balance);
-  const name = threadName(thread.thread).replace(" thread", "");
+  const name = threadName(thread.thread);
   const hidden = swingDatesHidden(setup);
   const view = swingCardView(thread);
   const where = state.next === "finished" ? practiceText("swingFinished", { days: state.days }) : practiceText("planDay", { day: state.day_no, of: state.days });
@@ -65,7 +65,7 @@ export function SwingThreadJournal({ thread, onChanged }: { thread: Thread; onCh
       <header className={styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>{`Thread · ${name} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`}</h1>
+            <h1 className={styles.title}>{`${name} · ${practiceText("swingCardWeek", { week: state.week_no, weeks: state.weeks })}`}</h1>
             <Badge tone="neutral">{threadModeLabel(thread.thread.mode)}</Badge>
           </div>
           <p className={styles.sub}>{`${startedWithText(thread.thread, state)} · ${where}${hidden ? ` · ${HUB_SWING_COPY.dateHidden}` : ""}`}</p>

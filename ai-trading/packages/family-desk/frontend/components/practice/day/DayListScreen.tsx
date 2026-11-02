@@ -507,7 +507,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                       : []),
                     { id: "window", label: "Practice window", value: `${practiceTime.from}–${practiceTime.to} ET` },
                     { id: "chart", label: "Chart", value: setup.interval },
-                    ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
+                    ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan, "day", thread.data.thread.shares).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
                     ...(ended ? [{ id: "day", label: "Day", value: formatEtDay(list.day) }] : []),
                   ]}
                 />

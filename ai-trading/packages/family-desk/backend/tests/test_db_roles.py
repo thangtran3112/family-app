@@ -413,9 +413,9 @@ def test_desk_runtime_can_use_the_swing_tables(role_split_urls: RoleSplitUrls) -
             ).scalar_one()
             thread_id = conn.execute(
                 text(
-                    "INSERT INTO practice_threads (owner_user_id, mode, starting_balance, stop_note_on_entry, "
-                    "trade_only_on_signal, status, created_at, updated_at) VALUES (:u, 'swing', 50000, 'yes', 'no', "
-                    "'active', now(), now()) RETURNING id"
+                    "INSERT INTO practice_threads (owner_user_id, name, mode, starting_balance, stop_note_on_entry, "
+                    "trade_only_on_signal, status, created_at, updated_at) VALUES (:u, 'Swing thread · roles', "
+                    "'swing', 50000, 'yes', 'no', 'active', now(), now()) RETURNING id"
                 ),
                 {"u": user_id},
             ).scalar_one()

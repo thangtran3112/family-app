@@ -1019,6 +1019,11 @@
         "schemaVersion": {
           "const": 1,
           "type": "number"
+        },
+        "shares": {
+          "maximum": 2147483647,
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "required": [
@@ -1163,12 +1168,23 @@
           ],
           "type": "string"
         },
+        "name": {
+          "maxLength": 60,
+          "minLength": 1,
+          "pattern": "^[ -~ -퟿-￿]+$",
+          "type": "string"
+        },
         "plan": {
           "$ref": "#/$defs/PracticeThreadPlanV1"
         },
         "schemaVersion": {
           "const": 1,
           "type": "number"
+        },
+        "shares": {
+          "maximum": 2147483647,
+          "minimum": 1,
+          "type": "integer"
         },
         "startingBalance": {
           "maximum": 10000000,
@@ -1192,6 +1208,7 @@
       "required": [
         "schemaVersion",
         "id",
+        "name",
         "mode",
         "startingBalance",
         "status",

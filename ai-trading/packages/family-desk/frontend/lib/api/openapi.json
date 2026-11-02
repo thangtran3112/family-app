@@ -10243,6 +10243,13 @@
             "title": "Mode",
             "type": "string"
           },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "pattern": "^[ -~\u00a0-\ud7ff\ue000-\uffff]+$",
+            "title": "Name",
+            "type": "string"
+          },
           "plan": {
             "$ref": "#/components/schemas/PracticeThreadPlanV1"
           },
@@ -10250,6 +10257,19 @@
             "const": 1,
             "title": "Schemaversion",
             "type": "integer"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
           },
           "startingBalance": {
             "maximum": 10000000.0,
@@ -10283,6 +10303,7 @@
           "createdAt",
           "id",
           "mode",
+          "name",
           "plan",
           "schemaVersion",
           "startingBalance",

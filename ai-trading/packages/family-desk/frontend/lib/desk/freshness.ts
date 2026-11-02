@@ -574,6 +574,8 @@ export const PRACTICE_COPY = {
   threadStartedFlat: "Started with {start} · no change yet",
   threadShares: "Shares per trade",
   threadSharesPerEntry: "You set it on each entry",
+  threadSharesNotSet: "Not set",
+  threadSharesPlaceholder: "Optional · tickets open at 100",
   threadPlanNoteNone: "None",
   threadPickTitle: "No practice thread selected",
   threadPickHint: "Pick a thread to open its journal.",

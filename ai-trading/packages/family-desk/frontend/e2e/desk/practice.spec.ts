@@ -504,7 +504,7 @@ test.describe("Practice", () => {
     await openRow(page, card);
     await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("thread ·");
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
     await expect(page.getByText(balance).first()).toBeVisible();
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();

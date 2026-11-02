@@ -10,8 +10,10 @@ import { ANY_CLOSE, DAY_URL, START_BUTTON, THREAD_URL, clickNewPlan, createThrea
 
 // The Practice landing, its New plan modal and the thread page (02r2, Paper mocks LEW-0 and X9Y-0).
 
-/** The delete confirm names its thread (D-079): "Delete October thread #12?". */
-const deleteDialog = (page: Page) => page.getByRole("dialog", { name: /^Delete .*thread #\d+\?$/ });
+/** The delete confirm names its thread (D-079): "Delete Day thread · Oct 15?". */
+const deleteDialog = (page: Page) => page.getByRole("dialog", { name: /^Delete (Day|Swing) thread · .+\?$/ });
+
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 test.describe("Practice landing", () => {
   test.beforeEach(async ({ context }) => {
@@ -495,24 +497,26 @@ test.describe("Practice landing · fix wave 5S", () => {
     await prepareDesk(context);
   });
 
-  test("two threads of one mode read apart by number, and the delete confirm names its thread, shows its whole warning and says Deleted (D-077, D-079)", async ({ page, context }) => {
-    const first = await createThreadByApi(context, { balance: 20_000 });
-    const second = await createThreadByApi(context, { balance: 30_000 });
+  test("two threads of one mode and day read apart by their stored names, and the delete confirm names its thread, shows its whole warning and says Deleted (D-069, D-079)", async ({ page, context }) => {
+    await createThreadByApi(context, { balance: 20_000 });
+    await createThreadByApi(context, { balance: 30_000 });
     await openDesk(page, "/practice");
     const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    await expect(table.getByRole("link", { name: new RegExp(`thread #${first}$`) })).toBeVisible();
-    await expect(table.getByRole("link", { name: new RegExp(`thread #${second}$`) })).toBeVisible();
+    const names = await table.getByRole("link", { name: /^Day thread · / }).allTextContents();
+    expect(names, "the day's second thread carries a (2)").toHaveLength(2);
+    expect(new Set(names).size, "D-069: no two threads read alike").toBe(2);
+    const [target] = names as [string, string];
 
-    await table.getByRole("button", { name: new RegExp(`^Delete .*thread #${first}$`) }).click();
-    const confirm = page.getByRole("dialog", { name: new RegExp(`^Delete .*thread #${first}\\?$`) });
+    await table.getByRole("button", { name: new RegExp(`^Delete ${literal(target)}$`) }).click();
+    const confirm = page.getByRole("dialog", { name: new RegExp(`^Delete ${literal(target)}\\?$`) });
     await expect(confirm).toBeVisible();
     // The warning wraps inside the dialog: it sits in a nowrap table cell, where it used to clip to "This can't be undor".
     await expect(confirm).toContainText("This can't be undone.");
     const clipped = await confirm.locator("p").evaluateAll((nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent));
     expect(clipped, "no line of the dialog is cut off").toEqual([]);
     await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
-    await expect(page.getByRole("status").filter({ hasText: /^Deleted .*thread #\d+$/ })).toHaveText(new RegExp(`thread #${first}$`));
-    await expect(table.getByRole("link", { name: new RegExp(`thread #${first}$`) })).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: /^Deleted (Day|Swing) thread · .+$/ })).toHaveText(`Deleted ${target}`);
+    await expect(table.getByRole("link", { name: new RegExp(`^${literal(target)}$`) })).toHaveCount(0);
   });
 
   test("with no thread the page is one card with one sentence and a primary button that opens New plan, and never says risk plan (D-115)", async ({ page }) => {
