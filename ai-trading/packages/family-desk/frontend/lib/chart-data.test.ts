@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachPinchZoom, chartTime, candlestickData, currentValue, lineData, pinchFactor, pinnedRange, rightOffsetOption, zoomedRange } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, zoomedRange } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -31,7 +31,9 @@ test("bar and line points are sorted, unique, and use whitespace for missing val
   ]);
 });
 
-import { TAG_CLEARANCE, clearTickLabel, crosshairPoint, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData, wholeAxisLabel } from "./chart-data.ts";
+import { defaultChartPrefs } from "./replay/chartPrefs.ts";
+import { chartLevels, positionLevel, stopLevel } from "./replay/marks.ts";
+import { TAG_CLEARANCE, axisTagPrices, clearTickLabel, crosshairPoint, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData, wholeAxisLabel } from "./chart-data.ts";
 
 const intraday = [
   { t: "2026-10-23T13:30:00Z", o: 10, h: 12, l: 9, c: 11, v: 100, ext: false },
@@ -264,6 +266,21 @@ test("a followed replay chart waits at the session's first bar only before the o
   assert.equal(pinnedRange(66, 40, 35), null, "26 bars in");
 });
 
+test("an update moves a followed chart to its newest bar from the first session bar on, whatever the data came from (D-195)", () => {
+  // 6000 lookback bars, the session opens at index 6000; the view is 100 slots wide with the newest bar 10 from its right edge.
+  const open = pinnedRange(6000, 6000, 99);
+  assert.deepEqual(open, { from: 6000, to: 6099 }, "before the open the view waits");
+  assert.equal(followsNewest(true, { from: 5998, to: 6097 }, 5999, open), false, "no session bar yet: it keeps waiting");
+  // The first session bar arrives (the clock moved: Step, Play, a Pause in another window, the clock route): `waiting` is gone and the
+  // view was parked on the old newest bar, so it follows. Nothing of this depends on where the data came from.
+  assert.equal(followsNewest(true, { from: 5998, to: 6097 }, 5999, pinnedRange(6001, 6000, 99)), true, "the first session bar");
+  assert.equal(followsNewest(true, { from: 5911, to: 6010 }, 6003, pinnedRange(6005, 6000, 99)), true, "four bars on: the newest bar and its pad are in view, so it follows");
+  assert.equal(followsNewest(true, null, 6003, null), true, "no view yet");
+  assert.equal(followsNewest(true, { from: 5905, to: 6001.5 }, 6003, null), true, "a bar and a half behind still counts as parked");
+  assert.equal(followsNewest(true, { from: 5800, to: 5899 }, 6003, null), false, "she scrolled back to read the past: the view is hers");
+  assert.equal(followsNewest(false, { from: 5911, to: 6010 }, 6003, null), false, "a chart that does not follow stays where it is");
+});
+
 test("the right offset is sent to the time scale once, not on every data update (the library scrolls to it each time it is set)", () => {
   assert.deepEqual(rightOffsetOption(null, 10), { rightOffset: 10 }, "first draw");
   assert.deepEqual(rightOffsetOption(10, 10), {}, "a data update leaves her scroll position alone");
@@ -293,4 +310,29 @@ test("a price-axis tick under a last-value tag is left out; the tick one step aw
   assert.equal(clearTickLabel("$51,500", 100, [107, 300]), "", "any tag in reach hides it");
   assert.equal(clearTickLabel("$51,500", null, [107]), "$51,500", "no place, no verdict: the tick stays");
   assert.equal(clearTickLabel("$51,500", 100, []), "$51,500");
+});
+
+test("the replay price axis leaves out a tick that any tag sits on: levels, last price, position and stop (D-196)", () => {
+  // TSLA at 9:34 AM ET. A tick label is 16 px clear of every tag or it is left out (D-181); dollars map to px at the scene's own scale.
+  const keyLevels = chartLevels({ prior_close: 384.2, session_high: 386.83, session_low: 380.97 }, defaultChartPrefs());
+  const ticks = (pxPerDollar: number, tags: readonly number[], labels: number[]) => {
+    const y = (price: number) => (400 - price) * pxPerDollar;
+    return labels.map((price) => clearTickLabel(price.toFixed(2), y(price), tags.map(y)));
+  };
+  const flat = axisTagPrices([], keyLevels, 372.47);
+  assert.deepEqual([...flat].sort(), [372.47, 380.97, 384.2, 386.83], "the level tags and the last-price tag");
+  // 1440: "372.00" sat under the red last-price tag (7 px), "386.00" under the session high (12 px), "380.00" under the session low (14 px).
+  assert.deepEqual(ticks(14, flat, [372, 376, 380, 382.5, 386, 388]), ["", "376.00", "", "382.50", "", "388.00"]);
+  // 1180 with the Practice drawer open (9 px a dollar): "387.50" sat under the session high (6 px), "382.50" under the session low (14 px).
+  assert.deepEqual(ticks(9, flat, [382.5, 387.5, 390, 377.5]), ["", "", "390.00", "377.50"]);
+  // A short opened at 374.94 with a stop at 378.50 adds two tags: "376.00" (15.9 px at 15 px a dollar) and "378.00" now sit under them.
+  const held = axisTagPrices([], [...keyLevels, ...positionLevel({ side: "short", shares: 50, entry_price: 374.94 }), ...stopLevel({ stop_price: 378.5 })], 372.47);
+  assert.deepEqual([...held].sort(), [372.47, 374.94, 378.5, 380.97, 384.2, 386.83], "the position and stop tags join them");
+  assert.deepEqual(ticks(15, held, [376, 378, 370]), ["", "", "370.00"]);
+  assert.deepEqual(ticks(15, flat, [376, 378, 370]), ["376.00", "378.00", "370.00"], "without them the same ticks stay");
+});
+
+test("a level line that prints no number, a missing price and a hidden last-price pill leave their ticks alone (D-196)", () => {
+  assert.deepEqual(axisTagPrices([], [{ price: 376, plain: true }, { price: null }, { price: Number.NaN }, { price: 380 }], null), [380]);
+  assert.deepEqual(axisTagPrices([375.2, null], [], 372.47), [375.2, 372.47], "the overlays' last values come first, then the last price");
 });

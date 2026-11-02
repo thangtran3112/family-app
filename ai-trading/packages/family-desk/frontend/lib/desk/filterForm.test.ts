@@ -3,7 +3,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { FilterStrategySpecV1Schema } from "@ai-trading/contracts/filter-strategy-spec-v1";
 import {
+  AVG_VOLUME_DAYS_HINT,
   addRow,
+  formToNewSpec,
   formToSpec,
   isDirty,
   newRow,
@@ -16,6 +18,8 @@ import {
   updateRow,
 } from "./filterForm.ts";
 import { choiceOf, OPERAND_CATALOG, operandFor } from "./operands.ts";
+import { NEW_FILTER_SPEC } from "./screenerView.ts";
+import { parseFilterSpec } from "../spec/parse.ts";
 
 const dir = new URL("../../../contracts/templates/filters/", import.meta.url);
 const templates = readdirSync(dir).filter((file) => file.endsWith(".json")).map((file) => ({
@@ -111,4 +115,22 @@ test("every operand in the shipped filters is either in the picker or kept read-
   };
   for (const { spec } of templates) walk(spec.when);
   assert.equal(unknown, 0, "all shipped filter operands are editable in the picker");
+});
+
+test("the new filter opens with the 20 sessions a blank means, and the hint names the range and the default (D-197)", () => {
+  const form = specToForm(parseFilterSpec(NEW_FILTER_SPEC)!);
+  assert.equal(form.avgVolumeDays, "20", "filled in, as the Days fields under Conditions are");
+  assert.equal(AVG_VOLUME_DAYS_HINT, "5 to 60 · blank is 20");
+  const contract = FilterStrategySpecV1Schema.shape.liquidity.unwrap().shape.avgVolumeDays;
+  assert.equal(contract.safeParse(5).success && contract.safeParse(60).success, true, "the range in the hint is the contract's");
+  assert.equal(contract.safeParse(4).success || contract.safeParse(61).success, false);
+});
+
+test("Create filter with the days box blank saves 20; an edit keeps its blank, and so does a filter with no volume floor (D-197)", () => {
+  const form = { ...specToForm(parseFilterSpec(NEW_FILTER_SPEC)!), avgVolumeDays: "" };
+  assert.equal((formToNewSpec(form).liquidity as Record<string, number>).avgVolumeDays, 20);
+  assert.equal(FilterStrategySpecV1Schema.safeParse(formToNewSpec(form)).success, true);
+  assert.equal((formToNewSpec({ ...form, avgVolumeDays: " 30 " }).liquidity as Record<string, number>).avgVolumeDays, 30, "a number she typed is kept");
+  assert.equal("avgVolumeDays" in (formToSpec(form).liquidity as object), false, "an edit does not add it: shipped filters round-trip unchanged");
+  assert.equal(formToNewSpec({ ...form, minAvgVolume: "" }).liquidity !== undefined && "avgVolumeDays" in (formToNewSpec({ ...form, minAvgVolume: "" }).liquidity as object), false, "no volume floor: the days mean nothing");
 });

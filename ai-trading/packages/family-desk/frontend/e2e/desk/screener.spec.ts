@@ -94,10 +94,25 @@ test("the defaults show as chips above the table; New filter opens a blank filte
   await chips.getByRole("link", { name: "New filter" }).click();
   await expect(page).toHaveURL(/\/screener\/filters$/);
   await expect(page.getByRole("heading", { level: 1, name: "New filter" })).toBeVisible();
+  // D-197: the Liquidity floor's last box is filled in like the Days fields under Conditions, and says its range and what a blank means.
+  await expect(page.getByLabel("Average volume days")).toHaveValue("20");
+  await expect(page.getByText("5 to 60 · blank is 20")).toBeVisible();
   await page.getByRole("button", { name: "Create filter" }).click();
   await expect(page).toHaveURL(/\/screener\/filters\?id=\d+$/);
   await expect(page.getByRole("heading", { level: 1, name: "New filter" })).toBeVisible();
   await expectCleanScreen(page);
+});
+
+test("Create filter with Average volume days left blank saves 20, and the box shows that default (D-197)", async ({ page }) => {
+  await openDesk(page, "/screener/filters");
+  const days = page.getByLabel("Average volume days");
+  await days.fill("");
+  await expect(days, "a cleared box still shows the default").toHaveAttribute("placeholder", "20");
+  await page.getByRole("button", { name: "Create filter" }).click();
+  await expect(page).toHaveURL(/\/screener\/filters\?id=\d+$/);
+  const saved = await getJson<Detail>(page, `/api/desk/screener/filters/${new URL(page.url()).searchParams.get("id")}`);
+  expect((saved.spec.liquidity as { avgVolumeDays?: number }).avgVolumeDays, "the blank is saved as the 20 it means").toBe(20);
+  await expect(page.getByLabel("Average volume days")).toHaveValue("20");
 });
 
 test("the results table lists matches in rank order with the filter's columns; a narrow pane drops Since, then ATR %, then Volume", async ({ page }) => {
