@@ -64,13 +64,16 @@ test.describe("Swing practice", () => {
     await page.waitForURL(THREAD_URL);
     await expectBacktestChrome(page, "Practice"); // ADR-0014: the thread page is Backtest mode
     const balance = page.getByRole("region", { name: "Thread balance" });
-    await expect(balance).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
+    await expect(balance).toContainText("12 names · Week 1 of 3 · No holds open"); // D-112: names, week and holds; the mode is the header chip
+    await expect(balance).toContainText("Day 1 of 15"); // the place line, once
+    await expect(balance).not.toContainText("Swing");
     await expect(balance).toContainText("$50,000.00");
     await expect(balance).toContainText("Equity $50,000");
     await expect(balance).toContainText(PRACTICE_COPY.threadSimulated);
     await openDesk(page, "/practice");
     const row = swingRow(page);
-    await expect(row).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
+    await expect(row).toContainText("12 names · Week 1 of 3 · No holds open");
+    await expect(row).toContainText("Day 1 of 15"); // D-112: the day is the Progress cell's, not the sub-line's
     await expect(row).toContainText("$50,000.00"); // D-112: the balance sits in its own cell, not in the sub-line
     await expect(row).toContainText("Equity $50,000");
     await expect(row).toContainText(PRACTICE_COPY.threadSimulated);
