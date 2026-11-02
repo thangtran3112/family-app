@@ -209,7 +209,7 @@ test.describe("Practice landing", () => {
     await row.getByRole("link", { name: /^Open Day 1$/ }).click();
     await page.waitForURL(DAY_URL);
 
-    // The thread page is where she returns between days: today's day is a Resume link.
+    // The thread page is where she returns between days: today's day is an Open Day link.
     await openDesk(page, `/practice/thread?id=${id}`);
     await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: /^Open Day 1$/ })).toBeVisible();
   });

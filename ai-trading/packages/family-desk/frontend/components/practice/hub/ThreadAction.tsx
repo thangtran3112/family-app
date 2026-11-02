@@ -24,8 +24,8 @@ export const lockLink = (locked: boolean) =>
   locked ? { "aria-disabled": true as const, tabIndex: -1, onClick: (event: MouseEvent) => event.preventDefault() } : {};
 
 /**
- * What a thread can do next, for the landing's rows and the thread page (02r2): a day thread resumes the day in progress,
- * opens a listed day, or starts the next day of its plan ("Start Day 3"; D-078), or says a new plan is needed; a swing thread continues
+ * What a thread can do next, for the landing's rows and the thread page (02r2): a day thread opens the day in progress (the clock's Play is the only Resume)
+ * or a listed day, or starts the next day of its plan ("Start Day 3"; D-078), or says a new plan is needed; a swing thread continues
  * or starts its day (while its week review is owed it has no action here: the overview carries the review). A closed thread has none. The same logic as the old thread card
  * (D-046, D-048). `busy` is true while any thread's open runs, so no second open can race the first; `onBusy` reports
  * this action's own open.
