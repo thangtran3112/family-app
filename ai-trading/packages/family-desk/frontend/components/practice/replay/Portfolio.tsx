@@ -14,7 +14,6 @@ import type { DayList } from "@/lib/replay/daily";
 import { openPositionsText, portfolioCells, portfolioFooter, portfolioRows, positionText, stopCrossedText, type PortfolioRow, type PortfolioUnit } from "@/lib/replay/dayView";
 import { exitMark } from "@/lib/replay/markInput";
 import { exitKindFor } from "@/lib/replay/playView";
-import type { OpenTrade } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayResultTone } from "@/lib/replay/threadView";
 import styles from "./panels.module.css";
@@ -26,9 +25,6 @@ const UNITS = [
   { value: "pct", label: "%" },
 ] as const;
 
-/** The name she is on in the replay, with its playhead and live open trade (null: she just exited). Absent on the day page. */
-export type PortfolioFrom = { symbol: string; playhead: string; openTrade: OpenTrade | null };
-
 /** The day list, read for the Portfolio. It follows every mark through `revision`; `enabled` is off where there is no day. */
 export const useDayPortfolio = (dayListId: number | null, revision = 0, enabled = true): DeskQueryResult<DayList> =>
   useDeskQuery(`portfolio:${dayListId}`, (signal) => loadDayList(dayListId ?? 0, {}, { signal }), { revision, enabled: enabled && dayListId !== null });
@@ -36,25 +32,8 @@ export const useDayPortfolio = (dayListId: number | null, revision = 0, enabled 
 /** The day's portfolio (practice = portfolio), read like a broker's positions list: a head with the open-position count and a $ / % switch, then a row for
  *  every name she opened, flat or holding its one open position (any number of fills, one average cost), with its last price, its move since entry and the
  *  day's P/L, each in dollars or percent. SIMULATED. Any number of names hold a position at once. A row opens or resumes that name's chart at the shared day
- *  clock; a held row also has Exit, which closes that name's trade from wherever she is. `from` and `onExitHere` exist only in
- *  the replay: the live view of the name on the chart and the workspace's own exit for it. */
-export function PortfolioPanel({
-  dayListId,
-  query,
-  from,
-  onExitHere,
-  onExited,
-  onLeave,
-}: {
-  dayListId: number;
-  query: DeskQueryResult<DayList>;
-  from?: PortfolioFrom;
-  onExitHere?: () => void;
-  /** A name's trade was closed from its row (the workspace answers a stop pause on it). */
-  onExited?: (symbol: string) => void;
-  /** Runs before a row opens another name or exits one: the workspace stops a running replay first, as the day strip does. */
-  onLeave?: () => void;
-}) {
+ *  clock; a held row also has Exit, which closes that name's trade from wherever she is. It lives on the Portfolio tab only: the chart view has none. */
+export function PortfolioPanel({ dayListId, query }: { dayListId: number; query: DeskQueryResult<DayList> }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -64,12 +43,11 @@ export function PortfolioPanel({
     return query.error === null ? null : <p className={styles.muted}>{PRACTICE_COPY.dayLoadError}</p>;
   }
   const day = query.data;
-  const rows = portfolioRows(day, from);
+  const rows = portfolioRows(day);
   const footer = portfolioFooter(day.day_pnl);
   const ended = day.status === "ended";
 
   async function open(symbol: string) {
-    onLeave?.();
     setBusy(symbol);
     setMessage(null);
     try {
@@ -82,23 +60,17 @@ export function PortfolioPanel({
     }
   }
 
-  /** Exit from the row: the name on the chart exits through the workspace; any other name opens its session at the day clock
-   *  (which lifts it if it is behind) and books the exit there, the same two calls as the stop-pause toast. */
+  /** Exit from the row: opens the name's session at the day clock (which lifts it if it is behind) and books the exit there, the
+   *  same two calls as the stop-pause toast. */
   async function exit(row: PortfolioRow) {
     if (row.side === null) return;
-    if (row.current && onExitHere) {
-      onExitHere();
-      return;
-    }
     const built = exitMark(exitKindFor(row.side));
     if (!built.ok) return;
-    onLeave?.();
     setBusy(row.symbol);
     setMessage(null);
     try {
       const session = await startDaySession(dayListId, row.symbol);
       await placeMark(session.id, built.mark);
-      onExited?.(row.symbol);
       query.refresh();
     } catch (error) {
       setMessage(problemMessage(error, PRACTICE_COPY.markError));

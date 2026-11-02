@@ -3,11 +3,12 @@ import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
 import { stepSession } from "./clock-helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
 import { createStubSession, openFirstDay, startThread } from "./hub-helpers";
-import { backToDayList, placeOrder } from "./swing-helpers";
+import { backToDayList, placeOrder, replayRail } from "./swing-helpers";
 
 // The replay workspace's left rail and foot (owner, 2026-11-01): the left rail is the popular technical indicators read off the bars
 // shown so far; the Back link and the End day bar are gone from a day thread's chart (the tab strip leads back); and Practice has no
-// keyboard shortcuts at all. The stub day is TSLA on Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars.
+// keyboard shortcuts at all. Later the same day (owner, 2026-11-01): the tape moved under the indicators in the left rail, the order
+// ticket has the right rail to itself, and the chart view shows no portfolio (that is the Portfolio tab's). The stub day is TSLA on Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars.
 
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const leftRail = (page: Page) => page.getByRole("complementary", { name: "Practice side panel" });
@@ -36,6 +37,37 @@ test.describe("Practice replay: indicators on the left, no shortcuts, no Back or
     for (const gone of ["Armed strategies", "Shares per trade", "Plan note", "attempt", "Symbol ·"]) await expect(leftRail(page), `the old "${gone}" block is gone`).not.toContainText(gone);
     await stepSession(page, 3);
     await expect(panel).toContainText("RSI (14)");
+    await expectCleanScreen(page);
+  });
+
+  test("the left rail is the indicators on top and the tape under them; the right rail is the order ticket; the chart view shows no portfolio", async ({ page, context }) => {
+    await openDesk(page, `/practice/replay?id=${await createStubSession(context)}`);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await stepSession(page, 3);
+
+    const tape = leftRail(page).getByTestId("tape-panel");
+    await expect(tape.getByRole("heading", { name: "Tape" })).toBeVisible();
+    await expect(tape.getByRole("table", { name: "Time and sales" })).toBeVisible();
+    const [top, bottom] = [await indicators(page).boundingBox(), await tape.boundingBox()];
+    expect(top!.y + top!.height, "the tape starts under the indicators").toBeLessThanOrEqual(bottom!.y + 1);
+    expect(bottom!.height, "the tape keeps room to read").toBeGreaterThanOrEqual(400);
+
+    // The right rail is the order side: the ticket (and the signals), no tape.
+    const right = await replayRail(page, "Practice");
+    const ticket = right.getByRole("region", { name: "Order ticket" });
+    await expect(ticket).toBeVisible();
+    await expect(right.getByRole("table", { name: "Time and sales" })).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Replay context" }).or(page.getByRole("complementary", { name: "Replay context" }))).not.toContainText("Tape");
+    if (test.info().project.name === "desktop-1440") {
+      // With the tape gone from the right rail the whole ticket, its Buy button included, is on screen without scrolling it.
+      const box = await ticket.boundingBox();
+      expect(box!.y + box!.height, "the Buy button is in view").toBeLessThanOrEqual(page.viewportSize()!.height);
+    }
+
+    // No portfolio on a chart: not in the left rail, not in the right rail, not in a 1180 drawer tab.
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    await expect(leftRail(page)).not.toContainText(PRACTICE_COPY.dayPortfolio);
+    await expect(page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     await expectCleanScreen(page);
   });
 

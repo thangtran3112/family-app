@@ -58,7 +58,7 @@ import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplayS
 import { chartBars, dailyBlock, type ReplayView } from "@/lib/replay/feedState";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { ChartToolbar } from "./ChartToolbar";
-import { PortfolioPanel, useDayPortfolio } from "./Portfolio";
+import { useDayPortfolio } from "./Portfolio";
 import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
@@ -169,7 +169,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const behind = view.behindClock && !ended;
   // The thread's one time: the day clock for a name on a day list (a name left behind it shows the thread's time, not its own old playhead).
   const clock = threadClock(view.revealedThrough, view.dayClock);
-  // A day's portfolio: every name she holds, read once here so the rail, the stop-pause toast and End day agree on it.
+  // A day's portfolio: every name she holds, read here only for the stop-pause toast (which name to exit). The chart view shows no portfolio panel: it is the Portfolio tab's (owner, 2026-11-01).
   // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
   // jump, a stop pause), not on every bar of a running replay: each read prices up to five names.
   // While paused the clock follows the playhead; while playing it stays at the playhead it had when the replay last paused. It is
@@ -196,11 +196,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   }, [daily, dailyForming, hidden]);
   const indicatorBars = swing && chartMode === "daily" && dailyBars !== null ? { bars: dailyBars, interval: "1d", timeframe: "Daily" } : { bars, interval: view.interval, timeframe: view.interval };
 
-  // At the 1180 band the right rail is a drawer: the tape opens when play starts, the controls open for T and N.
-  const toggle = () => {
-    if (api.player.status === "paused" && band === "1180" && railOpen.length === 0) setRailOpen(["tape"]);
-    api.togglePlay();
-  };
   const openComposer = (next: Composer) => {
     setComposer(next);
     if (next && band === "1180") setRailOpen((open) => openRailTab(open, "practice"));
@@ -374,41 +369,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       }}
     />;
 
-  const portfolio =
-    dayListId !== null && !swing ? (
-      <PortfolioPanel
-        dayListId={dayListId}
-        query={dayList}
-        from={{ symbol: spec.symbol, playhead: clock, openTrade: view.openTrade }}
-        onLeave={() => {
-          if (api.player.status === "playing") api.togglePlay();
-        }}
-        onExitHere={() => order("close")}
-        onExited={(symbol) => {
-          if (shownPause?.symbol === symbol) answerPause();
-        }}
-      />
-    ) : null;
-
+  const tapeOff = swing && session.tape_feed === "off";
+  // The right rail is the order side of the workspace: the ticket (Practice) and the signals. The tape is the left rail's.
   const sections: RailSection[] = [
-    {
-      id: "tape",
-      label: "Tape",
-      node: swing && session.tape_feed === "off" ? (
-        <div className={styles.controls}>
-          <p className={styles.muted}>{PRACTICE_COPY.swingTapeOff}</p>
-          <p className={styles.footnote}>{PRACTICE_COPY.swingTapeOffFootnote}</p>
-        </div>
-      ) : (
-        <div className={styles.tapeSlot}>
-          <TapePanel view={view} filterId={api.filterId} onFilter={api.setFilter} />
-        </div>
-      ),
-    },
     { id: "practice", label: "Practice", node: controls },
     { id: "signals", label: "Signals", node: signalsRail },
-    // At 1440 the day's portfolio sits in the left rail, under the indicators; at 1180 that rail is too narrow for it, so it opens from the right drawer.
-    ...(band === "1180" && portfolio !== null ? [{ id: "portfolio", label: PRACTICE_COPY.dayPortfolio, node: portfolio }] : []),
   ];
 
   const quick = band === "1180" ? (
@@ -438,7 +403,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           clock={clock}
           marks={session.marks}
           signals={view.signals}
-          onToggle={toggle}
+          onToggle={api.togglePlay}
           onStep={api.step}
           onSpeed={api.setSpeed}
           onJumpBy={api.jumpBy}
@@ -567,12 +532,19 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
             </>
           )}
           <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} />
-          {!swing && band === "1440" && portfolio && (
-            <section className={styles.sessionSection} aria-label={PRACTICE_COPY.dayPortfolio}>
-              <h2 className={styles.railTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
-              {portfolio}
-            </section>
-          )}
+          <section className={tapeOff ? styles.sessionSection : styles.tapeSection} aria-label="Tape" data-testid="tape-panel">
+            <h2 className={styles.railTitle}>Tape</h2>
+            {tapeOff ? (
+              <>
+                <p className={styles.muted}>{PRACTICE_COPY.swingTapeOff}</p>
+                <p className={styles.footnote}>{PRACTICE_COPY.swingTapeOffFootnote}</p>
+              </>
+            ) : (
+              <div className={styles.tapeSlot}>
+                <TapePanel view={view} filterId={api.filterId} onFilter={api.setFilter} />
+              </div>
+            )}
+          </section>
         </div>
       </LeftRailPortal>
       <RightRail sections={sections} label="Replay context" multi openIds={railOpen} onOpenIdsChange={setRailOpen} />
