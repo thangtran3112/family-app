@@ -79,3 +79,31 @@ func TestArchiveFlag(t *testing.T) {
 		}
 	}
 }
+
+// The Redis hot tier is off unless CACHE_ENABLED=1, and then it needs its URL.
+func TestCacheFlag(t *testing.T) {
+	const url = "redis://:pw-0123456789abcdef@market-data-cache:6379/0"
+	c, err := FromEnv(env(map[string]string{"CACHE_REDIS_URL": url}))
+	if err != nil || c.CacheEnabled {
+		t.Fatalf("a URL alone must not enable the cache: %+v %v", c, err)
+	}
+	if c, err = FromEnv(env(map[string]string{"CACHE_ENABLED": "0", "CACHE_REDIS_URL": url})); err != nil || c.CacheEnabled {
+		t.Fatalf("CACHE_ENABLED=0: %+v %v", c, err)
+	}
+	c, err = FromEnv(env(map[string]string{"CACHE_ENABLED": "1", "CACHE_REDIS_URL": " " + url + " "}))
+	if err != nil || !c.CacheEnabled || c.CacheURL != url {
+		t.Fatalf("enabled: %+v %v", c, err)
+	}
+	for name, e := range map[string]map[string]string{
+		"no url":  {"CACHE_ENABLED": "1"},
+		"garbage": {"CACHE_ENABLED": "yes", "CACHE_REDIS_URL": url},
+	} {
+		_, err := FromEnv(env(e))
+		if err == nil || !strings.Contains(err.Error(), "CACHE_ENABLED") {
+			t.Errorf("%s: want an error naming the variable, got %v", name, err)
+		}
+		if err != nil && strings.Contains(err.Error(), "pw-0123456789abcdef") {
+			t.Errorf("%s: the error echoes the password", name)
+		}
+	}
+}

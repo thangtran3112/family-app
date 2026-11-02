@@ -23,6 +23,7 @@ import (
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/archive"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/config"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/providers/alpaca"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/providers/cache"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/router"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/server"
 )
@@ -69,10 +70,22 @@ func run() error {
 	if !al.Configured() {
 		log.Warn("Alpaca keys are not set: provider alpaca reports NOT_CONFIGURED and no data is served")
 	}
-	rt := router.New(router.Options{Role: "bridge", Ladders: cfg.Ladders, Providers: []router.Provider{al}})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Append every provider here. The loop below wraps each one in the Redis hot tier (when it is
+	// on), so a new provider needs no cache code.
+	providers := []router.Provider{al}
+	if cfg.CacheEnabled {
+		if hot := openCache(cfg.CacheURL, cfg.ArchiveEnabled, log); hot != nil {
+			defer hot.Close()
+			for i, p := range providers {
+				providers[i] = hot.Wrap(p)
+			}
+			go hot.Run(ctx)
+		}
+	}
+	rt := router.New(router.Options{Role: "bridge", Ladders: cfg.Ladders, Providers: providers})
 	var arch *archive.Archive
 	if cfg.ArchiveEnabled {
 		if arch, err = openArchive(ctx, cfg.ArchiveURL, log); err != nil {
@@ -104,6 +117,19 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+// openCache never fails the boot: Redis connects lazily, so an unreachable server only means misses
+// (the cache package's breaker keeps that cheap). A URL that cannot be parsed leaves the cache off
+// with one warning. The URL carries the password and is never logged.
+func openCache(url string, archiveOn bool, log *slog.Logger) *cache.Cache {
+	store, err := cache.NewRedisStore(url)
+	if err != nil {
+		log.Warn("CACHE_REDIS_URL is not a valid redis:// URL; the hot tier stays off", "error", err.Error())
+		return nil
+	}
+	log.Info("cache enabled", "backend", store.Backend(), "archive_on", archiveOn)
+	return cache.New(store, cache.Options{Log: log, ArchiveOn: archiveOn})
 }
 
 // openArchive never fails on an unreachable database: the bridge must boot and serve quotes with

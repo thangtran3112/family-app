@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/providers/alpaca"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/providers/cache"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/router"
 )
 
@@ -117,28 +119,56 @@ type harness struct {
 	Logs       *lockedBuf
 	alpacaDown bool
 	amu        sync.Mutex
+	// alpacaCalls counts the HTTP requests that reached the fake vendor.
+	alpacaCalls atomic.Int64
+	// Hot is the Redis-tier stand-in when the harness wraps its providers in the cache.
+	Hot *cache.MemStore
 }
 
 func newHarness(t *testing.T, mods ...func(*Options)) *harness {
 	t.Helper()
+	return buildHarness(t, false, mods...)
+}
+
+// newCachedHarness is newHarness with every provider wrapped by the hot-tier cache over a MemStore.
+func newCachedHarness(t *testing.T, mods ...func(*Options)) *harness {
+	t.Helper()
+	return buildHarness(t, true, mods...)
+}
+
+func buildHarness(t *testing.T, hot bool, mods ...func(*Options)) *harness {
+	t.Helper()
 	h := &harness{t: t, IBKR: &fakeIBKR{}, Logs: &lockedBuf{}}
-	fake := httptest.NewServer(fakeAlpacaHandler(&h.alpacaDown, &h.amu))
+	vendor := fakeAlpacaHandler(&h.alpacaDown, &h.amu)
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.alpacaCalls.Add(1)
+		vendor(w, r)
+	}))
 	t.Cleanup(fake.Close)
 	clock := func() time.Time { return fixedNow }
 	al := alpaca.New("key", "secret", alpaca.WithBaseURL(fake.URL), alpaca.WithClock(clock), alpaca.WithMinInterval(0))
+	o := &Options{Token: readToken, AdminToken: adminToken, Build: "test-build", Now: clock,
+		Log: slog.New(slog.NewJSONHandler(h.Logs, nil)), Heartbeat: 20 * time.Millisecond}
+	for _, m := range mods {
+		m(o)
+	}
+	providers := []router.Provider{h.IBKR, al}
+	if hot {
+		h.Hot = cache.NewMemStore(clock)
+		c := cache.New(h.Hot, cache.Options{Now: clock, ArchiveOn: o.Archive != nil, Log: slog.New(slog.DiscardHandler)})
+		for i, p := range providers {
+			providers[i] = c.Wrap(p)
+		}
+	}
 	h.Router = router.New(router.Options{
 		Role: "bridge", Now: clock,
 		Ladders: map[pb.DataClass][]string{
 			pb.DataClass_EQUITY_QUOTES: {"ibkr", "alpaca"},
 			pb.DataClass_EQUITY_BARS:   {"alpaca"},
 		},
-		Providers: []router.Provider{h.IBKR, al},
+		Providers: providers,
 	})
-	o := &Options{Router: h.Router, Token: readToken, AdminToken: adminToken, Build: "test-build", Now: clock,
-		Log: slog.New(slog.NewJSONHandler(h.Logs, nil)), Heartbeat: 20 * time.Millisecond}
-	for _, m := range mods {
-		m(o)
-	}
+	o.Router = h.Router
 	srv := httptest.NewServer(Handler(*o))
 	t.Cleanup(srv.Close)
 	h.URL = srv.URL
