@@ -207,20 +207,28 @@ export function placeLabel(spots: readonly CurveLabel[], { plot, others = [], li
   return pool.find((spot) => clearOfLabels(spot) && lines.every((line) => !crossesLine(spot, line))) ?? pool.find(clearOfLabels) ?? pool[0]!;
 }
 
+/** How far (SVG units) each further tier of end-label spots sits from the one before it: the label is 14 high, so a tier clears the last. */
+const END_TIER = 16;
+/** How many further tiers `endLabelSpots` offers, above and below the first two. */
+const END_TIERS = 5;
+
 /**
  * Where a series' end label ("Balance $49,246.00") goes: left of its newest point and above it (below when `above` is false), then the
  * other side, then right of the point when the left has no room (the first days of a thread put the point at the plot's left edge).
+ * When every one of those is crossed by a line or leaves the plot (a newest point at the right edge, near the bottom tick, with the line
+ * falling to it from the upper left: the day journal after one lost day, D-188), the same four spots follow one tier further out, then
+ * two, so `placeLabel` can pick the nearest one clear of the line instead of keeping a crossed one.
  */
 export function endLabelSpots(point: Dot, text: string, above = true): CurveLabel[] {
-  const up = point.y - 8;
-  const down = point.y + 16;
-  const [first, second] = above ? [up, down] : [down, up];
-  return [
-    { x: point.x - 8, y: first, text, anchor: "end" },
-    { x: point.x - 8, y: second, text, anchor: "end" },
-    { x: point.x + 8, y: first, text, anchor: "start" },
-    { x: point.x + 8, y: second, text, anchor: "start" },
-  ];
+  const [first, second] = above ? [point.y - 8, point.y + 16] : [point.y + 16, point.y - 8];
+  const sign = above ? -1 : 1;
+  const spots: CurveLabel[] = [];
+  for (let tier = 0; tier <= END_TIERS; tier++) {
+    const [near, far] = [first + sign * tier * END_TIER, second - sign * tier * END_TIER];
+    spots.push({ x: point.x - 8, y: near, text, anchor: "end" }, { x: point.x - 8, y: far, text, anchor: "end" });
+    spots.push({ x: point.x + 8, y: near, text, anchor: "start" }, { x: point.x + 8, y: far, text, anchor: "start" });
+  }
+  return spots;
 }
 
 /**
