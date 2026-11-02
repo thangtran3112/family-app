@@ -88,6 +88,7 @@ export function PeekPanel({
           volume
           clockTicks
           sessionShading
+          guardAxis
           chrome="bare"
           height={PEEK_CHART_HEIGHT}
         />
@@ -100,6 +101,7 @@ export function PeekPanel({
           asOf={null}
           levels={levels}
           volume
+          guardAxis
           chrome="bare"
           height={PEEK_CHART_HEIGHT}
         />

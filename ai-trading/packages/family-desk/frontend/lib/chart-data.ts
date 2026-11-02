@@ -190,11 +190,15 @@ export function wholeAxisLabel(label: string, x: number | null, axisWidth: numbe
 export const TAG_CLEARANCE = 16;
 
 /**
- * A price-axis tick label, or "" when a last-value tag (the "Equity $51,457.00" pill) already sits on it: the tag is the number that
- * matters, and the tick under it printed through its edge (D-181). `y` is the tick's place on the axis, `tagYs` the tags'.
+ * A price-axis tick label, or "" when it would not print whole: a last-value tag (the "Equity $51,457.00" pill) already sits on it, the tag
+ * being the number that matters (D-181), or the pane's edge would cut it (D-199: "368.00" sat on the bottom edge and lost its lower half).
+ * `y` is the tick's place on the axis, `tagYs` the tags', `paneHeight` the axis' height; without one the
+ * edge gives no verdict. An axis may drop a label; it may not cut one (D-180).
  */
-export function clearTickLabel(label: string, y: number | null, tagYs: readonly number[]): string {
-  return y === null || tagYs.every((tag) => Math.abs(tag - y) >= TAG_CLEARANCE) ? label : "";
+export function clearTickLabel(label: string, y: number | null, tagYs: readonly number[], paneHeight: number | null = null): string {
+  if (y === null) return label;
+  if (paneHeight !== null && (y < AXIS_FONT_PX / 2 || y > paneHeight - AXIS_FONT_PX / 2)) return "";
+  return tagYs.every((tag) => Math.abs(tag - y) >= TAG_CLEARANCE) ? label : "";
 }
 
 /**

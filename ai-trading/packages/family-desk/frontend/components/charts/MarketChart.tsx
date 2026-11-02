@@ -124,6 +124,8 @@ export type MarketChartProps = {
   focus?: { time: string; at: number } | null;
   /** Replay: a level line carries no title, only its number on the price axis; its name (`label`) shows in a tooltip while the cursor is on the line. */
   levelTips?: boolean;
+  /** Price ticks keep clear of the tags and of the pane's edge (D-199), as the replay chart's do; a chart with indicator panes cannot (see the formatter). */
+  guardAxis?: boolean;
   /** Replay click-to-order: a click on the price pane picks a price (snapped onto a level line when it is on one) and draws what this returns beside the click, with a dashed line at the price. `close` dismisses it. Escape and a press elsewhere dismiss it too. */
   renderPick?: (price: number, close: () => void) => ReactNode;
   /** One legend per indicator pane (same order as `panes`), drawn at the top of its pane wherever the layout puts it. */
@@ -247,6 +249,7 @@ export function MarketChart({
   focus = null,
   paneLegends,
   levelTips = false,
+  guardAxis = false,
   renderPick,
 }: MarketChartProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -466,8 +469,9 @@ export function MarketChart({
     const formatTick: TickFormat = (time, tickType) => wholeLabel(tickLabel(time, tickType), time);
     tickFormat.current = formatTick;
     // The tags on the price axis (the overlays' last values, the level lines' numbers, the last price) are the numbers that matter; a tick label
-    // under one is left out, never cut (D-181, D-196). The money axis and the replay charts (`levelTips`) do this; a chart with indicator panes does
-    // not, because the library takes one tick formatter for every price scale and the panes' scales are not this one.
+    // under one is left out, never cut (D-181, D-196), and so is one the pane's edge would cut (D-199). The money axis and the charts that opt in
+    // (`levelTips`, `guardAxis`) do this; a chart with indicator panes does not, because the library takes one tick formatter for every price
+    // scale and the panes' scales are not this one.
     const tagPrices = axisTagPrices(overlays.map(({ values }) => currentValue(values)), levels, lastPricePill ? bars.reduce<number | null>((found, bar) => bar.c ?? found, null) : null);
     const tagYs = () => {
       const series = main.current;
@@ -477,7 +481,7 @@ export function MarketChart({
         return y === null ? [] : [y];
       });
     };
-    const clearsTags = moneyAxis !== undefined || (levelTips && panes.length === 0);
+    const clearsTags = moneyAxis !== undefined || ((levelTips || guardAxis) && panes.length === 0);
     const priceTick = moneyAxis ? moneyAxis.tick : (price: number) => main.current?.priceFormatter().format(price) ?? "";
     currentChart.applyOptions({
       timeScale: {
@@ -492,7 +496,9 @@ export function MarketChart({
           ? {
               tickmarksPriceFormatter: (prices: readonly number[]) => {
                 const tags = tagYs();
-                return prices.map((price) => clearTickLabel(priceTick(price), main.current?.priceToCoordinate(price) ?? null, tags));
+                // Not `series.getPane()`: a chart-type switch formats ticks while it removes the old series, and a removed series throws there.
+                const height = currentChart.panes()[0]?.getHeight() ?? null;
+                return prices.map((price) => clearTickLabel(priceTick(price), main.current?.priceToCoordinate(price) ?? null, tags, height));
               },
             }
           : {}),
@@ -664,7 +670,7 @@ export function MarketChart({
       currentChart.timeScale().scrollToPosition(FOLLOW_RIGHT_PAD, false);
     }
     lastIndex.current = count - 1;
-  }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, clockTicks, chartType, moneyAxis]);
+  }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, clockTicks, chartType, moneyAxis, guardAxis]);
 
   // Click-to-order: a dashed line with its price on the axis at the picked price, for as long as the pick is open. Declared after
   // the data effect, whose series swap (a chart-type change) it follows: the cleanup removes the line from the old series first.

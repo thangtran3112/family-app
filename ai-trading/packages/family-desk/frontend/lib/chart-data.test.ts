@@ -336,3 +336,16 @@ test("a level line that prints no number, a missing price and a hidden last-pric
   assert.deepEqual(axisTagPrices([], [{ price: 376, plain: true }, { price: null }, { price: Number.NaN }, { price: 380 }], null), [380]);
   assert.deepEqual(axisTagPrices([375.2, null], [], 372.47), [375.2, 372.47], "the overlays' last values come first, then the last price");
 });
+
+// The wave-13 walk's TSLA 1m/15m pane at 1440: 286 px tall, 384.00 at y 99.5 and 11.5 px a dollar.
+const WALK_PANE = 286;
+const walkY = (price: number) => 99.5 + (384 - price) * 11.5;
+
+test("a price tick the pane's edge would cut is left out; one that fits stays (D-199)", () => {
+  // 9:34: "368.00" was centred 3 px above the bottom of the pane and read with its lower half gone; "370.26" above it is whole.
+  assert.equal(clearTickLabel("368.00", WALK_PANE - 3, [], WALK_PANE), "");
+  assert.equal(clearTickLabel("370.26", walkY(370.26), [], WALK_PANE), "370.26");
+  assert.equal(clearTickLabel("388.00", 3, [], WALK_PANE), "", "the top edge cuts as well");
+  assert.equal(clearTickLabel("368.00", WALK_PANE - 3, [], null), "368.00", "a pane the chart cannot measure gives no verdict");
+  assert.equal(clearTickLabel("368.00", WALK_PANE - 3, [10]), "368.00", "and none is asked of a caller that sends no height");
+});
