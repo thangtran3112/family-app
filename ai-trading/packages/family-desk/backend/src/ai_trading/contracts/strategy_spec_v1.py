@@ -596,6 +596,7 @@ class PracticeThreadPatchV1(SpecModel):
     )
     plan: PracticeThreadPlanV1
     schemaVersion: Literal[1]
+    shares: Annotated[int | None, Field(ge=1, le=2147483647)] = None
 
 
 class SwingSetupV1(SpecModel):
@@ -669,8 +670,10 @@ class PracticeThreadV1(SpecModel):
     ]
     id: Annotated[int, Field(ge=1, le=9007199254740991)]
     mode: Literal["day", "swing"]
+    name: Annotated[str, Field(max_length=60, min_length=1, pattern="^[ -~\xa0-\ud7ff\ue000-\uffff]+$")]
     plan: PracticeThreadPlanV1
     schemaVersion: Literal[1]
+    shares: Annotated[int | None, Field(ge=1, le=2147483647)] = None
     startingBalance: Annotated[int, Field(ge=1000, le=10000000)]
     stats: PracticeThreadStatsV1
     status: Literal["active", "closed"]

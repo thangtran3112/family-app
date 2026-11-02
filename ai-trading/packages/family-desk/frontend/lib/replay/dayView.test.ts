@@ -306,7 +306,7 @@ test("the block ladder: earlier days ended, this one open, the next waits for it
   assert.deepEqual(blockLadder({ day_no: 2, of: 5, status: "ended", weekday: "Wed" }).map((row) => row.state), ["ended", "ended", "opens_after", "locked", "locked"]);
 });
 
-test("D-018: a list built before the open fills Prev RVOL and Prev change % from the server's own previous-session columns", () => {
+test("D-018: Prev RVOL and Prev change % are the candidate's own previous-session figures; the server's relabelled columns are not drawn twice", () => {
   const columns = dayColumns(dayList);
   assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Prev volume", "Since"]);
   const smci = dayList.candidates[0]!;
@@ -316,17 +316,19 @@ test("D-018: a list built before the open fills Prev RVOL and Prev change % from
   assert.equal(dayCellText(byKey.prev_change_pct!, smci), "+1.20%");
   assert.equal(dayCellTone(byKey.prev_change_pct!, smci), "up");
   // The cell prints two decimals: a move that prints 0.00% is flat, not red or green (D-148).
-  const tiny = (value: number) => ({ ...smci, metrics: { ...smci.metrics, change_pct: value } });
+  const tiny = (value: number) => ({ ...smci, prev_change_pct: value });
   assert.deepEqual([dayCellText(byKey.prev_change_pct!, tiny(-0.004)), dayCellTone(byKey.prev_change_pct!, tiny(-0.004))], ["0.00%", "flat"]);
   assert.deepEqual([dayCellText(byKey.prev_change_pct!, tiny(0.01)), dayCellTone(byKey.prev_change_pct!, tiny(0.01))], ["+0.01%", "up"]);
   assert.equal(dayCellText(byKey.prev_rvol!, dayList.candidates[1]!), "—");
-  assert.equal(byKey.prev_rvol!.missing, false);
   assert.equal(dayCellText(byKey.earnings!, smci), "Reported before the open");
   assert.equal(dayCellText(byKey.earnings!, dayList.candidates[1]!), "—");
   assert.equal(dayCellText(byKey.matched_since!, smci), "8:30 AM");
+  // A list stored before the candidate carried the two fields, built before the open, still reads them from its previous-session block.
+  const stored = { ...smci, prev_rvol: null, prev_change_pct: null };
+  assert.deepEqual([dayCellText(byKey.prev_rvol!, stored), dayCellText(byKey.prev_change_pct!, stored)], ["1.10×", "+1.20%"]);
 });
 
-test("D-018: a list built after the open has no previous-session RVOL or change, so those columns read a dash, never the live value", () => {
+test("D-018: a list built after the open still shows the previous session's RVOL and change %, beside the live ones", () => {
   const live = {
     ...dayList,
     universe: { ...dayList.universe, prev_basis: false },
@@ -342,13 +344,16 @@ test("D-018: a list built after the open has no previous-session RVOL or change,
   };
   const columns = dayColumns(live);
   assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "ATR %", "RSI", "Earnings", "Change %", "RVOL", "Since"]);
-  const smci = { ...live.candidates[0]!, metrics: { ...live.candidates[0]!.metrics, rvol_10d: 2.5 } };
+  const smci = { ...live.candidates[0]!, prev_rvol: 1.1, prev_change_pct: 1.2, metrics: { ...live.candidates[0]!.metrics, rvol_10d: 2.5, change_pct: 6.5 } };
   const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
   assert.equal(dayCellText(byKey.prev_close!, smci), "37.90");
-  assert.equal(dayCellText(byKey.prev_rvol!, smci), "—");
-  assert.equal(dayCellText(byKey.prev_change_pct!, smci), "—");
-  assert.equal(byKey.prev_rvol!.missing, true);
+  assert.equal(dayCellText(byKey.prev_rvol!, smci), "1.10×");
+  assert.equal(dayCellText(byKey.prev_change_pct!, smci), "+1.20%");
   assert.equal(dayCellText(byKey.rvol_10d!, smci), "2.50×");
+  assert.equal(dayCellText(byKey.change_pct!, smci), "+6.50%");
+  // A list stored before the fields existed has nothing to show for them after the open: a dash, never the live value.
+  const stored = { ...smci, prev_rvol: null, prev_change_pct: null };
+  assert.deepEqual([dayCellText(byKey.prev_rvol!, stored), dayCellText(byKey.prev_change_pct!, stored)], ["—", "—"]);
 });
 
 // ---- the table at the day clock ---------------------------------------------------------------------------------
@@ -362,15 +367,16 @@ test("the table follows the day clock only when a read carries live blocks, and 
   assert.deepEqual(liveState(atClock({ ...liveSmci, today: false })), { today: false });
   assert.deepEqual(dayColumns(atClock(liveSmci)).map((column) => column.live), dayColumns(dayList).map(() => undefined), "without a state the columns are the list's own");
   const columns = dayColumns(atClock(liveSmci), { today: true });
-  assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "RVOL now", "Change % now", "Earnings", "Volume now", "Since"]);
-  assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now", "prev_rvol", "prev_change_pct", "volume"]);
+  assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Volume now", "Since"]);
+  // Prev RVOL and Prev change % stay the previous session's own figures (D-018): they never relabel to the clock's
+  assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now", "volume"]);
   const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
   const [smci, anet] = atClock(liveSmci).candidates;
   // moving columns read the clock's values; the list-time ones keep the list's
   assert.equal(dayCellText(byKey.price_now!, smci!), "44.50");
   assert.equal(dayCellText(byKey.change_now!, smci!), "+17.41%");
-  assert.equal(dayCellText(byKey.prev_rvol!, smci!), "3.20×");
-  assert.equal(dayCellText(byKey.prev_change_pct!, smci!), "+17.41%");
+  assert.equal(dayCellText(byKey.prev_rvol!, smci!), "1.10×");
+  assert.equal(dayCellText(byKey.prev_change_pct!, smci!), "+1.20%");
   assert.equal(dayCellText(byKey.list_price!, smci!), "41.12");
   assert.equal(dayCellText(byKey.prev_close!, smci!), "37.90");
   assert.equal(dayCellText(byKey.matched_since!, smci!), "8:30 AM");

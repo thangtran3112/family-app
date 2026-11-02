@@ -18,6 +18,7 @@ export const activeThread: ThreadSummary = {
   thread: {
     schemaVersion: 1,
     id: 1,
+    name: "Day thread · Oct 5",
     mode: "day",
     startingBalance: 50000,
     status: "active",

@@ -84,7 +84,7 @@ test.describe("Practice thread tabs", () => {
 
     await tab(page, "Trades").click();
     await page.waitForURL(`**/practice/journal?thread=${threadId}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("thread ·");
     await expectSelected(page, "Trades");
     await expect(page.getByRole("region", { name: PRACTICE_COPY.fillsTitle, exact: true })).toContainText(PRACTICE_COPY.fillsEmpty); // a name is open, nothing is bought yet
 

@@ -507,7 +507,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                       : []),
                     { id: "window", label: "Practice window", value: `${practiceTime.from}–${practiceTime.to} ET` },
                     { id: "chart", label: "Chart", value: setup.interval },
-                    ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
+                    ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan, "day", thread.data.thread.shares).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
                     ...(ended ? [{ id: "day", label: "Day", value: formatEtDay(list.day) }] : []),
                   ]}
                 />
@@ -544,7 +544,6 @@ function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColu
       render: (row) => {
         const text = dayCellText(column, row);
         if (column.format === "earnings") return text === "—" ? text : <Badge tone="warn">{text}</Badge>;
-        if (column.missing) return <span title={PRACTICE_COPY.dayNoValue}>{text}</span>;
         const tone = dayCellTone(column, row);
         return <span className={tone ? styles[tone] : undefined}>{text}</span>;
       },

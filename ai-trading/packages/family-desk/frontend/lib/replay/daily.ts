@@ -127,6 +127,9 @@ export const CandidateSchema = z.object({
   list_price: finite,
   price_at: timestamp,
   prior_close: metric,
+  /** The previous session's own RVOL and change %, before or after the open (D-018). */
+  prev_rvol: metric,
+  prev_change_pct: metric,
   reported_before_open: z.boolean(),
   metrics: z.record(z.string(), metric),
   /** A re-scan added it: the list before the scan did not hold it. False on a list no re-scan has touched. */

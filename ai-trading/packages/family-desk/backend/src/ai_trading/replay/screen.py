@@ -33,8 +33,9 @@ import pandas as pd
 from ai_trading_common.errors import ProviderError
 
 from ai_trading.core import evaluate as engine
+from ai_trading.core import indicators
 from ai_trading.core.calendar import session as trading_session
-from ai_trading.data.metrics import AVG_VOLUME_DAYS, INTRADAY_LOOKBACK_DAYS, metric_row
+from ai_trading.data.metrics import AVG_VOLUME_DAYS, INTRADAY_LOOKBACK_DAYS, RVOL_DAYS, metric_row
 from ai_trading.data.universe import MIN_AVG_VOLUME, MIN_DAILY_BARS, MIN_PRICE
 from ai_trading.replay.cache import BlobKey, BlobStore, decode_daily, encode_daily
 from ai_trading.replay.data import DAILY_BARS, EMBARGO, History, prior_sessions
@@ -220,6 +221,17 @@ def _num(value: object, digits: int = 4) -> float | None:
     return None if (math.isnan(number) or math.isinf(number)) else round(number, digits)
 
 
+def prev_session_metrics(daily: pd.DataFrame) -> dict[str, float | None]:
+    """The previous session's own RVOL and change % (D-018): `daily`'s last bar against the sessions before it, the
+    10-session daily RVOL and the close-to-close change that `metric_row` reads on a list built before the open. They
+    are read from the same cut daily frame, so a list built after the open (where `metric_row` carries today's partial
+    day) still shows what the day before did. None where the frame is too short for the figure."""
+    closes = daily["close"]
+    change = _num((closes.iloc[-1] / closes.iloc[-2] - 1) * 100, 3) if len(closes) >= 2 else None
+    rvol = _num(indicators.rvol_daily(daily, RVOL_DAYS).iloc[-1], 3) if len(daily) else None
+    return {"prev_rvol": rvol, "prev_change_pct": change}
+
+
 def _price_at_cut(
     frames: Frames, spec: dict[str, Any], match: Match, as_of: pd.Timestamp
 ) -> tuple[float, pd.Timestamp] | None:
@@ -350,7 +362,15 @@ def build_list(
         prior_close = float(inputs.daily["close"].iloc[-1])
         change = None if row.pop("daily_filter") else _num((row["list_price"] / prior_close - 1) * 100, 2)
         metrics = {**metrics, "list_price": row["list_price"], "list_change_pct": change}
-        candidates.append({"rank": rank, **row, "prior_close": _num(prior_close), "metrics": metrics})
+        candidates.append(
+            {
+                "rank": rank,
+                **row,
+                "prior_close": _num(prior_close),
+                **prev_session_metrics(inputs.daily),
+                "metrics": metrics,
+            }
+        )
 
     with_change = any(c["metrics"]["list_change_pct"] is not None for c in candidates)
     return BuiltList(

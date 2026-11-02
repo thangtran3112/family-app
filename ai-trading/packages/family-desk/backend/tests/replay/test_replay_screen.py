@@ -311,6 +311,43 @@ def test_a_daily_list_prices_at_the_rebased_previous_close() -> None:
     assert row["metrics"]["list_change_pct"] is None  # no intraday price to compare with the close
 
 
+def _moving_daily() -> pd.DataFrame:
+    """The last session closes 110 on 4M shares after 100 on 2M-share sessions: change +10%, RVOL 2.0."""
+    days = trading_days("stock", PRIOR, 60)
+    closes = [100.0] * 59 + [110.0]
+    frame = daily_bars(days, closes, volume=2_000_000)
+    frame.loc[days[-1], "volume"] = 4_000_000.0
+    return frame
+
+
+def test_prev_rvol_and_prev_change_are_the_previous_sessions_own_figures_before_the_open() -> None:
+    world = {"GAPPER": {"daily": _moving_daily(), "minutes": _minutes(110.0, premarket=117.0)}}
+    row = _build(world, [_flag("Gap up", GAP_UP, ["GAPPER"])]).candidates[0]
+    assert row["prev_rvol"] == 2.0 and row["prev_change_pct"] == 10.0
+    # before the open the metric block IS the previous session's: the two read the same
+    assert row["metrics"]["rvol_10d"] == row["prev_rvol"] and row["metrics"]["change_pct"] == row["prev_change_pct"]
+
+
+def test_prev_rvol_and_prev_change_survive_a_list_built_after_the_open() -> None:
+    spec = _spec(
+        watch={"universe": {"market": "us_equities"}, "session": "regular", "runOn": "bar_close_5m"},
+        when={"op": "gt", "left": {"series": "close"}, "right": {"value": 105}},
+    )
+    minutes = _minutes(110.0, day_price=120.0)
+    world = {"AAA": {"daily": _moving_daily(), "minutes": minutes}}
+    built = _build(world, [_flag("Five", spec, ["AAA"])], list_at="10:00")
+    row = built.candidates[0]
+    assert built.prev_basis is False
+    assert row["prev_rvol"] == 2.0 and row["prev_change_pct"] == 10.0  # yesterday's, not today's partial day
+    assert row["metrics"]["change_pct"] != row["prev_change_pct"]  # the live column moved on
+
+
+def test_prev_figures_are_none_without_the_history_to_compute_them() -> None:
+    short = daily_bars(trading_days("stock", PRIOR, 1), [100.0])
+    assert screen.prev_session_metrics(short) == {"prev_rvol": None, "prev_change_pct": None}
+    assert screen.prev_session_metrics(short.iloc[0:0]) == {"prev_rvol": None, "prev_change_pct": None}
+
+
 # -- the lookback and the floor --------------------------------------------------------------------------------------
 
 

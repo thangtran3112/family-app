@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, type Tone } from "../desk/format.ts";
+import { EMPTY_VALUE, formatNumber, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { moneyTone, tradesCountText } from "./journalView.ts";
 import type { PracticeThread, Thread, ThreadBrief, ThreadDay, ThreadToday } from "./threads.ts";
@@ -47,14 +47,11 @@ export const dayResultTone = (value: number | null | undefined): Tone => moneyTo
 
 export const threadModeLabel = (mode: PracticeThread["mode"]): string => (mode === "day" ? "Day trading" : "Swing");
 
-const monthName = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "long" });
 const monthDay = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short", day: "numeric" });
 
-/** "October thread #12" for a day thread, "October swing thread #13" for a swing one: the month it was started, the mode when
- *  it is not the default, and the thread's own number, so two threads never read the same (D-069, D-077). The thread has no
- *  name of its own: a typed name needs a column and a migration. */
-export const threadName = (thread: Pick<PracticeThread, "id" | "createdAt" | "mode">): string =>
-  `${monthName.format(new Date(thread.createdAt))} ${thread.mode === "swing" ? "swing thread" : "thread"} #${thread.id}`;
+/** The thread's own name, as the server gave it when the thread started: "Day thread · Oct 15", "Swing thread · Oct 15", and
+ *  "(2)" on a later thread of that mode and day, so two threads never read the same (D-069). Nothing renames it yet. */
+export const threadName = (thread: Pick<PracticeThread, "name">): string => thread.name;
 
 /** "Started Oct 25": the day she started it (not a replayed day, so no date is spoiled). */
 export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): string => `Started ${monthDay.format(new Date(thread.createdAt))}`;
@@ -275,12 +272,14 @@ export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTil
 /** True while the thread has no ended day: nothing to chart yet. */
 export const hasNoDays = (thread: Pick<Thread, "daily">): boolean => thread.daily.length === 0;
 
-/** The plan as plain rows for the recap: label and value. A limit left unset is "None". The thread plan holds no share count (she sizes each entry), so that row says so.
+/** The plan as plain rows for the recap: label and value. A limit left unset is "None". A day thread's Shares row is the entry size
+ *  tickets open at, or "Not set" (D-042); a swing thread has none (each hold is sized from its cash), so that row says who sets it.
  *  A swing thread counts its two limits per week, as its modal and journal say (D-083). */
-export function planRows(plan: PracticeThread["plan"], mode: PracticeThread["mode"] = "day"): Array<{ id: string; label: string; value: string }> {
+export function planRows(plan: PracticeThread["plan"], mode: PracticeThread["mode"] = "day", shares?: number): Array<{ id: string; label: string; value: string }> {
   const per = mode === "swing" ? "a week" : "a day";
+  const sharesValue = mode === "swing" ? PRACTICE_COPY.threadSharesPerEntry : shares === undefined ? PRACTICE_COPY.threadSharesNotSet : formatNumber(shares, 0);
   return [
-    { id: "shares", label: PRACTICE_COPY.threadShares, value: PRACTICE_COPY.threadSharesPerEntry },
+    { id: "shares", label: PRACTICE_COPY.threadShares, value: sharesValue },
     { id: "stop", label: "Stop on every entry", value: plan.stopNoteOnEntry === "yes" ? "Yes" : "No" },
     { id: "signal", label: "Trade only on a signal", value: plan.tradeOnlyOnSignal === "yes" ? "Yes" : "No" },
     { id: "max_loss", label: `Max loss, pretend dollars ${per}`, value: plan.maxLossUsd === undefined ? "None" : formatWhole(plan.maxLossUsd) },
