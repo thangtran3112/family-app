@@ -74,6 +74,14 @@ test("a good draft validates; the window may not begin before the list time", ()
   assert.equal(validatePlanDraft(moved).ok, true);
 });
 
+// D-204: the window rule (regular hours) is said in plain words on the Start at field, not the contract's sentence.
+test("D-204: a Start at before the open reads as a plain sentence on its field, in 12-hour words", () => {
+  const early = validatePlanDraft({ ...ready(), setup: { ...ready().setup, from: "09:20" } });
+  assert.equal(early.ok, false);
+  assert.equal(!early.ok && early.problems.window, "Start at must be between 9:30 AM and 4:00 PM");
+  assert.equal(!early.ok && JSON.stringify(early.problems).includes("regular-session"), false, "no contract sentence leaks");
+});
+
 test("each bound maps to the field that shows it", () => {
   const cases: Array<[Partial<PlanDraft>, string]> = [
     [{ filterIds: [] }, "filters"],
