@@ -8,7 +8,9 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -34,6 +36,9 @@ export function ThreadJournalScreen() {
   const query = useDeskQuery(`replay-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null });
 
   if (id === null) return <ThreadPicker />;
+  if (query.error instanceof DeskApiError && query.error.status === 404) {
+    return <div className={styles.center}><PracticeNotice title={PRACTICE_COPY.threadPageNotFound} /></div>;
+  }
   if (query.data === null) {
     return (
       <div className={styles.center}>

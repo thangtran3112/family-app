@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { FactList } from "@/components/ui/FactList";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
 import { formatClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk/format";
@@ -115,7 +116,7 @@ export function DayListScreen() {
 function DayNotice({ title }: { title: string }) {
   return (
     <div className={styles.body}>
-      <EmptyBlock framed title={title} action={{ label: PRACTICE_COPY.openPractice, href: "/practice", primary: true }} />
+      <PracticeNotice title={title} />
     </div>
   );
 }

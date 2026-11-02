@@ -114,7 +114,7 @@ test("alerts banner, empty scan, load error and wrong lane copy", () => {
   assert.equal(loadErrorText("chart"), "Couldn't load this chart · Try again");
   assert.equal(notEnoughHistoryText("1W"), "Not enough history for 1W yet");
   assert.equal(COPY.ordersOff, "Trading is off in the Desk · place orders in IBKR");
-  assert.equal(COPY.noSignalsToday, "No signals yet today · your strategies are watching");
+  assert.equal(COPY.noSignalsToday, "No signals yet today · no strategy is live yet");
   assert.equal(COPY.advice, "Signals, not advice · you place every trade yourself in IBKR");
 });
 

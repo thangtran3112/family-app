@@ -10,8 +10,17 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 
-def make_engine(url: str) -> Engine:
-    return create_engine(url)
+def make_engine(url: str, *, lock_timeout_ms: int | None = None, idle_in_transaction_ms: int | None = None) -> Engine:
+    """`lock_timeout_ms`: a statement that waits this long for a row lock fails (`LockNotAvailable`) instead of holding
+    its pooled connection and a worker thread for as long as the holder lives. `idle_in_transaction_ms`: Postgres ends a
+    connection that sits idle inside a transaction this long, which frees the locks it holds. Both are per connection;
+    leave them out (the CLIs, the jobs) and nothing changes."""
+    options = []
+    if lock_timeout_ms is not None:
+        options.append(f"-c lock_timeout={lock_timeout_ms}")
+    if idle_in_transaction_ms is not None:
+        options.append(f"-c idle_in_transaction_session_timeout={idle_in_transaction_ms}")
+    return create_engine(url, connect_args={"options": " ".join(options)} if options else {})
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
