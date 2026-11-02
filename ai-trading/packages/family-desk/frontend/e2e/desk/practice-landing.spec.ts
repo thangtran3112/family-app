@@ -191,16 +191,17 @@ test.describe("Practice landing", () => {
     }
     await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceNone);
     await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceMeaning);
-    // The daily plan of this thread, with its armed filter; the dates stay hidden.
+    // The daily plan of this thread, with its armed filter; nothing is hidden (ADR-0022).
     const plan = page.getByRole("region", { name: "Daily list plan" });
     await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 }); // the data is prepared in the background first
     await expect(plan).toContainText("Any close");
-    await expect(page.locator("body")).not.toContainText("2026-09-25");
+    await expect(page.locator("body")).not.toContainText(/hidden day|show date|dates hidden/i);
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
     await expectCleanScreen(page);
 
     await openFirstDay(page);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri 2026-09-25"); // the actual date of the day (ADR-0022)
+    await expect(page.getByTestId("day-clock-time")).toHaveText(/^[A-Z][a-z]{2} 2026-\d{2}-\d{2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // and the thread's actual date and time
     // The day screen wears the thread's tab strip: Summary is the way back to the thread's page, the back link goes to the thread list.
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", "/practice");
     await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
@@ -344,7 +345,7 @@ test.describe("New plan modal redesign", () => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
     const groups = await segmentedGroups(dialog);
-    expect(groups.length).toBeGreaterThanOrEqual(5); // mode, days, list time, interval
+    expect(groups.length).toBeGreaterThanOrEqual(4); // mode, days, list time, interval
     for (const group of groups) {
       expect(group.overflow, `${group.name}: scrollWidth <= clientWidth`).toBeLessThanOrEqual(0);
       expect(group.poke, `${group.name}: no button outside its box`).toBeLessThanOrEqual(0.5);
