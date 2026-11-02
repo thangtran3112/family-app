@@ -285,7 +285,7 @@ test.describe("Practice", () => {
     await expect(planCard).toContainText("Day 1 of 5 · next: Fri", { timeout: 60_000 });
     await expect(planCard).toContainText("Any close"); // the card names the filter once (D-118: the armed line is gone with the arming)
     await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(50_000));
-    await expect(page.locator("body")).not.toContainText(DAY);
+    await expect(planCard, "the plan names the next day's actual date (ADR-0022)").toContainText(`next: ${formatEtDay(DAY)}`);
     await expectCleanScreen(page);
     await openFirstDay(page);
     const dayUrl = page.url();
@@ -329,7 +329,7 @@ test.describe("Practice", () => {
     // D-165: the day's clock starts at the open, so "built before the open" is already not true to say; the list time is still the build time (no re-scan).
     await expect(page.getByLabel("Status")).toContainText("List built 8:30 AM ET");
     await expect(page.getByLabel("Status")).not.toContainText("Day lists built before the open");
-    await expect(page.locator("body")).not.toContainText(DAY);
+    await expect(page.locator("body")).toContainText(formatEtDay(DAY)); // the actual date of the list's day (ADR-0022)
     await expectCleanScreen(page);
 
     // Peek: the chart before the open, from the row's own button, in a wide drawer. It adds nothing to the portfolio and starts no clock.
