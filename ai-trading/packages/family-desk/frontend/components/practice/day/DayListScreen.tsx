@@ -191,6 +191,13 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   // The thread's one time T, as the latest read answered it (ADR-0022): the label, the chip and the Summary's clock all read it, so they agree. The market is the
   // state of the exchange at that T; after the day's tape end it says so while T keeps counting.
   const threadTime = (landed ? read.thread_time : null) ?? list.thread_time ?? null;
+  // ADR-0023: before the clock reaches the list time there is no list (no names, no counts, nothing to open or star). The newest read decides; once
+  // a read at the clock says the list is out, the snapshot above is read again so its counts and names are the real ones.
+  const pending = landed ? read.list_pending : list.list_pending;
+  const listOut = list.list_pending && landed && !read.list_pending;
+  useEffect(() => {
+    if (listOut) onChanged();
+  }, [listOut, onChanged]);
   const market = (landed ? read.market : null) ?? list.market ?? null;
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
@@ -303,7 +310,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   const dayStart = practiceStart(list);
   // Day 5 of 5: there is no next day to open, so the button says what it does and goes to the plan's summary (D-096).
   // A re-scan with nothing to scan from (no list and no name, so no day clock) is a dead end: it is not offered (D-094).
-  const showRescan = ended ? list.rescan !== null : list.candidates.length > 0 || list.rescan !== null;
+  const showRescan = ended ? list.rescan !== null : !pending && (list.candidates.length > 0 || list.rescan !== null);
   const finishHref = list.plan.finished ? (threadId === null ? "/practice" : `/practice/thread?id=${threadId}`) : null;
 
   return (
@@ -315,7 +322,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
           <Badge tone="neutral">Practice day list</Badge>
         </div>
         {/* The badge reads the thread's time once practice has started, else the time the list was built (D-014). */}
-        <DayClock day={list.day} shown={(!ended ? liveClock.shown : null) ?? threadTime ?? list.clock ?? list.list_at} status={dayStatusLine(list)} show={!ended && list.clock !== null} market={market} />
+        <DayClock day={list.day} shown={(!ended ? liveClock.shown : null) ?? threadTime ?? list.clock ?? list.list_at} status={dayStatusLine({ ...list, list_pending: pending })} show={!ended && list.clock !== null} market={market} />
         <div className={styles.actions}>
           {practicing && !ended && (
             <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{PRACTICE_COPY.planStartTrading}</Button>
@@ -330,14 +337,16 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
       </header>
       {list.thread && <ThreadStrip thread={list.thread} />}
       <div className={styles.body}>
-        <p className={styles.line}>
-          {listCountsText(list)}
-          {list.rescan ? (
-            <span className={styles.built} data-testid="rescan-label">{rescanLabel(list.rescan)}</span>
-          ) : (
-            <span className={styles.built}>{listBuiltText(list)}</span>
-          )}
-        </p>
+        {!pending && (
+          <p className={styles.line}>
+            {listCountsText(list)}
+            {list.rescan ? (
+              <span className={styles.built} data-testid="rescan-label">{rescanLabel(list.rescan)}</span>
+            ) : (
+              <span className={styles.built}>{listBuiltText(list)}</span>
+            )}
+          </p>
+        )}
         <div className={styles.filterRow}>
           <span className={styles.filterLabel}>{PRACTICE_COPY.planFilters}</span>
           <ul className={styles.chips} aria-label="Filters">
@@ -360,7 +369,23 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
         {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
 
-        {!ended && (
+        {!ended && pending && (
+          <section className={styles.section} aria-label="Candidates">
+            <div className={styles.sectionHead}>
+              <h2 className={styles.sectionTitle}>Candidates</h2>
+            </div>
+            <div data-testid="list-pending">
+              <EmptyBlock
+                title={practiceText("dayListPendingTitle", { when: formatEtDateClock(list.list_at, { seconds: false }) })}
+                action={threadId === null ? undefined : { label: PRACTICE_COPY.dayListPendingSummary, href: `/practice/thread?id=${threadId}` }}
+              >
+                <p className={styles.muted}>{PRACTICE_COPY.dayListPendingHint}</p>
+              </EmptyBlock>
+            </div>
+          </section>
+        )}
+
+        {!ended && !pending && (
           <section className={styles.section} aria-label="Candidates">
             <div className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Candidates</h2>

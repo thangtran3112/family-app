@@ -3,7 +3,7 @@ import test from "node:test";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
 import { dayStatusLine, journalStatusLine, replayStatusLine } from "./statusLine.ts";
 
-const LISTED = { list_at: "2026-03-10T12:30:00Z", rescan: null, clock: null };
+const LISTED = { list_at: "2026-03-10T12:30:00Z", rescan: null, clock: null, list_pending: false };
 const scan = (asOf: string) => ({ seq: 1, as_of: asOf, data_through: "2026-03-10T13:17:00Z", new_count: 0, created_at: asOf });
 
 test("D-043: the day list says where prices come from, that lists are built before the open, and when this one was built", () => {
@@ -17,6 +17,12 @@ test("D-165: once the day clock is at the open, the status line no longer says l
   const line = dayStatusLine({ ...LISTED, clock: "2026-03-10T13:30:00Z" });
   assert.deepEqual(line.left, ["Prices: Alpaca SIP · past days"]);
   assert.equal(line.right[0], "List built 8:30 AM ET", "no re-scan yet: the list time is the build time");
+});
+
+test("ADR-0023: a list that is not out yet says when it comes out, not that it was built", () => {
+  const line = dayStatusLine({ ...LISTED, clock: "2026-03-10T13:30:00Z", list_at: "2026-03-10T14:00:00Z", list_pending: true });
+  assert.equal(line.right[0], "List comes out 10:00 AM ET");
+  assert.equal(containsPracticeBannedTerm(line.right[0]!), false);
 });
 
 test("D-165: after a re-scan the status line gives the scan's clock as the one list time", () => {

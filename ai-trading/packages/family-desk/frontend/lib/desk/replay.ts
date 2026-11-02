@@ -37,8 +37,11 @@ export const patchReplaySession = (id: number, body: { notes?: string | null; ra
   clientOf(options)(deskPath(`/replay/sessions/${id}`), ReplaySessionSchema, jsonInit("PATCH", body, options));
 
 export type TapeParams = { interval?: ReplayInterval; minSize?: number; minNotional?: number; maxPrints?: number };
-/** `sync`: follow the day thread's server-side clock (ADR-0018) - bring it to now, then reveal this name through it. */
-export type AdvanceTarget = { to: string } | { step: "bar" | "next_signal" } | { sync: true };
+/**
+ * `sync`: follow the day thread's server-side clock (ADR-0018) - bring it to now, then reveal this name through it. `since` is the playhead
+ * this window last read: the answer carries every bar closed after it, also the ones another window of the same session already took (D-198).
+ */
+export type AdvanceTarget = { to: string } | { step: "bar" | "next_signal" } | { sync: true; since?: string };
 
 const tapeBody = ({ interval, minSize, minNotional, maxPrints }: TapeParams) => ({
   interval,
@@ -120,10 +123,6 @@ export const startDaySession = (id: number, symbol: string, options?: RequestOpt
 export const rescanDay = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/day-lists/${id}/rescan`), DayListSchema, jsonInit("POST", {}, options));
 
-/** Ends the day: the open practice trade exits at the last price and the list review unseals. Idempotent. */
-export const endDay = (id: number, options?: RequestOptions) =>
-  clientOf(options)(deskPath(`/replay/day-lists/${id}/end`), DayListSchema, jsonInit("POST", {}, options));
-
 // ---- practice threads (02r) --------------------------------------------------------------------------------------
 
 /** Her threads, the active ones first, each with its plan, stats and today (the hub's "Your practice threads"). */
@@ -144,10 +143,10 @@ export const createThread = (spec: unknown, options?: RequestOptions) =>
 export const patchThread = (id: number, body: unknown, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/threads/${id}`), ThreadSchema, jsonInit("PATCH", body, options));
 
-/** Closes the thread: its journal and final balance stay, its plan and balance freeze. An open practice day is a 409. */
+/** Closes the thread: its journal and final balance stay, its plan and balance freeze. A day thread's open practice day ends with it (there is no End day); a swing thread's open day is a 409. */
 export const closeThread = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/threads/${id}/close`), ThreadSchema, jsonInit("POST", {}, options));
 
-/** Deletes the thread with its days, ledger and (swing) holds and weeks; it cannot be undone. An open practice day is a 409 in plain words. */
+/** Deletes the thread with its days, ledger and (swing) holds and weeks; it cannot be undone. An open practice day is a 409 in plain words: close a day thread first (that ends the day). */
 export const deleteThread = (id: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/threads/${id}`), z.undefined(), { method: "DELETE", signal: options?.signal });

@@ -1,7 +1,7 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
-import { expect } from "./helpers";
+import { expect, openDesk } from "./helpers";
 
 // A day thread's clock is the server's (ADR-0018), and a chart has no Step. A spec that needs the market to move on a chart moves the
 // thread's clock the way the Summary does (`POST /replay/threads/{id}/clock`), and the chart on screen follows it on its own.
@@ -39,10 +39,27 @@ export async function stepBar(page: Page, times = 1) {
   }
 }
 
-/** Ends the open day the only way a day-trade thread has: the Summary tab, End day, its confirm. The page then shows the day's review (the Day list). */
-export async function endDayFromSummary(page: Page) {
+/**
+ * Finishes the open day the only way a day-trade thread can (ADR-0023, no End day): Skip day on the Summary, which asks first, ends the day at the
+ * tape's end and opens the next one. Then the page shows the review of the day that ended (its Day list). `check` reads the question before it is answered.
+ */
+export async function skipDayToReview(page: Page, check?: (ask: Locator) => Promise<void>) {
   await page.getByRole("tab", { name: "Summary" }).click();
-  await page.getByRole("button", { name: PRACTICE_COPY.clockEndDay, exact: true }).click();
-  await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
-  await page.waitForURL(/\/practice\/day\?id=\d+/);
+  await page.getByRole("button", { name: PRACTICE_COPY.clockSkipDay, exact: true }).click();
+  const ask = page.getByRole("group", { name: "Confirm skipping the day" });
+  await check?.(ask);
+  const skipped = page.waitForResponse((response) => response.url().endsWith("/skip-day") && response.request().method() === "POST", { timeout: 90_000 });
+  await ask.getByRole("button", { name: PRACTICE_COPY.clockSkipConfirm, exact: true }).click();
+  const { ended_day_list_id: ended } = (await (await skipped).json()) as { ended_day_list_id: number };
+  await openDesk(page, `/practice/day?id=${ended}`);
+}
+
+/** Jumps the Summary's clock to an ET date and time through the Jump form (ADR-0023) and waits for the answer. */
+export async function jumpFromSummary(page: Page, date: string, time: string) {
+  const jump = page.getByRole("group", { name: PRACTICE_COPY.clockJump });
+  await jump.getByLabel(PRACTICE_COPY.clockJumpDate).fill(date);
+  await jump.getByLabel(PRACTICE_COPY.clockJumpTime).fill(time);
+  const answered = page.waitForResponse((response) => response.url().endsWith("/clock") && response.request().method() === "POST", { timeout: 90_000 });
+  await jump.getByRole("button", { name: PRACTICE_COPY.clockJumpGo, exact: true }).click();
+  expect((await answered).ok()).toBeTruthy();
 }

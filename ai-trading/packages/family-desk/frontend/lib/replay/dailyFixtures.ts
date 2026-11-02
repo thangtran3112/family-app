@@ -105,6 +105,7 @@ export const dayList: DayList = {
       metrics: { list_price: 96.4, list_change_pct: 4.1, last: 92.6, change_pct: -0.3, volume: 2400000, rvol_10d: null },
     },
   ],
+  list_pending: false,
   watch: [{ symbol: "SMCI", starred_clock: "2026-03-10T12:30:00Z" }],
   watch_check: { starred: ["SMCI"], traded: [], off_watch: [], verdict: "no_trades", label: "No practice trades yet" },
   clock: null,

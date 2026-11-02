@@ -17,7 +17,6 @@ import {
   followState,
   listTime,
   liveState,
-  endDayExitText,
   dayNumberText,
   dayTitle,
   filtersNote,
@@ -33,7 +32,6 @@ import {
   openPositionsText,
   openAtClock,
   openTodayText,
-  portfolioCells,
   portfolioFooter,
   portfolioRows,
   portfolioTotal,
@@ -461,23 +459,6 @@ test("the footer is the server's day P/L: realized, open, how many are open, and
   assert.deepEqual(footer, { total: 154, split: "realized −$46.00 · open +$200.00", openOf: "2 open", asOf: "as of 10:30 AM ET" });
 });
 
-test("End day names the open trades it exits and the price she sees now", () => {
-  const rows = portfolioRows({
-    sessions: [
-      opened("SMCI", 12, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:52:00Z" } }),
-      opened("ANET", 13),
-      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:45:00Z" } }),
-    ],
-  });
-  assert.equal(endDayExitText(rows), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI");
-  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "SMCI")), "Ending the day exits 1 open practice trade at the price you see now: SMCI");
-  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "ANET")), null);
-  // F-06: a held name behind the day clock exits at the clock, so the line no longer promises the price on its chart.
-  const behind = rows.map((row) => (row.symbol === "NVDA" ? { ...row, behind: true } : row));
-  assert.equal(endDayExitText(behind, "2026-09-28T15:00:00Z"), "Ending the day exits 2 open practice trades at the day clock, 11:00 AM ET. A name behind the clock books its exit at the clock price, not the price on its chart: NVDA, SMCI");
-  assert.equal(endDayExitText(behind), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", "without a clock the plain line stands");
-});
-
 test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with none open", () => {
   assert.equal(openTodayText({ open_count: 2, open_usd: 200 }), "2 open +$200.00");
   assert.equal(openTodayText({ open_count: 1, open_usd: -31.5 }), "1 open −$31.50");
@@ -519,41 +500,14 @@ test("a position reads Long or Short with its shares and entry price, a flat nam
   assert.equal(positionText({ position: { ...smciLong, entry_at: null } }), "Long 100 @ $812.40"); // an older payload has no entry time
 });
 
-test("a held row carries its cost, its move since entry and its P/L as a percent of cost; a flat row has none of them", () => {
-  const [long, short, flat] = portfolioRows({
-    sessions: [
-      opened("SMCI", 12, { has_open_trade: true, position: smciLong }), // 100 @ 812.40 = 81,240; last 814.54, +$214
-      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } }),
-      opened("ANET", 13, { trades: 1, realized_usd: -38 }),
-    ],
+test("a row's prior close comes from the day list's candidates; a name the list does not hold has none", () => {
+  const candidate = (symbol: string, prior_close: number | null) => ({ symbol, prior_close }) as Candidate;
+  const rows = portfolioRows({
+    sessions: [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13), opened("ZZZZ", 14)],
+    candidates: [candidate("SMCI", 812.4), candidate("ANET", null)],
   });
-  assert.equal(long!.basis, 81240);
-  assert.ok(Math.abs(long!.dayPct! - (100 * 214) / 81240) < 1e-9);
-  assert.ok(Math.abs(long!.priceChange! - 2.14) < 1e-9);
-  assert.ok(Math.abs(long!.priceChangePct! - (100 * 2.14) / 812.4) < 1e-9);
-  // A short wins when the stock falls: the price change is the market's (−$10, −5%), the P/L is hers (+$500, +5% of the $10,000 cost).
-  assert.deepEqual([short!.priceChange, short!.priceChangePct, short!.dayPnl, short!.dayPct], [-10, -5, 500, 5]);
-  assert.deepEqual([flat!.basis, flat!.dayPct, flat!.priceChange, flat!.priceChangePct], [null, null, null, null]);
-});
-
-test("a row's cells read in dollars or percent, with the arrow on the P/L's direction", () => {
-  const [long, short, flat, even] = portfolioRows({
-    sessions: [
-      opened("SMCI", 12, { has_open_trade: true, position: smciLong }),
-      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } }),
-      opened("ANET", 13, { trades: 1, realized_usd: -38 }),
-      opened("AMD", 15),
-    ],
-  });
-  assert.deepEqual(portfolioCells(long!, "usd"), { last: "$814.54", change: "+$2.14", changeTone: "up", pnl: "+$214.00", pnlTone: "up", arrow: "up" });
-  assert.deepEqual(portfolioCells(long!, "pct"), { last: "$814.54", change: "+0.26%", changeTone: "up", pnl: "+0.26%", pnlTone: "up", arrow: "up" });
-  // The short's stock fell (red) while her P/L rose (green, up arrow): the two columns do not share a tone.
-  assert.deepEqual(portfolioCells(short!, "usd"), { last: "$190.00", change: "−$10.00", changeTone: "down", pnl: "+$500.00", pnlTone: "up", arrow: "up" });
-  assert.deepEqual(portfolioCells(short!, "pct"), { last: "$190.00", change: "−5.00%", changeTone: "down", pnl: "+5.00%", pnlTone: "up", arrow: "up" });
-  // A flat name with a closed loss has dollars but no cost to take a percent of.
-  assert.deepEqual(portfolioCells(flat!, "usd"), { last: null, change: null, changeTone: "flat", pnl: "−$38.00", pnlTone: "down", arrow: "down" });
-  assert.deepEqual(portfolioCells(flat!, "pct"), { last: null, change: null, changeTone: "flat", pnl: "—", pnlTone: "flat", arrow: null });
-  assert.deepEqual(portfolioCells(even!, "usd"), { last: null, change: null, changeTone: "flat", pnl: "$0.00", pnlTone: "flat", arrow: null });
+  assert.deepEqual(rows.map((row) => [row.symbol, row.priorClose]), [["SMCI", 812.4], ["ANET", null], ["ZZZZ", null]]);
+  assert.equal(portfolioRows({ sessions: [opened("SMCI", 12)] })[0]!.priorClose, null, "a read without candidates holds no close");
 });
 
 test("the Portfolio head counts the open positions from the rows", () => {
@@ -690,10 +644,10 @@ test("a day thread's one action says what it does (D-078)", () => {
   assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Start Trading", "a day in progress opens too: the clock's Play resumes, this button never says Resume");
   assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 7, status: "practicing" } }), "Start Trading", "the same from the plan's cursor");
   assert.equal(dayActionLabel({ ...listed, day_no: 1 }, { ...plan, day_offset: 1 }), "Start Trading", "the label carries no day number, whatever the plan's offset");
-  // No open day: opening the next one starts it. The number is the thread's own (D-047).
-  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 7");
-  assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 10");
-  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Day 1");
+  // No open day: opening the next one says the same, with no day number (ADR-0023: a day runs open to open, the clock owns the day).
+  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Trading");
+  assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Trading");
+  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Trading");
   assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, prep: { state: "running", done: 1, total: 9, failed: 0 } }), null, "while the data prepares there is nothing to press");
   assert.equal(dayActionLabel(null, null), null);
 });

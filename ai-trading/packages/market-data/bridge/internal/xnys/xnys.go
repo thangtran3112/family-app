@@ -220,3 +220,16 @@ func (c *Calendar) Closed(timeframe string, point, now time.Time) bool {
 	close, ok := c.BarClose(timeframe, point)
 	return ok && !close.After(now)
 }
+
+// SessionFinished reports whether a session's bars can no longer change: the extended session
+// ends 20:00 ET, plus the 15-minute SIP embargo, so a session is finished from 20:15 ET on its
+// own date. This is later than the regular close on purpose: a 1m session holds after-hours bars
+// until 20:00 ET, and a write-once store that froze it at 16:15 would freeze it incomplete forever.
+// An unparseable date is never finished. The archive and the Redis hot tier share this rule.
+func SessionFinished(date string, now time.Time) bool {
+	d, err := time.ParseInLocation(DateFormat, date, NewYork)
+	if err != nil {
+		return false
+	}
+	return !now.Before(time.Date(d.Year(), d.Month(), d.Day(), 20, 15, 0, 0, NewYork))
+}

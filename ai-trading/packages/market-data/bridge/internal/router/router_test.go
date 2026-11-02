@@ -354,3 +354,36 @@ func TestChangedFiresOnRoutingAndHealth(t *testing.T) {
 		t.Fatal("mark-down must wake watchers")
 	}
 }
+
+// pinSpy records whether the context it was handed carries the pinned mark.
+type pinSpy struct {
+	fake
+	pinned []bool
+}
+
+func (p *pinSpy) Quotes(ctx context.Context, syms []string) ([]*pb.Quote, error) {
+	p.pinned = append(p.pinned, Pinned(ctx))
+	return p.fake.Quotes(ctx, syms)
+}
+func (p *pinSpy) Bars(ctx context.Context, r *pb.GetBarsRequest) ([]*pb.Bar, pb.Quality, error) {
+	p.pinned = append(p.pinned, Pinned(ctx))
+	return p.fake.Bars(ctx, r)
+}
+
+func TestPinnedFlagReachesTheProviderOnlyForPinnedCalls(t *testing.T) {
+	spy := &pinSpy{fake: fake{name: "alpaca", classes: qc, configured: true, quality: pb.Quality_DELAYED_15M}}
+	r, _ := newRouter(spy)
+	ctx := context.Background()
+	for _, pin := range []string{"", "alpaca"} {
+		if _, err := r.Quotes(ctx, []string{"AAPL"}, pin); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Bars(ctx, &pb.GetBarsRequest{Symbol: "AAPL", PinProvider: pin}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []bool{false, false, true, true}
+	if fmt.Sprint(spy.pinned) != fmt.Sprint(want) {
+		t.Fatalf("pinned flag per call = %v, want %v", spy.pinned, want)
+	}
+}

@@ -238,14 +238,23 @@ func callJSON(t *testing.T, h *harness, s step) outcome {
 }
 
 func TestConformanceEveryRPCIdenticalOverEveryWire(t *testing.T) {
+	conformance(t, newHarness, nil)
+}
+
+// conformance replays the whole script over every transport. mk builds the harnesses; before, when
+// set, runs ahead of each step (the cached run empties the hot tier there).
+func conformance(t *testing.T, mk func(*testing.T, ...func(*Options)) *harness, before func(*harness)) {
 	script := steps()
 	results := map[string][]outcome{}
 	for _, tr := range transports() {
-		h, withArchive := newHarness(t), newHarness(t, memArchive)
+		h, withArchive := mk(t), mk(t, memArchive)
 		for _, s := range script {
 			use := h
 			if s.archive {
 				use = withArchive
+			}
+			if before != nil {
+				before(use)
 			}
 			if s.pre != nil {
 				s.pre(use)
