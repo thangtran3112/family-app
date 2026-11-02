@@ -40,7 +40,12 @@ test("practiceText fills placeholders, and the strings the screens build contain
     noTradesText(0),
     noTradesText(2),
     tradesCountText(1),
+    practiceText("chartNotUpdating", { when: "Fri 2026-10-23 · 7:59:00 PM ET" }),
+    practiceText("marketClosed", { time: "8:00 PM ET" }),
+    practiceText("marketNextOpen", { when: "Fri 2026-10-23 · 10:00 AM ET" }),
   ];
+  assert.equal(practiceText("chartNotUpdating", { when: "8:00 PM ET" }), "Not updating · last data 8:00 PM ET");
+  assert.equal(practiceText("marketClosed", { time: "8:00 PM ET" }), "Market closed · data through 8:00 PM ET");
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
 });
 

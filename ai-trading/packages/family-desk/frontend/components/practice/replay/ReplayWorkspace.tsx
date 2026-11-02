@@ -20,7 +20,7 @@ import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
-import { isSpeed, threadClock } from "@/lib/replay/clock";
+import { isSpeed } from "@/lib/replay/clock";
 import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { formatEtDateClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -62,7 +62,7 @@ import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplayS
 import { useMinuteBars } from "@/lib/replay/useMinuteBars";
 import { useShownClock } from "@/lib/replay/useShownClock";
 import { sessionVwap } from "@/lib/replay/sessionVwap";
-import { chartBars, dailyBlock, type ReplayView } from "@/lib/replay/feedState";
+import { chartBars, dailyBlock, viewClock, type ReplayView } from "@/lib/replay/feedState";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { ChartToolbar } from "./ChartToolbar";
 import { useDayPortfolio } from "./Portfolio";
@@ -175,11 +175,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // A day thread's clock runs on the server and is controlled from the Summary: this screen has no transport at all (ADR-0018).
   const followed = api.follows;
   const behind = view.behindClock && !ended;
-  // The thread's one time: the day clock for a name on a day list (a name left behind it shows the thread's time, not its own old playhead).
-  const clock = threadClock(view.revealedThrough, view.dayClock);
+  // The thread's one time: the payload's own `thread_time` (ADR-0022), uncapped, so past the tape it keeps counting while the chart's data stands still. A swing
+  // or standalone session has none, and its time is its playhead (or the day clock a name was left behind).
+  const clock = viewClock(view);
   // What a day thread's chart SHOWS of that time ticks every second between two polls; the readout, the status bar and the top-bar chip all read this one
-  // value (D-166). `clock` stays the polled time for everything that prices or compares.
-  const ticking = useShownClock(clock, followed && view.clockRunning, isSpeed(view.clockSpeed) ? view.clockSpeed : 1);
+  // value (D-166). `clock` stays the polled time for everything that prices or compares. While the polls fail (`api.stale`) the readout is held, as the Summary's is.
+  const ticking = useShownClock(clock, followed && view.clockRunning && !api.stale, isSpeed(view.clockSpeed) ? view.clockSpeed : 1);
   const shownClock = followed ? ticking : clock;
   // A day's portfolio: every name she holds, read here only for the stop-pause toast (which name to exit). The chart view shows no portfolio panel: it is the Portfolio tab's (owner, 2026-11-01).
   // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
@@ -436,7 +437,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
           <span>{PRACTICE_COPY.threadTime}</span>
           <span data-testid="thread-clock-time">{formatEtDateClock(shownClock)}</span>
-          <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClosed : PRACTICE_COPY.clockStatePaused}</span>
+          {api.stale && <span role="status" className={styles.staleNote} data-testid="chart-stale">{practiceText("chartNotUpdating", { when: formatEtDateClock(view.dataThrough) })}</span>}
+          {view.market?.phase === "closed" && (
+            <span data-testid="market-closed">{practiceText("marketClosed", { time: formatEtTimeZone(view.dataThrough) })}</span>
+          )}
+          {view.market?.phase === "closed" && view.market.next_open_at !== null && (
+            <span data-testid="market-next-open">{practiceText("marketNextOpen", { when: formatEtDateClock(view.market.next_open_at, { seconds: false }) })}</span>
+          )}
+          <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : PRACTICE_COPY.clockStatePaused}</span>
           {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
         </p>
       )}
@@ -463,7 +471,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         </p>
       )}
       <div className={styles.chartSlot} data-testid="chart-slot">
-        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} focus={focus} dimmed={Boolean(api.player.error)} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} focus={focus} dimmed={Boolean(api.player.error) || api.stale} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
       <ChartToolbar
         symbol={spec.symbol}

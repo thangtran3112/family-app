@@ -121,3 +121,22 @@ export const delta = {
 export const feed = { ...delta, interval: "5m", window_start: "2026-04-07T13:30:00Z" };
 
 export const markResult = { mark, open_trade: openTrade, journal, warning: null, thread: null };
+
+/** A day-thread name overnight (ADR-0022): T is Thursday 1:22:24 AM ET, the tape ended at 8:00 PM ET Wednesday, and the price is the last print. */
+export const overnightDelta = {
+  ...delta,
+  revealed_through: "2026-04-08T00:00:00Z",
+  thread_time: "2026-04-08T05:22:24Z",
+  data_through: "2026-04-08T00:00:00Z",
+  market: { phase: "closed", tape_end: "2026-04-08T00:00:00Z", last_bar_at: "2026-04-07T23:59:00Z", next_open_at: "2026-04-08T14:00:00Z" },
+  last: { price: 188.05, at: "2026-04-07T23:59:40Z", age_s: 20 },
+  indicators: {
+    interval: "5m",
+    as_of_bar: "2026-04-07T23:55:00Z",
+    rows: [
+      { t: "2026-04-07T23:50:00Z", ema9: 187.9, ema21: 187.5, vwap: 187.7, rsi14: 55.5, macd: 0.4, macd_signal: 0.3, macd_hist: 0.1 },
+      { t: "2026-04-07T23:55:00Z", ema9: 188, ema21: 187.6, vwap: 187.71, rsi14: 58.1, macd: 0.45, macd_signal: 0.32, macd_hist: 0.13 },
+    ],
+  },
+};
+export const overnightFeed = { ...overnightDelta, interval: "5m", window_start: "2026-04-07T13:30:00Z" };
