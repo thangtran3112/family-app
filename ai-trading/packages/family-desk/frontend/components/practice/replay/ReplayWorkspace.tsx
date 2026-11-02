@@ -54,6 +54,7 @@ import {
 } from "@/lib/replay/playView";
 import type { Paused, ReplaySession } from "@/lib/replay/schemas";
 import { problemMessage } from "@/lib/replay/setup";
+import { routeId } from "@/lib/replay/routeId";
 import { replayStatusLine } from "@/lib/replay/statusLine";
 import { freeCashText } from "@/lib/replay/swing";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
@@ -84,13 +85,12 @@ const BOTTOM_TABS_ID = "replay-bottom";
 /** `/practice/replay?id=`: the chart, the tape and the controls (02o §a3). Reads the URL, so the page wraps it in Suspense. */
 export function ReplayWorkspace() {
   const params = useSearchParams();
-  const raw = params.get("id");
-  const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
+  const { id, given } = routeId(params.get("id"));
 
   if (id === null) {
     return (
       <div className={styles.page}>
-        <ThreadPicker hint={PRACTICE_COPY.threadPickHintReplay} href={threadPageHref} />
+        {given ? <PracticeNotice title={PRACTICE_COPY.sessionNotFound} /> : <ThreadPicker hint={PRACTICE_COPY.threadPickHintReplay} href={threadPageHref} />}
       </div>
     );
   }
