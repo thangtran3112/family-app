@@ -1,13 +1,12 @@
 import type { Page } from "@playwright/test";
 import { COPY } from "../../lib/desk/freshness.ts";
 import { fixture, mockFundamental, startInFundamental, watchGated } from "./fundamental-helpers";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { expect, expectCleanScreen, expectDropsInOrder, openDesk, prepareDesk, test } from "./helpers";
 
 // Research (02n FD7 to FD10): the brief at /stocks and one stock at /stocks?symbol=…#overview|valuation|timeline. The seeded
 // database has no Desk AI run, so the brief and the verdict are empty in the real world and the screens say "not started";
 // the populated views answer from the frozen contract fixtures. No spec here may reach a gated route.
 
-const narrow = () => test.info().project.name === "desktop-1180";
 const main = (page: Page) => page.locator("#main-content");
 const noSidewaysScroll = async (page: Page) =>
   expect(await page.evaluate(() => document.scrollingElement!.scrollWidth - window.innerWidth), "scrolls sideways").toBeLessThanOrEqual(0);
@@ -31,7 +30,7 @@ test("the real backend before the first Desk AI run: the brief says not started 
   expect(gated()).toEqual([]);
 });
 
-test("the brief lists every analyzed stock with its run line, columns that drop at 1180 and the stale footnote", async ({ page }) => {
+test("the brief lists every analyzed stock with its run line, columns that drop in a narrow pane and the stale footnote", async ({ page }) => {
   await mockFundamental(page);
   const gated = watchGated(page);
   await openDesk(page, "/stocks");
@@ -42,13 +41,7 @@ test("the brief lists every analyzed stock with its run line, columns that drop 
   await expect(table.getByRole("row", { name: /MSFT/ })).toContainText("Buy → Hold");
   await expect(table.getByRole("row", { name: /NVDA/ })).toContainText("New");
   await expect(main(page).getByRole("list", { name: "Stale views" })).toContainText("NVDA: Desk AI view from Thu · today's update didn't finish");
-  if (narrow()) {
-    await expect(table.getByRole("columnheader", { name: "EPS rev. 30d" })).toHaveCount(0);
-    await expect(table.getByRole("columnheader", { name: "Confidence" })).toHaveCount(0);
-  } else {
-    await expect(table.getByRole("columnheader", { name: "EPS rev. 30d" })).toBeVisible();
-    await expect(table.getByRole("columnheader", { name: "Confidence" })).toBeVisible();
-  }
+  await expectDropsInOrder(table, ["EPS rev. 30d", "Confidence"]);
   await noSidewaysScroll(page);
   await expectCleanScreen(page);
   expect(gated()).toEqual([]);

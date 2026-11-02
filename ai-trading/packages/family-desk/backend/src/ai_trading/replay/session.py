@@ -652,25 +652,8 @@ def create(
     check_window(day, asked_end, now)
     end = market_close(day, "extended") if extended_tape else asked_end
 
-    existing = db.execute(
-        select(ReplaySession).where(
-            ReplaySession.owner_user_id == user_id,
-            ReplaySession.symbol == symbol,
-            ReplaySession.day == day,
-            ReplaySession.status == "active",
-        )
-    ).scalar_one_or_none()
+    existing = _active_for(db, user_id, symbol, day, day_list)
     if existing is not None:
-        if day_list is not None and existing.day_list_id != day_list.id:
-            raise ReplayProblem(
-                f"You already have an open {symbol} practice session for this day · end it first",
-                path="symbol",
-                status=409,
-            )
-        if day_list is None and existing.day_list_id is not None:
-            raise ReplayProblem(
-                "This day is part of your daily list · open it from the list", path="symbol", status=409
-            )
         return existing
 
     store = svc.store_factory(db)
@@ -738,17 +721,68 @@ def create(
     db.add(row)
     try:
         db.flush()
-    except IntegrityError:  # a concurrent create of the same active session: return that one
+    except IntegrityError:  # a concurrent create of the same active session: that one, if it is this day list's own
         db.rollback()
-        return db.execute(
-            select(ReplaySession).where(
-                ReplaySession.owner_user_id == user_id,
-                ReplaySession.symbol == symbol,
-                ReplaySession.day == day,
-                ReplaySession.status == "active",
-            )
-        ).scalar_one()
+        found = _active_for(db, user_id, symbol, day, day_list)  # another list's winner is the same 409, never adopted
+        assert found is not None
+        return found
     return row
+
+
+def _active_for(
+    db: Session, user_id: int, symbol: str, day: date, day_list: ReplayDayList | None
+) -> ReplaySession | None:
+    """The user's active session on a name and day, or None. There is one per name and day whichever day list holds it
+    (the partial unique index), so a hit that is not `day_list`'s own is a 409 that says where it is open. The day list
+    shows the same rows as `held_elsewhere`, so a name it offers never meets this refusal."""
+    existing = db.execute(
+        select(ReplaySession).where(
+            ReplaySession.owner_user_id == user_id,
+            ReplaySession.symbol == symbol,
+            ReplaySession.day == day,
+            ReplaySession.status == "active",
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return None
+    if day_list is not None and existing.day_list_id != day_list.id:
+        thread = db.get(PracticeThread, existing.thread_id) if existing.thread_id is not None else None
+        where = f"in {thread.name}" if thread is not None else "as a standalone session"
+        raise ReplayProblem(
+            f"You already have an open {symbol} practice session for this day {where} · end it first",
+            path="symbol",
+            status=409,
+        )
+    if day_list is None and existing.day_list_id is not None:
+        raise ReplayProblem("This day is part of your daily list · open it from the list", path="symbol", status=409)
+    return existing
+
+
+def held_elsewhere(db: Session, user_id: int, day: date, day_list_id: int) -> list[dict[str, Any]]:
+    """The user's active sessions on `day` that belong to another day list or to none: the names `_active_for` refuses
+    to open in this one (one active session per name and day, across every thread and swing day). The day list read
+    reports them so a name is never shown as "not opened" while the open refuses it; each names where to end it."""
+    rows = db.execute(
+        select(
+            ReplaySession.id,
+            ReplaySession.symbol,
+            ReplaySession.day_list_id,
+            ReplaySession.thread_id,
+            PracticeThread.name,
+        )
+        .outerjoin(PracticeThread, PracticeThread.id == ReplaySession.thread_id)
+        .where(
+            ReplaySession.owner_user_id == user_id,
+            ReplaySession.day == day,
+            ReplaySession.status == "active",
+            ReplaySession.day_list_id.is_distinct_from(day_list_id),
+        )
+        .order_by(ReplaySession.id)
+    )
+    return [
+        {"session_id": sid, "symbol": symbol, "day_list_id": dlid, "thread_id": tid, "thread_name": tname}
+        for sid, symbol, dlid, tid, tname in rows
+    ]
 
 
 # -- advance and feed ----------------------------------------------------------------------------------------

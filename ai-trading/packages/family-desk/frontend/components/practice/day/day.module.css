@@ -72,3 +72,5 @@
 .tileLabel { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tileValue { font-size: var(--text-title); line-height: var(--line-title); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .tileHint { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); }
+/* A clock-dependent cell whose read has not landed (D-159): the skeleton sits on the cell's alignment edge, so the column keeps its width and its side. */
+.pending { margin-left: auto; }

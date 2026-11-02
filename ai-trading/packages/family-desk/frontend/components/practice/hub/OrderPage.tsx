@@ -13,7 +13,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { practiceTabLabel, threadPageHref } from "@/lib/replay/practiceTabs";
-import { orderNames, type OrderName } from "@/lib/replay/orderView";
+import { heldBlocked, heldHref, heldWhere, orderNames, type OrderName } from "@/lib/replay/orderView";
 import { problemMessage } from "@/lib/replay/setup";
 import { loadAnyDayList } from "@/lib/replay/swingApi";
 import { threadName } from "@/lib/replay/threadView";
@@ -100,8 +100,9 @@ function NamePicker({ dayListId }: { dayListId: number }) {
   const [message, setMessage] = useState<string | null>(null);
   const query = useDeskQuery(`practice-order-names:${dayListId}`, (signal) => loadAnyDayList(dayListId, {}, { signal }));
 
-  const open = async (symbol: string) => {
+  const open = async (symbol: string, held: OrderName["held"]) => {
     if (opening !== null) return;
+    if (held !== null) return setMessage(heldBlocked(held)); // the open would be a 409: the name is open elsewhere
     setOpening(symbol);
     setMessage(null);
     try {
@@ -129,9 +130,16 @@ function NamePicker({ dayListId }: { dayListId: number }) {
               columns={NAME_COLUMNS}
               rows={rows}
               rowKey={(row) => row.symbol}
-              onSelect={(row) => void open(row.symbol)}
+              onSelect={(row) => void open(row.symbol, row.held)}
               empty={PRACTICE_COPY.orderFindNone}
               rowActions={(row) => {
+                if (row.held !== null) {
+                  return (
+                    <Button size="sm" href={heldHref(row.held)} aria-label={practiceText("dayHeldGoLabel", { symbol: row.symbol, where: heldWhere(row.held) })}>
+                      {PRACTICE_COPY.dayHeldGo}
+                    </Button>
+                  );
+                }
                 const here = opening === row.symbol;
                 return (
                   <Button
@@ -140,7 +148,7 @@ function NamePicker({ dayListId }: { dayListId: number }) {
                     disabled={opening !== null}
                     loading={here}
                     aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
-                    onClick={() => void open(row.symbol)}
+                    onClick={() => void open(row.symbol, null)}
                   >
                     {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
                   </Button>

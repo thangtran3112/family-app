@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { COPY } from "../../lib/desk/freshness.ts";
-import { test, expect, prepareDesk, openDesk, expectCleanScreen, setScenario, watchApi, MIDDAY } from "./helpers";
+import { test, expect, prepareDesk, openDesk, expectCleanScreen, expectDropsInOrder, setScenario, watchApi, MIDDAY } from "./helpers";
 
 // Today (02m D2): route `/` with the `/today` alias. Seeds: `technical` (market closed, no signals yet) and
 // `technical-alerts` (four NVDA fires today, three unread, alerts running).
@@ -108,13 +108,12 @@ test.describe("technical seed", () => {
     await expectCleanScreen(page);
   });
 
-  test("the watchlist heat drops vs VWAP and RVOL at 1180 and keeps both at 1440", async ({ page }) => {
+  test("the watchlist heat drops vs VWAP, then RVOL, only when its pane is too narrow, and keeps the rest", async ({ page }) => {
     await openDesk(page, "/");
     const heat = page.getByRole("table", { name: "Watchlist heat" });
     await expect(heat.locator("tbody tr")).toHaveCount(8);
-    await expect(heat.getByRole("columnheader")).toHaveText(
-      narrow() ? ["Symbol", "Last", "Change %", "Bias"] : ["Symbol", "Last", "Change %", "RVOL", "vs VWAP", "Bias"],
-    );
+    for (const name of ["Symbol", "Last", "Change %", "Bias"]) await expect(heat.getByRole("columnheader", { name, exact: true })).toHaveCount(1);
+    await expectDropsInOrder(heat, ["vs VWAP", "RVOL"]);
     await expectCleanScreen(page);
   });
 });

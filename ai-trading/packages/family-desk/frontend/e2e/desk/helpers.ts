@@ -1,4 +1,4 @@
-import { expect, test as base, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test as base, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { BANNED_TERMS } from "../../lib/desk/freshness.ts";
 import { authenticate, origin, prepare } from "../helpers";
 
@@ -149,6 +149,26 @@ export async function orderControlsOnScreen(page: Page): Promise<string[]> {
 // market, limit, stop and stop-limit entries are simulated against a replayed past day and reach no broker or account. Every other
 // screen, the Practice lists and journals included, is still checked for order controls.
 const PRACTICE_TICKET_SCREEN = /^\/practice\/replay\/?$/;
+
+/** The table fits its pane (D-157): no value is cut and nothing scrolls sideways. */
+export async function expectTableFits(table: Locator) {
+  const [pane, content] = await table.evaluate((node) => {
+    const wrap = node.parentElement!;
+    return [wrap.clientWidth, wrap.scrollWidth];
+  });
+  expect(content, "the table fits its pane: no value is cut or scrolled").toBeLessThanOrEqual(pane + 1);
+}
+
+/**
+ * The table's columns follow their declared drop order (D-157, `BOARD_PRIORITIES`): whichever of `dropOrder` the pane has no room for are the first
+ * entries of it (lowest priority first, never one skipped), and what is shown fits the pane. Which ones drop depends on the pane, not on the viewport.
+ */
+export async function expectDropsInOrder(table: Locator, dropOrder: string[]) {
+  const shown = (await table.getByRole("columnheader").allTextContents()).map((text) => text.replace(/[▲▼]/g, "").trim());
+  const missing = dropOrder.filter((name) => !shown.includes(name));
+  expect(missing, `a narrow pane drops ${dropOrder.join(", ")} from the first, never skipping one`).toEqual(dropOrder.slice(0, missing.length));
+  await expectTableFits(table);
+}
 
 /** The screen shows none of the banned wording and no order control (the Practice replay workspace's own ticket aside). */
 export async function expectCleanScreen(page: Page) {

@@ -4,7 +4,7 @@ import { DeskApiError } from "../api/client.ts";
 import { WatchlistTableSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
 import { manageErrorMessage, moveSymbol, normalizeListName, orderChange, strategyChips, tagLine, validateListName } from "./watchlistView.ts";
-import { columnsForBand, withPriorities } from "./columns.ts";
+import { droppedKeys, withPriorities } from "./columns.ts";
 
 const table = WatchlistTableSchema.parse(loadDeskFixture("watchlist_1_table"));
 
@@ -63,7 +63,7 @@ test("manage errors use plain words, the API detail first", () => {
   assert.equal(manageErrorMessage(new DeskApiError("http", 404, { detail: "Not Found" }), "add"), "Couldn't save that change · Try again");
 });
 
-test("1180 drops RVOL then bias label on the watchlist table", () => {
+test("a narrow pane drops RVOL then bias label on the watchlist table", () => {
   const columns = withPriorities(["symbol", "last", "change_pct", "rvol_10d", "bias_label", "tags"].map((key) => ({ key })), "watchlist");
-  assert.deepEqual(columnsForBand(columns, "1180").map((c) => c.key), ["symbol", "last", "change_pct", "tags"]);
+  assert.deepEqual(droppedKeys(columns), ["rvol_10d", "bias_label"]);
 });

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { COPY } from "../../lib/desk/freshness.ts";
-import { test, expect, expectCleanScreen, prepareDesk, openDesk, origin, watchApi } from "./helpers";
+import { test, expect, expectCleanScreen, expectDropsInOrder, prepareDesk, openDesk, origin, watchApi } from "./helpers";
 
 // D5 screener and D6 filter editor (02m §c2, §a3.4). The seeds' returned matches (the API caps them at 8 rows) never include
 // SPY, NVDA or MSFT, the only symbols with bars, so the chart test saves its own filter; the editor tests save copies of
@@ -100,7 +100,7 @@ test("the defaults show as chips above the table; New filter opens a blank filte
   await expectCleanScreen(page);
 });
 
-test("the results table lists matches in rank order with the filter's columns; 1180 drops three of them", async ({ page }) => {
+test("the results table lists matches in rank order with the filter's columns; a narrow pane drops Since, then ATR %, then Volume", async ({ page }) => {
   await openDesk(page, "/screener?filter=1");
   await expectCleanScreen(page);
   const table = page.getByRole("table", { name: "Screener matches" });
@@ -109,12 +109,8 @@ test("the results table lists matches in rank order with the filter's columns; 1
   await expect(table.getByRole("row").nth(2)).toHaveText(/^LKQ/);
   await expect(table.getByRole("row").nth(3)).toHaveText(/^SPTI/);
   await expect(table.getByRole("columnheader", { name: "RVOL", exact: true })).toBeVisible();
-  // matched_since ("Since"), atr_pct_14 ("ATR %") and volume ("Volume") carry a band priority: gone at 1180 only
-  for (const label of ["Since", "ATR %", "Volume"]) {
-    const header = table.getByRole("columnheader", { name: label, exact: true });
-    if (narrow()) await expect(header).toHaveCount(0);
-    else await expect(header).toBeVisible();
-  }
+  // matched_since ("Since"), atr_pct_14 ("ATR %") and volume ("Volume") carry a drop priority: they go, in that order, only when the pane cannot hold them (D-157)
+  await expectDropsInOrder(table, ["Since", "ATR %", "Volume"]);
 });
 
 test("quick filters narrow the rows in place and say so; Clear brings them back (A-SCR-02)", async ({ page }) => {

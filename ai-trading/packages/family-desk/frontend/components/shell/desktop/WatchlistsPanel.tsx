@@ -93,7 +93,6 @@ export function WatchlistsPanel({ band }: { band: ShellBand }) {
           columns={columns}
           rows={table.data.rows}
           rowKey={(row) => row.symbol}
-          band={band}
           density="compact"
           dim={stale}
           empty={empty}

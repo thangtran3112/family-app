@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { columnsForBand } from "@/lib/desk/columns";
-import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, type CellAlign, type ColumnKind } from "@/lib/desk/denseTable";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, fitColumns, type CellAlign, type ColumnFit, type ColumnKind, type ColumnWidth } from "@/lib/desk/denseTable";
 import { ariaSort, nextSort, sortRows, type SortState, type SortValue } from "@/lib/desk/sort";
-import { useShellBand } from "@/lib/desk/useViewportBand";
-import type { ShellBand } from "@/lib/desk/viewport";
 import styles from "./DenseTable.module.css";
 
 export type DenseColumn<R> = {
@@ -18,7 +15,7 @@ export type DenseColumn<R> = {
   align?: CellAlign;
   /** Present: sortable header. */
   sortValue?: (row: R) => SortValue;
-  /** Present: dropped at the 1180 band (lowest first, see lib/desk/columns.ts). */
+  /** Present: the column may drop. When the table does not fit its pane (its own container, never the viewport) the lowest number drops first, only as many as it takes; a column without one never drops. See `fitColumns`. */
   priority?: number;
   /** First click direction for sortable headers; numbers default to descending. */
   firstSort?: "asc" | "desc";
@@ -38,7 +35,6 @@ export type DenseTableProps<R> = {
   columns: readonly DenseColumn<R>[];
   rows: readonly R[];
   rowKey: (row: R) => string;
-  band?: ShellBand;
   /** 28 px rows by default, 24 px for compact rails. */
   density?: "default" | "compact";
   /** 4 px cell padding for a table that must fit its column without scrolling; the first and last cells keep the `--dense-edge` gutter (default `--space-3`; a wrapper may set it). */
@@ -58,6 +54,9 @@ export type DenseTableProps<R> = {
   empty?: ReactNode;
 };
 
+const FITS_ALL: ColumnFit = { hidden: [], wrap: false, fits: true };
+const sameFit = (a: ColumnFit, b: ColumnFit) => a.wrap === b.wrap && a.fits === b.fits && a.hidden.join("|") === b.hidden.join("|");
+
 const alignClass = (column: { kind?: ColumnKind; align?: CellAlign }) => {
   const align = cellAlign(column);
   return align === "right" ? styles.right : align === "center" ? styles.center : "";
@@ -68,7 +67,6 @@ export function DenseTable<R>({
   columns,
   rows,
   rowKey,
-  band,
   density = "default",
   tight = false,
   selectedKey = null,
@@ -80,11 +78,57 @@ export function DenseTable<R>({
   dim = false,
   empty,
 }: DenseTableProps<R>) {
-  const shellBand = useShellBand();
   const [sort, setSort] = useState<SortState | null>(initialSort);
-  const visible = useMemo(() => dropEmptyColumns(columnsForBand(columns, band ?? shellBand), rows), [columns, rows, band, shellBand]);
+  const visible = useMemo(() => dropEmptyColumns(columns, rows), [columns, rows]);
   const showEmpty = rows.length === 0 && Boolean(empty);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Pane fit (D-157): every column is rendered; `fit` says which are hidden (`data-dropped`) and whether the headers wrap.
+  const [fit, setFit] = useState<ColumnFit>(FITS_ALL);
+  const dropped = useMemo(() => new Set(fit.hidden), [fit.hidden]);
+  const measured = useRef<{ columns: ColumnWidth[]; reserved: { max: number; min: number } } | null>(null);
+  const hasActions = Boolean(rowActions);
+  const settle = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || !measured.current) return;
+    const next = fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth);
+    setFit((previous) => (sameFit(previous, next) ? previous : next));
+  }, []);
+  // Measure before paint, so a column that does not fit is never shown: each header cell's width with the table at its natural width (one-line
+  // headers, then wrapped headers), the dropped columns shown for the measure (CSS `data-measure`). Again when the columns or the rows change.
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    let live = true;
+    const measure = () => {
+      if (!live) return;
+      const heads = Array.from(wrap.querySelectorAll<HTMLElement>("thead th"));
+      const widthsAt = (size: "max" | "min") => {
+        wrap.dataset.measure = size;
+        return heads.map((head) => head.getBoundingClientRect().width);
+      };
+      const max = widthsAt("max");
+      const min = widthsAt("min");
+      delete wrap.dataset.measure;
+      measured.current = {
+        columns: visible.map((column, index) => ({ key: column.key, ...(column.priority === undefined ? {} : { priority: column.priority }), max: max[index] ?? 0, min: min[index] ?? 0 })),
+        reserved: hasActions ? { max: max[visible.length] ?? 0, min: min[visible.length] ?? 0 } : { max: 0, min: 0 },
+      };
+      settle();
+    };
+    measure();
+    // The first measure may run before the web font has: measure again once it is in, because a letter's width is what is being summed.
+    void document.fonts?.ready.then(measure);
+    return () => {
+      live = false;
+    };
+  }, [visible, rows.length, hasActions, showEmpty, settle]);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const observer = new ResizeObserver(settle);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, [showEmpty, settle]);
   // The scroll edge shadow: the wrapper says which edges have more to scroll to; the CSS draws the shadow (no re-render on scroll).
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -130,6 +174,7 @@ export function DenseTable<R>({
       data-tight={tight ? "true" : undefined}
       data-actions={rowActions ? actions : undefined}
       data-dim={dim ? "true" : undefined}
+      data-wrap={fit.wrap ? "true" : undefined}
     >
       <table className={styles.table} aria-label={caption}>
         <thead>
@@ -140,6 +185,7 @@ export function DenseTable<R>({
                 <th
                   key={column.key}
                   scope="col"
+                  data-dropped={dropped.has(column.key) ? "" : undefined}
                   className={`${alignClass(column)} ${scrollX && index === 0 ? styles.sticky : ""} ${fill ? styles.fill : ""}`}
                   style={style}
                   aria-sort={column.sortValue ? ariaSort(sort, column.key) : undefined}
@@ -172,7 +218,7 @@ export function DenseTable<R>({
                 {visible.map((column, index) => {
                   const { fill, truncate, style } = columnLayout(column);
                   return (
-                    <td key={column.key} className={`${alignClass(column)} ${scrollX && index === 0 ? styles.sticky : ""} ${fill ? styles.fill : ""}`} style={style}>
+                    <td key={column.key} data-dropped={dropped.has(column.key) ? "" : undefined} className={`${alignClass(column)} ${scrollX && index === 0 ? styles.sticky : ""} ${fill ? styles.fill : ""}`} style={style}>
                       {truncate ? <span className={styles.clip} title={cellTitle(column, row)}>{column.render(row)}</span> : column.render(row)}
                     </td>
                   );

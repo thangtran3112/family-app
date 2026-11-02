@@ -24,6 +24,7 @@ import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import type { Candidate, DayList } from "@/lib/replay/daily";
 import {
+  beforeOpen,
   canRescan,
   datesHidden,
   dayCellText,
@@ -31,10 +32,13 @@ import {
   dayColumns,
   dayRouteProblem,
   dayTitle,
+  type FollowState,
   filtersNote,
   filtersText,
+  followState,
   listBuiltText,
   listCountsText,
+  listTime,
   listWarning,
   liveState,
   practiceWindow,
@@ -48,6 +52,7 @@ import {
   threadDayNo,
   universeNote,
 } from "@/lib/replay/dayView";
+import { heldBlocked, heldHref, heldWhere } from "@/lib/replay/orderView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
@@ -201,10 +206,12 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   });
   // A read from before a re-scan or a re-list is not this list's names any more: until the new read lands, the snapshot shows.
   const read = atClock.data;
-  const rows = !ended && read !== null && read.data_through === list.data_through && read.rescan?.seq === list.rescan?.seq ? read.candidates : list.candidates;
-  const live = liveState({ candidates: rows });
+  const landed = read !== null && read.data_through === list.data_through && read.rescan?.seq === list.rescan?.seq;
+  const rows = !ended && landed ? read.candidates : list.candidates;
+  // The table follows the clock from the day's start, so its columns are the settled set from the first paint; the cells the read fills wait as placeholders (D-159).
+  const live = followState(list, { candidates: rows }, { landed, failed: atClock.error !== null });
   const columns = columnsOf(list, live);
-  const liveAt = rows.find((row) => row.live)?.live?.at ?? null;
+  const liveAt = rows.find((row) => row.live)?.live?.at ?? list.clock;
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -224,6 +231,12 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   // A click on a candidate opens its practice chart at the day clock; a second click while one opens does nothing.
   const practice = (symbol: string) => {
     if (busy) return Promise.resolve();
+    // A name open in another day or thread is refused by the open (one active session per name and day): say where, do not call.
+    const elsewhere = list.held_elsewhere.find((item) => item.symbol === symbol);
+    if (elsewhere !== undefined) {
+      setMessage(heldBlocked(elsewhere));
+      return Promise.resolve();
+    }
     setOpening(symbol);
     return run(async () => {
       const session = await startDaySession(list.id, symbol);
@@ -376,7 +389,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
             </p>
             {live && liveAt && (
               <p className={styles.muted} data-testid="live-note">
-                {practiceText(live.today ? "dayLiveNote" : "dayLiveNotePre", { clock: formatEtTimeZone(liveAt), list: formatEtTimeZone(list.list_at) })}
+                {practiceText(live.today ? "dayLiveNote" : beforeOpen(list.clock) ? "dayLiveNotePre" : "dayLiveNoteOpen", { clock: formatEtTimeZone(liveAt), list: formatEtTimeZone(listTime(list)) })}
               </p>
             )}
             <DenseTable
@@ -400,18 +413,25 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
               }
               rowActions={(row) => {
                 const here = opening === row.symbol;
+                const elsewhere = list.held_elsewhere.find((item) => item.symbol === row.symbol);
                 return (
                   <span className={styles.actions}>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      disabled={busy}
-                      loading={here}
-                      aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
-                      onClick={() => void practice(row.symbol)}
-                    >
-                      {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
-                    </Button>
+                    {elsewhere !== undefined ? (
+                      <Button client size="sm" href={heldHref(elsewhere)} aria-label={practiceText("dayHeldGoLabel", { symbol: row.symbol, where: heldWhere(elsewhere) })}>
+                        {PRACTICE_COPY.dayHeldGo}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={busy}
+                        loading={here}
+                        aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
+                        onClick={() => void practice(row.symbol)}
+                      >
+                        {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
+                      </Button>
+                    )}
                     <Button size="sm" variant="primary" disabled={busy} aria-label={practiceText("dayPeekAt", { symbol: row.symbol })} onClick={() => peekAt(row.symbol)}>
                       {PRACTICE_COPY.dayPeek}
                     </Button>
@@ -529,7 +549,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   );
 }
 
-function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColumn<Candidate>[] {
+function columnsOf(list: DayList, live: FollowState | null): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
@@ -550,6 +570,8 @@ function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColu
       // No name was checked (every cell a dash): the column would be a row of dashes to scroll past (D-136).
       hideWhenEmpty: column.format === "earnings",
       render: (row) => {
+        // The read at the clock has not landed: the column is here, its value is on its way (D-159).
+        if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} />;
         const text = dayCellText(column, row);
         if (column.format === "earnings") return row.earnings_state === "reported" ? <Badge tone="warn">{text}</Badge> : text;
         const tone = dayCellTone(column, row);

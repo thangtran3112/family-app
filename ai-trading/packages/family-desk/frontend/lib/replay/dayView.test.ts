@@ -13,7 +13,10 @@ import {
   dayRecordText,
   dayCellText,
   dayCellTone,
+  beforeOpen,
   dayColumns,
+  followState,
+  listTime,
   liveState,
   endDayExitText,
   dayNumberText,
@@ -756,4 +759,48 @@ test("each trade row carries its hold time and its return on the position; the t
 test("Resume belongs to the thread's day, never to one name: a day session resumes through its day", () => {
   assert.equal(sessionResumeHref({ id: 9, day_list_id: 42 }), "/practice/day?id=42", "a day-list session resumes the whole day, on its shared clock");
   assert.equal(sessionResumeHref({ id: 9, day_list_id: null }), "/practice/replay?id=9", "a standalone session has no day to resume through");
+});
+
+// ---- D-159: one column set from the first paint · D-165: one list time ---------------------------------------------
+
+const clocked = (clock: string | null) => ({ ...dayList, status: "listed" as const, clock });
+const AT_950 = "2026-03-10T13:50:00Z"; // 9:50 AM ET (EDT)
+
+test("D-159: the table follows the clock from its start, so the columns before the read lands are the settled ones, with the moving cells pending", () => {
+  const list = clocked(AT_950);
+  const first = followState(list, list, { landed: false, failed: false });
+  assert.deepEqual(first, { today: true, pending: true });
+  const settled = followState(list, atClock(liveSmci), { landed: true, failed: false });
+  assert.deepEqual(settled, { today: true, pending: false });
+  assert.deepEqual(dayColumns(list, first).map((column) => [column.key, column.label, column.live]), dayColumns(list, settled).map((column) => [column.key, column.label, column.live]), "nothing is added or relabelled when the read lands");
+  assert.deepEqual(dayColumns(list, first).filter((column) => column.live).map((column) => column.key), ["price_now", "change_now", "volume"]);
+});
+
+test("D-159: before the regular open only the price columns follow the clock, and the estimate agrees with the read", () => {
+  const early = clocked("2026-03-10T12:45:00Z"); // 8:45 AM ET
+  assert.deepEqual(followState(early, early, { landed: false, failed: false }), { today: false, pending: true });
+  assert.deepEqual(followState(early, atClock({ ...liveSmci, today: false }), { landed: true, failed: false }), { today: false, pending: false });
+  assert.equal(followState(clocked("2026-03-10T13:30:00Z"), dayList, { landed: false, failed: false })?.today, false, "9:30:00: no regular bar has closed yet");
+  assert.equal(followState(clocked("2026-03-10T13:31:00Z"), dayList, { landed: false, failed: false })?.today, true, "9:31: the first one has");
+});
+
+test("D-159: a failed read leaves dashes, not placeholders for ever; no clock or an ended day does not follow it", () => {
+  const list = clocked(AT_950);
+  assert.equal(followState(list, list, { landed: false, failed: true })?.pending, false);
+  assert.equal(followState(clocked(null), dayList, { landed: false, failed: false }), null, "no clock yet");
+  assert.equal(followState({ ...list, status: "ended" }, dayList, { landed: true, failed: false }), null, "the day has ended");
+  assert.equal(followState(list, { candidates: [] }, { landed: true, failed: false }), null, "no names: the empty state shows, not a table to follow");
+});
+
+test("D-165: the list time is the re-scan's clock once a scan has replaced the list, the build time before", () => {
+  const scan = { seq: 1, as_of: "2026-03-10T13:32:00Z", data_through: "2026-03-10T13:17:00Z", new_count: 0, created_at: "2026-03-10T13:32:05Z" };
+  assert.equal(listTime({ list_at: dayList.list_at, rescan: null }), dayList.list_at);
+  assert.equal(listTime({ list_at: dayList.list_at, rescan: scan }), "2026-03-10T13:32:00Z");
+});
+
+test("D-165: a day with no clock yet, or a clock before 9:30 AM ET, is before the open", () => {
+  assert.equal(beforeOpen(null), true);
+  assert.equal(beforeOpen("2026-03-10T13:29:59Z"), true);
+  assert.equal(beforeOpen("2026-03-10T13:30:00Z"), false);
+  assert.equal(beforeOpen("2026-03-10T20:30:00Z"), false, "4:30 PM ET is past it too");
 });

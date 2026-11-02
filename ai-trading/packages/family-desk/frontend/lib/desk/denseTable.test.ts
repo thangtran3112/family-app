@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EMPTY_VALUE } from "./format.ts";
-import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, isEmptyCell } from "./denseTable.ts";
+import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, fitColumns, isEmptyCell, type ColumnWidth } from "./denseTable.ts";
 
 test("numbers and actions align right, text left, and an explicit align wins", () => {
   assert.equal(cellAlign({}), "left");
@@ -45,4 +45,40 @@ test("a number is never clipped; a truncating column holds its minWidth, a fill 
   assert.deepEqual(columnLayout({ truncate: true, minWidth: 140 }), { fill: false, truncate: true, style: { width: 140, minWidth: 140, maxWidth: 140 } });
   assert.deepEqual(columnLayout({ fill: true, truncate: true, minWidth: 80 }), { fill: true, truncate: true, style: { minWidth: 80 } });
   assert.deepEqual(columnLayout({}), { fill: false, truncate: false, style: undefined });
+});
+
+// -- fitColumns (D-157) ------------------------------------------------------------------------------------------------------
+
+const col = (key: string, max: number, min: number, priority?: number): ColumnWidth => (priority === undefined ? { key, max, min } : { key, max, min, priority });
+
+test("a table that fits its pane drops nothing and wraps nothing", () => {
+  const columns = [col("symbol", 80, 60), col("last", 90, 70, 1), col("chg", 90, 70, 2)];
+  assert.deepEqual(fitColumns(columns, { max: 100, min: 100 }, 360), { hidden: [], wrap: false, fits: true });
+  assert.deepEqual(fitColumns(columns, { max: 100, min: 100 }, 1000), { hidden: [], wrap: false, fits: true }, "a wider pane changes nothing");
+});
+
+test("columns drop lowest priority first, only until the rest fit, the rightmost of equal priorities first", () => {
+  const columns = [col("symbol", 80, 60), col("a", 100, 70, 1), col("b", 100, 70, 2), col("c", 100, 70, 2), col("d", 100, 70, 3)];
+  assert.deepEqual(fitColumns(columns, { max: 0, min: 0 }, 470), { hidden: ["a"], wrap: false, fits: true });
+  assert.deepEqual(fitColumns(columns, { max: 0, min: 0 }, 370), { hidden: ["a", "c"], wrap: false, fits: true });
+  assert.deepEqual(fitColumns(columns, { max: 0, min: 0 }, 270), { hidden: ["a", "c", "b"], wrap: false, fits: true });
+  assert.deepEqual(fitColumns(columns, { max: 0, min: 0 }, 170), { hidden: ["a", "c", "b", "d"], wrap: false, fits: true });
+});
+
+test("the actions cell is reserved: it never drops and always counts", () => {
+  const columns = [col("symbol", 80, 60), col("a", 100, 70, 1)];
+  assert.deepEqual(fitColumns(columns, { max: 140, min: 140 }, 300), { hidden: ["a"], wrap: false, fits: true });
+  assert.deepEqual(fitColumns(columns, { max: 140, min: 140 }, 320), { hidden: [], wrap: false, fits: true });
+});
+
+test("when the columns without a priority overflow, headers wrap and the drop restarts at the wrapped widths", () => {
+  // At one-line headers only the unprioritized 80 + 120 + 140 reserved = 340 would be left, still over 300: wrap, and the wrapped widths (370 in all) need only column a gone.
+  const columns = [col("symbol", 80, 60), col("a", 120, 70, 1), col("b", 130, 70, 2), col("c", 120, 80)];
+  assert.deepEqual(fitColumns(columns, { max: 140, min: 90 }, 300), { hidden: ["a"], wrap: true, fits: true });
+  assert.deepEqual(fitColumns(columns, { max: 140, min: 90 }, 250), { hidden: ["a", "b"], wrap: true, fits: true });
+});
+
+test("when even the wrapped columns without a priority overflow, the table says it does not fit", () => {
+  const columns = [col("symbol", 80, 60), col("a", 120, 70, 1), col("c", 120, 80)];
+  assert.deepEqual(fitColumns(columns, { max: 100, min: 100 }, 200), { hidden: ["a"], wrap: true, fits: false });
 });
