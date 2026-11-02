@@ -33,7 +33,19 @@ import o from "./overview.module.css";
  * session's start and ends the day; End day stops at the clock, exits what is open at that price and opens the day's review. The plan's
  * practice window is a mark on the track, not a stop. The simulated account beside it is priced at that clock.
  */
-export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadClockApi; /** The thread was made with Hide dates: no calendar date while a day is open (D-155). */ datesHidden: boolean; onSkipped: (result: SkipDay) => void }) {
+export function ThreadClockPanel({
+  api,
+  datesHidden,
+  preparing = false,
+  onSkipped,
+}: {
+  api: ThreadClockApi;
+  /** The thread was made with Hide dates: no calendar date while a day is open (D-155). */
+  datesHidden: boolean;
+  /** The first day's data is still being prepared: no Start button exists yet, so the card does not tell her to press one (D-182). */
+  preparing?: boolean;
+  onSkipped: (result: SkipDay) => void;
+}) {
   const { clock, shown } = api;
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -88,6 +100,8 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
     setEndError(null);
     try {
       await whenReady(() => endDay(dayListId), { onWaiting: () => setNote(PRACTICE_COPY.dayEndStillWorking) });
+      // The page scrolls inside #main-content, so the offset of a scrolled Summary would carry onto the review: it opens at the top (D-184).
+      document.getElementById("main-content")?.scrollTo({ top: 0, behavior: "instant" });
       router.push(`/practice/day?id=${dayListId}`);
     } catch (failure) {
       setEndError(problemMessage(failure, PRACTICE_COPY.dayEndError));
@@ -104,7 +118,7 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
         {clock.state !== "no_day" && <Badge tone={running ? "up" : "neutral"} data-testid="thread-clock-state">{clockStateText(clock)}</Badge>}
       </div>
 
-      {clock.state === "no_day" && <p className={o.placeLine}>{PRACTICE_COPY.clockNoDay}</p>}
+      {clock.state === "no_day" && <p className={o.placeLine}>{preparing ? PRACTICE_COPY.clockPreparing : PRACTICE_COPY.clockNoDay}</p>}
 
       {can.started && (
         <>

@@ -16,6 +16,7 @@ import {
   threadOverviewHref,
   universeLines,
   weekAction,
+  weekHref,
   weekLoadProblem,
   weekMissingText,
   weekSubtitle,
@@ -27,12 +28,15 @@ test("every line of the screen's own copy passes the Practice banned-word list",
   for (const [key, text] of Object.entries(WEEK_TEXT)) assert.equal(containsPracticeBannedTerm(text), false, `${key}: ${text}`);
 });
 
-test("the URL needs a thread and a week that are whole numbers above zero", () => {
+// D-183: the thread and the week are read apart, so one thread id gets one answer whatever its week says.
+test("the thread and the week each need a whole number above zero, and are read apart", () => {
   assert.deepEqual(parseWeekParams("7", "2"), { threadId: 7, weekNo: 2 });
-  for (const [thread, week] of [[null, "2"], ["7", null], [null, null], ["0", "2"], ["7", "0"], ["-1", "2"], ["7", "1.5"], ["abc", "2"], ["7", ""], ["7", "2x"]] as const) {
-    assert.equal(parseWeekParams(thread, week), null, `${thread} ${week}`);
+  for (const bad of [null, "0", "-1", "1.5", "abc", "", "2x", "99999999999999999999"]) {
+    assert.deepEqual(parseWeekParams("7", bad), { threadId: 7, weekNo: null }, `week ${bad}`);
+    assert.deepEqual(parseWeekParams(bad, "2"), { threadId: null, weekNo: 2 }, `thread ${bad}`);
   }
-  assert.equal(parseWeekParams("99999999999999999999", "1"), null);
+  assert.deepEqual(parseWeekParams(null, null), { threadId: null, weekNo: null });
+  assert.equal(weekHref(7, 2), "/practice/week?thread=7&week=2");
 });
 
 test("links are the thread journal and a day's board", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { niceTicks } from "./ticks.ts";
+import { fitsWhole, labelSpan, niceTicks, textWidth } from "./ticks.ts";
 
 test("ticks are round (1, 2, 5 times a power of ten), ascending, and cover the data", () => {
   assert.deepEqual(niceTicks(49753, 50123, { minStep: 1 }), [49700, 49800, 49900, 50000, 50100, 50200]);
@@ -29,4 +29,20 @@ test("a flat or unreadable range has no ticks", () => {
   assert.deepEqual(niceTicks(Number.NaN, 5), []);
   assert.deepEqual(niceTicks(0, Number.POSITIVE_INFINITY), []);
   assert.deepEqual(niceTicks(9, 3), []);
+});
+
+test("a label is kept whole or left out: the edge of the axis never cuts one (D-180)", () => {
+  assert.equal(textWidth("04:00 AM", 11), 56, "7 units a character at 11 px");
+  assert.deepEqual(labelSpan(100, "abcd", 11, "middle"), [86, 114]);
+  assert.deepEqual(labelSpan(100, "abcd", 11, "start"), [100, 128]);
+  assert.deepEqual(labelSpan(100, "abcd", 11, "end"), [72, 100]);
+  // "04:00 AM" centred on the first bar (x 0) loses its left half; centred 28 units in it just fits.
+  assert.equal(fitsWhole(0, "04:00 AM", 11, "middle", 0, 520), false);
+  assert.equal(fitsWhole(27, "04:00 AM", 11, "middle", 0, 520), false);
+  assert.equal(fitsWhole(28, "04:00 AM", 11, "middle", 0, 520), true);
+  assert.equal(fitsWhole(492, "04:00 AM", 11, "middle", 0, 520), true);
+  assert.equal(fitsWhole(493, "04:00 AM", 11, "middle", 0, 520), false, "the right edge cuts too");
+  // A y label ends at the gutter's right edge: too long for the gutter, it is left out.
+  assert.equal(fitsWhole(68, "$51,500", 11, "end", 0, 760), true);
+  assert.equal(fitsWhole(68, "$1,000,000.00", 11, "end", 0, 760), false);
 });

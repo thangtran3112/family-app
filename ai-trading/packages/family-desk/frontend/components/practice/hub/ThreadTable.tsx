@@ -190,7 +190,7 @@ function ThreadRow({
       {wide && (
         <td className={styles.lastDay}>
           {/* The column header already says "Last day": the label is only for a day that is not that (D-113). */}
-          {view.label !== PRACTICE_COPY.threadLastDay && <span className={styles.sub}>{view.label}</span>}
+          {view.label !== PRACTICE_COPY.threadLastDay && <span className={styles.sub}>{view.label === PRACTICE_COPY.threadToday && view.pnl !== null ? PRACTICE_COPY.landingTodayRealized : view.label}</span>}
           <ResultLine pnl={view.pnl} line={view.short} />
         </td>
       )}

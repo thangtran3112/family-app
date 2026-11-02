@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { MiniChartFrame } from "@/components/charts/MiniChartFrame";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
+import { endLabelSpots, placeLabel, startNoteSpot, type CurveLabel } from "@/lib/replay/hubSwing";
 import { curveLayout, dayTickStep, type Box } from "@/lib/replay/threadChart";
 import { formatAxisDollars, formatBalance } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
@@ -31,12 +31,12 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
   const lastDay = points.at(-1)?.n ?? 0;
   const nowText = now ? practiceText("curveAfterDay", { n: lastDay, balance: formatBalance(now.balance) }) : "";
   const lowText = lowest ? `lowest ${formatBalance(lowest.balance)}` : "never below the start";
-  // The start note moves off the "Now" and "Lowest" labels, as on the swing curve (it printed over them on a live thread).
-  const others: CurveLabel[] = [
-    ...(now ? [{ x: now.x - 8, y: now.y - 8, text: nowText, anchor: "end" as const }] : []),
-    ...(lowest && !lowIsNow ? [{ x: lowest.x, y: lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8, text: `Lowest ${formatBalance(lowest.balance)}`, anchor: lowRight ? ("end" as const) : ("start" as const) }] : []),
-  ];
-  const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, others);
+  // "Lowest" first, then the "After day N" label keeps off it and off the line, then the start note keeps off both (D-181: "After day 1" had
+  // the balance line drawn through it). A label never leaves the plot box: on day 1 the newest point is at its left edge, so it goes to the right.
+  const lowLabel: CurveLabel | null = lowest && !lowIsNow ? { x: lowest.x, y: lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8, text: `Lowest ${formatBalance(lowest.balance)}`, anchor: lowRight ? "end" : "start" } : null;
+  const lines = [points.map((point) => ({ x: point.x, y: point.y }))];
+  const nowLabel = now ? placeLabel(endLabelSpots(now, nowText), { plot, lines, others: lowLabel ? [lowLabel] : [] }) : null;
+  const note = startNoteSpot(layout, PRACTICE_COPY.curveStart, [nowLabel, lowLabel].filter((label): label is CurveLabel => label !== null), lines);
   const summary = `Balance at the end of each day. Starts at ${formatBalance(startingBalance)}, ${now ? `after day ${lastDay} ${formatBalance(now.balance)}` : `now ${formatBalance(stats.balance)}`}, ${lowText}.`;
 
   return (
@@ -70,18 +70,11 @@ export function BalanceCurve({ thread }: { thread: Thread }) {
           <text key={point.n} x={point.x} y={bottom + 20} textAnchor={index === 0 ? "start" : "middle"} className={styles.axis}>{point.label}</text>
         ) : null,
       )}
-      {now && (
-        <text x={now.x - 8} y={now.y - 8} textAnchor="end" className={styles.nowLabel}>{nowText}</text>
+      {nowLabel && (
+        <text x={nowLabel.x} y={nowLabel.y} textAnchor={nowLabel.anchor} className={styles.nowLabel}>{nowLabel.text}</text>
       )}
-      {lowest && !lowIsNow && (
-        <text
-          x={lowest.x}
-          y={lowest.y + 16 < bottom - 6 ? lowest.y + 16 : lowest.y - 8}
-          textAnchor={lowRight ? "end" : "middle"}
-          className={styles.lowLabel}
-        >
-          {`Lowest ${formatBalance(lowest.balance)}`}
-        </text>
+      {lowLabel && (
+        <text x={lowLabel.x} y={lowLabel.y} textAnchor={lowRight ? "end" : "middle"} className={styles.lowLabel}>{lowLabel.text}</text>
       )}
     </MiniChartFrame>
   );

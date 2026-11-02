@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { chartPalette } from "@/lib/desk/chartPalette";
+import { fitsWhole } from "@/lib/desk/ticks";
 import styles from "./MiniChartFrame.module.css";
+
+/** The size of `--text-micro` in the chart's units (the SVG scales with its box, so a label's width in units does not change with the screen). */
+const MICRO_PX = 11;
 
 /** The SVG box: its size in viewBox units and the margins that leave room for the axes. */
 export type FrameBox = { width: number; height: number; left: number; right: number; top: number; bottom: number };
@@ -15,6 +19,7 @@ export type FrameStart = { y: number; note?: { x: number; y: number; text: strin
  * The frame every small SVG chart shares: the `<svg>` with its viewBox and accessible name, hairline grid lines with their y labels
  * (the ticks come from `niceTicks` in lib/desk/ticks.ts), an optional dashed start line and a row of x labels. Colours come from
  * `chartPalette` (SVG cannot read the CSS tokens' class names), type from `--text-micro`. The series, bars and marks are `children`.
+ * A label that would not print whole (a y label wider than the gutter, an x label centred too near the edge) is left out, never cut (D-180).
  * `MarketChart` is not built on this: it is a charting library.
  */
 export function MiniChartFrame({
@@ -43,15 +48,17 @@ export function MiniChartFrame({
   const left = box.left;
   const right = box.width - box.right;
   const bottom = box.height - box.bottom;
+  const yLabels = yTicks.filter((tick) => fitsWhole(left - 8, tick.label, MICRO_PX, "end", 0, box.width));
+  const xShown = xLabels.filter((item) => fitsWhole(item.x, item.label, MICRO_PX, "middle", 0, box.width));
   return (
     <svg viewBox={`0 0 ${box.width} ${box.height}`} role="img" aria-label={label} className={`${styles.svg} ${className ?? ""}`} style={maxWidth === undefined ? undefined : { maxWidth }}>
       {yTicks.map((tick) => (
         <g key={tick.key}>
           <line x1={left} x2={right} y1={tick.y} y2={tick.y} stroke={tick.zero ? chartPalette.muted : chartPalette.hairline} strokeWidth={1} />
-          <text x={left - 8} y={tick.y} dy="0.32em" textAnchor="end" fill={chartPalette.muted} className={styles.text}>{tick.label}</text>
+          {yLabels.includes(tick) && <text x={left - 8} y={tick.y} dy="0.32em" textAnchor="end" fill={chartPalette.muted} className={styles.text}>{tick.label}</text>}
         </g>
       ))}
-      {xLabels.map((item) => (
+      {xShown.map((item) => (
         <text key={item.x} x={item.x} y={bottom + 14} textAnchor="middle" fill={chartPalette.muted} className={styles.text}>{item.label}</text>
       ))}
       {start && (

@@ -39,7 +39,7 @@ export function OrderPage() {
   if (id === null) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
-        <ThreadPicker />
+        <ThreadPicker hint={PRACTICE_COPY.threadPickHintOrder} href={(threadId) => `/practice/order?thread=${threadId}`} />
       </OverviewShell>
     );
   }

@@ -31,7 +31,7 @@ test("bar and line points are sorted, unique, and use whitespace for missing val
   ]);
 });
 
-import { crosshairPoint, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData } from "./chart-data.ts";
+import { TAG_CLEARANCE, clearTickLabel, crosshairPoint, formatChartClock, paneHeights, replayTickLabel, seriesMarkers, shadingData, sourceTimeLabel, volumeData, wholeAxisLabel } from "./chart-data.ts";
 
 const intraday = [
   { t: "2026-10-23T13:30:00Z", o: 10, h: 12, l: 9, c: 11, v: 100, ext: false },
@@ -281,4 +281,28 @@ test("the right offset is sent to the time scale once, not on every data update 
   assert.deepEqual(rightOffsetOption(10, 10), {}, "a data update leaves her scroll position alone");
   assert.deepEqual(rightOffsetOption(0, 0), {}, "a chart that does not follow is left alone too");
   assert.deepEqual(rightOffsetOption(0, 10), { rightOffset: 10 }, "a chart that starts following takes its offset");
+});
+
+test("a time-axis label that would print cut at the edge is left out, a whole one stays (D-180)", () => {
+  // Peek at 1440: "04:00 AM" sat on the first bar and read "0 AM"; the next hours were whole.
+  assert.equal(wholeAxisLabel("04:00 AM", 0, 420), "");
+  assert.equal(wholeAxisLabel("05:00 AM", 96, 420), "05:00 AM");
+  // The right edge cuts as well.
+  assert.equal(wholeAxisLabel("09:30 AM", 410, 420), "");
+  // Replay at 1180 with the drawer open: a 520 px axis keeps the labels that fit and none that do not.
+  const labels = [{ x: 14, text: "08:30 AM" }, { x: 150, text: "09:00 AM" }, { x: 300, text: "09:30 AM" }, { x: 516, text: "10:15 AM" }];
+  assert.deepEqual(labels.map(({ x, text }) => wholeAxisLabel(text, x, 520)), ["", "09:00 AM", "09:30 AM", ""]);
+  // Unknown place (the chart could not say) and an empty label pass through.
+  assert.equal(wholeAxisLabel("04:00 AM", null, 420), "04:00 AM");
+  assert.equal(wholeAxisLabel("", 0, 420), "");
+});
+
+test("a price-axis tick under a last-value tag is left out; the tick one step away stays (D-181)", () => {
+  // Week review: the "Equity $51,457.00" tag sits 7 px from the "$51,500" tick and 61 px from "$51,000".
+  assert.equal(clearTickLabel("$51,500", 100, [107]), "");
+  assert.equal(clearTickLabel("$51,000", 161, [107]), "$51,000");
+  assert.equal(clearTickLabel("$51,500", 100, [100 + TAG_CLEARANCE]), "$51,500", "exactly the clearance apart reads apart");
+  assert.equal(clearTickLabel("$51,500", 100, [107, 300]), "", "any tag in reach hides it");
+  assert.equal(clearTickLabel("$51,500", null, [107]), "$51,500", "no place, no verdict: the tick stays");
+  assert.equal(clearTickLabel("$51,500", 100, []), "$51,500");
 });

@@ -13,6 +13,7 @@ import { startWeekAction, type EquitySeries, type WeekDayRowView } from "./weekV
 export const WEEK_TEXT = {
   none: "No week selected",
   noneHint: "Open a week from your thread.",
+  openWeek: "Open Week {n}",
   openPractice: "Open Practice",
   loading: "Loading the week…",
   notStarted: "This week has not started yet",
@@ -50,14 +51,16 @@ const whole = (raw: string | null): number | null => {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 };
 
-/** `?thread=7&week=2` as numbers; null when either is missing, not a whole number, or zero. */
-export function parseWeekParams(thread: string | null, week: string | null): { threadId: number; weekNo: number } | null {
-  const threadId = whole(thread);
-  const weekNo = whole(week);
-  return threadId === null || weekNo === null ? null : { threadId, weekNo };
+/**
+ * `?thread=7&week=2` as numbers, each null when it is missing, not a whole number, or zero. They are read apart because the route answers
+ * for the thread first and only then for the week: one thread id gets one answer whatever the week says (D-183).
+ */
+export function parseWeekParams(thread: string | null, week: string | null): { threadId: number | null; weekNo: number | null } {
+  return { threadId: whole(thread), weekNo: whole(week) };
 }
 
 export const threadHref = (threadId: number): string => `/practice/journal?thread=${threadId}`;
+export const weekHref = (threadId: number, weekNo: number): string => `/practice/week?thread=${threadId}&week=${weekNo}`;
 /** The thread's page: where "Back to your thread" goes (the journal is `threadHref`). */
 export const threadOverviewHref = (threadId: number): string => `/practice/thread?id=${threadId}`;
 export const dayBoardHref = (dayListId: number): string => `/practice/day?id=${dayListId}`;

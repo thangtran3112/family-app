@@ -163,6 +163,9 @@ export function applyQuickFilters<Row extends Pick<Match, "columns">>(rows: read
   );
 }
 
+/** What the preview says when a row has no price history to draw, instead of an empty plot with no words (D-185). */
+export const previewEmptyTitle = (symbol: string): string => `No price bars for ${symbol} yet`;
+
 /** Bars the preview chart loads for a selected row. */
 export const previewInterval = (runOn: string): "15m" | "1d" => (runOn === "daily_close" || runOn === "weekly" || runOn === "premarket_0830" ? "1d" : "15m");
 
