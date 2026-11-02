@@ -132,15 +132,31 @@ test.describe("Practice: the thread clock", () => {
     await page.waitForURL(THREAD_URL);
     const account = page.getByTestId("thread-clock-account");
     await expect(account).toBeVisible();
-    const equity = page.getByTestId("thread-clock-equity");
+    // The big figure on the page is the equity, not only the realized balance (the Equity block that restated it is gone, D-175).
+    const equity = page.getByTestId("thread-balance");
     const first = await equity.textContent();
-    await expect(page.getByTestId("thread-balance"), "the big figure on the page is the equity, not only the realized balance").toHaveText(first ?? "");
+    await expect(page.getByTestId("thread-clock-buying-power")).toBeVisible();
+    // D-170: a position is open, so the line under the headline says what is realized and the open P/L, never "no change yet".
+    const place = page.getByRole("region", { name: "Thread balance" });
+    await expect(place).toContainText(/Started with \$[\d,]+ · realized .* · open P\/L /);
+    await expect(place).not.toContainText("no change yet");
 
     await play(page, "5x");
     await page.getByRole("tab", { name: "Portfolio" }).click(); // away from the Summary's numbers; the server keeps pricing
     await page.waitForTimeout(6000);
     await page.getByRole("tab", { name: "Summary" }).click();
     await expect.poll(async () => equity.textContent(), { timeout: 30_000, message: "equity moved with the market" }).not.toBe(first);
+    // D-169: the Today row's open P/L is the headline's, whenever it is read (it kept an old figure through a whole run).
+    const signed = (text: string | null) => /[+−]\$[\d,]+\.\d\d/.exec(text ?? "")?.[0] ?? null;
+    await expect
+      .poll(
+        async () => {
+          const card = signed(await page.getByTestId("today-open").textContent());
+          return card !== null && card === signed(await page.getByTestId("thread-balance-open").textContent());
+        },
+        { message: "one open P/L on the Summary" },
+      )
+      .toBe(true);
     // The same account from the API, with the clock it is priced at: equity is the ledger balance plus the open P/L.
     const body = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}/clock`)).json();
     expect(body.account.positions).toBe(1);
@@ -148,6 +164,26 @@ test.describe("Practice: the thread clock", () => {
     expect(Date.parse(body.account.as_of)).toBe(Date.parse(body.clock));
     expect(Date.parse(body.clock)).toBeGreaterThan(Date.parse(body.window_start));
     expect(Date.parse(body.clock)).toBeLessThanOrEqual(Date.parse(body.window_end)); // never past the window: nothing later is read
+  });
+
+  // D-174: Hide dates is Yes by default. "Show date" on the chart band reveals the date for that day, and the Summary clock shows what the chip shows.
+  test("Show date on the chart band reaches the Summary: the clock, the next session line and the End day question show the date, for that day only (D-174)", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    await startDayOnTsla(page, context);
+    await page.getByRole("tab", { name: "Summary" }).click();
+    await page.waitForURL(THREAD_URL);
+    await expect(readout(page), "hidden: the weekday and the time only").not.toContainText("Sep");
+    await page.goBack(); // the chart again
+    await page.waitForURL(SESSION_URL);
+    await page.getByRole("button", { name: PRACTICE_COPY.showDate }).click();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toHaveCount(0);
+    await page.getByRole("tab", { name: "Summary" }).click();
+    await page.waitForURL(THREAD_URL);
+    await expect(readout(page), "shown: the chip shows the date, so does the clock").toContainText("Sep 25");
+    await expect(page.getByTestId("thread-clock-next")).toContainText(/Sep \d+/);
+    await panel(page).getByRole("button", { name: PRACTICE_COPY.clockEndDay }).click();
+    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toContainText("Sep 25");
+    await expect(page.getByRole("group", { name: "Confirm ending the day" })).toBeVisible();
   });
 
   test("nothing happens at the close: the clock flows through after-hours and the night, and the day hands over only at the next session's start", async ({ page, context }) => {

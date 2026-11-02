@@ -34,6 +34,7 @@ import {
   peekOffsets,
   planArmedText,
   openPositionsText,
+  openAtClock,
   openTodayText,
   portfolioCells,
   portfolioFooter,
@@ -502,6 +503,16 @@ test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with
   assert.equal(openTodayText({ open_count: 2, open_usd: 200 }), "2 open +$200.00");
   assert.equal(openTodayText({ open_count: 1, open_usd: -31.5 }), "1 open −$31.50");
   assert.equal(openTodayText({ open_count: 0, open_usd: 0 }), null);
+});
+
+// D-169: the Today row used to read the day list once, so it kept an old open P/L while the headline followed the clock.
+test("the Today row's open figure is the clock account's, so it moves with the headline (D-169)", () => {
+  const account = { balance: 50000, open_pnl_usd: -791, equity_usd: 49209, buying_power_usd: 44000, day_pnl_usd: -791, positions: 1, as_of: "2026-09-25T13:35:00Z" };
+  assert.equal(openTodayText(openAtClock(account)!), "1 open −$791.00");
+  // The clock moves on: the same selector, the new account, the new row; nothing else feeds it.
+  assert.equal(openTodayText(openAtClock({ ...account, open_pnl_usd: -822 })!), "1 open −$822.00");
+  assert.equal(openAtClock({ ...account, open_pnl_usd: 0, positions: 0 }), null, "nothing open: no open figure on the row");
+  assert.equal(openAtClock(null), null, "the clock not read yet: no figure rather than an old one");
 });
 
 test("no copy asks her to close one trade before another", () => {
