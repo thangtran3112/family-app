@@ -22,6 +22,7 @@ guarantees the blobs).
 """
 
 import logging
+import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -336,6 +337,7 @@ class SeriesCache:
     def __init__(self, size: int = LRU_SERIES) -> None:
         self.size = size
         self._lru: OrderedDict[tuple[str, date, int], PreparedSeries] = OrderedDict()
+        self._lock = threading.Lock()  # request threads and the background warm share this cache
 
     def __len__(self) -> int:
         return len(self._lru)
@@ -343,14 +345,18 @@ class SeriesCache:
     def get(self, inputs: Any, width: int) -> PreparedSeries:
         """The series of `inputs` (a `DayInputs`) at `width` minutes: the cached one, else built now."""
         key = (inputs.symbol, inputs.day, width)
-        if key in self._lru:
+        with self._lock:
+            found = self._lru.get(key)
+            if found is not None:
+                self._lru.move_to_end(key)
+                return found
+        series = PreparedSeries(inputs.symbol, inputs.day, width, inputs.bars_1m, inputs.prior_close)  # built unlocked
+        with self._lock:
+            self._lru[key] = self._lru.get(key, series)  # two threads that built it keep the first one stored
             self._lru.move_to_end(key)
+            while len(self._lru) > self.size:
+                self._lru.popitem(last=False)
             return self._lru[key]
-        series = PreparedSeries(inputs.symbol, inputs.day, width, inputs.bars_1m, inputs.prior_close)
-        self._lru[key] = series
-        while len(self._lru) > self.size:
-            self._lru.popitem(last=False)
-        return series
 
 
 def warm(

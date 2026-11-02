@@ -222,3 +222,34 @@ def test_a_49_name_cut_with_indicators_stays_inside_the_per_name_budget() -> Non
     p95_cold, p95_warm = float(np.percentile(cold, 95)), float(np.percentile(warm, 95))
     print(f"\n[A5 timing] 49 names, 1m cut with indicators: cold p95 {p95_cold:.1f} ms, warm p95 {p95_warm:.1f} ms")
     assert p95_warm < 50 and p95_cold < 50, (p95_cold, p95_warm)
+
+
+# -- the caches are shared by request threads and the background warm ---------------------------------------------
+
+
+def test_the_series_cache_survives_threads_hammering_it_past_its_size() -> None:
+    """A request thread and the warm thread both ask the LRU for series and evict: without the lock a `move_to_end`
+    could find its key gone (KeyError) or a pop race a read."""
+    import threading
+    from types import SimpleNamespace
+
+    minutes = _minutes(20, sessions=2)
+    inputs = [SimpleNamespace(symbol=f"S{i}", day=DAY, bars_1m=minutes, prior_close=100.0) for i in range(8)]
+    cache = frames.SeriesCache(size=3)
+    errors: list[BaseException] = []
+
+    def work(seed: int) -> None:
+        rng = np.random.default_rng(seed)
+        try:
+            for _ in range(60):
+                series = cache.get(inputs[int(rng.integers(0, 8))], 5)
+                assert series.symbol.startswith("S")
+        except BaseException as exc:  # noqa: BLE001 -- the test reports whatever a thread hit
+            errors.append(exc)
+
+    threads = [threading.Thread(target=work, args=(seed,)) for seed in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(60)
+    assert errors == [] and len(cache) <= 3

@@ -11,6 +11,7 @@ sessions (indicator warm-up and levels), 300 raw daily bars, and the day checks 
 """
 
 import logging
+import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -134,6 +135,7 @@ class History:
         self._sources = sources
         self._now = now
         self._lru: OrderedDict[tuple[str, date], DayInputs] = OrderedDict()
+        self._lock = threading.Lock()  # request threads and the background warm share the LRU
         self.series = SeriesCache()  # prepared display series over the decoded inputs (`replay/frames.py`)
         self.fetches = 0  # provider bar requests (one per contiguous run), for tests and the prep CLI
 
@@ -141,9 +143,11 @@ class History:
 
     def day_inputs(self, store: BlobStore, symbol: str, day: date) -> DayInputs:
         key = (symbol, day)
-        if key in self._lru:
-            self._lru.move_to_end(key)
-            return self._lru[key]
+        with self._lock:
+            found = self._lru.get(key)
+            if found is not None:
+                self._lru.move_to_end(key)
+                return found
         sessions = [*prior_sessions(day), day]
         frames = self.minute_bars(store, symbol, sessions)
         today = frames.get(day)
@@ -160,9 +164,11 @@ class History:
             prior_close=float(before["close"].iloc[-1]) if len(before) else None,
             avg_shares_per_s=_avg_shares_per_s(frames, sessions[:-1]),
         )
-        self._lru[key] = inputs
-        while len(self._lru) > LRU_DAYS:
-            self._lru.popitem(last=False)
+        with self._lock:
+            self._lru[key] = inputs
+            self._lru.move_to_end(key)
+            while len(self._lru) > LRU_DAYS:
+                self._lru.popitem(last=False)
         return inputs
 
     def minute_bars(self, store: BlobStore, symbol: str, sessions: list[date]) -> dict[date, pd.DataFrame]:
