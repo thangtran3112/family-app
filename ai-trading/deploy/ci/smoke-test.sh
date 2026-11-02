@@ -937,6 +937,19 @@ assert status["role"] == "bridge" and status["routing"]["source"] == "ENV_DEFAUL
   expect_status 401 "$rpc/ListProviders" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer ' -d '{}'
   echo "ok   market-data-bridge with no profile boots healthy and rejects every call"
   docker rm -fv smoke-market-data-bridge-bare >/dev/null
+
+  # The Redis hot tier is optional and must never stop the bridge: with the cache switched on and
+  # no Redis at the address (the host does not resolve here), it still boots healthy and serves,
+  # and the password in the URL never reaches its log.
+  start smoke-market-data-bridge-nocache "$(image market-data-bridge)" 18090 8080 --read-only \
+    -e MARKET_DATA_BRIDGE_TOKEN=smoke-bridge-token \
+    -e CACHE_ENABLED=1 -e CACHE_REDIS_URL=redis://:smoke-redis-pw-0123456789@market-data-cache:6379/0
+  expect_status 200 http://127.0.0.1:18090/healthz
+  expect_status 200 "$rpc/ListProviders" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer smoke-bridge-token' -d '{}'
+  docker logs smoke-market-data-bridge-nocache 2>&1 | grep -q 'cache enabled' || fail "bridge with CACHE_ENABLED=1 did not report the cache"
+  ! docker logs smoke-market-data-bridge-nocache 2>&1 | grep -q 'smoke-redis-pw' || fail "bridge logged the Redis password"
+  echo "ok   market-data-bridge boots healthy with the cache on and Redis unreachable, and logs no password"
+  docker rm -fv smoke-market-data-bridge-nocache >/dev/null
   docker network rm smoke-marketdata-net >/dev/null 2>&1 || true
 }
 

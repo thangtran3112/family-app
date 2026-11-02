@@ -38,17 +38,10 @@ func New(store Store, log *slog.Logger, now func() time.Time) *Archive {
 	return &Archive{store: store, log: log, now: now, cal: xnys.Default()}
 }
 
-// finished reports whether a session's bars can no longer change: the extended session ends
-// 20:00 ET, plus the 15-minute SIP embargo. This is later than 02u §2.1's "regular close plus the
-// embargo" on purpose: a 1m session holds after-hours bars until 20:00 ET, and the archive is
-// write-once, so archiving at 16:15 would freeze it incomplete forever.
-func finished(date string, now time.Time) bool {
-	d, err := time.ParseInLocation(xnys.DateFormat, date, xnys.NewYork)
-	if err != nil {
-		return false
-	}
-	return !now.Before(time.Date(d.Year(), d.Month(), d.Day(), 20, 15, 0, 0, xnys.NewYork))
-}
+// finished is xnys.SessionFinished: the extended session ends 20:00 ET plus the 15-minute SIP
+// embargo, later than 02u §2.1's "regular close plus the embargo" on purpose (the archive is
+// write-once and a 1m session holds after-hours bars until 20:00 ET).
+func finished(date string, now time.Time) bool { return xnys.SessionFinished(date, now) }
 
 // Bars answers from the archive where it can and asks fetch for the rest. Only RAW DAY_1 and
 // MINUTE_1 are archived: a split rewrites adjusted history (02u §2.1), and a pinned provider is a

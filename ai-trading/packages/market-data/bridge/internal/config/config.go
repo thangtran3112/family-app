@@ -59,6 +59,11 @@ type Config struct {
 	// bridge deploys without it; ArchiveURL is then unused.
 	ArchiveEnabled bool
 	ArchiveURL     string
+	// CacheEnabled (CACHE_ENABLED=1) wraps every provider in the Redis hot tier. Off by default;
+	// CacheURL (CACHE_REDIS_URL, redis://:<password>@host:port/db) is then required. The URL carries
+	// the password: it is never logged and never put in an error.
+	CacheEnabled bool
+	CacheURL     string
 }
 
 // ArchiveURL is the archive's Postgres connection string: ARCHIVE_DATABASE_URL, else the Desk's
@@ -83,6 +88,7 @@ func FromEnv(getenv func(string) string) (*Config, error) {
 		AlpacaSecret: getenv("ALPACA_API_SECRET_KEY"),
 		Ladders:      map[pb.DataClass][]string{},
 		ArchiveURL:   ArchiveURL(getenv),
+		CacheURL:     strings.TrimSpace(getenv("CACHE_REDIS_URL")),
 	}
 	switch v := strings.TrimSpace(getenv("ARCHIVE_ENABLED")); v {
 	case "", "0":
@@ -93,6 +99,16 @@ func FromEnv(getenv func(string) string) (*Config, error) {
 		}
 	default:
 		return nil, fmt.Errorf("ARCHIVE_ENABLED: %q is not 0 or 1", v)
+	}
+	switch v := strings.TrimSpace(getenv("CACHE_ENABLED")); v {
+	case "", "0":
+	case "1":
+		c.CacheEnabled = true
+		if c.CacheURL == "" {
+			return nil, fmt.Errorf("CACHE_ENABLED=1 needs CACHE_REDIS_URL")
+		}
+	default:
+		return nil, fmt.Errorf("CACHE_ENABLED: %q is not 0 or 1", v)
 	}
 	if c.Listen == "" {
 		c.Listen = ":8080"

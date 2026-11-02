@@ -180,7 +180,7 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "SKIP - docker compose not available in this environment (Case 10)"
 else
   fake_secrets="$(mktemp -d)"
-  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env desk.env cloudflared.env; do
+  for name in tradingagents.env ai-hedge-fund.env vibe-trading.env vibe-gateway.env vibe-consensus.env auth.env market-data.env market-data-bridge.env market-data-bridge-cache.env market-data-cache.env desk.env cloudflared.env; do
     printf 'FAKE_VALUE=fake-not-real-%s\n' "$name" >"$fake_secrets/$name"
   done
   if AI_TRADING_IMAGE_TAG=0000000000000000000000000000000000000000 \
