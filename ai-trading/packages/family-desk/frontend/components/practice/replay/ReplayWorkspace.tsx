@@ -55,7 +55,7 @@ import { problemMessage } from "@/lib/replay/setup";
 import { replayStatusLine } from "@/lib/replay/statusLine";
 import { freeCashText } from "@/lib/replay/swing";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
-import { buildTicket, initialTicket, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
+import { buildTicket, buyingPowerMessage, initialTicket, type PowerBasis, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
 import { useMinuteBars } from "@/lib/replay/useMinuteBars";
 import { useShownClock } from "@/lib/replay/useShownClock";
@@ -133,7 +133,13 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const swingContext = useSwingContext(swing ? session.thread_id : null, session.thread?.week_no, session.marks.length);
   // The order ticket: a side, a quantity and an order type with the prices that type takes. A stop is never part of it.
   const [ticket, setTicket] = useState<TicketDraft>(() => initialTicket(spec.shares));
-  const [ticketError, setTicketError] = useState<{ field: TicketField | "type"; message: string } | null>(null);
+  const [ticketError, setTicketError] = useState<{ field: TicketField | "type" | "order"; message: string } | null>(null);
+  const [placing, setPlacing] = useState(false);
+  // What the ticket can tell of the buying power before it sends: the thread's numbers and this name's position (the server holds the exact cash).
+  const powerBasis: PowerBasis | null = session.thread
+    ? { balance: session.thread.balance, freeCash: session.thread.free_cash_usd ?? null, trade: view.openTrade, last: view.last?.price ?? null }
+    : null;
+  const buyingPower = buyingPowerMessage(ticket, powerBasis);
   const editTicket = (next: TicketDraft) => {
     setTicket(next);
     setTicketError(null);
@@ -218,27 +224,30 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
    * leaves the ticket's own draft as she had it. Resolves true when the server took it.
    */
   const submitTicket = (chosen: "buy" | "sell", chartDraft?: TicketDraft): Promise<boolean> => {
-    const built = buildTicket(chartDraft ?? { ...ticket, side: chosen });
-    if (!built.ok) {
+    const draft = chartDraft ?? { ...ticket, side: chosen };
+    const built = buildTicket(draft);
+    const tooBig = built.ok ? buyingPowerMessage(draft, powerBasis) : null;
+    if (!built.ok || tooBig !== null) {
       if (!chartDraft) setTicket((current) => ({ ...current, side: chosen }));
-      setTicketError({ field: built.field, message: built.message });
+      setTicketError(built.ok ? { field: "shares", message: tooBig! } : { field: built.field, message: built.message });
       if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the message sits at the field
       return Promise.resolve(false);
     }
     setTicketError(null);
-    // The server names the field it refused (not enough cash is the Quantity's): the message then sits at that field, as a typed one does.
-    // A chart order's price is not a ticket field the ticket shows (its type is market), so a refused price is the message line's.
+    // A failed order is said on the ticket, with the server's own sentence. The server names the field it refused (not enough cash is the
+    // Quantity's): the message then sits at that field, as a typed one does. A chart order's price is not a ticket field the ticket shows
+    // (its type is market), and some failures name no field at all: those sit on the ticket as a whole, and in the chart popup.
     const refused = (path: string, message: string) => {
       const shown = chartDraft ? path === "shares" : path === "shares" || path === "limitPrice" || path === "stopPrice";
-      if (!shown) return false;
-      setTicketError({ field: path as TicketField, message });
-      if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the field is in the drawer
+      setTicketError({ field: shown ? (path as TicketField) : "order", message });
+      if (band === "1180") setRailOpen((open) => openRailTab(open, "practice")); // the ticket is in the drawer
       return true;
     };
+    setPlacing(true);
     return api.ticket(built.action, refused).then((accepted) => {
       if (accepted && !chartDraft) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
       return accepted;
-    });
+    }).finally(() => setPlacing(false));
   };
   const placeMark = (kind: Parameters<ReplaySessionApi["mark"]>[0]) => {
     if (kind === "long_entry" || kind === "short_entry") {
@@ -315,7 +324,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         router.replace(`/practice/replay?id=${other.id}`);
       })
       .catch((error) => {
-        api.notify("error", problemMessage(error, PRACTICE_COPY.markError));
+        api.notify("error", problemMessage(error, PRACTICE_COPY.orderError));
         setOpening(null);
       });
   };
@@ -336,7 +345,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const lastPrice = view.last?.price ?? null;
   const chartOrder = ended || behind || lastPrice === null
     ? undefined
-    : { shares: ticket.shares, place: (chosen: "buy" | "sell", price: number) => submitTicket(chosen, chartOrderDraft(ticket, chosen, price, lastPrice)) };
+    : { shares: ticket.shares, place: (chosen: "buy" | "sell", price: number) => submitTicket(chosen, chartOrderDraft(ticket, chosen, price, lastPrice)), error: ticketError?.message ?? null };
 
   const controls = (
     <PracticeControls
@@ -346,6 +355,8 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       ticket={ticket}
       onTicket={editTicket}
       ticketError={ticketError}
+      buyingPower={buyingPower}
+      placing={placing}
       onSubmit={order}
       orders={session.orders}
       onCancelOrder={api.cancelOrder}

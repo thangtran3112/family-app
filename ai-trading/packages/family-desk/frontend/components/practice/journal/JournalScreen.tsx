@@ -75,7 +75,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
         setSaved(true);
         onSaved();
       })
-      .catch(() => setAgain((current) => ({ ...current, message: PRACTICE_COPY.markError })))
+      .catch(() => setAgain((current) => ({ ...current, message: PRACTICE_COPY.notesError })))
       .finally(() => setSaving(false));
   };
 
