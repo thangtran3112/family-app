@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { formatEtDateClock, formatEtTime } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
@@ -37,6 +38,7 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
   const [confirming, setConfirming] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
@@ -49,7 +51,11 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
     return (
       <section className={styles.panel} aria-label={PRACTICE_COPY.clockTitle} data-testid="thread-clock">
         <h2 className={styles.panelTitle}>{PRACTICE_COPY.clockTitle}</h2>
-        <p className={o.placeLine} role="status">{api.error ?? (api.loading ? PRACTICE_COPY.loadingReplay : "")}</p>
+        {api.error !== null ? (
+          <ErrorBlock message={PRACTICE_COPY.clockLoadError} onRetry={api.refresh} />
+        ) : (
+          api.loading && <LoadingBlock label={PRACTICE_COPY.clockLoading} height={64} />
+        )}
       </section>
     );
   }
@@ -58,12 +64,15 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
   const focus = focusProgress(clock);
   const account = clock.account;
   const exits = portfolio.data === null ? null : endDayExitText(portfolioRows(portfolio.data), clock.clock);
-  const busy = api.busy || ending;
+  // A read that failed leaves the clock held at its last confirmed time: nothing is sent to a clock the page cannot see.
+  const busy = api.busy || ending || api.stale;
   const speed = clock.speed;
   const dayListId = clock.day_list_id;
 
   async function skip() {
+    setSkipping(true);
     const result = await api.skipDay();
+    setSkipping(false);
     setConfirming(false);
     if (result !== null) {
       setNote(skippedText(result));
@@ -101,6 +110,8 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
           <p className={o.clockTime}>
             <span data-testid="thread-clock-time">{formatEtDateClock(shown, { hideDate: datesHidden })}</span>
           </p>
+          <p className={styles.hint} data-testid="thread-clock-replayed">{PRACTICE_COPY.clockReplayedDate}</p>
+          {api.stale && <p className={o.placeLine} role="status" data-testid="thread-clock-frozen">{practiceText("clockFrozen", { time: formatEtDateClock(shown) })}</p>}
           <div className={o.clockTrack} role="progressbar" aria-label="Day progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clockProgress(clock, shown) * 100)}>
             <div className={o.clockFill} style={{ width: `${clockProgress(clock, shown) * 100}%` }} />
             {focus !== null && <span className={o.clockFocus} style={{ left: `${focus * 100}%` }} title={clock.focus_end === null ? undefined : practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })} data-testid="thread-clock-focus" />}
@@ -118,7 +129,7 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
             {running ? PRACTICE_COPY.clockPause : PRACTICE_COPY.clockPlay}
           </Button>
           <SpeedChips speed={speed} onSpeed={(next) => void api.setSpeed(next)} />
-          <Button ref={skipRef} size="touch" disabled={!can.skip || busy || confirming || confirmingEnd} onClick={() => setConfirming(true)}>{PRACTICE_COPY.clockSkipDay}</Button>
+          <Button ref={skipRef} size="touch" loading={skipping} disabled={!can.skip || busy || confirming || confirmingEnd} onClick={() => setConfirming(true)}>{skipping ? PRACTICE_COPY.clockSkipping : PRACTICE_COPY.clockSkipDay}</Button>
           <Button ref={endRef} size="touch" disabled={!can.skip || busy || confirming || confirmingEnd} aria-expanded={confirmingEnd} onClick={() => setConfirmingEnd(true)}>{PRACTICE_COPY.clockEndDay}</Button>
         </div>
       )}
@@ -127,7 +138,7 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
         <InlineConfirm
           label="Confirm skipping the day"
           prompt={PRACTICE_COPY.clockSkipAsk}
-          confirmLabel={PRACTICE_COPY.clockSkipConfirm}
+          confirmLabel={skipping ? PRACTICE_COPY.clockSkipping : PRACTICE_COPY.clockSkipConfirm}
           cancelLabel={PRACTICE_COPY.clockSkipCancel}
           layout="block"
           busy={busy}
@@ -156,9 +167,11 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
         />
       )}
 
+      {clock.state === "paused" && !skipping && <p className={styles.hint} data-testid="thread-clock-paused-hint">{PRACTICE_COPY.clockPausedHint}</p>}
+      {skipping && <p className={o.placeLine} role="status">{PRACTICE_COPY.clockSkippingNote}</p>}
       {api.rolled && <p className={o.placeLine} role="status" data-testid="thread-clock-rolled">{api.rolled}</p>}
       {note && <p className={o.placeLine} role="status">{note}</p>}
-      {api.error && <p className={o.placeLine} role="alert">{api.error}</p>}
+      {api.error && !api.stale && <p className={o.placeLine} role="alert">{api.error}</p>}
       {endError && <p className={o.placeLine} role="alert">{endError}</p>}
 
       {account && can.started && (
@@ -173,6 +186,7 @@ export function ThreadClockPanel({ api, datesHidden, onSkipped }: { api: ThreadC
               { id: "balance", label: PRACTICE_COPY.clockAccountBalance, value: formatBalance(account.balance) },
               { id: "open", label: PRACTICE_COPY.clockAccountOpen, value: formatDayResult(account.open_pnl_usd), tone: account.open_pnl_usd > 0 ? "up" : account.open_pnl_usd < 0 ? "down" : "neutral" },
               { id: "equity", label: PRACTICE_COPY.clockAccountEquity, value: <span data-testid="thread-clock-equity">{formatBalance(account.equity_usd)}</span> },
+              { id: "buying-power", label: PRACTICE_COPY.clockAccountBuyingPower, value: <span data-testid="thread-clock-buying-power">{formatBalance(account.buying_power_usd)}</span> },
             ]}
           />
           <p className={styles.hint}>{PRACTICE_COPY.clockAccountHint}</p>

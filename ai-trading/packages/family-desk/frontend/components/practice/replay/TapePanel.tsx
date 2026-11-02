@@ -21,6 +21,9 @@ export type TapePanelProps = {
 };
 
 const TONE_CLASS = { up: styles.up, down: styles.down, same: styles.same } as const;
+// The tick rule in words as well as colour: a sign in front of the price, and the same words for a screen reader.
+const TICK_SIGN = { up: "▲", down: "▼", same: "–" } as const;
+const TICK_WORD = { up: "Up-tick", down: "Down-tick", same: "Same price" } as const;
 
 const COLUMNS: DenseColumn<TapeDisplayRow>[] = [
   { key: "time", label: "Time", render: (row) => <span className={row.big ? styles.bigTime : undefined}>{etTapeClock(row.t)}</span> },
@@ -28,7 +31,13 @@ const COLUMNS: DenseColumn<TapeDisplayRow>[] = [
     key: "price",
     label: "Price",
     align: "right",
-    render: (row) => <span className={row.big ? styles.bigPrice : TONE_CLASS[row.tone]}>{row.price}</span>,
+    render: (row) => (
+      <span className={row.big ? styles.bigPrice : TONE_CLASS[row.tone]}>
+        <span aria-hidden="true">{TICK_SIGN[row.tone]} </span>
+        <span className="sr-only">{TICK_WORD[row.tone]} </span>
+        {row.price}
+      </span>
+    ),
   },
   { key: "size", label: "Size", align: "right", render: (row) => row.size },
   { key: "big", label: "Big", align: "right", render: (row) => (row.bigText ? <span className={styles.bigNotional}>{row.bigText}</span> : "") },
@@ -60,7 +69,7 @@ export function TapePanel({ view, filterId, onFilter, refreshing = false }: Tape
           empty={<p className={styles.muted}>Waiting for the first print</p>}
         />
       </div>
-      <p className={styles.legend}>Colours show the tick rule: up-tick green, down-tick red, same price grey</p>
+      <p className={styles.legend}>Signs and colours show the tick rule: ▲ up-tick (green), ▼ down-tick (red), – same price (grey)</p>
       <p className={styles.legend}>{`Amber row · ${formatNotional(view.tapeMeta?.bigPrintUsd ?? DEFAULT_BIG_PRINT_USD)} or more (price times size) · the tape has no bid or ask`}</p>
     </section>
   );

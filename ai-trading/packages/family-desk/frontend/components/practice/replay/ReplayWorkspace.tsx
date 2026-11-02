@@ -440,6 +440,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
           <span>{PRACTICE_COPY.threadTime}</span>
           <span data-testid="thread-clock-time">{formatEtClock(shownClock)}</span>
+          <span>{PRACTICE_COPY.clockReplayedShort}</span>
           <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClosed : PRACTICE_COPY.clockStatePaused}</span>
           {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
         </p>

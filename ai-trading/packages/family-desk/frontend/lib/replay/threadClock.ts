@@ -18,6 +18,7 @@ export const ClockAccountSchema = z.object({
   balance: finite,
   open_pnl_usd: finite,
   equity_usd: finite,
+  buying_power_usd: finite,
   day_pnl_usd: finite,
   positions: finite.int(),
   as_of: timestamp,
@@ -72,6 +73,13 @@ export function extrapolate(clock: Pick<ThreadClock, "clock" | "running" | "spee
   if (!clock.running || clock.state !== "running" || elapsedMs <= 0) return clock.clock;
   return new Date(ms(clock.clock) + elapsedMs * clock.speed).toISOString();
 }
+
+/**
+ * The label to show: moved on by `elapsedMs` while the server keeps confirming the clock, HELD at the last confirmed time while a read is
+ * failing (`stale`). A clock that keeps running with no answer behind it is a guess, so it is not shown as the time.
+ */
+export const shownClock = (clock: Pick<ThreadClock, "clock" | "running" | "speed" | "state">, elapsedMs: number, stale: boolean): string | null =>
+  extrapolate(clock, stale ? 0 : elapsedMs);
 
 /** The pill beside the time. */
 export function clockStateText(clock: Pick<ThreadClock, "state" | "speed">): string {

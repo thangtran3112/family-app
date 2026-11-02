@@ -2492,7 +2492,7 @@
         "type": "object"
       },
       "ClockAccountOut": {
-        "description": "The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its\ncost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. Computed on the server, never past the\nclock.",
+        "description": "The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its\ncost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. `buying_power_usd` is the cash an entry can\nuse: the balance less the cost of the open positions and the cash its working orders hold back, the figure the\norder check enforces. Computed on the server, never past the clock.",
         "properties": {
           "as_of": {
             "format": "date-time",
@@ -2501,6 +2501,10 @@
           },
           "balance": {
             "title": "Balance",
+            "type": "number"
+          },
+          "buying_power_usd": {
+            "title": "Buying Power Usd",
             "type": "number"
           },
           "day_pnl_usd": {
@@ -2524,6 +2528,7 @@
           "balance",
           "open_pnl_usd",
           "equity_usd",
+          "buying_power_usd",
           "day_pnl_usd",
           "positions",
           "as_of"

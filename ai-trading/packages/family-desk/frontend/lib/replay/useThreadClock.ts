@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { backoffMs } from "../desk/backoff.ts";
 import { PRACTICE_COPY } from "../desk/freshness.ts";
 import type { Speed } from "./clock.ts";
 import { problemMessage } from "./setup.ts";
-import { commandThreadClock, extrapolate, loadThreadClock, rolledText, skipThreadDay, type ClockCommand, type SkipDay, type ThreadClock } from "./threadClock.ts";
+import { ms } from "./time.ts";
+import { commandThreadClock, loadThreadClock, rolledText, shownClock, skipThreadDay, type ClockCommand, type SkipDay, type ThreadClock } from "./threadClock.ts";
 
 // The Summary's view of the day thread's server-side clock (ADR-0018). RECOMMENDATION, polling: the server settles the clock lazily on
 // every read, so a poll is one idempotent request and needs no connection, and no-lookahead rules out pricing a balance in the browser
 // (it would need prices after the clock). The page asks every POLL_MS while it is visible, and at once when it becomes visible again.
 // Between polls only the TIME LABEL moves (`extrapolate`). Nothing here starts, stops or keeps the clock: leaving the page or signing
-// out changes nothing on the server.
+// out changes nothing on the server. A read that fails does not stop the clock on the server, but this page can no longer confirm it: the
+// label is HELD at the last time the server confirmed (`stale`) instead of running on unconfirmed, and the next poll waits twice as long
+// after each failure (`backoffMs`) until an answer comes back.
 
 export const POLL_MS = 2000;
 const LABEL_MS = 1000;
@@ -19,9 +23,11 @@ export type ThreadClockApi = {
   clock: ThreadClock | null;
   /** The clock label right now: the server's time moved on by the wall time since the last poll. */
   shown: string | null;
+  /** The last read failed: `shown` is held at the last time the server confirmed (`clock.clock`) and the controls wait for an answer. */
+  stale: boolean;
   /** Set when the clock reached the next session on its own since the last answer: the day that ended and where the next one stands. Stays until she skips a day or leaves the page: the next day is already open and running. */
   rolled: string | null;
-  /** Counts up whenever the server's clock or state changed, so a screen that prices things at the clock can read again. */
+  /** Counts up whenever the server's clock minute or state changed, so a screen that prices things at the clock can read again. */
   revision: number;
   loading: boolean;
   error: string | null;
@@ -42,17 +48,24 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(threadId !== null);
+  const [stale, setStale] = useState(false);
   const [rolled, setRolled] = useState<string | null>(null);
   const seen = useRef<string>("");
   const day = useRef<{ id: number; no: number | null } | null>(null);
   const alive = useRef(true);
+  const failures = useRef(0);
 
   const take = useCallback((clock: ThreadClock) => {
     setSnapshot({ clock, at: Date.now() });
     setNow(Date.now());
     setError(null);
+    setStale(false);
+    failures.current = 0;
     setLoading(false);
-    const key = `${clock.day_list_id}|${clock.state}|${clock.speed}|${clock.clock}|${clock.account?.equity_usd}`;
+    // The clock's MINUTE, not its second: prices change when a bar closes, and a screen that reads the whole day again on every revision (the
+    // Portfolio) would have each read cancelled by the next poll's, so its "as of" never moved.
+    const minute = clock.clock === null ? null : Math.floor(ms(clock.clock) / 60_000);
+    const key = `${clock.day_list_id}|${clock.state}|${clock.speed}|${minute}|${clock.account?.equity_usd}|${clock.account?.buying_power_usd}`;
     if (key !== seen.current) {
       seen.current = key;
       setRevision((n) => n + 1);
@@ -78,6 +91,8 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
         follow(await loadThreadClock(threadId, { signal }));
       } catch {
         if (alive.current && !signal?.aborted) {
+          failures.current += 1;
+          setStale(true);
           setError(PRACTICE_COPY.clockLoadError);
           setLoading(false);
         }
@@ -90,10 +105,13 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     alive.current = true;
     if (threadId === null) return;
     const controller = new AbortController();
-    const first = setTimeout(() => void read(controller.signal), 0); // after this effect, so the first answer is not a setState inside it
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void read(controller.signal);
-    }, POLL_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // One poll at a time: the next waits for this one's answer, then the poll interval, doubled per failure in a row.
+    const tick = async () => {
+      if (document.visibilityState === "visible") await read(controller.signal);
+      if (!controller.signal.aborted) timer = setTimeout(() => void tick(), backoffMs(POLL_MS, failures.current));
+    };
+    timer = setTimeout(() => void tick(), 0); // after this effect, so the first answer is not a setState inside it
     const onVisible = () => {
       if (document.visibilityState === "visible") void read(controller.signal);
     };
@@ -101,13 +119,12 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     return () => {
       alive.current = false;
       controller.abort();
-      clearTimeout(first);
-      clearInterval(timer);
+      clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [threadId, read]);
 
-  const running = snapshot?.clock.state === "running";
+  const running = snapshot?.clock.state === "running" && !stale;
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => setNow(Date.now()), LABEL_MS);
@@ -148,12 +165,14 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     }
   }, [threadId, take]);
 
-  const shown = snapshot === null ? null : extrapolate(snapshot.clock, now - snapshot.at);
+  // Held at the last confirmed time while a read is failing: a clock that keeps running with no answer behind it is a guess.
+  const shown = snapshot === null ? null : shownClock(snapshot.clock, now - snapshot.at, stale);
   const clockNow = snapshot?.clock ?? null;
   return useMemo(
     () => ({
       clock: clockNow,
       shown,
+      stale,
       rolled,
       revision,
       loading,
@@ -166,6 +185,6 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       skipDay,
       refresh: () => void read(),
     }),
-    [clockNow, shown, rolled, revision, loading, error, busy, command, skipDay, read],
+    [clockNow, shown, stale, rolled, revision, loading, error, busy, command, skipDay, read],
   );
 }

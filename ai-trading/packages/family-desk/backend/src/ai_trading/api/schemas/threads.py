@@ -153,12 +153,14 @@ class ThreadFillsOut(BaseModel):
 
 class ClockAccountOut(BaseModel):
     """The simulated account at the clock: the ledger's `balance` (realized), what every open position is worth over its
-    cost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. Computed on the server, never past the
-    clock."""
+    cost at the clock (`open_pnl_usd`), and `equity_usd`, the two together. `buying_power_usd` is the cash an entry can
+    use: the balance less the cost of the open positions and the cash its working orders hold back, the figure the
+    order check enforces. Computed on the server, never past the clock."""
 
     balance: FiniteFloat
     open_pnl_usd: FiniteFloat
     equity_usd: FiniteFloat
+    buying_power_usd: FiniteFloat
     day_pnl_usd: FiniteFloat
     positions: int
     as_of: datetime

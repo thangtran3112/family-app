@@ -10,9 +10,9 @@ const list = {
   ],
 };
 
-test("every name shows in list order, with an open trade and an opened name marked", () => {
+test("every name shows in list order, with a status on each row: not opened yet, opened, or an open trade", () => {
   assert.deepEqual(orderNames(list, ""), [
-    { symbol: "TSLA", status: "" },
+    { symbol: "TSLA", status: "Not opened yet" },
     { symbol: "NVDA", status: "Open trade" },
     { symbol: "AAPL", status: "Opened" },
   ]);
