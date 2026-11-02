@@ -1553,10 +1553,9 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
         for s in sessions:
             session_mod.refresh_journal(db, user_id, s.id, svc)
             db.refresh(s)
-    setup = plan.spec["setup"]
     close = session_mod.market_close(row.day, "extended")  # the day's tape ends with the extended session
     close = session_mod.window_end_of(sessions[0], day_thread=True) if sessions else close
-    focus_end = et(row.day, setup["window"]["to"])  # her practice window: the review's yardstick, not the day's end
+    yardstick = session_mod.market_close(row.day, "regular")  # the review measures every move to the regular close
     store = svc.store_factory(db)
     minutes: dict[str, pd.DataFrame | None] = {}
     for candidate in row.candidates:
@@ -1568,7 +1567,7 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
     picks = {w["symbol"]: "starred" for w in row.watch}
     picks.update({s.symbol: "traded" for s in sessions})
     now = svc.now()
-    row.review = jsonable(review_mod.compute_review(row.candidates, minutes, row.day, focus_end, picks))
+    row.review = jsonable(review_mod.compute_review(row.candidates, minutes, row.day, yardstick, picks))
     row.journal = jsonable(_day_journal(sessions))
     row.status, row.revealed_through, row.ended_at, row.updated_at = "ended", close.to_pydatetime(), now, now
     db.flush()

@@ -661,9 +661,12 @@ def test_end_day_unseals_the_review_and_ranks_the_candidates_by_move_from_the_li
     out = plan_mod.day_list_out(db_session, user_id, row.id, svc)
     review = out["review"]
     gapper = review["rows"][0]
-    assert gapper["symbol"] == "GAPPER" and gapper["list_price"] == 106.0 and gapper["window_end_price"] == 110.0
-    assert gapper["move_pct"] == 3.77 and gapper["rank"] == 1 and gapper["picked"] == "traded"
-    assert review["selection"]["picks"] == [{"symbol": "GAPPER", "kind": "traded", "move_pct": 3.77, "rank": 1}]
+    # A9: every move is measured to the regular close (GAPPER trades 110 until her 11:30 mark, then 100), not her mark
+    assert gapper["symbol"] == "GAPPER" and gapper["list_price"] == 106.0 and gapper["close_price"] == 100.0
+    assert "window_end_price" not in gapper and pd.Timestamp(review["window_end"]) == et(DAYS[0], "16:00")
+    assert gapper["move_pct"] == -5.66 == gapper["close_move_pct"]
+    assert gapper["rank"] == 1 and gapper["picked"] == "traded"
+    assert review["selection"]["picks"] == [{"symbol": "GAPPER", "kind": "traded", "move_pct": -5.66, "rank": 1}]
     assert out["journal"]["sessions"][0]["symbol"] == "GAPPER" and out["journal"]["trades"] == 1
     assert [(s["id"], s["symbol"], s["status"]) for s in out["sessions"]] == [(started.id, "GAPPER", "ended")]
     assert plan_mod.end_day(db_session, user_id, row.id, svc).ended_at == ended.ended_at  # idempotent
@@ -676,5 +679,5 @@ def test_ending_a_day_with_no_practice_still_gives_the_review(db_session, user_i
     plan_mod.end_day(db_session, user_id, row.id, svc)
     out = plan_mod.day_list_out(db_session, user_id, row.id, svc)
     assert (
-        out["status"] == "ended" and out["journal"]["sessions"] == [] and out["review"]["rows"][0]["move_pct"] == 3.77
+        out["status"] == "ended" and out["journal"]["sessions"] == [] and out["review"]["rows"][0]["move_pct"] == -5.66
     )

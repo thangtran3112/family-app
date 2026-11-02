@@ -895,14 +895,13 @@ class DayJournalOut(BaseModel):
 class ReviewRowOut(BaseModel):
     symbol: str
     list_price: FiniteFloat
-    window_end_price: FiniteFloat | None
-    move_pct: FiniteFloat | None
+    move_pct: FiniteFloat | None  # from the list price to the yardstick (the regular close: `window_end`)
     close_price: FiniteFloat | None
     close_move_pct: FiniteFloat | None
     high_pct: FiniteFloat | None
     low_pct: FiniteFloat | None
     range_pct: FiniteFloat | None
-    rank: int | None  # 1 = the biggest gain from the list price to the window end; a loss ranks below every gain
+    rank: int | None  # 1 = the biggest gain from the list price to the regular close; a loss ranks below every gain
     picked: StarKind | None
 
 
@@ -922,8 +921,9 @@ class SelectionOut(BaseModel):
 
 
 class ReviewOut(BaseModel):
-    """Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
-    window end, biggest gain first. Only present once the day ended. `day` is the finished day's date, always shown
+    """Every candidate's move from its list price to the regular close, ranked by the signed move, biggest gain
+    first. `window_end` is the yardstick the moves were measured to (the regular close; a day ended earlier keeps its
+    own). Only present once the day ended. `day` is the finished day's date, always shown
     (a plan's `hideDates` is accepted and ignored)."""
 
     day: date

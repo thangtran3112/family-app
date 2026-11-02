@@ -152,9 +152,9 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
     assert ended.status_code == 200
     review = ended.json()["review"]
-    assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == 3.77
+    assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == -5.66  # to the regular close
     assert review["selection"]["picks"][0]["kind"] == "traded"
-    assert review["selection"]["median_move_pct"] == 3.77 and review["selection"]["picks_avg_move_pct"] == 3.77
+    assert review["selection"]["median_move_pct"] == -5.66 and review["selection"]["picks_avg_move_pct"] == -5.66
     assert review["day"] == "2026-09-28" and "dates_hidden" not in review  # a date is always shown (hideDates ignored)
     journal = ended.json()["journal"]
     assert journal["trades"] == 1 and ended.json()["status"] == "ended"

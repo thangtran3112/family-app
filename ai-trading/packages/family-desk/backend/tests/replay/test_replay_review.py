@@ -21,7 +21,6 @@ def _row(symbol: str, move: float | None) -> dict:
     return {
         "symbol": symbol,
         "list_price": 100.0,
-        "window_end_price": None if move is None else round(100 + move, 2),
         "move_pct": move,
         "close_price": None,
         "close_move_pct": None,
