@@ -46,7 +46,6 @@
 .planNoteLabel { color: var(--color-text); font-weight: var(--weight-semibold); }
 
 /* Session rail: armed strategies */
-.armedName { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; font-weight: var(--weight-semibold); }
 
 /* Session rail: signals (the whole row is one button) */
 .signalList { display: flex; margin: 0; flex-direction: column; padding: 0; list-style: none; }
@@ -78,37 +77,9 @@
 .portfolio { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .portfolioHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
 .portfolioCount { margin-right: auto; font-size: var(--text-label); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
-.portfolioCaption { display: flex; justify-content: space-between; gap: var(--space-2); margin: 0; padding: 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); letter-spacing: 0.04em; text-transform: uppercase; }
-.portfolioItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-bottom: 1px solid var(--color-hairline); }
-.portfolioRow { display: grid; width: 100%; min-width: 0; min-height: 32px; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px var(--space-3); border: 0; background: transparent; padding: 2px var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
-.portfolioItem > .portfolioRow[data-inert="true"] { grid-column: 1 / -1; }
-.portfolioRow:hover:not([aria-disabled="true"]):not([aria-current="true"]):not([data-inert="true"]) { background: var(--color-raised); }
-.portfolioRow[aria-current="true"] { background: var(--color-panel); box-shadow: inset 2px 0 0 var(--color-amber); cursor: default; }
-.portfolioRow[aria-disabled="true"] { cursor: default; opacity: 0.7; }
-.portfolioRow[data-inert="true"] { cursor: default; }
-.portfolioRow:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
-.portfolioName { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
-.portfolioName > :not(.armedName) { flex: 0 0 auto; } /* a badge wraps to the next line whole, never inside its pill */
-.portfolioUnit { margin-left: auto; }
-/* The position and the price share a line while they fit; in a narrow rail the price drops below, still on the right. */
-.portfolioSub { grid-column: 1 / -1; display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 var(--space-3); }
-.portfolioPosition { min-width: 0; color: var(--color-muted); font-size: var(--text-meta); }
-/* Right column: the P/L above, the last price and its move since entry below, both right-aligned so the figures line up down the list. */
-.portfolioPnl { display: inline-flex; justify-content: flex-end; align-items: baseline; gap: var(--space-1); font-weight: var(--weight-semibold); text-align: right; }
-.portfolioArrow { font-size: var(--text-meta); }
-.portfolioPrice { display: inline-flex; margin-left: auto; justify-content: flex-end; gap: var(--space-2); color: var(--color-muted); font-size: var(--text-meta); text-align: right; }
-.portfolioMeta { grid-column: 1 / -1; display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--color-muted); font-size: var(--text-meta); }
-.portfolioStop { color: var(--color-amber); font-weight: var(--weight-semibold); }
-/* A held row's Exit: a text button beside the row, not a bordered control (the row itself is the switch). */
-.portfolioExit { min-height: 28px; border: 0; background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; }
-.portfolioExit:hover:not(:disabled) { color: var(--color-amber); }
-.portfolioExit:disabled { color: var(--color-muted); cursor: default; }
-.portfolioExit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.portfolioItem:has(.portfolioStop) { box-shadow: inset 2px 0 0 var(--color-amber); }
 .portfolioTotal { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-2); margin: 0; border-top: 1px solid var(--color-hairline); padding-top: var(--space-2); font-size: var(--text-label); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); }
+.portfolioDay { display: inline-flex; align-items: baseline; gap: var(--space-2); }
 .problem { margin: 0; color: var(--color-amber); font-size: var(--text-label); }
 .unseen { opacity: 0.6; }
 .unseenNote { color: var(--color-muted); font-size: var(--text-meta); }
 
-/* The row text is the button's description (its name stays "Switch to X"); the wrapper adds no box of its own. */
-.portfolioBody { display: contents; }
