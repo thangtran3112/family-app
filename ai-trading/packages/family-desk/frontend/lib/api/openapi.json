@@ -147,7 +147,7 @@
         "type": "object"
       },
       "AdvanceIn": {
-        "description": "Exactly one of `to`, `step` and `sync`. `to` at or before `revealed_through` answers an empty delta; `to` past\nthe window end is clamped and `at_end` is true. `step: \"next_signal\"` reveals through the next would-fire bar\nclose (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422. `sync: true` is\nthe day-trade screen following the thread's server-side clock (ADR-0018): it brings a running clock to now, then\nreveals this name through that clock, wherever it is; it moves nothing itself.",
+        "description": "Exactly one of `to`, `step` and `sync`. `to` at or before `revealed_through` answers an empty delta; `to` past\nthe window end is clamped and `at_end` is true. `step: \"next_signal\"` reveals through the next would-fire bar\nclose (a strategy-testing tool: it tells her a signal is coming); with none left it answers 422. `sync: true` is\nthe day-trade screen following the thread's server-side clock (ADR-0018): it brings a running clock to now, then\nreveals this name through that clock, wherever it is; it moves nothing itself. `since` (with `sync` only) is the\nplayhead the caller last read: the answer carries what closed after it, so a second window on the same name, whose\nsession playhead the first window already moved, still gets every bar (D-198). Without it, the answer starts at\nthe session's own playhead.",
         "properties": {
           "interval": {
             "anyOf": [
@@ -185,6 +185,18 @@
             "minimum": 0.0,
             "title": "Min Size",
             "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
           },
           "step": {
             "anyOf": [

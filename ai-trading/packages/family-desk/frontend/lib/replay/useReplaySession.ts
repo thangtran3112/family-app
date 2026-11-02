@@ -6,7 +6,7 @@ import { backoffMs } from "../desk/backoff.ts";
 import { advanceReplay, cancelOrder, endReplay, loadReplayFeed, loadReplaySession, placeMark, placeOrder, undoMark, type AdvanceTarget, type OrderBody, type TapeParams } from "../desk/replay.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { DEFAULT_SPEED, delayUntilNextTick, isSpeed, jumpMinutes, nextTo, type Speed } from "./clock.ts";
-import { applyAdvance, applyFeedSwing, dismissPause as withoutPause, viewClock, viewFromFeed, withHoldMarker, type ReplayView } from "./feedState.ts";
+import { applyAdvance, applyFeedSwing, dismissPause as withoutPause, syncTarget, viewClock, viewFromFeed, withHoldMarker, type ReplayView } from "./feedState.ts";
 import { markForAction, noteMark, stopMark, type MarkBuild, type MarkDraft } from "./markInput.ts";
 import type { EntryOrExit } from "./keys.ts";
 import { canUndoLast, lastMark } from "./marks.ts";
@@ -312,7 +312,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       const failed = syncFailed.current;
       if (failed.count > 0 && performance.now() - failed.at < backoffMs(POLL_MS, failed.count)) return;
       syncing.current = true;
-      void exec(() => advance({ sync: true }, true))
+      void exec(() => advance(syncTarget(viewRef.current), true))
         .then((ok) => {
           if (ok === true) syncFailed.current = { count: 0, at: 0 };
           else if (ok === false) {
