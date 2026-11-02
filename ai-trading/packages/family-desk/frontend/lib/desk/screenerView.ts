@@ -1,6 +1,7 @@
 import type { ScreenerFilter, ScreenerPreview, ScreenerResults, ScreenerUniverse } from "../api/schemas.ts";
 import { formatEtDay, formatEtTimeZone, formatMetric, type MetricFormat } from "./format.ts";
 import { withPriorities, type PrioritizedColumn } from "./columns.ts";
+import { DEFAULT_AVG_VOLUME_DAYS } from "./filterForm.ts";
 
 // View logic for the screener (D5): groups, columns from `table_columns`, the universe line.
 
@@ -186,7 +187,7 @@ export const NEW_FILTER_SPEC = {
   schemaVersion: 1,
   name: "New filter",
   watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
-  liquidity: { minPrice: 5, minAvgVolume: 500000 },
+  liquidity: { minPrice: 5, minAvgVolume: 500000, avgVolumeDays: DEFAULT_AVG_VOLUME_DAYS },
   when: { op: "gte", left: { series: "rvol", lookbackDays: 10 }, right: { value: 2 } },
   rank: { by: { series: "rvol", lookbackDays: 10 }, order: "desc" },
   maxResults: 50,

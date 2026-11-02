@@ -197,6 +197,15 @@ export function clearTickLabel(label: string, y: number | null, tagYs: readonly 
   return y === null || tagYs.every((tag) => Math.abs(tag - y) >= TAG_CLEARANCE) ? label : "";
 }
 
+/**
+ * The prices of the tags on a chart's price axis, for `clearTickLabel` to keep ticks out from under: each overlay's last value, each level line
+ * that prints its number (a `plain` one prints none), and the last price. On the replay chart that is the session high and low, the prior close,
+ * her position and stop, the last price and the lines' last values (D-181, D-196).
+ */
+export function axisTagPrices(overlayLasts: readonly (number | null)[], levels: readonly { price: number | null; plain?: boolean }[], last: number | null): number[] {
+  return [...overlayLasts, ...levels.map((level) => (level.plain ? null : level.price)), last].filter((price): price is number => price !== null && Number.isFinite(price));
+}
+
 /** The "Source time" cell of a chart's data table: the New York day and time ("Fri 2026-10-23 10:07 AM"), never the raw UTC string (V-Technicals-05). */
 export function sourceTimeLabel(t: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(t) ? formatEtDay(t) : `${formatEtDay(t)} ${formatEtTime(t)}`;
@@ -260,6 +269,16 @@ export function zoomedRange(range: LogicalRange, x: number, width: number, facto
  */
 export function pinnedRange(count: number, anchor: number, span: number): LogicalRange | null {
   return count <= anchor ? { from: anchor, to: anchor + span } : null;
+}
+
+/**
+ * Does an update move a followed chart to its newest bar? Not before the open (`waiting`, D-186), and not once she has scrolled back: the view
+ * is hers when its right edge is more than a bar and a half behind the newest bar the chart had (`visible` is the view before the update).
+ * Otherwise it is parked at the newest bar and goes with it, from the first session bar on, whatever the data came from (the clock's Play,
+ * a Pause in another window, the clock route: D-195).
+ */
+export function followsNewest(follow: boolean, visible: LogicalRange | null, lastIndex: number, waiting: LogicalRange | null): boolean {
+  return follow && waiting === null && (visible === null || visible.to >= lastIndex - 1.5);
 }
 
 /**
