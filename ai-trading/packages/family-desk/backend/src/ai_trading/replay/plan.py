@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
-from ai_trading.core.calendar import et
+from ai_trading.core.calendar import et, next_session
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.data.universe import SEED_SYMBOLS, ensure_universe, split_plain
 from ai_trading.db.models import (
@@ -457,20 +457,27 @@ class ClockCarry:
 
 
 def day_start(plan: PracticePlan, day: date) -> pd.Timestamp:
-    """When practice on `day` begins: the plan's "Start at" time. It is where a day's clock starts when no clock is
-    handed over, and the moment the clock reaches it is when the day before hands over."""
+    """When practice on `day` begins: the plan's "Start at" time. It is where a plan's FIRST day's clock starts (no
+    clock is handed over then). A later day opens at the exchange's open (`next_day_start`), never here."""
     return et(day, plan.spec["setup"]["window"]["from"])
 
 
-def next_day_start(db: Session, day_list: ReplayDayList) -> pd.Timestamp | None:
-    """The start of the plan's next trading day after `day_list`'s, or None for the plan's last day. The thread clock
-    hands over to that day when it gets there (`clock.roll`); the weekend, a holiday and the night are ordinary time
-    in between."""
+def next_day_start(db: Session, day_list: ReplayDayList) -> pd.Timestamp:
+    """When `day_list`'s day ends and the next begins: the exchange's regular open (9:30 ET) of the plan's next trading
+    day, never the plan's "Start at" time (starting later than the open would hide the open from her: practice bias).
+    The thread clock hands over to that day when it gets there (`clock.roll`), and Skip day jumps there; the weekend, a
+    holiday and the night are ordinary time in between. The plan's last day ends at the next trading day's open too, so
+    a day always has a natural end (and so its review), though no further day of the plan follows it."""
     plan = db.get(PracticePlan, day_list.plan_id)
     assert plan is not None
     days = plan_days(plan.first_day, plan.spec["sessions"])
     index = days.index(day_list.day) + 1 if day_list.day in days else len(days)
-    return day_start(plan, days[index]) if index < len(days) else None
+    return session_mod.market_open(days[index] if index < len(days) else next_session("stock", day_list.day))
+
+
+def plan_end(plan: PracticePlan) -> pd.Timestamp:
+    """When the plan's last day ends: the open that follows it. The latest instant the thread clock can be jumped to."""
+    return session_mod.market_open(next_session("stock", plan_days(plan.first_day, plan.spec["sessions"])[-1]))
 
 
 def _filter_inputs(
@@ -619,8 +626,9 @@ def open_next(
     """The current day list while it is not over; else the next day's list, built now on today's Desk universe
     (D-011). While the plan's data is not ready the result carries no list and the plan's prep progress says why.
     Every day done: no list. `thread_id` names the thread (else her most recent day thread); a swing thread continues
-    its own calendar (`swing.open_next`). The new day's clock starts at its "Start at" time, paused, unless `carry`
-    hands over a running clock (the thread clock reached this day: it does not restart). No name has to be opened for
+    its own calendar (`swing.open_next`). The new day's clock starts paused at the plan's "Start at" time on its first
+    day and at the exchange's open on every later one, unless `carry` hands over the thread clock (it reached this
+    day: it does not restart). No name has to be opened for
     the clock to exist: it belongs to the thread, and Play is on the Summary."""
     if thread_id is not None and threads_mod.get_thread(db, user_id, thread_id).mode == "swing":
         return _swing().open_next(db, user_id, svc, thread_id)
@@ -649,7 +657,13 @@ def open_next(
         day_no=index + 1,
         **_list_fields(db, plan, day, svc, store, now),
         watch=[],
-        revealed_through=(day_start(plan, day) if carry is None else pd.Timestamp(carry.at)).to_pydatetime(),
+        revealed_through=(
+            pd.Timestamp(carry.at)
+            if carry is not None
+            else day_start(plan, day)
+            if latest is None
+            else session_mod.market_open(day)  # a later day opens at the exchange's open even when not handed the clock
+        ).to_pydatetime(),
         status="listed",
         clock_speed=carry.speed
         if carry is not None
@@ -738,6 +752,19 @@ def relist(db: Session, user_id: int, day_list_id: int, list_at: str, svc: Servi
 
 
 # -- reading and changing a day list ---------------------------------------------------------------------------
+
+
+def list_pending(row: ReplayDayList) -> bool:
+    """The day's list was built at `list_at` and the day clock is not there yet, so it is not out: serving it would show
+    the future. A day opens at the exchange's open (9:30), which is before a 10:00 or 10:45 list time; until the clock
+    reaches it the list shows nothing (no names, no counts) and no name can be opened or starred."""
+    return row.status != "ended" and row.revealed_through is not None and _utc(row.revealed_through) < _utc(row.list_at)
+
+
+def _list_not_out(row: ReplayDayList, path: str) -> ReplayProblem:
+    return ReplayProblem(
+        f"The list comes out at {clock12(row.screen['listAt'])} · the day clock is not there yet", path=path, status=409
+    )
 
 
 def get_day_list(db: Session, user_id: int, day_list_id: int, *, lock: bool = False) -> ReplayDayList:
@@ -1034,10 +1061,15 @@ def day_list_out(
     clock = None if row.revealed_through is None else _utc(row.revealed_through)
     # every open trade priced at the one day clock, a name behind it included (nothing here is later than the clock)
     held = {} if clock is None else {p.row.id: p for p in session_mod.positions(db, svc, row.id, clock, books)}
-    universe = row.universe
+    pending = list_pending(row)
+    universe = (
+        {**row.universe, "scanned": 0, "no_data": 0, "below_floor": 0, "matches_total": 0, "shown": 0, "filters": []}
+        if pending
+        else row.universe
+    )
     held_tape = {p.row.symbol: p.row.tape_feed for p in held.values()}
     scan = _latest_scan(db, row.id)
-    warnings = [_few_names_reason(db, row, scan)] if len(row.candidates) < FEW_NAMES else []
+    warnings = [_few_names_reason(db, row, scan)] if len(row.candidates) < FEW_NAMES and not pending else []
     return {
         "id": row.id,
         "plan": plan_out(db, plan),
@@ -1057,7 +1089,9 @@ def day_list_out(
         "columns": row.columns,
         # `live`: the names priced at the day clock (nothing past it), asked for by the day list's table. Off, or before
         # the first name is practised (no clock yet), or once the day has ended, the names are the list-time snapshot.
-        "candidates": _live_candidates(svc, db, row, clock, plan.spec["setup"]["interval"], held_tape)
+        "candidates": []
+        if pending
+        else _live_candidates(svc, db, row, clock, plan.spec["setup"]["interval"], held_tape)
         if live and clock is not None and not ended
         else row.candidates,
         "watch": row.watch,
@@ -1078,10 +1112,11 @@ def day_list_out(
         "watch_check": watch_check(db, row, sessions),
         "thread": threads_mod.brief(db, plan.thread_id, row.id),
         "warnings": warnings,
-        "relist": _relist_offer(db, plan, row),
+        "list_pending": pending,
+        "relist": None if pending else _relist_offer(db, plan, row),
         "rescan": None if scan is None else _scan_out(scan),
         "rescan_job": _job_out(row.rescan_job, svc.now()),
-        "peek": None if peek is None else _peek(db, svc, row, peek),
+        "peek": None if peek is None or pending else _peek(db, svc, row, peek),
         "journal": _ended_journal(db, plan, row, sessions) if ended else None,
         "review": _ended_review(row) if ended else None,
         "notes": row.notes,
@@ -1114,6 +1149,8 @@ def patch_day_list(
     if "watch" in fields:
         if row.status == "ended":
             raise ReplayProblem("The day is over · stars are closed", path="watch", status=409)
+        if list_pending(row) and watch:
+            raise _list_not_out(row, "watch")
         symbols = list(dict.fromkeys(watch or []))
         on_list = {c["symbol"] for c in row.candidates}
         for index, symbol in enumerate(symbols):
@@ -1451,6 +1488,8 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
     )  # a name opened now starts at the clock as it is now, not as it was last read
     if row.status == "ended":
         raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
+    if list_pending(row):
+        raise _list_not_out(row, "symbol")
     if symbol not in {c["symbol"] for c in row.candidates}:
         raise ReplayProblem(f"{symbol} is not on today's list", path="symbol")
     opened = {s.symbol for s in _sessions_of(db, row.id)}
@@ -1574,6 +1613,23 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
     return row
 
 
+def end_day_by_hand(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayList:
+    """`POST /day-lists/{id}/end`: a swing day only. A day-trade day has no manual end: it ends when the thread clock
+    reaches the next open (`clock.roll`), after the night, or when she skips to it (`clock.skip_day`) or jumps there
+    (`clock.control`), and both book its open positions and store its review. 409 for an open day-trade day; a day
+    that already ended answers as it is."""
+    row = get_day_list(db, user_id, day_list_id)
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None
+    if row.status != "ended" and not _is_swing(plan):
+        raise ReplayProblem(
+            "A practice day ends when the clock reaches the next open · skip to it or jump the clock",
+            path="dayListId",
+            status=409,
+        )
+    return end_day(db, user_id, day_list_id, svc)
+
+
 # -- the hub ----------------------------------------------------------------------------------------------------
 
 
@@ -1627,10 +1683,12 @@ __all__ = (
     "day_list_out",
     "earnings_states",
     "end_day",
+    "end_day_by_hand",
     "hub",
     "open_next",
     "patch_day_list",
     "plan_days",
+    "plan_end",
     "plan_out",
     "practice_universe",
     "relist",

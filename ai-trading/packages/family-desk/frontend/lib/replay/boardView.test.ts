@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containsPracticeBannedTerm, practiceText } from "../desk/freshness.ts";
+import { containsPracticeBannedTerm, PRACTICE_COPY } from "../desk/freshness.ts";
 import { sortRows } from "../desk/sort.ts";
 import {
   boardColumns,
@@ -77,7 +77,7 @@ test("Start Day opens on a focus name or a hold; a day under way resumes its ope
   assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions }), { kind: "resume", symbol: "NVDA" }, "the first focus name's session");
   assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [sessions[0]!] }), { kind: "resume", symbol: "AMD" }, "else any open one");
   assert.deepEqual(boardStart({ ...swingDayList, status: "practicing", sessions: [session(90, "NVDA", "ended")] }), { kind: "start", symbol: "NVDA" });
-  assert.equal(practiceText("planOpenDay", { n: 7 }), "Open Day 7", "the button only goes to the day: Resume is the thread clock's word, not a second button's");
+  assert.equal(PRACTICE_COPY.planStartTrading, "Start Trading", "the button only goes to the day: Resume is the thread clock's word, not a second button's, and no day number is named");
 });
 
 test("Pass is offered only on a day she has not opened", () => {
@@ -119,7 +119,7 @@ test("an ended day links its week, says when the review is ready, and offers the
 
 test("the strings the board builds contain no banned word", () => {
   const built = [
-    practiceText("planOpenDay", { n: 7 }),
+    PRACTICE_COPY.planStartTrading,
     lateStarsText(["COIN"])!,
     ...boardColumns(apiColumns).map((column) => column.label),
     endedDayView({ day_no: 5, of: 20, week_no: 1 }, { ...swingState, week_no: 2, next: "week_review" }).notice!,

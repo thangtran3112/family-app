@@ -15,17 +15,21 @@ import styles from "./landing.module.css";
  * history and cannot be undone, so it asks first. An open practice day is the server's plain 409, shown in the dialog.
  * `busy` is the table's shared flag (some row is opening a day): nothing can be deleted meanwhile. The question is a
  * `ui/ConfirmDialog`; it sits inside the row, and stops its clicks there, so they never reach the row's click that opens the thread page.
+ * `plan` is the same delete on the thread's Summary, worded for the plan ("Delete plan"): a plan is its thread, it is never edited, and a
+ * new plan is a new thread. There it stands alone, so it needs neither the table's flag nor a row name in its label.
  */
 export function DeleteThread({
   thread,
-  busy,
-  onBusy,
+  busy = false,
+  onBusy = () => undefined,
   onDeleted,
+  plan = false,
 }: {
   thread: PracticeThread;
-  busy: boolean;
-  onBusy: (busy: boolean) => void;
+  busy?: boolean;
+  onBusy?: (busy: boolean) => void;
   onDeleted: (name: string) => void;
+  plan?: boolean;
 }) {
   const [asking, setAsking] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -57,16 +61,16 @@ export function DeleteThread({
       <Button
         className={styles.deleteButton}
         disabled={busy}
-        aria-label={`${PRACTICE_COPY.threadDelete} ${threadName(thread)}`}
+        aria-label={plan ? undefined : `${PRACTICE_COPY.threadDelete} ${threadName(thread)}`}
         onClick={() => setAsking(true)}
       >
-        {PRACTICE_COPY.threadDelete}
+        {plan ? PRACTICE_COPY.planDelete : PRACTICE_COPY.threadDelete}
       </Button>
       {asking && (
         <ConfirmDialog
           title={practiceText("threadDeleteTitleNamed", { name: threadName(thread) })}
-          body={PRACTICE_COPY.threadDeleteBody}
-          confirmLabel={deleting ? PRACTICE_COPY.threadDeleting : PRACTICE_COPY.threadDeleteConfirm}
+          body={plan ? PRACTICE_COPY.planDeleteBody : PRACTICE_COPY.threadDeleteBody}
+          confirmLabel={deleting ? PRACTICE_COPY.threadDeleting : plan ? PRACTICE_COPY.planDeleteConfirm : PRACTICE_COPY.threadDeleteConfirm}
           cancelLabel={PRACTICE_COPY.threadDeleteKeep}
           tone="danger"
           busy={deleting}

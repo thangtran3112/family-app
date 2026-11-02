@@ -115,7 +115,7 @@ for route in today screener screener/filters strategies/library alerts alerts/ne
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
 # The Practice routes from 02o and the daily-list day screen from 02o-b.
-for route in practice practice/replay practice/journal practice/order practice/day practice/week practice/thread; do
+for route in practice practice/replay practice/journal practice/day practice/week practice/thread; do
   mkdir -p "$DESK/$route"
   printf '<html>Desk %s</html>\n' "$route" >"$DESK/$route.html"
 done
@@ -131,13 +131,13 @@ printf 'Flight\n' >"$DESK/strategies/new/__next.strategies.new.__PAGE__.txt"
 "$TARGET" "$DESK" test-desk desk >/dev/null || fail "Desk export profile rejected"
 cmp -s "$(live_file test-desk strategies.html)" "$DESK/strategies.html" || fail "Desk strategies not published"
 pass "Desk profile uploads its own routes with the shared transaction"
-for extra in api/desk/strategies.html private.txt strategies/__next._unknown.txt feedback/__next._unknown.txt feedback/new.json unknown.html .txt; do
+for extra in api/desk/strategies.html private.txt strategies/__next._unknown.txt feedback/__next._unknown.txt feedback/new.json practice/order.html unknown.html .txt; do
   mkdir -p "$DESK/$(dirname "$extra")"; printf 'private\n' >"$DESK/$extra"; : >"$CALL_LOG"
   "$TARGET" "$DESK" test-desk desk >/dev/null 2>&1 && fail "Desk accepted $extra"
   [[ ! -s "$CALL_LOG" ]] || fail "Desk rejection reached cloud calls"
   rm "$DESK/$extra"
 done
-pass "Desk profile rejects API, private, unknown route and unknown Flight files before cloud calls"
+pass "Desk profile rejects API, private, unknown route (the retired /practice/order included) and unknown Flight files before cloud calls"
 : >"$CALL_LOG"
 "$TARGET" "$DESK" test-desk unknown >/dev/null 2>&1 && fail "unknown profile passed"
 [[ ! -s "$CALL_LOG" ]] || fail "unknown profile reached cloud calls"

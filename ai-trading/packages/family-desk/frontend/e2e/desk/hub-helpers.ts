@@ -13,9 +13,9 @@ export const DAY = "2026-09-25";
 export const START_BUTTON = /^Start (\d+-day )?(swing )?practice$/;
 export const THREAD_URL = /\/practice\/thread\?id=\d+/;
 export const DAY_URL = /\/practice\/day\?id=\d+/;
-/** A day thread's one action says what it does (D-078): the button that opens the next day starts it, and the link to an open day opens it, started or not (the thread clock's Play is the only Resume). */
+/** A day thread's one action says what it does (D-078): the button that opens the next day starts it, and the "Start Trading" link to an open day opens it, started or not (the thread clock's Play is the only Resume). */
 export const START_DAY = /^Start Day \d+$/;
-export const OPEN_DAY = /^Open Day \d+$/;
+export const OPEN_DAY = /^Start Trading$/;
 
 /** A saved filter that lists the stub's TSLA only (the fixture's stand-in names trade below $200). */
 export const ANY_CLOSE = {
@@ -45,8 +45,6 @@ export type NewPlan = {
   /** Days of the plan: 5, 10, 20 or 30. */
   days?: string;
   interval?: "1m" | "5m" | "15m";
-  /** The modal replaces an active thread's plan: no balance or risk plan to fill. */
-  replace?: boolean;
 };
 
 /** The landing with the New plan modal open. */
@@ -64,7 +62,7 @@ export async function clickNewPlan(page: Page): Promise<Locator> {
 
 /** Fills the day-trading half of the modal: the balance, one filter, the stub day, `days` days, on `interval`. The day has no end of its own: the stub holds bars to 09:40 and the clock carries on after them. */
 export async function fillNewPlan(dialog: Locator, plan: NewPlan = {}) {
-  if (!plan.replace && plan.balance) await dialog.getByLabel("Starting balance").fill(plan.balance);
+  if (plan.balance) await dialog.getByLabel("Starting balance").fill(plan.balance);
   await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: plan.filter ?? "Any close" }).check();
   await dialog.locator('input[type="date"]').fill(DAY);
   await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: plan.days ?? "5", exact: true }).click();
@@ -118,7 +116,7 @@ export async function openRow(page: Page, row: Locator) {
   await page.waitForURL(THREAD_URL);
 }
 
-/** On the thread page after `startThread`: the plan's data is prepared in the background, then Day 1 opens (here `Start Day 1`, or Open Day 1 when the modal already opened it). */
+/** On the thread page after `startThread`: the plan's data is prepared in the background, then Day 1 opens (here `Start Day 1`, or Start Trading when the modal already opened it). */
 export async function openFirstDay(page: Page) {
   const start = page.getByRole("button", { name: START_DAY });
   const resume = page.getByRole("link", { name: OPEN_DAY });

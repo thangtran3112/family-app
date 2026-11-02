@@ -24,7 +24,8 @@ export function Tabs<T extends string>({
   className,
 }: {
   tabs: ReadonlyArray<TabItem<T>>;
-  value: T;
+  /** The selected tab; null when none of the tabs is the screen (a strip worn by a screen that is no tab of it). */
+  value: T | null;
   onChange: (id: T) => void;
   /** The list's name for assistive tech. */
   label: string;
