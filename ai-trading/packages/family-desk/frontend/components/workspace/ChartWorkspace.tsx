@@ -63,7 +63,7 @@ export function ChartWorkspace({ symbol, timeframe, onTimeframe }: { symbol: str
   const live = useLiveQuote(symbol);
 
   const barRows = useMemo(() => bars.data?.bars ?? [], [bars.data]);
-  const series = useMemo(() => buildChartSeries(barRows, indicators, timeframe), [barRows, indicators, timeframe]);
+  const series = useMemo(() => buildChartSeries(barRows, indicators, timeframe, symbol.startsWith("/") ? "future" : "stock"), [barRows, indicators, timeframe, symbol]);
   const levels = useMemo(() => buildLevels(technicals.data, alertLevels(strategies.data ?? [])), [technicals.data, strategies.data]);
   const chartMarkers = useMemo<ChartMarkerInput[]>(
     () => [

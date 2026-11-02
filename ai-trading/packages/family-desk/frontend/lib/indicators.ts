@@ -3,7 +3,7 @@
 // `tradingDay` and `calcVWAP` at the end (Family Desk additions, 02m §a3.3), and three audit changes
 // (2026-11-01) that make these functions agree with the backend's `core/indicators.py`, the single source of
 // truth: `calcEMA` seeds with the first value (not an SMA), `calcRSI` reads 50 when nothing moved, and
-// `calcVWAP` leaves out pre- and after-hours bars. `lib/indicators.golden.test.ts` pins all three against
+// `calcVWAP` leaves out pre- and after-hours bars (a future's by the New York clock). `lib/indicators.golden.test.ts` pins all three against
 // `contracts/fixtures/indicator-golden-v1`. See `indicators.LICENSE` and `packages/family-desk/THIRD_PARTY_NOTICES.md`.
 type N = number | null;
 
@@ -133,16 +133,30 @@ export function tradingDay(t: string): string {
 
 export type VwapBar = { t: string; h: number; l: number; c: number; v: number; ext?: boolean };
 
+const etClockFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/**
+ * Whether a futures bar starts in the 09:30-16:00 New York window, the only bars the backend's `session_vwap` counts
+ * (`annotate(bars, "future")` calls the overnight Globex session from 18:00 and the 16:00-17:00 window "pre" and "post").
+ * The API never flags a futures bar `ext`, so the clock decides. ponytail: no calendar; a CME early close needs none,
+ * because no bar follows it until Globex reopens at 18:00.
+ */
+function inRegularWindow(t: string): boolean {
+  const clock = etClockFormat.format(new Date(t));
+  return clock >= "09:30" && clock < "16:00";
+}
+
 /**
  * Session-anchored VWAP of the typical price (h+l+c)/3, reset at each New York trading day. A pre- or after-hours bar
- * (`ext`) reads unknown and adds nothing: the backend's `session_vwap` covers the regular session only.
+ * (`ext`) reads unknown and adds nothing: the backend's `session_vwap` covers the regular session only. A future
+ * is the same window (09:30-16:00 New York), found by the clock instead of `ext`.
  */
-export function calcVWAP(bars: VwapBar[]): N[] {
+export function calcVWAP(bars: VwapBar[], asset: "stock" | "future" = "stock"): N[] {
   let day = "";
   let priceVolume = 0;
   let volume = 0;
   return bars.map((bar) => {
-    if (bar.ext) return null;
+    if (asset === "future" ? !inRegularWindow(bar.t) : bar.ext) return null;
     const barDay = tradingDay(bar.t);
     if (barDay !== day) {
       day = barDay;

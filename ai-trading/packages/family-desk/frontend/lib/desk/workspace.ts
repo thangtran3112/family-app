@@ -51,11 +51,11 @@ export function toggleIndicator(current: ReadonlySet<IndicatorId>, id: Indicator
 export type ChartSeries = { overlays: MarketChartOverlay[]; panes: MarketChartPane[]; volume: boolean };
 
 /** Series computed in the browser from the bars (02m §f decision 5). VWAP is intraday only. */
-export function buildChartSeries(bars: Bars["bars"], indicators: ReadonlySet<IndicatorId>, apiInterval: string): ChartSeries {
+export function buildChartSeries(bars: Bars["bars"], indicators: ReadonlySet<IndicatorId>, apiInterval: string, asset: "stock" | "future" = "stock"): ChartSeries {
   const closes = bars.map((bar) => bar.c);
   const overlays: MarketChartOverlay[] = [];
   if (indicators.has("vwap") && isIntraday(apiInterval)) {
-    overlays.push({ id: "vwap", label: "VWAP", ...OVERLAY_LOOK.vwap, values: calcVWAPWithGaps(bars) });
+    overlays.push({ id: "vwap", label: "VWAP", ...OVERLAY_LOOK.vwap, values: calcVWAPWithGaps(bars, asset) });
   }
   if (indicators.has("ema9")) overlays.push({ id: "ema9", label: "EMA 9", ...OVERLAY_LOOK.ema9, values: calcEMAWithGaps(closes, 9) });
   if (indicators.has("ema21")) overlays.push({ id: "ema21", label: "EMA 21", ...OVERLAY_LOOK.ema21, values: calcEMAWithGaps(closes, 21) });
