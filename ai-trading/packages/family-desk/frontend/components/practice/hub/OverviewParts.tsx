@@ -9,7 +9,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { adherenceStat, overviewDayRows, threadProgress, type EquityDays, type OverviewDayRow } from "@/lib/replay/overviewView";
 import type { Thread, ThreadSummary } from "@/lib/replay/threads";
 import type { ClockAccount } from "@/lib/replay/threadClock";
-import { formatBalance, formatDayResult, startedWithText, threadModeLabel, winRateText } from "@/lib/replay/threadView";
+import { formatBalance, formatDayResult, headlineFigure, startedWithText, threadModeLabel, winRateText } from "@/lib/replay/threadView";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 import o from "./overview.module.css";
@@ -44,18 +44,20 @@ export function OverviewChips({ thread }: { thread: ThreadSummary["thread"] }) {
 
 /**
  * Where the thread is: the balance with SIMULATED, what it started with, the place line and the days so far. `children` adds the swing
- * facts. `account` is a day thread's account at the server clock (ADR-0018): the big figure is then its equity, the ledger balance plus
- * every open position at the clock's price, so it moves while the clock runs, whether or not she is on this page.
+ * facts. `account` is a day thread's account at the server clock (ADR-0018): the big figure is then its equity and says "Equity" (the ledger
+ * balance plus every open position at the clock's price, so it moves while the clock runs, whether or not she is on this page); otherwise it
+ * is the ledger balance and says "Balance" (`headlineFigure`, D-156).
  */
 export function PlaceStrip({ summary, planFinished = false, account = null, children }: { summary: ThreadSummary; planFinished?: boolean; account?: ClockAccount | null; children?: ReactNode }) {
   const { thread } = summary;
   const progress = threadProgress(summary, planFinished);
   const live = account !== null && account.positions > 0;
+  const headline = headlineFigure(thread.stats.balance, account);
   return (
     <section className={`${styles.panel} ${o.place}`} aria-label="Thread balance">
-      <h2 className={styles.panelTitle}>{PRACTICE_COPY.threadBalance}</h2>
+      <h2 className={styles.panelTitle}>{headline.label}</h2>
       <p className={hub.balanceRow}>
-        <span className={hub.balanceValue} data-testid="thread-balance">{formatBalance(live ? account.equity_usd : thread.stats.balance)}</span>
+        <span className={hub.balanceValue} data-testid="thread-balance">{headline.value}</span>
         <SimulatedBadge />
       </p>
       {live && <p className={hub.muted} data-testid="thread-balance-open">{`${PRACTICE_COPY.clockAccountOpen} ${formatDayResult(account.open_pnl_usd)} at the clock · ${PRACTICE_COPY.clockAccountBalance} ${formatBalance(account.balance)}`}</p>}

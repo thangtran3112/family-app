@@ -1,11 +1,12 @@
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
 import type { OrderBody } from "../desk/replay.ts";
 import { DECIMAL, SHARES_MAX, SHARES_TOO_BIG, entryMark } from "./markInput.ts";
-import type { PracticeOrder } from "./schemas.ts";
+import type { OpenTrade, PracticeOrder } from "./schemas.ts";
 
 // The order ticket of the replay workspace: a side, a quantity and an order type, with the price fields that type needs
 // and no others. Pure: the draft in, the request out. The only checks are the broker's own: a whole quantity of 1 or more
-// and prices above 0. Whether the cash covers it is the server's answer. A stop price is never required.
+// and prices above 0, and the one size rule: the cost must fit the buying power (`buyingPowerMessage`, from what the client
+// knows; the server holds the exact figure and answers the rest). A stop price is never required.
 
 export type TicketSide = "buy" | "sell";
 export type TicketType = "market" | "limit" | "stop" | "stop_limit" | "bracket";
@@ -79,6 +80,49 @@ export function buildTicket(draft: TicketDraft): TicketBuild {
       },
     },
   };
+}
+
+/** What the client knows of the account: the thread's numbers and this name's position. Other names' holds and working orders are the server's. */
+export type PowerBasis = {
+  /** The thread's balance (booked trades included). */
+  balance: number;
+  /** A swing thread's free cash, already net of its open holds; null for a day thread. */
+  freeCash: number | null;
+  /** This name's open position. */
+  trade: Pick<OpenTrade, "side" | "shares" | "entry_price"> | null;
+  /** The last print: what a market order costs. */
+  last: number | null;
+};
+
+const dollars = (value: number): string => `$${value.toLocaleString("en-US")}`;
+
+/**
+ * Buying power is the only size rule, the server's own: the shares that open or add to the position cost shares x price (a market
+ * order at the last print, a limit order at its limit, a stop at its trigger) and must fit the free cash. Shares that close the
+ * position need no cash; a flip gets the closed position's cash and P/L back first. The client cannot see other names' holds or
+ * working orders, so it takes the most cash the account can have (never refusing what the server would take) and the server's
+ * "Not enough practice cash" covers the rest. Returns the refusal, or null when the order fits or the draft is not complete yet.
+ */
+export function buyingPowerMessage(draft: TicketDraft, basis: PowerBasis | null): string | null {
+  if (basis === null) return null;
+  const option = typeOption(draft.type);
+  if (option.unavailable || !/^\d+$/.test(draft.shares.trim())) return null;
+  const shares = Number(draft.shares);
+  if (shares < 1 || shares > SHARES_MAX) return null;
+  const at = draft.type === "market" ? basis.last : price(option.limit ? draft.limitPrice : draft.stopPrice);
+  if (at === null) return null;
+  const { trade, freeCash } = basis;
+  const buying = draft.side === "buy";
+  const closes = trade !== null && (trade.side === "long") === !buying ? Math.min(trade.shares, shares) : 0;
+  const opens = shares - closes;
+  if (opens === 0) return null;
+  const held = trade === null ? 0 : trade.entry_price * trade.shares;
+  let free = freeCash ?? basis.balance;
+  if (closes > 0) free += (trade!.side === "long" ? 1 : -1) * (at - trade!.entry_price) * closes + (freeCash === null ? 0 : held);
+  else if (freeCash === null) free -= held;
+  const cost = opens * at;
+  if (Math.round(cost * 100) <= Math.round(free * 100)) return null;
+  return `Exceeds buying power · this order costs ${dollars(Math.ceil(cost))}, buying power is ${dollars(Math.max(0, Math.floor(free)))}`;
 }
 
 const money = (value: number): string => value.toFixed(2);

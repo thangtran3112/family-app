@@ -1,6 +1,7 @@
 import { EMPTY_VALUE, formatNumber, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { moneyTone, tradesCountText } from "./journalView.ts";
+import type { ClockAccount } from "./threadClock.ts";
 import type { PracticeThread, Thread, ThreadBrief, ThreadDay, ThreadToday } from "./threads.ts";
 
 // View logic of the practice-thread screens (02r): money text, the thread card, the weeks of the journal, the improvement
@@ -124,10 +125,18 @@ const shortResult = (pnl: number, trades: number): string => `${formatDayResult(
 /** The caption over the summary tiles: it says "today's day is still open" only while a day is open (D-134). */
 export const summaryHintText = (dayOpen: boolean): string => (dayOpen ? PRACTICE_COPY.summaryHintOpen : PRACTICE_COPY.summaryHint);
 
-/** The header strip of a day screen or the workspace: "Thread balance $50,123 · today +$112". */
+/** The header strip of a day screen or the workspace: "Thread balance $50,123 · realized today +$112". "Today" is the realized result of the day
+ *  (the open trade is not in it), the same split as the Portfolio's "Day P/L (realized · open)", so the word says so (D-158). */
 export function briefLine(brief: Pick<ThreadBrief, "balance" | "today_pnl_usd">): string {
   const balance = practiceText("threadBalanceLine", { balance: formatBalance(brief.balance) });
-  return brief.today_pnl_usd === null ? balance : `${balance} · ${practiceText("threadTodayShort", { pnl: formatDayResult(brief.today_pnl_usd) })}`;
+  return brief.today_pnl_usd === null ? balance : `${balance} · ${PRACTICE_COPY.threadRealizedToday.toLowerCase()} ${formatDayResult(brief.today_pnl_usd)}`;
+}
+
+/** The big figure on the Summary and its word (D-156, ADR-0018). A day thread with its clock account read shows its equity and says "Equity":
+ *  the ledger balance plus every open position at the clock. Without one (a swing thread, a closed thread, the clock not read yet) it is the
+ *  ledger balance and says "Balance". "Balance" is always the realized figure; one word, one number. */
+export function headlineFigure(balance: number, account: Pick<ClockAccount, "equity_usd"> | null): { label: string; value: string } {
+  return account === null ? { label: PRACTICE_COPY.threadBalance, value: formatBalance(balance) } : { label: PRACTICE_COPY.clockAccountEquity, value: formatBalance(account.equity_usd) };
 }
 
 /** "4 weeks in", "first week". */

@@ -33,8 +33,12 @@ export type PracticeControlsProps = {
   openTrade: OpenTrade | null;
   ticket: TicketDraft;
   onTicket: (ticket: TicketDraft) => void;
-  /** The field the last submit found wrong, with its sentence; cleared when that field changes. */
-  ticketError: { field: TicketField | "type"; message: string } | null;
+  /** Why the last submit failed, with its sentence: a field of the ticket, or "order" for the order as a whole (the server named no field). Cleared when the ticket changes. */
+  ticketError: { field: TicketField | "type" | "order"; message: string } | null;
+  /** The ticket as it stands costs more than the buying power: said under the summary, and Buy and Sell stay off until the order fits. Null when it fits. */
+  buyingPower: string | null;
+  /** An order is on its way to the server: the Buy or Sell button shows it. */
+  placing: boolean;
   /** Place the ticket as a buy or a sell (the submit button, and the B and S keys). */
   onSubmit: (side: TicketSide) => void;
   /** Every order of the session; the working ones can be cancelled. */
@@ -146,13 +150,14 @@ function ComposerForm({ composer, onStop, onNote, onClose }: { composer: Exclude
  * playhead; a limit, stop or stop-limit order waits on the replayed tape and fills only on a later bar.
  */
 export function PracticeControls(props: PracticeControlsProps) {
-  const { symbol, side, openTrade, ticket, onTicket, ticketError, composer, onComposer, disabled, swing } = props;
+  const { symbol, side, openTrade, ticket, onTicket, ticketError, buyingPower, placing, composer, onComposer, disabled, swing } = props;
   const option = typeOption(ticket.type);
   const sharesId = useId();
   const typeId = useId();
   const limitId = useId();
   const stopId = useId();
   const summaryId = useId();
+  const powerId = useId();
   const errorOf = (field: TicketField) => (ticketError?.field === field ? ticketError.message : null);
   const edit = (changes: Partial<TicketDraft>) => onTicket({ ...ticket, ...changes });
   const [allOrders, setAllOrders] = useState(false);
@@ -210,12 +215,15 @@ export function PracticeControls(props: PracticeControlsProps) {
           </div>
         )}
         <p id={summaryId} className={styles.summary}>{ticketSummary(ticket, symbol)}</p>
+        <p id={powerId} className={styles.ticketError} aria-live="polite">{buyingPower}</p>
+        <p className={styles.ticketError} role="alert">{ticketError?.field === "order" ? ticketError.message : null}</p>
         <Button
           variant={buying ? "up" : "down"}
           size="touch"
           className={styles.submit}
-          disabled={disabled}
-          aria-describedby={summaryId}
+          disabled={disabled || buyingPower !== null}
+          loading={placing}
+          aria-describedby={buyingPower === null ? summaryId : `${summaryId} ${powerId}`}
           onClick={() => props.onSubmit(ticket.side)}
         >
           {buying ? "Buy" : "Sell"}

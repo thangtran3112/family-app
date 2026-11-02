@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createDeskApiClient } from "../api/client.ts";
+import { formatEtClock } from "../desk/format.ts";
+import { replayBadgeText } from "../desk/freshness.ts";
+import { replayStatusLine } from "./statusLine.ts";
 import {
   clockControls,
   clockProgress,
@@ -112,4 +115,15 @@ test("the loaders hit the thread clock and skip routes with the body the server 
   assert.match(skippedText(result), /next day is ready/);
   assert.match(skippedText({ ...result, next_day_list_id: null }), /still being prepared/);
   assert.match(skippedText({ ...result, next_day_list_id: null, clock: clock({ state: "no_day" }) }), /last day/);
+});
+
+test("one visible clock: the readout, the status bar and the chip read the same ticking value, not the poll (D-166)", () => {
+  // The poll answered 9:32:05 and the clock runs at 10x: two wall seconds later the screen says 9:32:25 everywhere.
+  const shown = extrapolate({ clock: "2026-09-25T13:32:05Z", running: true, speed: 10, state: "running" }, 2000);
+  assert.equal(shown, "2026-09-25T13:32:25.000Z");
+  assert.equal(formatEtClock(shown), "9:32:25 AM ET");
+  assert.equal(replayStatusLine("sip", shown as string).right[0], "Replay clock 9:32:25 AM ET");
+  assert.equal(replayBadgeText("2026-09-25", shown, true), "Replay · hidden day · 9:32 AM ET");
+  // Paused: no second reading of the polled value moves it.
+  assert.equal(extrapolate({ clock: "2026-09-25T13:32:05Z", running: false, speed: 10, state: "paused" }, 2000), "2026-09-25T13:32:05Z");
 });

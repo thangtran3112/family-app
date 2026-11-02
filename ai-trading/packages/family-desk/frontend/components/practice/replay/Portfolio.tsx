@@ -73,7 +73,7 @@ export function PortfolioPanel({ dayListId, query }: { dayListId: number; query:
       await placeMark(session.id, built.mark);
       query.refresh();
     } catch (error) {
-      setMessage(problemMessage(error, PRACTICE_COPY.markError));
+      setMessage(problemMessage(error, PRACTICE_COPY.orderError));
     } finally {
       setBusy(null);
     }

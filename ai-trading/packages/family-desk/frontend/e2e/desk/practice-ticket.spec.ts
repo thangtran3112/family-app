@@ -216,7 +216,8 @@ test.describe("Practice order ticket", () => {
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height - 6);
     const popup = chartOrder(page);
     await popup.getByRole("button", { name: /^Buy limit / }).click();
-    await expect(page.getByRole("alert").filter({ hasText: /^Not enough practice cash/ })).toHaveText("Not enough practice cash · $50,000 free");
+    await expect(popup.getByRole("alert"), "the popup says why where she clicked").toHaveText("Not enough practice cash · $50,000 free");
+    await expect(practice.getByRole("alert").filter({ hasText: /^Not enough practice cash/ }), "and the ticket's Quantity does").toHaveText("Not enough practice cash · $50,000 free");
     await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
     await expect(popup).toBeVisible();
     await expect(orders(practice).getByText("Working")).toHaveCount(0);
