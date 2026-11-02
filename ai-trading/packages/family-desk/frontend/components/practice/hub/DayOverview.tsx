@@ -38,7 +38,7 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan, clock }: { su
     <div className={o.grid}>
       <div className={o.main}>
         <PlaceStrip summary={summary} planFinished={planHere?.finished === true} account={account} />
-        {!closed && <ThreadClockPanel api={clock} datesHidden={hidden} onSkipped={onChanged} />}
+        {!closed && <ThreadClockPanel api={clock} datesHidden={hidden} preparing={preparing} onSkipped={onChanged} />}
         <div className={o.topRow}>
           <NextStep summary={summary} plan={plan} account={account} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (

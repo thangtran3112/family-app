@@ -9,6 +9,8 @@ import {
   PREVIEW_POLL_MAX_MS,
   pollExpired,
   startBlockedBy,
+  endLabelSpots,
+  placeLabel,
   startNoteSpot,
   swingCurveLayout,
   swingCurveSummary,
@@ -123,4 +125,91 @@ test("the Starting balance note moves off the end labels when the balance is sti
   // No free spot at all: the first one stays rather than dropping the note.
   const wall = [0, 1, 2, 3].map((n) => ({ x: n % 2 === 0 ? 400 : 736, y: n < 2 ? 106 : 126, text: "x".repeat(120), anchor: "end" as const }));
   assert.equal(startNoteSpot(layout, "Starting balance", wall).y, 106);
+});
+
+// -- annotations keep off their own series and inside the plot box (D-181) ---------------------------------------------------------
+
+const BOX_PLOT = { x: 76, y: 16, width: 660, height: 188 };
+const LABEL_PX_PER_CHAR = 7;
+const boxOfLabel = (label: { x: number; y: number; text: string; anchor: "start" | "end" }) => {
+  const width = label.text.length * LABEL_PX_PER_CHAR;
+  const left = label.anchor === "end" ? label.x - width : label.x;
+  return { left, right: left + width, top: label.y - 11, bottom: label.y + 3 };
+};
+/** Independent of the module: walk the line one unit at a time and ask whether any step lands within `reach` of the label's box. */
+const lineTouches = (label: Parameters<typeof boxOfLabel>[0], line: ReadonlyArray<{ x: number; y: number }>, reach = 3): boolean => {
+  const box = boxOfLabel(label);
+  return line.some((from, index) => {
+    const to = line[index + 1] ?? from;
+    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y)));
+    for (let step = 0; step <= steps; step++) {
+      const x = from.x + ((to.x - from.x) * step) / steps;
+      const y = from.y + ((to.y - from.y) * step) / steps;
+      if (x > box.left - reach && x < box.right + reach && y > box.top - reach && y < box.bottom + reach) return true;
+    }
+    return false;
+  });
+};
+const insideBox = (label: Parameters<typeof boxOfLabel>[0], plot = BOX_PLOT) => {
+  const box = boxOfLabel(label);
+  return box.left >= plot.x && box.right <= plot.x + plot.width && box.top >= plot.y && box.bottom <= plot.y + plot.height;
+};
+
+test("Starting balance keeps off a series that leaves the start point, above or below (swing journal)", () => {
+  const startY = 110;
+  const layout = { plot: BOX_PLOT, startY };
+  const rising = [{ x: 76, y: startY }, { x: 110, y: 96 }, { x: 144, y: 84 }, { x: 178, y: 70 }, { x: 212, y: 60 }];
+  const falling = rising.map((point) => ({ x: point.x, y: 2 * startY - point.y }));
+  // The default spot (above the start line at the left) is on the rising series; the note moves and touches neither series.
+  for (const lines of [[rising], [falling], [rising, falling]]) {
+    const note = startNoteSpot(layout, "Starting balance", [], lines);
+    assert.equal(insideBox(note), true, "inside the plot box");
+    for (const line of lines) assert.equal(lineTouches(note, line), false, `clear of the series (${JSON.stringify(note)})`);
+  }
+  // Rising and falling together take both left spots: the note goes along the line to the first free run.
+  const both = startNoteSpot(layout, "Starting balance", [], [rising, falling]);
+  assert.notEqual(both.x, 82, "not at the left end");
+  // No series: unchanged.
+  assert.deepEqual(startNoteSpot(layout, "Starting balance", [], []), startNoteSpot(layout, "Starting balance", []));
+});
+
+test("the end label sits on the side of its point the line does not come from, inside the plot box (day journal)", () => {
+  const text = "After day 1 $49,246.00";
+  // One ended day: the balance fell from the start (left, high) to the newest point (right edge, low). Above-left is the line itself.
+  const now = { x: 736, y: 150 };
+  const line = [{ x: 76, y: 100 }, now];
+  const label = placeLabel(endLabelSpots(now, text), { plot: BOX_PLOT, lines: [line] });
+  assert.equal(label.y > now.y, true, "below the point: the line comes in from above");
+  assert.equal(lineTouches(label, line), false);
+  assert.equal(insideBox(label), true);
+  // A line that rose into the point keeps the label above, the way it was.
+  const rose = [{ x: 76, y: 190 }, now];
+  const above = placeLabel(endLabelSpots(now, text), { plot: BOX_PLOT, lines: [rose] });
+  assert.deepEqual([above.x, above.y, above.anchor], [now.x - 8, now.y - 8, "end"]);
+});
+
+test("a label never leaves the plot box when a spot inside it exists: day 1 goes right of its point, a low point stays above the day labels", () => {
+  const text = "After day 1 $49,246.00";
+  const early = { x: 100, y: 120 }; // 24 units in: no room to the left for 154 units of text
+  const right = placeLabel(endLabelSpots(early, text), { plot: BOX_PLOT, lines: [[{ x: 76, y: 110 }, early]] });
+  assert.equal(right.anchor, "start");
+  assert.equal(insideBox(right), true);
+  const floor = { x: 400, y: BOX_PLOT.y + BOX_PLOT.height };
+  const kept = placeLabel(endLabelSpots(floor, text), { plot: BOX_PLOT });
+  assert.equal(insideBox(kept), true, "a point on the bottom tick never sends its label under the plot (D-123)");
+  const top = { x: 400, y: BOX_PLOT.y };
+  assert.equal(insideBox(placeLabel(endLabelSpots(top, text), { plot: BOX_PLOT })), true, "nor above it");
+  // Whole sweep: every spot of a 5 x 5 grid of points lands inside.
+  for (const x of [76, 200, 400, 600, 736]) for (const y of [16, 60, 110, 160, 204]) {
+    assert.equal(insideBox(placeLabel(endLabelSpots({ x, y }, text), { plot: BOX_PLOT })), true, `(${x}, ${y})`);
+  }
+});
+
+test("a label clear of the lines but on another label is worse than one on a line: the labels stay readable", () => {
+  const text = "Balance $50,000.00";
+  const point = { x: 400, y: 110 };
+  const spots = endLabelSpots(point, text);
+  const other = { ...spots[0]!, text: "Equity $50,100.00" }; // sits on the first spot
+  const picked = placeLabel(spots, { plot: BOX_PLOT, others: [other], lines: [[{ x: 76, y: 130 }, { x: 736, y: 130 }]] });
+  assert.notDeepEqual([picked.x, picked.y], [spots[0]!.x, spots[0]!.y], "not on the other label");
 });

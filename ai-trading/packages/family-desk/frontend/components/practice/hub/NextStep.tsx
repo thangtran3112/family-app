@@ -91,10 +91,12 @@ export function NextStep({ summary, plan, account = null, onChanged, onNewPlan }
                 </div>
               )
             )}
-            {canReplace && <Button disabled={preparing} aria-describedby={dayOpen ? replaceNoteId : undefined} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</Button>}
+            {canReplace && <Button disabled={preparing} title={preparing ? PRACTICE_COPY.clockPreparing : undefined} aria-describedby={dayOpen || preparing ? replaceNoteId : undefined} onClick={onNewPlan}>{PRACTICE_COPY.threadPageReplace}</Button>}
           </div>
           {/* Replacing ends the day in progress and exits what is open at the day clock (F-05): said before the click, not after. */}
           {canReplace && dayOpen && <p id={replaceNoteId} className={hub.muted}>{PRACTICE_COPY.threadReplaceOpenDay}</p>}
+          {/* While the data is prepared Replace plan is disabled: it says why, the same reason the clock card gives (D-182). */}
+          {preparing && <span id={replaceNoteId} className="sr-only">{PRACTICE_COPY.clockPreparing}</span>}
           {gate && <p className={hub.muted}>{gate.locked}</p>}
           {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}
           {planDone && <p className={styles.dayLine}>{planFinishedLine(thread)}</p>}

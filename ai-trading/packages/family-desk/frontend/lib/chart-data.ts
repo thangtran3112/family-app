@@ -10,6 +10,7 @@ import type {
   WhitespaceData,
 } from "lightweight-charts";
 import { formatEtDay, formatEtTime } from "./desk/format.ts";
+import { fitsWhole } from "./desk/ticks.ts";
 
 export type ChartBar = {
   t: string;
@@ -171,6 +172,29 @@ export function replayTickLabel(time: Time, tickType: number, hideDates: boolean
   if (tickType >= 3) return formatChartClock(time);
   if (hideDates || typeof time === "object") return "";
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" }).format(new Date(typeof time === "number" ? time * 1000 : time));
+}
+
+/** The library's axis type size (`layout.fontSize`, 12 by default): the chart sets no other. */
+const AXIS_FONT_PX = 12;
+
+/**
+ * A time-axis label, or "" when it would print cut off at the edge of the axis (D-180). The library centres each label on its tick and
+ * clips it at the edge, so the first tick of a narrow chart read "0 AM" for "04:00 AM". `x` is the tick's place on the axis, null
+ * when the chart cannot say (the label stays). An axis may drop a label; it may not cut one (D-157).
+ */
+export function wholeAxisLabel(label: string, x: number | null, axisWidth: number): string {
+  return label === "" || x === null || fitsWhole(x, label, AXIS_FONT_PX, "middle", 0, axisWidth) ? label : "";
+}
+
+/** How far apart (px) a price-axis tick label and a last-value tag must be to read apart: half the tag's height plus half the label's. */
+export const TAG_CLEARANCE = 16;
+
+/**
+ * A price-axis tick label, or "" when a last-value tag (the "Equity $51,457.00" pill) already sits on it: the tag is the number that
+ * matters, and the tick under it printed through its edge (D-181). `y` is the tick's place on the axis, `tagYs` the tags'.
+ */
+export function clearTickLabel(label: string, y: number | null, tagYs: readonly number[]): string {
+  return y === null || tagYs.every((tag) => Math.abs(tag - y) >= TAG_CLEARANCE) ? label : "";
 }
 
 /**

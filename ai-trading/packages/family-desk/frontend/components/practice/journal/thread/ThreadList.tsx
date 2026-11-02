@@ -4,15 +4,17 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { formatBalance, threadModeLabel, threadName } from "@/lib/replay/threadView";
 import type { ThreadSummary } from "@/lib/replay/threads";
 
-/** Her threads as links to their journals (the journal's left rail and the picker): name, status and mode, balance and the simulated mark. `current` is the open thread. */
-export function ThreadList({ rows, current, label }: { rows: ThreadSummary[]; current?: number; label?: string }) {
+const journalHref = (threadId: number): string => `/practice/journal?thread=${threadId}`;
+
+/** Her threads as links (the journal's left rail and the picker): name, status and mode, balance and the simulated mark. `current` is the open thread. A link goes to the thread's journal unless `href` says where else (D-183). */
+export function ThreadList({ rows, current, label, href = journalHref }: { rows: ThreadSummary[]; current?: number; label?: string; href?: (threadId: number) => string }) {
   return (
     <RailList
       client
       label={label}
       rows={rows.map((row) => ({
         id: String(row.thread.id),
-        href: `/practice/journal?thread=${row.thread.id}`,
+        href: href(row.thread.id),
         selected: row.thread.id === current,
         label: threadName(row.thread),
         // The name keeps the row to itself: the balance and the mark sit on the line under it, and the status and mode on the line under that,

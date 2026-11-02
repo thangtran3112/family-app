@@ -15,6 +15,7 @@ import {
   missingFilterNote,
   neverScanned,
   pickFilter,
+  previewEmptyTitle,
   previewInterval,
   previewNotes,
   quickFiltersActive,
@@ -154,6 +155,8 @@ test("results state covers scanning, error, empty and ready", () => {
   assert.equal(resultsState({ loading: false, hasResults: true, failed: false, matches: 9 }), "ready");
   assert.equal(previewInterval("bar_close_15m"), "15m");
   assert.equal(previewInterval("daily_close"), "1d");
+  // A row with no price history says so by name instead of drawing an empty plot (D-185).
+  assert.equal(previewEmptyTitle("BOLT"), "No price bars for BOLT yet");
 });
 
 test("the fixture filter's spec parses and describes in one sentence", () => {
