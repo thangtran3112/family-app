@@ -133,6 +133,9 @@ VIBE_DRAIN_LEASE=""
 VIBE_HEARTBEAT_SECONDS=60
 FORWARD_SWITCH_STARTED=0
 MIROFISH_WAS_RUNNING=0
+# The services this run's last apply_selected_services asked Compose to bring up; the failure
+# diagnostics below inspect exactly these.
+SELECTED_SERVICES=()
 DEPLOY_COMMITTED=0
 LOCK_WAIT_SECONDS="${AI_TRADING_LOCK_WAIT_SECONDS:-60}"
 CONTROL_OWNER_UID="${AI_TRADING_CONTROL_OWNER_UID:-0}"
@@ -536,6 +539,44 @@ migrate_desk_db() {
     || die "desk db migration failed (alembic upgrade head) -- schema left at its previous revision and no container was swapped"
 }
 
+# redact_secrets: stdin to stdout with credential-looking values masked. This repository is public and
+# the Actions log of a deploy is world-readable; none of these values are registered GitHub secrets, so
+# nothing a service printed may reach that log unfiltered. Over-masking is fine, under-masking is not.
+# Fails closed: without perl nothing is printed. Covers URL userinfo, Bearer/Basic credentials, any
+# name containing key/token/secret/password/credential/auth followed by = or :, and well-known token shapes.
+redact_secrets() {
+  perl -pe '
+    s#(://[^/\s:@]+:)[^@\s/]+@#$1***@#g;
+    s#\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}#$1 ***#gi;
+    s#(\b[\w.-]*(?:key|token|secret|passw(?:or)?d|credential|auth)[\w.-]*["\x27]?\s*[=:]\s*["\x27]?)[^\s"\x27,;&]+#$1***#gi;
+    s#\b(?:sk|pk|ghp|gho|ghs|xox[a-z]|AKIA)[-_A-Za-z0-9]{16,}#***#g;
+  '
+}
+
+# dump_unhealthy_diagnostics SERVICE...: for each service whose container is missing, not running, or
+# neither healthy nor health-check-less, print its last 80 log lines and its healthcheck's last results
+# (stderr, redacted). Read-only and never fails the deploy: callers run it as `|| true`. Added after
+# run 41472449417, whose log said only "container ai-trading-scheduler-1 is unhealthy".
+dump_unhealthy_diagnostics() {
+  local service id state health
+  for service in "$@"; do
+    id="$(compose ps -q "$service" 2>/dev/null)" || id=""
+    if [[ -z "$id" ]]; then
+      echo "deploy: diagnostics: $service has no container" >&2
+      continue
+    fi
+    state="$(docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null)" || state=unknown
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null)" || health=unknown
+    if [[ "$state" == running && ("$health" == healthy || "$health" == none) ]]; then
+      continue
+    fi
+    echo "deploy: diagnostics: $service state=$state health=$health; last 80 log lines follow" >&2
+    compose logs --no-color --tail=80 "$service" 2>&1 | redact_secrets >&2 || true
+    echo "deploy: diagnostics: $service last healthcheck results follow" >&2
+    docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}exit={{.ExitCode}} {{.Output}}{{end}}{{end}}' "$id" 2>&1 | redact_secrets >&2 || true
+  done
+}
+
 # apply_selected_services: explicit, catalog-driven service selection --
 # task-5-brief's own snippet, verbatim in spirit: never a blanket
 # `compose up` that could silently revive an intentionally disabled group.
@@ -547,10 +588,18 @@ apply_selected_services() {
   selected_text="$(control_state_py services --state "$CONTROL_STATE_PATH" --lock "$LOCK_PATH" --mirofish-ready "$mirofish_ready" "${DARK_ARGS[@]+"${DARK_ARGS[@]}"}")" \
     || die "control: failed to compute the selected service list"
   [[ -n "$selected_text" ]] || die "control: selected service list is empty"
-  local selected=()
+  local selected=() rc=0
   mapfile -t selected <<<"$selected_text"
+  SELECTED_SERVICES=("${selected[@]}")
   [[ "$IMAGE_TAG" != "$TARGET_IMAGE_TAG" ]] || FORWARD_SWITCH_STARTED=1
-  compose up -d --no-deps --wait --wait-timeout 300 "${selected[@]}"
+  compose up -d --no-deps --wait --wait-timeout 300 "${selected[@]}" || rc=$?
+  if ((rc != 0)); then
+    # Compose's own line says only "container X is unhealthy". Print why, here, BEFORE the ERR trap
+    # rolls back: the rollback recreates the containers and the evidence goes with them.
+    echo "deploy: compose up --wait failed with status $rc; diagnostics for services that are not healthy follow" >&2
+    dump_unhealthy_diagnostics "${SELECTED_SERVICES[@]}" || true
+    return "$rc"
+  fi
 }
 
 # stop_disabled_groups: every catalog service NOT in the currently selected
@@ -1328,9 +1377,16 @@ deploy_tag() {
   # necessarily this run's scratch copy or $CONTROL_STATE_PATH (e.g. when
   # $STATE_DIR is ever customized, or during a same-run rollback where
   # $APP_DIR/control may already be reverted/removed).
+  local health_rc=0
   AI_TRADING_CONTROL_DIR="$CONTROL_SCRATCH_DIR/control" \
   AI_TRADING_STATE_PATH="$CONTROL_STATE_PATH" \
-    "$CONTROL_SCRATCH_DIR/health-check.sh"
+    "$CONTROL_SCRATCH_DIR/health-check.sh" || health_rc=$?
+  if ((health_rc != 0)); then
+    # Same evidence as a failed `up --wait`: health-check.sh names the failing service, not the cause.
+    echo "deploy: health-check failed with status $health_rc; diagnostics for services that are not healthy follow" >&2
+    dump_unhealthy_diagnostics ${SELECTED_SERVICES[@]+"${SELECTED_SERVICES[@]}"} || true
+    return "$health_rc"
+  fi
 }
 
 restore_previous_mirofish_only() {

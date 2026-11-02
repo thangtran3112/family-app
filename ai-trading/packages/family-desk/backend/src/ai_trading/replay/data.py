@@ -11,6 +11,7 @@ sessions (indicator warm-up and levels), 300 raw daily bars, and the day checks 
 """
 
 import logging
+import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from ai_trading.replay.cache import (
     encode_bars,
     encode_daily,
 )
+from ai_trading.replay.frames import SeriesCache
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +38,9 @@ EARLIEST_DAY = date(2016, 1, 4)  # Alpaca's SIP history floor
 LOOKBACK_SESSIONS = 10
 DAILY_BARS = 300
 EMBARGO = timedelta(minutes=15)
-LRU_DAYS = 8
+# Decoded (symbol, day) inputs kept in memory: about 0.5 MB each (11 sessions of 1-minute bars). 64 holds one full
+# 49-name day and more; a read past it re-decodes from the blob cache, never from the provider (measured in A7).
+LRU_DAYS = 64
 _DAILY_LOOKBACK_DAYS = 460  # calendar days that hold 300 sessions with room for holidays
 _BARS_FEED = "sip"
 
@@ -131,15 +135,19 @@ class History:
         self._sources = sources
         self._now = now
         self._lru: OrderedDict[tuple[str, date], DayInputs] = OrderedDict()
+        self._lock = threading.Lock()  # request threads and the background warm share the LRU
+        self.series = SeriesCache()  # prepared display series over the decoded inputs (`replay/frames.py`)
         self.fetches = 0  # provider bar requests (one per contiguous run), for tests and the prep CLI
 
     # -- public ----------------------------------------------------------------------------------------------
 
     def day_inputs(self, store: BlobStore, symbol: str, day: date) -> DayInputs:
         key = (symbol, day)
-        if key in self._lru:
-            self._lru.move_to_end(key)
-            return self._lru[key]
+        with self._lock:
+            found = self._lru.get(key)
+            if found is not None:
+                self._lru.move_to_end(key)
+                return found
         sessions = [*prior_sessions(day), day]
         frames = self.minute_bars(store, symbol, sessions)
         today = frames.get(day)
@@ -156,9 +164,11 @@ class History:
             prior_close=float(before["close"].iloc[-1]) if len(before) else None,
             avg_shares_per_s=_avg_shares_per_s(frames, sessions[:-1]),
         )
-        self._lru[key] = inputs
-        while len(self._lru) > LRU_DAYS:
-            self._lru.popitem(last=False)
+        with self._lock:
+            self._lru[key] = inputs
+            self._lru.move_to_end(key)
+            while len(self._lru) > LRU_DAYS:
+                self._lru.popitem(last=False)
         return inputs
 
     def minute_bars(self, store: BlobStore, symbol: str, sessions: list[date]) -> dict[date, pd.DataFrame]:

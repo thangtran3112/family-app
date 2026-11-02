@@ -4,9 +4,11 @@ It looks past the playhead (the window end and the close), so `plan.end_day` com
 and the API serves it only then. The list price is the price at the evaluating filter's cut (`screen.build_list`),
 on the day's own share basis, so it compares with the raw 1-minute prices of the day.
 
-Rank is by the **signed** move from the list price to the window end, the biggest gain first (D-031). It used to be
-by absolute move, which put a -5% above a +4% without saying so; a review stored that way is re-ranked on read
-(`normalized`), so every ended day reads the same way.
+Rank is by the **signed** move from the list price to the yardstick, the biggest gain first (D-031). The yardstick is
+the day's regular close (it was the end of her practice window, which is only a mark and no longer a rule). It used to
+be by absolute move, which put a -5% above a +4% without saying so; a review stored that way is re-ranked on read
+(`normalized`), so every ended day reads the same way. A day ended before the yardstick moved keeps the moves it stored
+(its `window_end` says where they were measured).
 """
 
 import statistics
@@ -32,13 +34,12 @@ def _pct(price: float | None, base: float | None) -> float | None:
 def candidate_move(
     candidate: dict[str, Any], minutes: pd.DataFrame | None, day: date, window_end: pd.Timestamp
 ) -> dict:
-    """One candidate's outcome: its price at the window end and at the close, and its range from the open to the
-    window end, each as a move from its list price. Nulls when the day has no minutes for the symbol."""
+    """One candidate's outcome: its move from its list price to `window_end` (the yardstick, the regular close), its
+    close, and its range from the open to the yardstick. Nulls when the day has no minutes for the symbol."""
     list_price = candidate["list_price"]
     row: dict[str, Any] = {
         "symbol": candidate["symbol"],
         "list_price": list_price,
-        "window_end_price": None,
         "move_pct": None,
         "close_price": None,
         "close_move_pct": None,
@@ -55,7 +56,6 @@ def candidate_move(
         row["close_price"] = round(float(regular["close"].iloc[-1]), 4)
         row["close_move_pct"] = _pct(float(regular["close"].iloc[-1]), list_price)
     if not upto.empty:
-        row["window_end_price"] = round(float(upto["close"].iloc[-1]), 4)
         row["move_pct"] = _pct(float(upto["close"].iloc[-1]), list_price)
         row["high_pct"] = _pct(float(upto["high"].max()), list_price)
         row["low_pct"] = _pct(float(upto["low"].min()), list_price)
@@ -71,7 +71,7 @@ def compute_review(
     window_end: pd.Timestamp,
     picks: Mapping[str, str],
 ) -> dict[str, Any]:
-    """The review: every candidate's move, ranked by signed move from the list price to the window end (biggest gain
+    """The review: every candidate's move, ranked by signed move from the list price to the yardstick (biggest gain
     first), her picks (`traded` first, then `starred`) highlighted with their rank, and the Selection numbers.
 
     `picks` maps a symbol to `traded` or `starred`. The median is over every candidate that has a move."""

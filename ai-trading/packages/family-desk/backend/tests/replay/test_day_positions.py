@@ -346,7 +346,7 @@ def test_a_name_behind_the_clock_shows_the_price_end_day_books_for_it(db_session
     assert (shown["open_trade"]["last_price"], shown["open_trade"]["unrealized_usd"]) == (120.0, 50.0)
     feed = _feed(db_session, user_id, svc, gapper.id)
     assert feed["open_trade"]["last_price"] == 120.0
-    assert feed["last"]["price"] == 110.0  # the chart's own last price stays at its playhead: nothing is drawn past it
+    assert feed["last"]["price"] == 120.0  # the chart is read at the thread's time too: one number on every surface
 
     plan_mod.end_day(db_session, user_id, row.id, svc)
     booked = max(session_mod._marks_of(session_mod._load_marks(db_session, gapper.id)), key=lambda m: m.seq)

@@ -90,7 +90,12 @@ def test_undoing_an_exit_with_other_holds_open_is_accepted_when_the_cash_is_ther
 def test_the_swing_session_window_ends_at_the_days_regular_close(day, close) -> None:
     plan = SimpleNamespace(spec={"interval": "15m", "armed": [], "hideDates": "yes"})
     thread = SimpleNamespace(
-        stop_note_on_entry="no", trade_only_on_signal="no", max_loss_usd=None, max_trades=None, plan_note=None
+        mode="swing",
+        stop_note_on_entry="no",
+        trade_only_on_signal="no",
+        max_loss_usd=None,
+        max_trades=None,
+        plan_note=None,
     )
     spec = swing._session_spec(plan, day, "S01", thread)
     assert spec.model_dump(mode="json", by_alias=True)["window"] == {"from": "09:30", "to": close}

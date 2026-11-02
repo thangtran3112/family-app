@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from ai_trading.core.calendar import et
 from ai_trading.db.models import PracticePlan, PracticeThread, ReplayDayList
+from ai_trading.replay import frames as frames_mod
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
@@ -126,6 +127,7 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "window_end": None,
         "focus_end": None,
         "next_start": None,
+        "market": None,
         "server_now": svc.wall(),
         "account": None,
         "label": threads_mod.SIMULATED_LABEL,
@@ -135,6 +137,7 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
     assert day is not None and day.revealed_through is not None
     clock = _ts(day.revealed_through)
     start, tape_end = _window(db, day)
+    following = plan_mod.next_day_start(db, day)
     return {
         **out,
         "state": "running" if day.clock_running else "paused",
@@ -146,7 +149,8 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "window_start": start,
         "window_end": tape_end,
         "focus_end": _focus_end(db, day, tape_end),
-        "next_start": plan_mod.next_day_start(db, day),
+        "next_start": following,
+        "market": frames_mod.market_block(day.day, clock, None, following),
         "account": _account(db, svc, thread, day, clock),
     }
 
