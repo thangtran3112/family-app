@@ -539,11 +539,11 @@ function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColu
       key: column.key,
       label: column.label,
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",
-      // No name reports before the open: the column would be a row of dashes to scroll past (D-136).
+      // No name was checked (every cell a dash): the column would be a row of dashes to scroll past (D-136).
       hideWhenEmpty: column.format === "earnings",
       render: (row) => {
         const text = dayCellText(column, row);
-        if (column.format === "earnings") return text === "—" ? text : <Badge tone="warn">{text}</Badge>;
+        if (column.format === "earnings") return row.earnings_state === "reported" ? <Badge tone="warn">{text}</Badge> : text;
         const tone = dayCellTone(column, row);
         return <span className={tone ? styles[tone] : undefined}>{text}</span>;
       },

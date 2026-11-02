@@ -11,7 +11,7 @@ armed strategy). A tape row is `[time, price, size, tick]`, oldest first.
 from datetime import date, datetime
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer, model_validator
 
 from ai_trading.api.schemas.common import Stamp, SwingOptional
 from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
@@ -595,6 +595,8 @@ class PracticePlanOut(BaseModel):
     next_day: date | None
     next_weekday: Weekday | None
     next_day_no: int | None
+    # Every block day's weekday, day_no 1 first: the block ladder labels each of its rows with it.
+    weekdays: list[Weekday]
     finished: bool
     prep: PlanPrepOut
 
@@ -684,6 +686,9 @@ class CandidateLiveOut(BaseModel):
     metrics: dict[str, FiniteFloat | None]
 
 
+EarningsState = Literal["reported", "none"]
+
+
 class CandidateOut(BaseModel):
     """One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut."""
 
@@ -700,7 +705,10 @@ class CandidateOut(BaseModel):
     # whether the list was built before or after the open (D-018). Null on a list stored before they existed.
     prev_rvol: FiniteFloat | None = None
     prev_change_pct: FiniteFloat | None = None
-    reported_before_open: bool  # an explicit before-the-open report (or yesterday's after-close one); never directional
+    # `reported`: an explicit before-the-open report (or yesterday's after-close one), never directional. `none`: the
+    # name's report history was read and holds no such report. Null: not checked (no history, a provider failure, or
+    # the time budget spent), which is not the same as none (D-018).
+    earnings_state: EarningsState | None = None
     metrics: dict[str, FiniteFloat | None]
     # A re-scan repopulates the list (2026-11-01). `new_since_list`: the scan added it, the list before did not hold it.
     # `held_over`: the scan no longer matches it, and it stays because she opened or starred it. Both false on a list
@@ -710,6 +718,14 @@ class CandidateOut(BaseModel):
     # Only on a read with `?live=true` while the day clock runs: the name at the clock (the fields above stay the
     # list's).
     live: CandidateLiveOut | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flag_of_a_stored_list(cls, data: object) -> object:
+        """A list stored before `earnings_state` holds the positive flag only: `reported` stays, the rest is unknown."""
+        if isinstance(data, dict) and "earnings_state" not in data and data.get("reported_before_open"):
+            return {**data, "earnings_state": "reported"}
+        return data
 
 
 class RescanOut(BaseModel):

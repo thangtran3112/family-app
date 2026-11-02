@@ -106,14 +106,16 @@ export type LadderRow = { n: number; weekday: string | null; state: "ended" | "o
 
 /** The block's days as a ladder (P7): the ones before this day ended, this day open or ended, the next one waits for this one, the rest are locked.
  *  `n` is the plan's own count; `offset` (the plan's `day_offset`) turns it into the thread's number for the labels (D-047). */
-export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">, offset = 0): LadderRow[] {
+export function blockLadder(list: Pick<DayList, "day_no" | "of" | "status" | "weekday">, offset = 0, weekdays: readonly string[] = []): LadderRow[] {
   const ended = list.status === "ended";
   return Array.from({ length: list.of }, (_, index): LadderRow => {
     const n = index + 1;
-    if (n < list.day_no || (n === list.day_no && ended)) return { n, weekday: n === list.day_no ? list.weekday : null, state: "ended", detail: PRACTICE_COPY.dayLadderEnded };
-    if (n === list.day_no) return { n, weekday: list.weekday, state: "open", detail: PRACTICE_COPY.dayLadderOpen };
-    if (n === list.day_no + 1) return { n, weekday: null, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no + offset }) };
-    return { n, weekday: null, state: "locked", detail: PRACTICE_COPY.dayLadderLocked };
+    // A row's weekday is the plan's own for that day; a row the plan does not list keeps its number alone, never a guessed day.
+    const weekday = n === list.day_no ? list.weekday : (weekdays[index] ?? null);
+    if (n < list.day_no || (n === list.day_no && ended)) return { n, weekday, state: "ended", detail: PRACTICE_COPY.dayLadderEnded };
+    if (n === list.day_no) return { n, weekday, state: "open", detail: PRACTICE_COPY.dayLadderOpen };
+    if (n === list.day_no + 1) return { n, weekday, state: "opens_after", detail: practiceText("dayLadderOpensAfter", { day: list.day_no + offset }) };
+    return { n, weekday, state: "locked", detail: PRACTICE_COPY.dayLadderLocked };
   });
 }
 
@@ -234,6 +236,10 @@ const nowLabel = (label: string): string => {
 
 const EARNINGS_FORMAT = "earnings";
 
+/** The earnings cell: a report before the open, "None" for a name whose report history was read and holds none, and nothing (a dash) for a name that was not checked (D-018). */
+const earningsText = (state: Candidate["earnings_state"]): string | null =>
+  state === "reported" ? PRACTICE_COPY.dayReported : state === "none" ? PRACTICE_COPY.dayEarningsNone : null;
+
 /**
  * The table's columns in the order of P7: list price, prev close, prev RVOL, prev change %, ATR %, RSI, earnings, then the rest of the
  * server's columns and the time the match began. Prev close, prev RVOL and prev change % are the previous session's own figures on the
@@ -272,7 +278,7 @@ export function dayColumns(list: Pick<DayList, "columns" | "universe">, live: { 
   ];
   const core = [...plain("atr_pct_14"), ...plain("rsi_14")];
   const rest = list.columns.flatMap((column) => plain(column.key));
-  const earnings: DayColumn = { key: "earnings", label: "Earnings", format: EARNINGS_FORMAT, value: (row) => (row.reported_before_open ? PRACTICE_COPY.dayReported : null) };
+  const earnings: DayColumn = { key: "earnings", label: "Earnings", format: EARNINGS_FORMAT, value: (row) => earningsText(row.earnings_state) };
   const since = have.get("matched_since");
   const tail: DayColumn[] = since ? [{ key: "matched_since", label: since.label, format: since.format, value: (row) => row.matched_since }] : [];
   const columns = [...head, ...prev, ...core, earnings, ...rest, ...tail];

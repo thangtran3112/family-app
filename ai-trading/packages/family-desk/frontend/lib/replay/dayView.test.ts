@@ -306,6 +306,17 @@ test("the block ladder: earlier days ended, this one open, the next waits for it
   assert.deepEqual(blockLadder({ day_no: 2, of: 5, status: "ended", weekday: "Wed" }).map((row) => row.state), ["ended", "ended", "opens_after", "locked", "locked"]);
 });
 
+test("D-018: every ladder row carries its own weekday from the plan; a row the plan does not list keeps its number alone", () => {
+  const list = { day_no: 2, of: 5, status: "listed", weekday: "Tue" } as const;
+  assert.deepEqual(blockLadder(list, 0, ["Mon", "Tue", "Wed", "Thu", "Fri"]).map((row) => row.weekday), ["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  assert.deepEqual(blockLadder(list, 0, ["Mon", "Tue"]).map((row) => row.weekday), ["Mon", "Tue", null, null, null]);
+  assert.deepEqual(blockLadder(list).map((row) => row.weekday), [null, "Tue", null, null, null]);
+  // The current day's own weekday wins over the plan's list, so the two can never disagree on the open row.
+  assert.equal(blockLadder(list, 0, ["Mon", "Fri", "Wed", "Thu", "Fri"])[1]!.weekday, "Tue");
+  assert.deepEqual(plan.weekdays.slice(0, 5), ["Mon", "Tue", "Wed", "Thu", "Fri"]);
+  assert.equal(plan.weekdays.length, plan.sessions);
+});
+
 test("D-018: Prev RVOL and Prev change % are the candidate's own previous-session figures; the server's relabelled columns are not drawn twice", () => {
   const columns = dayColumns(dayList);
   assert.deepEqual(columns.map((column) => column.label), ["List price", "vs prev close %", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Prev volume", "Since"]);
@@ -321,7 +332,9 @@ test("D-018: Prev RVOL and Prev change % are the candidate's own previous-sessio
   assert.deepEqual([dayCellText(byKey.prev_change_pct!, tiny(0.01)), dayCellTone(byKey.prev_change_pct!, tiny(0.01))], ["+0.01%", "up"]);
   assert.equal(dayCellText(byKey.prev_rvol!, dayList.candidates[1]!), "—");
   assert.equal(dayCellText(byKey.earnings!, smci), "Reported before the open");
-  assert.equal(dayCellText(byKey.earnings!, dayList.candidates[1]!), "—");
+  // D-018: a name checked with no report reads "None"; a name that was not checked reads a dash.
+  assert.equal(dayCellText(byKey.earnings!, dayList.candidates[1]!), "None");
+  assert.equal(dayCellText(byKey.earnings!, { ...smci, earnings_state: null }), "—");
   assert.equal(dayCellText(byKey.matched_since!, smci), "8:30 AM");
   // A list stored before the candidate carried the two fields, built before the open, still reads them from its previous-session block.
   const stored = { ...smci, prev_rvol: null, prev_change_pct: null };
