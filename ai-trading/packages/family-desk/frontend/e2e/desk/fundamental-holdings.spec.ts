@@ -1,6 +1,6 @@
 import { COPY } from "../../lib/desk/freshness.ts";
 import { fixture, mainText, mockFundamental, startInFundamental, watchGated } from "./fundamental-helpers";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { expect, expectCleanScreen, expectDropsInOrder, openDesk, prepareDesk, test } from "./helpers";
 
 // FD3 Holdings, the left-rail Holdings tab and the Fundamental right rail (02n §b1, §b3). The seeded database has no Flex
 // import, so the populated screens answer from the frozen contract fixtures; the empty world is the real backend's.
@@ -79,18 +79,13 @@ test("the right rail says the Desk AI has not started when there is no verdict, 
   await expectCleanScreen(page);
 });
 
-test("the positions table drops its low-priority columns at 1180 and nothing scrolls sideways", async ({ page }) => {
+test("the positions table drops its low-priority columns when its pane is too narrow and nothing scrolls sideways", async ({ page }) => {
   await startInFundamental(page);
   await mockFundamental(page);
   await openDesk(page, "/holdings");
   const table = page.getByRole("table", { name: "Holdings" });
   await expect(table).toBeVisible();
-  const dropped = ["Earnings", "AI", "Open", "Unrl %"];
-  for (const name of dropped) {
-    const header = table.getByRole("columnheader", { name, exact: true });
-    if (compact()) await expect(header).toHaveCount(0);
-    else await expect(header).toHaveCount(1);
-  }
+  await expectDropsInOrder(table, ["Earnings", "AI", "Open", "Unrl %"]);
   await expect(table.getByRole("columnheader", { name: "Symbol" })).toBeVisible();
   const overflow = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>("#main-content")!;
