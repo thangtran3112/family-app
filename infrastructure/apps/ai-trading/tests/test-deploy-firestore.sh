@@ -3421,6 +3421,136 @@ grep -q 'DEPLOY_DARK must be 0 or 1' "$s76/stderr.log" || fail "case76: missing 
 [[ ! -e "$s76/app/docker.log" ]] || fail "case76: docker was reached despite a malformed DEPLOY_DARK"
 [[ ! -e "$s76/secrets/cloudflared.env" ]] || fail "case76: a secret was installed despite a malformed DEPLOY_DARK"
 
+# run_fake_deploy_unhealthy SCRATCH UP_FAILS: a process-level deploy (real deploy.sh, fake Docker) of
+# tag 1111... over a last-good tag aaaa.... With UP_FAILS=1 the FIRST `compose up --wait` fails the way
+# real Compose does for a scheduler whose healthcheck turned unhealthy (incident 41472449417); the
+# rollback's `up` succeeds. The fake answers `compose ps -q`, `docker inspect` and `compose logs` for
+# the scheduler (unhealthy, logs carrying secret-looking values) and reports every other service
+# healthy. Every docker call lands in SCRATCH/app/docker.log, in order.
+run_fake_deploy_unhealthy() {
+  local scratch="$1" up_fails="$2" status=0
+  printf 'TUNNEL_TOKEN=fake-tunnel-token\n' >"$scratch/ci-staging/cloudflared.env"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$scratch/config-staging/health-check.sh"
+  chmod +x "$scratch/config-staging/health-check.sh"
+  printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' >"$scratch/app/last-good-tag"
+  (
+    APP_DIR="$scratch/app"
+    AI_TRADING_SECRETS_DIR="$scratch/secrets"
+    ENV_STAGING_DIR="$scratch/ci-staging"
+    APP_CONFIG_STAGING_DIR="$scratch/config-staging"
+    AI_TRADING_STATE_DIR="$scratch/control-state"
+    AI_TRADING_UNIT_DIR="$scratch/unit-dir"
+    FAMILY_CONFIG_CREDENTIALS="$scratch/fake-reader-key.json"
+    DEPLOY_SH_SKIP_CHOWN=1
+    IMAGE_TAG=1111111111111111111111111111111111111111
+    FAKE_UP_FAILS="$up_fails"
+    export APP_DIR AI_TRADING_SECRETS_DIR ENV_STAGING_DIR APP_CONFIG_STAGING_DIR AI_TRADING_STATE_DIR AI_TRADING_UNIT_DIR FAMILY_CONFIG_CREDENTIALS DEPLOY_SH_SKIP_CHOWN IMAGE_TAG FAKE_UP_FAILS
+    # shellcheck disable=SC2329 # exported shim, called by the deploy.sh child process
+    docker() {
+      if [[ "${1:-}" == compose ]]; then
+        echo "fake docker $*" >>"$APP_DIR/docker.log"
+        local arg sub="" last="${*: -1}"
+        for arg in "$@"; do
+          case "$arg" in up | ps | logs) sub="$arg"; break ;; esac
+        done
+        case "$sub" in
+          up)
+            local n=0
+            [[ -f "$APP_DIR/up-count" ]] && n="$(cat "$APP_DIR/up-count")"
+            n=$((n + 1))
+            echo "$n" >"$APP_DIR/up-count"
+            if [[ "$FAKE_UP_FAILS" == 1 && "$n" == 1 ]]; then
+              echo "container ai-trading-scheduler-1 is unhealthy" >&2
+              return 1
+            fi
+            ;;
+          ps) echo "id-$last" ;;
+          logs)
+            if [[ "$last" == scheduler ]]; then
+              echo "scheduler-1  | 2026-11-02 15:52:23 INFO database not reachable yet (attempt 3/30)"
+              echo "scheduler-1  | DESK_RUNTIME_DATABASE_URL=postgresql://desk_runtime:hunter2pass@postgres:5432/desk"
+              echo "scheduler-1  | calling bridge with Authorization: Bearer abcdef0123456789abcdef"
+              echo "scheduler-1  | MARKET_DATA_BRIDGE_TOKEN: tok_live_9f8e7d6c5b4a"
+            else
+              echo "$last-1  | ok"
+            fi
+            ;;
+        esac
+        return 0
+      fi
+      if [[ "${1:-}" == inspect ]]; then
+        echo "fake docker $*" >>"$APP_DIR/docker.log"
+        local id="${*: -1}"
+        if [[ "$*" == *State.Health.Log* || "$*" == *Health.Log* ]]; then
+          [[ "$id" == id-scheduler ]] && echo "exit=1 heartbeat missing or older than 180s"
+        elif [[ "$*" == *State.Health.Status* || "$*" == *State.Health* ]]; then
+          if [[ "$id" == id-scheduler ]]; then echo unhealthy; else echo healthy; fi
+        else
+          echo running
+        fi
+        return 0
+      fi
+      if [[ "${1:-}" == ps || "${1:-}" == images || "${1:-}" == rmi ]]; then
+        return 0
+      fi
+      command docker "$@"
+    }
+    export -f docker
+    install_fake_systemctl "$scratch"
+    # shellcheck disable=SC2329 # exported shim, called by the deploy.sh child process
+    stat() {
+      if [[ "${1:-}" == -c && "${2:-}" == '%u:%a' ]]; then
+        local mode
+        mode="$(command stat -c '%a' "$3" 2>/dev/null || command stat -f '%Lp' "$3" 2>/dev/null)"
+        printf '0:%s\n' "$mode"
+      else
+        command stat "$@"
+      fi
+    }
+    export -f stat
+    bash "$DEPLOY_SH" >"$scratch/stdout.log" 2>"$scratch/stderr.log"
+  ) || status=$?
+  return "$status"
+}
+
+echo "=== Case 77 (RED, process-level): an aborted 'compose up --wait' dumps the unhealthy service's last 80 log lines and its healthcheck result, redacted, BEFORE the rollback runs ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s77="$(new_scratch case77)"
+status77=0
+run_fake_deploy_unhealthy "$s77" 1 || status77=$?
+[[ "$status77" != 0 ]] || fail "case77: a deploy whose scheduler never turns healthy must fail"
+err77="$s77/stderr.log"
+grep -q 'container ai-trading-scheduler-1 is unhealthy' "$err77" || fail "case77: compose's own abort line is missing: $(cat "$err77")"
+grep -q 'diagnostics: scheduler' "$err77" || fail "case77: no diagnostics block for the unhealthy scheduler: $(cat "$err77")"
+grep -q 'database not reachable yet (attempt 3/30)' "$err77" || fail "case77: the scheduler's log tail was not printed: $(cat "$err77")"
+grep -q 'heartbeat missing or older than 180s' "$err77" || fail "case77: the healthcheck's last output was not printed: $(cat "$err77")"
+grep -qE 'compose .* logs .*--tail=80 .*scheduler$' "$s77/app/docker.log" || fail "case77: expected 'compose logs --tail=80 scheduler': $(cat "$s77/app/docker.log")"
+# Only unhealthy services are dumped: the healthy ones are not.
+if grep -E 'compose .* logs ' "$s77/app/docker.log" | grep -vq 'scheduler$'; then
+  fail "case77: logs were dumped for a healthy service: $(grep -E 'compose .* logs ' "$s77/app/docker.log")"
+fi
+# Redaction: none of the secret-looking values may reach the (public) Actions log.
+for leak in hunter2pass abcdef0123456789abcdef tok_live_9f8e7d6c5b4a; do
+  if grep -qF "$leak" "$err77" "$s77/stdout.log"; then fail "case77: '$leak' leaked into the deploy output"; fi
+done
+grep -q '\*\*\*' "$err77" || fail "case77: redaction left no marker in the dumped logs"
+# Order: the dump comes before the rollback starts.
+dump_line77="$(grep -n 'diagnostics: scheduler' "$err77" | head -n 1 | cut -d: -f1 || true)"
+roll_line77="$(grep -n 'rolling back to' "$err77" | head -n 1 | cut -d: -f1 || true)"
+[[ -n "$dump_line77" && -n "$roll_line77" && "$dump_line77" -lt "$roll_line77" ]] \
+  || fail "case77: diagnostics (line '${dump_line77:-none}') must precede 'rolling back to' (line '${roll_line77:-none}')"
+[[ "$(cat "$s77/app/up-count")" == 2 ]] || fail "case77: expected the forward up and the rollback up (got $(cat "$s77/app/up-count" 2>/dev/null))"
+
+echo "=== Case 78 (GREEN, process-level): a slow-starting scheduler that turns healthy inside the wait does not fail the deploy and dumps nothing ==="
+CASE_COUNT=$((CASE_COUNT + 1))
+s78="$(new_scratch case78)"
+status78=0
+run_fake_deploy_unhealthy "$s78" 0 || status78=$?
+[[ "$status78" == 0 ]] || fail "case78: a deploy whose 'compose up --wait' succeeds must succeed, got $status78: $(cat "$s78/stderr.log" 2>/dev/null)"
+if grep -qE 'compose .* logs ' "$s78/app/docker.log"; then fail "case78: logs were dumped on a healthy deploy"; fi
+if grep -q 'diagnostics:' "$s78/stderr.log"; then fail "case78: a healthy deploy printed diagnostics"; fi
+[[ "$(cat "$s78/app/up-count")" == 1 ]] || fail "case78: a healthy deploy must not roll back (up-count $(cat "$s78/app/up-count" 2>/dev/null))"
+
 echo
 cleanup
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
