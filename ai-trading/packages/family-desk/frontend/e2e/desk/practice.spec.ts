@@ -302,17 +302,26 @@ test.describe("Practice", () => {
     await expect(page.getByText(/Universe: today's Desk set, up to 250 names by today's dollar volume \(\d+ names here\)/).first()).toBeVisible();
     const table = page.getByRole("table", { name: "Candidates" });
     await expect(table.getByRole("row", { name: /TSLA/ })).toBeVisible();
-    // D-013, D-014, D-018: the P7 layout, the chips read as on, the P7 columns. The left rail holds only the block's days (#317):
-    // today is open and the rest wait; the portfolio and the thread box are not on the day list.
-    const left = page.getByRole("complementary", { name: "Practice side panel" });
-    await expect(left).toContainText("This block · 5 days");
-    await expect(left.getByRole("listitem").filter({ hasText: "Day 1 · Fri" })).toContainText("Open now");
-    await expect(left.getByRole("listitem").filter({ hasText: "Day 2" })).toContainText("Opens after day 1");
-    await expect(left).not.toContainText("Risk plan comes from the thread");
+    // D-013, D-014, D-018: the P7 layout, the chips read as on, the P7 columns. The day list has no left rail (the Practice side panel stays empty): the
+    // right rail holds the thread plan, with the block's days stacked below it (a drawer tab each at 1180). Today is open and the rest wait; the portfolio is not on the day list.
+    const narrow = test.info().project.name === "desktop-1180";
+    await expect(page.locator('aside[aria-label="Practice side panel"]')).toBeEmpty(); // zero width, so no role query sees it
+    const rail = page.getByRole("complementary", { name: "Day context" });
+    if (!narrow) {
+      const sections = rail.locator(":scope > section");
+      await expect(sections).toHaveCount(2);
+      await expect(sections.first(), "Thread plan first").toContainText(PRACTICE_COPY.threadPlanTitle);
+      await expect(sections.nth(1), "Block days below it").toContainText(PRACTICE_COPY.dayBlockRail);
+    }
+    if (narrow) await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayBlockRail }).click();
+    const blockRail = narrow ? page.getByRole("dialog", { name: PRACTICE_COPY.dayBlockRail }) : rail;
+    await expect(blockRail).toContainText("This block · 5 days");
+    await expect(blockRail.getByRole("listitem").filter({ hasText: "Day 1 · Fri" })).toContainText("Open now");
+    await expect(blockRail.getByRole("listitem").filter({ hasText: "Day 2" })).toContainText("Opens after day 1");
+    if (narrow) await page.keyboard.press("Escape");
     // The risk plan is the right rail's Thread plan section (a drawer tab at 1180): the plan set above, and where it comes from.
-    if (test.info().project.name === "desktop-1180") await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.threadPlanTitle }).click();
-    const planRail =
-      test.info().project.name === "desktop-1180" ? page.getByRole("dialog", { name: PRACTICE_COPY.threadPlanTitle }) : page.getByRole("complementary", { name: "Day context" });
+    if (narrow) await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.threadPlanTitle }).click();
+    const planRail = narrow ? page.getByRole("dialog", { name: PRACTICE_COPY.threadPlanTitle }) : rail;
     await expect(planRail).toContainText(PRACTICE_COPY.threadPlanFrom);
     await expect(planRail, "a stop is not asked for or scored").not.toContainText(/stop on every entry/i);
     await expect(planRail).toContainText(/Day starts\s*\d{1,2}:\d{2} (AM|PM) ET/);
@@ -377,7 +386,10 @@ test.describe("Practice", () => {
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToList }), "no Back bar at the foot: the tab strip is the way back").toHaveCount(0);
     await expect(page.getByRole("button", { name: "End day…" }), "no End day on the chart: it is on the Summary").toHaveCount(0);
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice }), "the tab strip stands in for the back link").toHaveCount(0);
-    await expect(page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabOrder })).toHaveAttribute("aria-selected", "true");
+    // The chart is where orders are placed and no tab of the thread: the strip is there with Summary, Portfolio, Day list and Trades, and none is selected.
+    const chartTabs = page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel });
+    await expect(chartTabs.getByRole("tab")).toHaveText(["Summary", "Portfolio", "Day list", "Trades"]);
+    await expect(chartTabs.locator('[role="tab"][aria-selected="true"]')).toHaveCount(0);
     // ADR-0022: the date always shows, on the band, the header and the clock.
     await expect(page.locator("body")).toContainText(formatEtDay(DAY));
     await stepBar(page);
@@ -644,11 +656,11 @@ test.describe("Practice", () => {
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
   });
 
-  // D-030, D-035: replacing the plan while a day is half practiced ends that day (its P/L stays in the ledger), so only the
-  // new plan's Day 1 is open. The thread page must agree with the balance and the review: Day 1 reads "list ready" (not "in
-  // progress"), the thread's day row is the day just ended (not a $0 for the unstarted one), and Continue and the review's
-  // Next day meet.
-  test("replacing the plan ends the half-practiced day; the thread page and its day row agree with the balance and the review", async ({ page, context }) => {
+  // D-030, D-035: a plan is never replaced or edited (a new plan is a new thread), so a half-practiced day ends only from the Summary (its P/L
+  // stays in the ledger) and the review's Next day opens the following one. The thread page must agree with the balance and the review: the next
+  // day reads "list ready" (not "in progress"), the thread's day row is the day just ended (not a $0 for the unstarted one), and Start Trading and
+  // the review's Next day meet.
+  test("ending the half-practiced day leaves a review; the thread page and its day row agree with the balance and the review", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await startThread(page, context);
     await openFirstDay(page);
@@ -667,18 +679,16 @@ test.describe("Practice", () => {
     await placeOrder(page, "Close position");
     await expect(page.getByRole("tabpanel")).toContainText("Practice exit");
 
-    // Replace the plan while that day is half practiced (the thread page's Replace plan): the old day ends, and the new plan's Day 1 is the only open day.
-    await openDesk(page, `/practice/thread?id=${threadId}`);
-    await page.getByRole("button", { name: PRACTICE_COPY.threadPageReplace }).click();
-    const replace = page.getByRole("dialog", { name: /^New plan for/ });
-    await fillNewPlan(replace, { replace: true });
-    await replace.getByRole("button", { name: START_BUTTON }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 90_000 });
-    await openFirstDay(page);
+    // End the day while it is half practiced (from the Summary): its own screen is the review, and Next day opens the following day, the only open one.
+    await endDayFromSummary(page);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
+    await page.waitForURL((url) => /\/practice\/day\?id=\d+/.test(url.toString()) && url.toString() !== practiced);
     const fresh = page.url();
     expect(fresh).not.toBe(practiced);
+    await expect(page.getByRole("button", { name: "Replace plan" }), "no Replace plan anywhere").toHaveCount(0);
 
-    // The old day is over without the owner ending it: its own screen is the review, and it offers the next day.
+    // The ended day still shows its review.
     await page.goto(practiced);
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
 
@@ -690,13 +700,13 @@ test.describe("Practice", () => {
     await expect(day).toContainText("Last day");
     await expect(day).toContainText(`${formatDayResult(ended.pnl_usd)} realized · 1 practice trade`);
     await expect(day).not.toContainText("0 practice trades");
-    // D-047: the replaced plan's half-practiced day was the thread's Day 1, so the new plan's first day is the thread's Day 2.
+    // D-047: the ended day was the thread's Day 1, so the next one is the thread's Day 2.
     const plan = page.getByRole("region", { name: "Daily list plan" });
-    await expect(plan).toContainText("Day 2 · list ready");
+    await expect(plan).toContainText("Day 2 of 5 · list ready");
     await expect(plan).not.toContainText("in progress");
 
-    // The thread page's Resume and the review's Next day open the same day.
-    await day.getByRole("link", { name: /^Open Day 2$/ }).click();
+    // The thread page's Start Trading and the review's Next day open the same day.
+    await day.getByRole("link", { name: /^Start Trading$/ }).click();
     await page.waitForURL(fresh);
     await page.goto(practiced);
     await page.getByRole("button", { name: PRACTICE_COPY.dayAfter }).click();
@@ -721,8 +731,8 @@ test.describe("Practice", () => {
 
     await page.getByRole("link", { name: "Practice", exact: true }).first().click();
     await page.waitForURL(/\/practice$/);
-    // Day 2 is open: the row's Resume is its link.
-    await expect(dayRow(page).getByRole("link", { name: /^Open Day 2$/ })).toHaveAttribute("href", `${dayTwo.pathname}${dayTwo.search}`);
+    // Day 2 is open: the row's Start Trading is its link.
+    await expect(dayRow(page).getByRole("link", { name: /^Start Trading$/ })).toHaveAttribute("href", `${dayTwo.pathname}${dayTwo.search}`);
   });
 
   // D-058: a slow open outlasts the gateway (524) while the server finishes it. The screen says it is still working, asks again,
@@ -1041,7 +1051,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("tablist").first(), "the tab strip is whole under the amber band").toBeInViewport({ ratio: 1 });
   });
 
-  test("a day with no matching name says one plain sentence and points to the Summary to skip it and offers Change plan; ending it there leaves one empty block (D-091, D-094)", async ({ page, context }) => {
+  test("a day with no matching name says one plain sentence and points to the Summary to skip it and offers no Change plan; ending it there leaves one empty block (D-091, D-094)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await openDayList(page, context);
     await endDayFromSummary(page);
@@ -1054,10 +1064,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     const skip = (await page.getByRole("link", { name: PRACTICE_COPY.daySkipOnSummary }).boundingBox())!;
     expect(skip.y - (hint.y + hint.height), "the hint does not touch the buttons under it").toBeGreaterThanOrEqual(8);
     await expect(page.getByRole("link", { name: /widen a filter/ }), "the Screener cannot edit this thread's plan").toHaveCount(0);
-    await page.getByRole("button", { name: PRACTICE_COPY.dayChangePlan }).click();
-    await expect(page.getByRole("dialog", { name: /^New plan for / })).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Change plan" }), "a plan is never edited from the day list: a new plan is a new thread").toHaveCount(0);
 
     // Skipping is the Summary's: the link goes there, and ending the empty day from it leaves the review.
     await page.getByRole("link", { name: PRACTICE_COPY.daySkipOnSummary }).click();
@@ -1110,7 +1117,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(row.getByRole("button", { name: "Start a new plan" })).toBeVisible();
   });
 
-  test("the day list's left rail carries only the block's days, with no portfolio at 1440 or at 1180, and the block's days stay open for a short block (D-097)", async ({ page, context }) => {
+  test("the day list has no left rail: the block's days sit in the right rail under the thread plan, with no portfolio at 1440 or at 1180, and stay open for a short block (D-097)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await saveFilter(context);
     const dialog = await openNewPlan(page);
@@ -1118,7 +1125,9 @@ test.describe("Practice day list · fix wave 5S", () => {
     await dialog.getByRole("button", { name: START_BUTTON }).click();
     await page.waitForURL(THREAD_URL, { timeout: 90_000 });
     await openFirstDay(page);
-    const side = page.getByRole("complementary", { name: "Practice side panel" });
+    await expect(page.locator('aside[aria-label="Practice side panel"]'), "nothing is stacked on the left of the day list").toBeEmpty();
+    if (test.info().project.name === "desktop-1180") await page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayBlockRail }).click();
+    const side = test.info().project.name === "desktop-1180" ? page.getByRole("dialog", { name: PRACTICE_COPY.dayBlockRail }) : page.getByRole("complementary", { name: "Day context" });
     const block = side.locator("details").filter({ hasText: "This block · 10 days" });
     await expect(block, "ten days or fewer start open").toHaveAttribute("open", "");
     await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio }), "the portfolio is the Portfolio tab's").toHaveCount(0);
