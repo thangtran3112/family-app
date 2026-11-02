@@ -14,7 +14,7 @@ from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers
 from daily_world import DAYS, NOW, SYMBOLS, make_services
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
-from test_replay_daily_api import _plan_body, _start_plan
+from test_replay_daily_api import _plan_body, _skip_day, _start_plan
 
 from ai_trading.api.app import app
 from ai_trading.api.replay import get_services
@@ -299,12 +299,12 @@ def test_marks_move_the_balance_and_every_screen_carries_the_thread_header(world
     summary = client.get(f"{BASE}/sessions", headers=auth_headers()).json()
     assert [row["thread_id"] for row in summary] == [tid]
 
-    ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    ended = _skip_day(client, list_id)
     assert ended.json()["thread"]["balance"] == 50_040.0
     detail = client.get(f"{BASE}/threads/{tid}", headers=auth_headers()).json()
     assert detail["thread"]["stats"]["balance"] == 50_040.0 and detail["thread"]["stats"]["wins"] == 1
     assert [d["kind"] for d in detail["daily"]] == ["practiced"] and detail["curve"][-1]["balance"] == 50_040.0
-    assert detail["today"] is None and detail["daily"][0]["pnl_usd"] == 40.0
+    assert detail["today"]["day_no"] == 2 and detail["daily"][0]["pnl_usd"] == 40.0  # the skip opened day 2 at the open
     _strict(detail["thread"])
 
 
@@ -493,13 +493,15 @@ def test_a_thread_is_deleted_with_its_days_and_ledger_once_no_day_is_open(world,
     assert _problems(refused) == [
         {
             "path": "status",
-            "message": "End today's practice day before deleting the thread · its simulated trades are not scored yet",
+            "message": "Close the thread before deleting it · closing ends today's practice day and scores its trades",
         }
     ]
     assert client.get(f"{BASE}/threads/{tid}", headers=auth_headers()).status_code == 200
     assert _rows(db_session, PracticeLedger, tid) == 1 and _rows(db_session, ReplaySession, tid) == 1
 
-    assert client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers()).status_code == 200
+    closed_now = client.post(f"{BASE}/threads/{tid}/close", headers=auth_headers())  # closing ends the open day
+    assert closed_now.status_code == 200
+    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["review"] is not None
     stranger = client.delete(f"{BASE}/threads/{tid}", headers=auth_headers(OTHER_EMAIL))
     assert stranger.status_code == 404
     assert client.get(f"{BASE}/threads/{tid}", headers=auth_headers()).status_code == 200  # nothing was removed

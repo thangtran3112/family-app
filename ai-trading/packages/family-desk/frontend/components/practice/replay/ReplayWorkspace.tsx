@@ -404,7 +404,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   return (
     <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined} data-full={full ? "true" : undefined}>
-      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active="order" mode={swing ? "swing" : "day"} back={dayListId === null} />}
+      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active={null} mode={swing ? "swing" : "day"} back={dayListId === null} />}
       {/* A day thread's clock is the thread's, on the server, and its controls are on the Summary: none of that is on a chart (ADR-0018).
           A swing session and a standalone replay still carry their own clock bar. */}
       {!followed && (

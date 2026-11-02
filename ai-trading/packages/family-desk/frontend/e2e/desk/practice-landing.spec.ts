@@ -212,15 +212,15 @@ test.describe("Practice landing", () => {
     await openDesk(page, "/practice");
     const row = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel }).getByRole("row", { name: /Day trading/ });
     await expect(row).toContainText(formatBalance(25_000));
-    await row.getByRole("link", { name: /^Open Day 1$/ }).click();
+    await row.getByRole("link", { name: /^Start Trading$/ }).click();
     await page.waitForURL(DAY_URL);
 
-    // The thread page is where she returns between days: today's day is an Open Day link.
+    // The thread page is where she returns between days: today's day is a Start Trading link, whatever its number.
     await openDesk(page, `/practice/thread?id=${id}`);
-    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: /^Open Day 1$/ })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: /^Start Trading$/ })).toBeVisible();
   });
 
-  test("with a day thread active the modal still offers Day and the thread page replaces its plan", async ({ page, context }) => {
+  test("with a day thread active the modal still offers Day; the thread page has Delete plan and no Replace plan, and deleting returns to Practice", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     const id = threadIdOf(page);
@@ -232,17 +232,22 @@ test.describe("Practice landing", () => {
     await expect(dialog.getByText("is already active")).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    // Replace plan from the thread page: only the plan, the balance and risk plan stay with the thread.
+    // A plan is never replaced or edited (a new plan is a new thread): the thread page has Delete plan and nothing that changes the plan.
     await openDesk(page, `/practice/thread?id=${id}`);
-    await page.getByRole("button", { name: PRACTICE_COPY.threadPageReplace }).click();
-    const replace = page.getByRole("dialog", { name: /^New plan for/ });
-    await expect(replace).toBeVisible();
-    await expect(replace.getByLabel("Starting balance")).toHaveCount(0);
-    await expect(replace.getByLabel("Max loss ($)")).toHaveCount(0);
-    await fillNewPlan(replace, { replace: true, days: "10" });
-    await replace.getByRole("button", { name: START_BUTTON }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 90_000 });
-    await expect(page.getByRole("region", { name: "Daily list plan" })).toContainText("Day 1 of 10", { timeout: 60_000 }); // the data is prepared in the background first
+    const step = page.getByRole("region", { name: "Practice day" });
+    await expect(step.getByRole("button", { name: "Replace plan" })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: /^New plan for/ })).toHaveCount(0);
+    await step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true }).click();
+    const confirm = page.getByRole("dialog", { name: /^Delete / });
+    await expect(confirm).toContainText(PRACTICE_COPY.planDeleteBody);
+    await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteKeep }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true })).toBeVisible(); // Keep leaves the plan alone
+    await step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true }).click();
+    await page.getByRole("dialog", { name: /^Delete / }).getByRole("button", { name: PRACTICE_COPY.planDeleteConfirm }).click();
+    await page.waitForURL("**/practice");
+    const gone = await context.request.get(`${origin}/api/desk/replay/threads/${id}`);
+    expect(gone.status()).toBe(404);
   });
 
   test("several day threads list as several rows, and Delete removes one after a confirm", async ({ page, context }) => {
@@ -286,10 +291,10 @@ test.describe("Practice landing", () => {
     await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
   });
 
-  test("a thread that is not chosen and one that is not found say different things on every route, and a picker's hint names where its rows go (D-164, D-190, D-191, D-193)", async ({ page, context }) => {
+  test("a thread that is not chosen and one that is not found say different things on every route, and a picker's hint names where its rows go (D-164, D-191, D-193)", async ({ page, context }) => {
     const id = await createThreadByApi(context);
     // Not found: an id the server does not know, and an id that is no number (she gave one; it cannot name a thread).
-    for (const [path, param] of [["/practice/thread", "id"], ["/practice/order", "thread"], ["/practice/journal", "thread"], ["/practice/week", "thread"]] as const) {
+    for (const [path, param] of [["/practice/thread", "id"], ["/practice/journal", "thread"], ["/practice/week", "thread"]] as const) {
       for (const bad of ["999999", "abc", "0"]) {
         await openDesk(page, `${path}?${param}=${bad}`);
         await expect(page.getByText(PRACTICE_COPY.threadPageNotFound), `${path} ${bad}`).toBeVisible();
@@ -300,11 +305,9 @@ test.describe("Practice landing", () => {
       await openDesk(page, path);
       await expect(page.getByText(text), path).toBeVisible();
     }
-    // Not chosen: the picker, one hint per route that says what a row opens, every row going there. The Order picker's rows carry
-    // `/practice/order?thread=`, which the screen guard knows is the Order tab's own address and not an order control (D-190).
+    // Not chosen: the picker, one hint per route that says what a row opens, every row going there.
     for (const [path, hint, rows] of [
       ["/practice/thread", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
-      ["/practice/order", PRACTICE_COPY.threadPickHintOrder, `/practice/order?thread=${id}`],
       ["/practice/week", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
       ["/practice/replay", PRACTICE_COPY.threadPickHintReplay, `/practice/thread?id=${id}`],
       ["/practice/journal", PRACTICE_COPY.threadPickHint, `/practice/journal?thread=${id}`],

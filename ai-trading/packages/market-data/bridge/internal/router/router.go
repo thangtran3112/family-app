@@ -309,6 +309,14 @@ func (r *Router) Run(ctx context.Context) {
 	}
 }
 
+// pinCtx marks the context a pinned call hands its provider (see WithPinned).
+func pinCtx(ctx context.Context, pin string) context.Context {
+	if pin != "" {
+		return WithPinned(ctx)
+	}
+	return ctx
+}
+
 func (r *Router) Quotes(ctx context.Context, symbols []string, pin string) (*pb.GetQuotesResponse, error) {
 	var quotes []*pb.Quote
 	served, err := r.route(ctx, pb.DataClass_EQUITY_QUOTES, pin, func(p Provider) (pb.Quality, error) {
@@ -316,7 +324,7 @@ func (r *Router) Quotes(ctx context.Context, symbols []string, pin string) (*pb.
 		if !ok {
 			return 0, fmt.Errorf("%w: %s has no quote support", ErrNotConfigured, p.Name())
 		}
-		qs, err := qp.Quotes(ctx, symbols)
+		qs, err := qp.Quotes(pinCtx(ctx, pin), symbols)
 		if err != nil {
 			return 0, err
 		}
@@ -366,7 +374,7 @@ func (r *Router) Bars(ctx context.Context, req *pb.GetBarsRequest) (*pb.GetBarsR
 		if !ok {
 			return 0, fmt.Errorf("%w: %s has no bars support", ErrNotConfigured, p.Name())
 		}
-		bs, q, err := bp.Bars(ctx, req)
+		bs, q, err := bp.Bars(pinCtx(ctx, req.PinProvider), req)
 		if err != nil {
 			return 0, err
 		}

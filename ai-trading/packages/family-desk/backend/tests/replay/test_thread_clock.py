@@ -470,3 +470,175 @@ def test_skip_day_ends_a_running_clock_with_a_flagged_stop(db_session, user_id, 
     assert ended.status == "ended" and ended.clock_running is False and ended.revealed_through == _at("20:00")
     assert float(db_session.query(PracticeLedger).filter_by(thread_id=thread_id).one().exit_price) == 50.0
     assert DAYS[0] == row.day  # the stop crossed at 10:21 did not matter to the skip
+
+
+# -- the open, the jump and the end of the day -------------------------------------------------------------------
+
+START_AT_10 = {"setup": {"window": {"from": "10:00", "to": "11:30"}}}  # her "Start at" 10:00, the list at 08:30
+AFTER_PLAN = et(date(2026, 10, 5), "09:30")  # the open after the plan's last day (Fri 2026-10-02): where the plan ends
+
+
+def _plan_not_started(db_session, user_id, svc, **plan):
+    """The five-session plan from Mon 2026-09-28, listed and not started: `(thread id, day 1's list)`. GAPPER gaps up on
+    days 1 and 3, so those lists hold it."""
+    make_thread(db_session, user_id)
+    plan_mod.run_prep(db_session, svc, _plan(db_session, user_id, svc, **plan).id)
+    row = plan_mod.open_next(db_session, user_id, svc).day_list
+    db_session.commit()
+    return _thread_id(db_session, row), row
+
+
+def _jump(db_session, user_id, svc, thread_id, to: pd.Timestamp) -> dict:
+    """Jump the clock and let the day hand over, as the route does."""
+    _control(db_session, user_id, svc, thread_id, to=to.to_pydatetime())
+    clock_mod.roll(db_session, user_id, thread_id, svc)
+    return _read(db_session, user_id, svc, thread_id)
+
+
+def _skip(db_session, user_id, svc, thread_id, times: int = 1) -> int:
+    """Skip `times` days; the id of the day list that is open after."""
+    for _ in range(times):
+        clock_mod.skip_day(db_session, user_id, thread_id, svc)
+        db_session.commit()
+    return _read(db_session, user_id, svc, thread_id)["day_list_id"]
+
+
+def test_skip_day_lands_on_the_market_open_not_the_plans_start_at(db_session, user_id, svc, wall) -> None:
+    thread_id, row = _plan_not_started(db_session, user_id, svc, **START_AT_10)
+    first = _read(db_session, user_id, svc, thread_id)
+    assert first["clock"] == _at("10:00")  # a plan's first day starts at her "Start at"
+    assert first["next_start"] == et(DAYS[1], "09:30")  # and ends at the open, never at the next 10:00
+
+    ended, opened = clock_mod.skip_day(db_session, user_id, thread_id, svc)
+    db_session.commit()
+    assert ended.id == row.id and opened.day_list.revealed_through == et(DAYS[1], "09:30")
+    out = _read(db_session, user_id, svc, thread_id)
+    assert (out["clock"], out["market"]["phase"]) == (et(DAYS[1], "09:30"), "regular")
+    assert out["window_start"] == et(DAYS[1], "09:30")
+
+
+def test_the_day_hands_over_at_the_open_and_stores_its_review_there(db_session, user_id, svc, wall) -> None:
+    thread_id, row = _plan_not_started(db_session, user_id, svc, **START_AT_10)
+    assert _jump(db_session, user_id, svc, thread_id, et(DAYS[1], "09:29"))["day_no"] == 1  # a minute short
+    assert plan_mod.get_day_list(db_session, user_id, row.id).review is None
+    out = _jump(db_session, user_id, svc, thread_id, et(DAYS[1], "09:30"))
+    assert (out["day_no"], out["clock"]) == (2, et(DAYS[1], "09:30"))
+    ended = plan_mod.get_day_list(db_session, user_id, row.id)
+    assert ended.status == "ended" and ended.review is not None and ended.ended_at is not None  # scored, unprompted
+
+
+def test_a_running_clock_hands_over_at_the_open_with_no_end_day_press(db_session, user_id, svc, wall) -> None:
+    thread_id, row = _plan_not_started(db_session, user_id, svc, **START_AT_10)
+    _control(db_session, user_id, svc, thread_id, running=True)
+    wall[0] += timedelta(hours=23, minutes=30)  # Mon 10:00 + 23.5 hours = Tue 09:30
+    assert clock_mod.roll(db_session, user_id, thread_id, svc).day_list.day_no == 2
+    db_session.commit()
+    assert plan_mod.get_day_list(db_session, user_id, row.id).review is not None
+
+
+def test_a_day_trade_day_has_no_manual_end(db_session, user_id, svc, wall) -> None:
+    thread_id, row = _plan_not_started(db_session, user_id, svc)
+    with pytest.raises(ReplayProblem) as caught:
+        plan_mod.end_day_by_hand(db_session, user_id, row.id, svc)
+    assert caught.value.status == 409 and "next open" in caught.value.message
+    assert plan_mod.get_day_list(db_session, user_id, row.id).status == "listed"  # nothing moved
+    _skip(db_session, user_id, svc, thread_id)
+    assert plan_mod.end_day_by_hand(db_session, user_id, row.id, svc).status == "ended"  # an ended day answers as it is
+
+
+def test_a_jump_across_several_opens_hands_over_day_by_day_and_the_last_day_ends_at_the_open_after_it(
+    db_session, user_id, svc, wall
+) -> None:
+    thread_id, _ = _plan_not_started(db_session, user_id, svc)
+    out = _jump(db_session, user_id, svc, thread_id, et(DAYS[4], "11:03"))  # Fri, the plan's fifth day
+    last = plan_mod.get_day_list(db_session, user_id, out["day_list_id"])
+    assert (out["day_no"], out["clock"]) == (5, et(DAYS[4], "11:03"))
+    assert (out["next_start"], out["jump_limit"]) == (AFTER_PLAN, AFTER_PLAN)
+    days = {d.day_no: d.status for d in db_session.query(ReplayDayList).filter_by(plan_id=last.plan_id)}
+    assert days == {1: "ended", 2: "ended", 3: "ended", 4: "ended", 5: "listed"}
+
+    out = _jump(db_session, user_id, svc, thread_id, AFTER_PLAN)  # the natural end of the plan: Monday's open
+    assert out["state"] == "no_day" and out["clock"] is None
+    db_session.refresh(last)
+    assert last.status == "ended" and last.review is not None
+
+
+def test_skip_day_on_the_last_day_goes_to_the_next_open_ends_it_and_opens_nothing(
+    db_session, user_id, svc, wall
+) -> None:
+    thread_id, _ = _plan_not_started(db_session, user_id, svc)
+    _jump(db_session, user_id, svc, thread_id, et(DAYS[4], "11:03"))
+    ended, after = clock_mod.skip_day(db_session, user_id, thread_id, svc)
+    db_session.commit()
+    assert after.day_list is None and ended.day_no == 5
+    assert ended.status == "ended" and ended.review is not None and ended.revealed_through == et(DAYS[4], "20:00")
+    assert _read(db_session, user_id, svc, thread_id)["state"] == "no_day"
+
+
+def test_a_jump_is_bounded_by_the_end_of_the_plan(db_session, user_id, svc, wall) -> None:
+    thread_id, _ = _plan_not_started(db_session, user_id, svc)
+    assert _read(db_session, user_id, svc, thread_id)["jump_limit"] == AFTER_PLAN
+    with pytest.raises(ReplayProblem) as caught:
+        _control(db_session, user_id, svc, thread_id, to=(AFTER_PLAN + pd.Timedelta(minutes=1)).to_pydatetime())
+    assert caught.value.path == "to" and "plan ends" in caught.value.message
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("09:30")  # the refused jump moved nothing
+
+
+def test_a_jump_across_the_open_lands_the_next_day_at_that_instant(db_session, user_id, svc, wall) -> None:
+    thread_id, _ = _plan_not_started(db_session, user_id, svc, screen={"listAt": "10:00"}, **START_AT_10)
+    target = et(DAYS[2], "11:03")  # Wed, a gap day: two hand-overs in one jump
+    out = _jump(db_session, user_id, svc, thread_id, target)
+    assert (out["day_no"], out["clock"], out["account"]["as_of"]) == (3, target, target)
+    listed = plan_mod.day_list_out(db_session, user_id, out["day_list_id"], svc, live=True)
+    assert listed["thread_time"] == target and listed["list_pending"] is False
+    assert listed["candidates"]
+    assert {pd.Timestamp(c["live"]["at"]) for c in listed["candidates"]} == {target}  # every name priced at the jump
+
+
+def test_the_list_is_not_out_until_the_clock_reaches_its_time(db_session, user_id, svc, wall) -> None:
+    thread_id, _ = _plan_not_started(db_session, user_id, svc, screen={"listAt": "10:00"}, **START_AT_10)
+    day3 = plan_mod.get_day_list(db_session, user_id, _skip(db_session, user_id, svc, thread_id, 2))
+    assert day3.candidates  # the list exists, built at 10:00 ...
+
+    early = plan_mod.day_list_out(db_session, user_id, day3.id, svc, live=True)
+    assert early["thread_time"] == et(DAYS[2], "09:30") and early["list_pending"] is True  # ... and is not served yet
+    assert early["candidates"] == [] and early["universe"]["shown"] == 0 and early["universe"]["filters"] == []
+    assert early["warnings"] == [] and early["relist"] is None
+    for call in (
+        lambda: plan_mod.start_session(db_session, user_id, day3.id, "GAPPER", svc),
+        lambda: plan_mod.patch_day_list(
+            db_session, user_id, day3.id, svc, watch=["GAPPER"], notes=None, rating=None, fields={"watch"}
+        ),
+    ):
+        with pytest.raises(ReplayProblem) as caught:
+            call()
+        assert caught.value.status == 409 and "10:00 AM" in caught.value.message
+
+    _control(db_session, user_id, svc, thread_id, to=et(DAYS[2], "10:00").to_pydatetime())
+    ready = plan_mod.day_list_out(db_session, user_id, day3.id, svc, live=True)
+    assert ready["list_pending"] is False
+    assert [c["symbol"] for c in ready["candidates"]] == [c["symbol"] for c in day3.candidates]
+    assert plan_mod.start_session(db_session, user_id, day3.id, "GAPPER", svc).revealed_through == et(DAYS[2], "10:00")
+
+
+def test_a_name_opened_before_the_start_at_joins_at_the_clock_and_never_lifts_it(
+    db_session, user_id, svc, wall
+) -> None:
+    thread_id, _ = _plan_not_started(db_session, user_id, svc, **START_AT_10)  # list out at 08:30, Start at 10:00
+    day3 = _skip(db_session, user_id, svc, thread_id, 2)
+    name = plan_mod.start_session(db_session, user_id, day3, "GAPPER", svc)
+    db_session.commit()
+    open_ = et(DAYS[2], "09:30")
+    assert (name.revealed_through, name.window_start) == (open_, open_)
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == open_  # opening a name did not jump to 10:00
+
+
+def test_a_later_day_opened_without_a_carried_clock_still_opens_at_the_exchange_open(
+    db_session, user_id, svc, wall
+) -> None:
+    """The hub opens the next day when its list was not ready at the hand-over: no clock is carried then."""
+    thread_id, row = _plan_not_started(db_session, user_id, svc, **START_AT_10)
+    assert row.revealed_through == _at("10:00")  # the plan's first day starts at her "Start at"
+    plan_mod.end_day(db_session, user_id, row.id, svc)
+    second = plan_mod.open_next(db_session, user_id, svc, thread_id).day_list
+    assert second.revealed_through == et(DAYS[1], "09:30")

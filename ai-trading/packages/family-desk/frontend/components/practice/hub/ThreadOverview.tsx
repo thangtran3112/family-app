@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ThreadPicker } from "@/components/practice/journal/thread/ThreadPicker";
 import { PracticeNotice } from "@/components/practice/PracticeNotice";
@@ -33,12 +33,14 @@ const POLL_MS = 4000;
  *  under one header and the thread's tab strip. `?tab=portfolio` shows the Portfolio tab; anything else is Summary. Both tabs share
  *  this component, so a switch keeps the loaded thread. Reads the URL, so the page wraps it in Suspense. */
 export function ThreadOverview() {
+  const router = useRouter();
   const params = useSearchParams();
   const { id, given } = routeId(params.get("id"));
   const tab = parseThreadTab(params.get("tab"));
   const [revision, setRevision] = useState(0);
   const changed = useCallback(() => setRevision((n) => n + 1), []);
-  const [replacing, setReplacing] = useState(false);
+  // New plan from this page starts a new thread (a plan is never replaced); `onSaved` takes her to it.
+  const [starting, setStarting] = useState(false);
   // Arriving here (after a day ended, a day opened or New plan was submitted) the keyboard starts at the page heading, not at the skip link (D-093).
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -104,20 +106,16 @@ export function ThreadOverview() {
         ) : thread.mode === "swing" && summary.swing ? (
           <SwingOverview summary={summary} plan={plan} onChanged={changed} />
         ) : (
-          <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setReplacing(true)} clock={clock} />
+          <DayOverview summary={summary} plan={plan} onChanged={changed} onNewPlan={() => setStarting(true)} clock={clock} />
         )}
       </TabPanel>
-      {replacing && (
+      {starting && (
         <NewPlanModal
-          thread={thread}
           onClose={() => {
-            setReplacing(false);
+            setStarting(false);
             changed();
           }}
-          onSaved={() => {
-            setReplacing(false);
-            changed();
-          }}
+          onSaved={(newId) => router.push(threadPageHref(newId))}
         />
       )}
     </OverviewShell>

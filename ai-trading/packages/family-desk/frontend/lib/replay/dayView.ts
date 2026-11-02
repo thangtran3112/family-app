@@ -137,18 +137,18 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   return practiceText("planArmed", { names: names.join(" · ") });
 }
 
-/** The label of a day thread's one action (D-078): an open day opens, and opening the next day starts it. It never says "Resume":
+/** The label of a day thread's one action (D-078): the day that is open starts trading ("Start Trading": the day is the thread clock's, never one
+ *  ahead of it or behind it, so it carries no number), and opening the next day starts it ("Start Day 7"). It never says "Resume":
  *  the button only goes to the day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control).
- *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
+ *  `today` is the thread's open day; the number of a next day is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
 export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
-  // `today.day_no` counts the plan's own days; the thread's number adds the days an earlier plan already ended (D-047).
-  if (today !== null) return practiceText("planOpenDay", { n: plan === null ? today.day_no : threadDayNo(plan, today.day_no) });
+  if (today !== null) return PRACTICE_COPY.planStartTrading;
   if (plan === null) return null;
   const card = planCard(plan);
   if (card.action === "none" || card.action === "new") return null;
   const current = plan.current;
   if (current !== null && current.status !== "ended") {
-    return practiceText("planOpenDay", { n: threadDayNo(plan, current.day_no) });
+    return PRACTICE_COPY.planStartTrading;
   }
   return practiceText("planStartDayN", { n: threadDayNo(plan, plan.next_day_no ?? plan.days_opened + 1) });
 }
@@ -503,7 +503,7 @@ export const positionText = (row: Pick<PortfolioRow, "position">): string => {
   return `${trade.side === "long" ? "Long" : "Short"} ${trade.shares} @ $${formatPrice(trade.entry_price)}${entered}`;
 };
 
-/** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Open Day N" reopens the
+/** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Start Trading" reopens the
  *  day at the shared clock); only a standalone session, which has no day, opens on its own. */
 export const sessionResumeHref = (session: { id: number; day_list_id: number | null }): string =>
   session.day_list_id === null ? `/practice/replay?id=${session.id}` : `/practice/day?id=${session.day_list_id}`;

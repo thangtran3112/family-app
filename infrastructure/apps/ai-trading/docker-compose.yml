@@ -114,7 +114,11 @@ services:
     restart: unless-stopped
     env_file:
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data-bridge.env
-    networks: [marketdata]
+      # CACHE_ENABLED=1 and CACHE_REDIS_URL, derived by deploy.sh from the ai-trading/market-data-cache
+      # profile; a comment-only placeholder (cache off) when that profile does not exist.
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data-bridge-cache.env
+    # `mdcache` is the bridge's private route to its Redis hot tier; api and scheduler do not join it.
+    networks: [marketdata, mdcache]
     mem_limit: 128m
     pids_limit: 128
     read_only: true
@@ -126,6 +130,45 @@ services:
       interval: 30s
       timeout: 5s
       start_period: 10s
+      retries: 3
+
+  market-data-cache:
+    # The bridge's Redis hot tier: a small, disposable cache of quotes and bars (open session,
+    # adjusted, hourly). The durable history is the Postgres archive, not this. No volume and no
+    # RDB/AOF, so a restart is a cold cache and a short burst of vendor calls. Any RESP server
+    # works; Valkey is the drop-in if the Redis license ever matters.
+    image: redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    restart: unless-stopped
+    env_file:
+      - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data-cache.env
+    # REDIS_PASSWORD comes from the Firestore profile ai-trading/market-data-cache. Without it
+    # (no profile) the server starts healthy on a random throwaway password nobody knows, so
+    # nothing can log in and the bridge's cache stays off. `$$` is Compose's escape for a literal
+    # `$`, so the shell inside the container expands them.
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        --requirepass "$${REDIS_PASSWORD:-$$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+        --maxmemory 128mb --maxmemory-policy allkeys-lru
+        --save "" --appendonly no
+    # The redis image's own uid:gid. Compose bypasses its entrypoint (which drops root only for a
+    # bare `redis-server` command), so the container starts unprivileged.
+    user: "999:1000"
+    networks: [mdcache]
+    mem_limit: 192m
+    pids_limit: 64
+    read_only: true
+    tmpfs: [/data]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # The process answers; being refused for lack of a password is still an answer.
+      test: ["CMD-SHELL", "redis-cli ping 2>&1 | grep -Eq 'PONG|NOAUTH'"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
       retries: 3
 
   vibe-trading:
@@ -347,6 +390,10 @@ networks:
   gateway: {}
   # The market-data bridge's private network (02t §7.1), shared with api and scheduler.
   marketdata: {}
+  # Bridge <-> its Redis hot tier only. `internal: true`: no route out, so the cache cannot dial
+  # anything and nothing outside the project reaches it.
+  mdcache:
+    internal: true
   # Dedicated to gateway + ta-research only (review round 1, Critical): a
   # fixed, small subnet so ta-research's own FORWARDED_ALLOW_IPS above can
   # trust exactly this network's peers, not "*". /29 (6 usable addresses) is
