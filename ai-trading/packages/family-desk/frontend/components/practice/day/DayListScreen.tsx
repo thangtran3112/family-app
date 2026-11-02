@@ -11,13 +11,12 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { FactList } from "@/components/ui/FactList";
-import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
 import { formatClock, formatEtDay, formatEtTimeZone, signTone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
-import { endDay, loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
+import { loadDaily, loadDayList, loadThread, openNextDay, relistDay, rescanDay, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useThreadClock } from "@/lib/replay/useThreadClock";
 import { useShellBand } from "@/lib/desk/useViewportBand";
@@ -35,6 +34,7 @@ import {
   listBuiltText,
   listCountsText,
   listWarning,
+  liveState,
   nameActionLabel,
   practiceWindow,
   rescanCounts,
@@ -46,15 +46,11 @@ import {
   sourceNote,
   threadDayNo,
   universeNote,
-  endDayExitText,
-  portfolioRows,
 } from "@/lib/replay/dayView";
-import { resumeDayLabel } from "@/lib/replay/boardView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
-import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
@@ -161,25 +157,17 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // The name a click is opening.
   const [opening, setOpening] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  // The gateway cut a slow open or end short and the screen is asking again; the server is still finishing (D-058, D-059).
-  const [still, setStill] = useState<"open" | "end" | null>(null);
+  // The gateway cut a slow open short and the screen is asking again; the server is still finishing (D-058, D-059).
+  const [still, setStill] = useState<"open" | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
   // The re-scan click is on its way to the server; from its answer on, the day list's `rescan_job` says how far it is.
   const [scanning, setScanning] = useState(false);
   // This screen saw a scan run, so when the job reads "done" it can tell her it finished, not just show a new label.
   const [scanSeen, setScanSeen] = useState(false);
-  const [confirmEnd, setConfirmEnd] = useState(false);
-  // "Skip this day" (an empty list) ends the day like End day does, so it asks first too (F-11).
-  const [confirmSkip, setConfirmSkip] = useState(false);
-  const skipRef = useRef<HTMLButtonElement>(null);
   // The plan replaced from a day with no names (D-094).
   const [changing, setChanging] = useState(false);
-  // Keyboard focus follows the flow (D-092, D-093): the page heading on arrival, then the confirm (InlineConfirm) when it opens and
-  // the trigger when it closes, and the control that replaces End day once the day has ended.
+  // Keyboard focus follows the flow (D-092): the page heading on arrival.
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const endRef = useRef<HTMLButtonElement>(null);
-  const nextRef = useRef<HTMLButtonElement>(null);
-  const endedHere = useRef(false);
   // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
@@ -196,26 +184,27 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
   }, []);
-  useEffect(() => {
-    if (ended && endedHere.current) {
-      endedHere.current = false;
-      nextRef.current?.focus({ preventScroll: true });
-    }
-  }, [ended]);
-
   // The badge reads the day clock once practice has started, else the time the list was built (D-014).
   useReportPracticeChrome({ day: list.day, hidden, playhead: list.clock ?? list.list_at, scope: "days", status: dayStatusLine(list) });
 
   // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
   const practicing = list.sessions.at(-1) ?? null;
   const opened = new Set(list.sessions.map((session) => session.symbol));
-  const columns = columnsOf(list);
-  // The End-day confirm names the open trades from this read, which re-reads whenever the day page's own data moves (a name opened, the day ended).
-  // The thread clock runs on the server (ADR-0018), so while the day is open it is read again whenever the clock moves: "the price you see now".
+  // The list is a snapshot of the list time; the day clock runs on the server (ADR-0018). Once the clock has started, the table is read again with
+  // `live`, which prices every name at the clock (nothing later than it). A bar closes once a minute, so a new clock minute (or a new re-scan) is the
+  // only thing worth a read. Not the clock's every poll: a read of the whole list takes a while and would be cancelled by the next one.
   const liveClock = useThreadClock(!ended && list.thread?.mode === "day" ? threadId : null);
-  const portfolioRevision = list.sessions.length * 2 + (ended ? 1 : 0) + liveClock.revision;
-  const portfolio = useDayPortfolio(list.id, portfolioRevision);
-  const exits = endDayExitText(portfolioRows(portfolio.data ?? list), list.clock);
+  const clockMinute = liveClock.clock?.clock ? Math.floor(Date.parse(liveClock.clock.clock) / 60_000) : 0;
+  const atClock = useDeskQuery(`day-live:${list.id}`, (signal) => loadDayList(list.id, { live: true }, { signal }), {
+    enabled: !ended && list.clock !== null,
+    revision: clockMinute * 1000 + (list.rescan?.seq ?? 0),
+  });
+  // A read from before a re-scan or a re-list is not this list's names any more: until the new read lands, the snapshot shows.
+  const read = atClock.data;
+  const rows = !ended && read !== null && read.data_through === list.data_through && read.rescan?.seq === list.rescan?.seq ? read.candidates : list.candidates;
+  const live = liveState({ candidates: rows });
+  const columns = columnsOf(list, live);
+  const liveAt = rows.find((row) => row.live)?.live?.at ?? null;
 
   async function run(action: () => Promise<void>, fallback: string, again: (() => void) | null = null) {
     setBusy(true);
@@ -245,20 +234,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
     setSelected(symbol);
     setPeeking(true);
   };
-
-  // Ending is safe to ask twice (the server answers an ended day the same), so a gateway cut waits and asks again, as the replay does (F-08).
-  const finish = (): Promise<void> =>
-    run(
-      async () => {
-        await whenReady(() => endDay(list.id), { onWaiting: () => setStill("end") });
-        endedHere.current = true;
-        setConfirmEnd(false);
-        setConfirmSkip(false);
-        onChanged();
-      },
-      PRACTICE_COPY.dayEndError,
-      () => void finish(),
-    );
 
   const relist = (listAt: string) =>
     run(async () => {
@@ -339,41 +314,16 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           <Badge tone="neutral">Practice day list</Badge>
           {hidden && <Badge tone="neutral">{PRACTICE_COPY.dayDateHidden}</Badge>}
         </div>
-        <div className={`${styles.actions} ${styles.endWrap}`}>
+        <div className={styles.actions}>
           {practicing && !ended && (
-            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{resumeDayLabel(threadDayNo(list.plan, list.day_no))}</Button>
+            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{practiceText("planOpenDay", { n: threadDayNo(list.plan, list.day_no) })}</Button>
           )}
-          {ended ? (
-            finishHref !== null ? (
+          {ended &&
+            (finishHref !== null ? (
               <Button client href={finishHref} variant="primary">{PRACTICE_COPY.dayFinishPlan}</Button>
             ) : (
-              <Button ref={nextRef} variant="primary" disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</Button>
-            )
-          ) : (
-            <>
-              <Button ref={endRef} disabled={busy} aria-expanded={confirmEnd} onClick={() => setConfirmEnd(true)}>{PRACTICE_COPY.dayEnd}</Button>
-              {confirmEnd && (
-                <InlineConfirm
-                  label="Confirm ending the day"
-                  layout="floating"
-                  size="md"
-                  className={styles.endAnchor}
-                  prompt={
-                    <>
-                      <span>{PRACTICE_COPY.dayEndWarning}</span>
-                      {exits && <span>{exits}</span>}
-                    </>
-                  }
-                  confirmLabel={PRACTICE_COPY.dayEndYes}
-                  cancelLabel={PRACTICE_COPY.dayKeepPracticing}
-                  busy={busy}
-                  returnFocus={endRef}
-                  onConfirm={() => void finish()}
-                  onCancel={() => setConfirmEnd(false)}
-                />
-              )}
-            </>
-          )}
+              <Button variant="primary" disabled={busy} onClick={() => void next()}>{busy ? PRACTICE_COPY.dayAfterOpening : PRACTICE_COPY.dayAfter}</Button>
+            ))}
         </div>
       </header>
       {list.thread && <ThreadStrip thread={list.thread} />}
@@ -406,7 +356,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
           </div>
         )}
         {still === "open" && <p className={styles.banner} role="status">{PRACTICE_COPY.planStillWorking}</p>}
-        {still === "end" && <p className={styles.banner} role="status">{PRACTICE_COPY.dayEndStillWorking}</p>}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
 
         {!ended && (
@@ -417,10 +366,15 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
             <p className={styles.muted} data-testid="open-hint">
               {list.clock === null ? (list.relist ? PRACTICE_COPY.dayOpenRelistHint : PRACTICE_COPY.dayOpenHint) : practiceText("daySwitchHint", { time: formatEtTimeZone(list.clock) })}
             </p>
+            {live && liveAt && (
+              <p className={styles.muted} data-testid="live-note">
+                {practiceText(live.today ? "dayLiveNote" : "dayLiveNotePre", { clock: formatEtTimeZone(liveAt), list: formatEtTimeZone(list.list_at) })}
+              </p>
+            )}
             <DenseTable
               caption="Candidates"
               columns={withPriorities(columns, "practiceList")}
-              rows={list.candidates}
+              rows={rows}
               rowKey={(row) => row.symbol}
               selectedKey={selected}
               onSelect={(row) => void practice(row.symbol)}
@@ -429,22 +383,8 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                 <EmptyBlock title={PRACTICE_COPY.dayNoMatchTitle}>
                   <p className={styles.muted}>{PRACTICE_COPY.dayNoMatchHint}</p>
                   <div className={styles.actions}>
-                    {list.sessions.length === 0 && !confirmSkip && (
-                      <Button ref={skipRef} variant="primary" disabled={busy} onClick={() => setConfirmSkip(true)}>{PRACTICE_COPY.daySkip}</Button>
-                    )}
-                    {list.sessions.length === 0 && confirmSkip && (
-                      <InlineConfirm
-                        label="Confirm skipping the day"
-                        layout="block"
-                        size="md"
-                        prompt={<span>{PRACTICE_COPY.daySkipWarning}</span>}
-                        confirmLabel={PRACTICE_COPY.daySkipYes}
-                        cancelLabel={PRACTICE_COPY.dayKeepPracticing}
-                        busy={busy}
-                        returnFocus={skipRef}
-                        onConfirm={() => void finish()}
-                        onCancel={() => setConfirmSkip(false)}
-                      />
+                    {list.sessions.length === 0 && threadId !== null && (
+                      <Button client href={`/practice/thread?id=${threadId}`} variant="primary">{PRACTICE_COPY.daySkipOnSummary}</Button>
                     )}
                     {thread.data !== null && <Button onClick={() => setChanging(true)}>{PRACTICE_COPY.dayChangePlan}</Button>}
                   </div>
@@ -581,7 +521,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   );
 }
 
-function columnsOf(list: DayList): DenseColumn<Candidate>[] {
+function columnsOf(list: DayList, live: ReturnType<typeof liveState>): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
@@ -595,7 +535,7 @@ function columnsOf(list: DayList): DenseColumn<Candidate>[] {
       ),
     },
     { key: "filters", label: "Filters", render: (row) => filtersText(row) },
-    ...dayColumns(list).map((column): DenseColumn<Candidate> => ({
+    ...dayColumns(list, live).map((column): DenseColumn<Candidate> => ({
       key: column.key,
       label: column.label,
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
 import { expect } from "./helpers";
 
@@ -36,4 +37,12 @@ export async function stepBar(page: Page, times = 1) {
     expect(response.ok(), await response.text()).toBeTruthy();
     await expect(readout).not.toHaveText(before, { timeout: 10_000 });
   }
+}
+
+/** Ends the open day the only way a day-trade thread has: the Summary tab, End day, its confirm. The page then shows the day's review (the Day list). */
+export async function endDayFromSummary(page: Page) {
+  await page.getByRole("tab", { name: "Summary" }).click();
+  await page.getByRole("button", { name: PRACTICE_COPY.clockEndDay, exact: true }).click();
+  await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
+  await page.waitForURL(/\/practice\/day\?id=\d+/);
 }

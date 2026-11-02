@@ -1,7 +1,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
-import { stepBar } from "./clock-helpers";
+import { endDayFromSummary, stepBar } from "./clock-helpers";
 import { expect, expectCleanScreen, prepareDesk, test } from "./helpers";
 import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, setRiskPlan, threadIdOf } from "./hub-helpers";
 import { backToDayList, placeOrder, replayRail } from "./swing-helpers";
@@ -160,14 +160,13 @@ test.describe("Practice: switching names", () => {
     // The day list is only the list of names: its portfolio is the Portfolio tab's, not a section of this screen.
     await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
-    // Resume is the day's, never a name's: no per-name button says Resume, and the header resumes the whole day on its shared clock.
+    // The day's header opens the whole day on its shared clock; Resume is the thread clock's word alone, so no button on this screen says it.
     await expect(page.getByRole("button", { name: /^Resume/ })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /^Resume Day \d+$/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Open Day \d+$/ })).toBeVisible();
     await expectCleanScreen(page);
 
     // The whole day ends together: every opened name scores.
-    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
-    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
+    await endDayFromSummary(page);
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
     await expectCleanScreen(page);
   });
@@ -344,10 +343,9 @@ test.describe("Practice: switching names", () => {
     await expect(portfolio.getByTestId("portfolio-count")).toHaveText("1 open position");
     await openFromPortfolio(page, "LRCX");
 
-    // The day page asks before it exits what is still open, and names it.
-    await backToDayList(page);
-    await page.waitForURL(dayUrl);
-    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
+    // The Summary asks before it exits what is still open, and names it.
+    await page.getByRole("tab", { name: "Summary" }).click();
+    await page.getByRole("button", { name: PRACTICE_COPY.clockEndDay, exact: true }).click();
     const confirm = page.getByRole("group", { name: "Confirm ending the day" });
     await expect(confirm).toContainText("Ending the day exits 1 open practice trade at the price you see now: LRCX");
     await confirm.getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
@@ -514,8 +512,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new in this scan");
 
     // Ending the day closes scanning and keeps the last scan's label on screen.
-    await page.getByRole("button", { name: PRACTICE_COPY.dayEnd, exact: true }).click();
-    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEnd }).click();
+    await endDayFromSummary(page);
     await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
     await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan })).toHaveCount(0);
     await expect(label).toHaveText("Scan 2 · run at 9:37 AM ET · data through 9:22 AM");

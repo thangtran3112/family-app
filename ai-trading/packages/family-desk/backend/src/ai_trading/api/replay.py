@@ -529,14 +529,17 @@ def open_next(
 def get_day_list(
     day_list_id: int,
     peek: str | None = Query(default=None, max_length=10, pattern=r"^[A-Z][A-Z0-9.]*$"),
+    live: bool = Query(default=False),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's
     session, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null
-    until the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`)."""
-    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services, peek=peek)
+    until the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).
+    With `live`, each candidate also carries `live`: the name priced at the day clock (its price, move from the prior
+    close and metric block, nothing later than the clock); the list-time values stay in the candidate itself."""
+    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services, peek=peek, live=live)
 
 
 @router.patch("/day-lists/{day_list_id}", response_model=DayListOut | SwingDayListOut)

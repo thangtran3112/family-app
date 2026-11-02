@@ -34,10 +34,6 @@
 .down { color: var(--color-down); }
 .flat { color: var(--color-muted); }
 
-/* The End day confirm opens under its button instead of pushing the table down (D-092, D-137). */
-.endWrap { position: relative; }
-.endAnchor { position: absolute; top: calc(100% + var(--space-1)); right: 0; width: min(340px, calc(100vw - 32px)); }
-
 /* Peek */
 .peek { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
 .peekHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }

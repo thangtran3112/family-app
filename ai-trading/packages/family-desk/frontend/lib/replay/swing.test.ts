@@ -176,7 +176,7 @@ test("the board header: day, week, weekday, as of the prior close, balance, equi
 test("the hub card line, the review-ready notice and the action", () => {
   const card = swingCardView(swingThreadSummary)!;
   assert.equal(card.title, "Swing · 50 names");
-  assert.equal(card.line, "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · 2 holds open", "D-112: week, day, names and holds; the money sits in its own cells");
+  assert.equal(card.line, "50 names · Week 2 of 4 · 2 holds open", "D-112: names, week and holds; the mode, the money and the day sit in their own cells");
   assert.deepEqual([card.notice, card.action], [null, { kind: "continue", label: "Continue Day 7", weekNo: null }]);
 
   const ready = swingCardView(swingThreadReviewReady)!;
@@ -185,7 +185,7 @@ test("the hub card line, the review-ready notice and the action", () => {
   assert.match(ready.line, /1 hold open$/);
 
   const finished = swingCardView(swingThreadFinished)!;
-  assert.equal(finished.line, "Swing · 50 names · Finished · Day 20 of 20");
+  assert.equal(finished.line, "50 names", "D-112: a finished thread keeps the names alone, with no separator left over");
   assert.equal(finished.action.kind, "none");
 
   const fresh = swingCardView({ ...swingThreadSummary, today: null, swing: { ...swingThreadSummary.swing!, days_ended: 0, day_no: 1, week_no: 1, holds_open: 0, equity_series: [] } })!;
@@ -194,6 +194,15 @@ test("the hub card line, the review-ready notice and the action", () => {
 
   assert.equal(swingCardView(activeThread), null, "a day thread has no swing card");
   assert.equal(swingCardView({ ...swingThreadSummary, swing: undefined }), null);
+});
+
+// D-112: the landing sub-line sits under the mode badge, beside the Balance and Progress cells, so it repeats none of them.
+test("the card line never repeats the mode, the balance, the equity or the day, and never starts or ends on a separator", () => {
+  for (const summary of [swingThreadSummary, swingThreadReviewReady, swingThreadFinished]) {
+    const { line } = swingCardView(summary)!;
+    assert.doesNotMatch(line, /Swing|Balance|Equity|\$|Day \d|Finished/, line);
+    assert.doesNotMatch(line, /^\s*·|·\s*$|·\s*·/, line);
+  }
 });
 
 test("End day names the clock and the holds that stay open; Pass names the holds that ride", () => {

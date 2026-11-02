@@ -777,6 +777,8 @@ export interface paths {
          * @description One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's
          *     session, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null
          *     until the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).
+         *     With `live`, each candidate also carries `live`: the name priced at the day clock (its price, move from the prior
+         *     close and metric block, nothing later than the clock); the list-time values stay in the candidate itself.
          */
         get: operations["get_day_list_api_desk_replay_day_lists__day_list_id__get"];
         put?: never;
@@ -2560,6 +2562,29 @@ export interface components {
             skipped: number;
         };
         /**
+         * CandidateLiveOut
+         * @description A listed name as of the day clock `at`, from bars closed by it. `price`: the last closed 1-minute bar of the day
+         *     (null before the first); `change_pct`: its move from the prior close; `metrics`: the metric block cut at the clock,
+         *     which is today's when `today` and the previous session's while no regular-session bar has closed.
+         */
+        CandidateLiveOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Change Pct */
+            change_pct: number | null;
+            /** Metrics */
+            metrics: {
+                [key: string]: number | null;
+            };
+            /** Price */
+            price: number | null;
+            /** Today */
+            today: boolean;
+        };
+        /**
          * CandidateOut
          * @description One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.
          */
@@ -2573,6 +2598,7 @@ export interface components {
             held_over: boolean;
             /** List Price */
             list_price: number;
+            live?: components["schemas"]["CandidateLiveOut"] | null;
             /**
              * Matched Since
              * Format: date-time
@@ -9117,6 +9143,7 @@ export interface operations {
         parameters: {
             query?: {
                 peek?: string | null;
+                live?: boolean;
             };
             header?: never;
             path: {

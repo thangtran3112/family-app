@@ -28,7 +28,6 @@ import {
   lateStars,
   lateStarsText,
   prepStep,
-  resumeDayLabel,
   starEntry,
   trustedSwingState,
   type PrepStep,
@@ -213,7 +212,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
               aria-describedby={start.kind === "none" ? "swing-star-hint" : undefined}
               onClick={() => void startNow()}
             >
-              {start.kind === "resume" ? resumeDayLabel(list.day_no) : practiceText("swingStartDay", { n: list.day_no })}
+              {practiceText(start.kind === "resume" ? "planOpenDay" : "swingStartDay", { n: list.day_no })}
             </Button>
           )}
           {!ended && canPass(list) && !confirmPass && (
