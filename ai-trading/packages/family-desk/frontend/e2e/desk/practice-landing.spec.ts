@@ -502,8 +502,9 @@ test.describe("Practice landing · fix wave 5S", () => {
     await createThreadByApi(context, { balance: 30_000 });
     await openDesk(page, "/practice");
     const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    const names = await table.getByRole("link", { name: /^Day thread · / }).allTextContents();
-    expect(names, "the day's second thread carries a (2)").toHaveLength(2);
+    const links = table.getByRole("link", { name: /^Day thread · / });
+    await expect(links, "the day's second thread carries a (2)").toHaveCount(2);
+    const names = await links.allTextContents();
     expect(new Set(names).size, "D-069: no two threads read alike").toBe(2);
     const [target] = names as [string, string];
 
