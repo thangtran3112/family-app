@@ -3759,6 +3759,13 @@
             ],
             "title": "Ended At"
           },
+          "held_elsewhere": {
+            "items": {
+              "$ref": "#/components/schemas/HeldElsewhereOut"
+            },
+            "title": "Held Elsewhere",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -3938,6 +3945,7 @@
           "watch",
           "clock",
           "sessions",
+          "held_elsewhere",
           "day_pnl",
           "watch_check",
           "thread",
@@ -6161,6 +6169,61 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HeldElsewhereOut": {
+        "description": "A name open in another day list (another thread's day, a swing day) or in a standalone session, on this day. The\none-open-session-per-name-and-day rule refuses it here, so the day list shows it open there, not \"not opened\".",
+        "properties": {
+          "day_list_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day List Id"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "integer"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "thread_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Name"
+          }
+        },
+        "required": [
+          "session_id",
+          "symbol",
+          "day_list_id",
+          "thread_id",
+          "thread_name"
+        ],
+        "title": "HeldElsewhereOut",
         "type": "object"
       },
       "HoldOut": {
@@ -13651,6 +13714,13 @@
             ],
             "title": "Free Cash Usd"
           },
+          "held_elsewhere": {
+            "items": {
+              "$ref": "#/components/schemas/HeldElsewhereOut"
+            },
+            "title": "Held Elsewhere",
+            "type": "array"
+          },
           "holds": {
             "items": {
               "$ref": "#/components/schemas/HoldOut"
@@ -13798,6 +13868,7 @@
           "holds",
           "free_cash_usd",
           "sessions",
+          "held_elsewhere",
           "universe",
           "label",
           "peek",
