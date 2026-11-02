@@ -20,6 +20,7 @@ import {
   attachPinchZoom,
   candlestickData,
   chartTime,
+  clearTickLabel,
   crosshairPoint,
   formatChartClock,
   sourceTimeLabel,
@@ -32,6 +33,7 @@ import {
   seriesMarkers,
   shadingData,
   volumeData,
+  wholeAxisLabel,
   type ChartBar,
   type ChartMarkerInput,
   type CrosshairPoint,
@@ -432,15 +434,40 @@ export function MarketChart({
     const timeLabel = dayName ? (time: Time) => dayName.get(timeId(time)) ?? "" : hideDates ? formatChartClock : formatChartTime;
     // The right offset goes in only when it changes: the library scrolls to it every time it is set, so setting it on each data update snapped a chart she had scrolled back to the newest bar.
     const wantedOffset = follow ? FOLLOW_RIGHT_PAD : 0;
+    // The library centres a tick label on its tick and clips it at the axis edge ("0 AM" for "04:00 AM", D-180): a label that would not
+    // print whole is left out instead. The axis is the time scale's width and a tick's place is the library's own answer for its time.
+    const wholeLabel = (label: string, time: Time) => {
+      const scale = currentChart.timeScale();
+      return wholeAxisLabel(label, scale.timeToCoordinate(time), scale.width());
+    };
+    const tickLabel = dayName || !(follow || hideDates || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates);
+    // The overlays' last-value tags sit on the price axis at their newest value; a tick label under one is left out (D-181).
+    const tagYs = () => {
+      const series = main.current;
+      if (!series) return [];
+      return overlays.flatMap(({ values }) => {
+        const last = currentValue(values);
+        const y = last === null ? null : series.priceToCoordinate(last);
+        return y === null ? [] : [y];
+      });
+    };
     currentChart.applyOptions({
       timeScale: {
         timeVisible: interval !== "1d" && interval !== "1w",
-        tickMarkFormatter: dayName || !(follow || hideDates || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates),
+        tickMarkFormatter: (time: Time, tickType: number) => wholeLabel(tickLabel(time, tickType), time),
         ...rightOffsetOption(rightOffset.current, wantedOffset),
       },
       localization: {
         timeFormatter: timeLabel,
-        ...(moneyAxis ? { priceFormatter: moneyAxis.label, tickmarksPriceFormatter: (prices: readonly number[]) => prices.map(moneyAxis.tick) } : {}),
+        ...(moneyAxis
+          ? {
+              priceFormatter: moneyAxis.label,
+              tickmarksPriceFormatter: (prices: readonly number[]) => {
+                const tags = tagYs();
+                return prices.map((price) => clearTickLabel(moneyAxis.tick(price), main.current?.priceToCoordinate(price) ?? null, tags));
+              },
+            }
+          : {}),
       },
     });
     rightOffset.current = wantedOffset;

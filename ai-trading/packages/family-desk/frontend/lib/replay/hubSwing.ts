@@ -4,6 +4,7 @@ import type { SwingProblems } from "./swingSetup.ts";
 import { startBlocker } from "./universeView.ts";
 import { balanceTicks, dayTickStep, type Box, type Tick } from "./threadChart.ts";
 import type { SwingEquityPoint } from "./threads.ts";
+import { labelSpan, textWidth } from "../desk/ticks.ts";
 
 // What the hub and the thread journal need for swing threads beyond F1's `swing*.ts`: the thread modes,
 // the universe preview's timing, what "Continue" answered, and the geometry of the balance-and-equity curve. Pure, so
@@ -155,39 +156,94 @@ export function swingCurveLayout(series: readonly SwingEquityPoint[], startingBa
 /** A label's anchor point in the curve's own SVG units: `end` anchored labels grow to the left of `x`, `start` ones to the right. */
 export type CurveLabel = { x: number; y: number; text: string; anchor: "start" | "end" };
 
-// ponytail: text width is estimated at 7 units a character (the curve prints 11 px labels); measure with getBBox if a font change ever shifts it.
-const CHAR_WIDTH = 7;
+/** A point on a drawn line, in the curve's SVG units. */
+export type Dot = { x: number; y: number };
+
+type Plot = SwingCurve["plot"];
+
+const LABEL_PX = 11; // the curve prints --text-micro labels
 const LABEL_ABOVE = 11;
 const LABEL_BELOW = 3;
+/** How far a line reaches around its points: half the stroke and the biggest dot (r 4.5). */
+const LINE_REACH = 5;
+
+const boxOf = (label: CurveLabel) => {
+  const [left, right] = labelSpan(label.x, label.text, LABEL_PX, label.anchor);
+  return { left, right, top: label.y - LABEL_ABOVE, bottom: label.y + LABEL_BELOW };
+};
 
 const overlaps = (a: CurveLabel, b: CurveLabel): boolean => {
-  const span = (label: CurveLabel) => {
-    const width = label.text.length * CHAR_WIDTH;
-    return label.anchor === "end" ? [label.x - width, label.x] : [label.x, label.x + width];
-  };
-  const [aLeft, aRight] = span(a) as [number, number];
-  const [bLeft, bRight] = span(b) as [number, number];
-  return aLeft < bRight && bLeft < aRight && a.y - LABEL_ABOVE < b.y + LABEL_BELOW && b.y - LABEL_ABOVE < a.y + LABEL_BELOW;
+  const [p, q] = [boxOf(a), boxOf(b)];
+  return p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom;
 };
+
+/** True when the label sits whole inside the plot box: it never leaves the frame, so it never lands on a tick label or an axis. */
+const insidePlot = (label: CurveLabel, plot: Plot): boolean => {
+  const box = boxOf(label);
+  return box.left >= plot.x && box.right <= plot.x + plot.width && box.top >= plot.y && box.bottom <= plot.y + plot.height;
+};
+
+/** True when a line (or one of its dots) passes through the label. The line is walked every 2 units: the label is 14 high and the reach 5, so no crossing slips between two steps. */
+function crossesLine(label: CurveLabel, line: readonly Dot[]): boolean {
+  const box = boxOf(label);
+  const hit = (x: number, y: number) => x > box.left - LINE_REACH && x < box.right + LINE_REACH && y > box.top - LINE_REACH && y < box.bottom + LINE_REACH;
+  return line.some((from, index) => {
+    const to = line[index + 1] ?? from;
+    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 2));
+    for (let step = 0; step <= steps; step++) if (hit(from.x + ((to.x - from.x) * step) / steps, from.y + ((to.y - from.y) * step) / steps)) return true;
+    return false;
+  });
+}
+
+/**
+ * The first of `spots` (best first) where the label sits inside the plot box and prints on no `others` label and on no `lines` series
+ * (D-181: the end label and "Starting balance" printed on their own lines). With no such spot it takes the first inside the plot that
+ * clears the labels (a line through a readable label beats two labels on each other), then the first inside the plot, then the first.
+ */
+export function placeLabel(spots: readonly CurveLabel[], { plot, others = [], lines = [] }: { plot: Plot; others?: readonly CurveLabel[]; lines?: ReadonlyArray<readonly Dot[]> }): CurveLabel {
+  const inside = spots.filter((spot) => insidePlot(spot, plot));
+  const pool = inside.length > 0 ? inside : spots;
+  const clearOfLabels = (spot: CurveLabel) => others.every((other) => !overlaps(spot, other));
+  return pool.find((spot) => clearOfLabels(spot) && lines.every((line) => !crossesLine(spot, line))) ?? pool.find(clearOfLabels) ?? pool[0]!;
+}
+
+/**
+ * Where a series' end label ("Balance $49,246.00") goes: left of its newest point and above it (below when `above` is false), then the
+ * other side, then right of the point when the left has no room (the first days of a thread put the point at the plot's left edge).
+ */
+export function endLabelSpots(point: Dot, text: string, above = true): CurveLabel[] {
+  const up = point.y - 8;
+  const down = point.y + 16;
+  const [first, second] = above ? [up, down] : [down, up];
+  return [
+    { x: point.x - 8, y: first, text, anchor: "end" },
+    { x: point.x - 8, y: second, text, anchor: "end" },
+    { x: point.x + 8, y: first, text, anchor: "start" },
+    { x: point.x + 8, y: second, text, anchor: "start" },
+  ];
+}
 
 /**
  * Where the "Starting balance" note sits on the curve. The note belongs on the start line, but the end labels ("Balance $25,000.00",
- * "Equity ...") land on that line too whenever the balance is still near its start, so the note tries the left end above the line,
- * the left end below it, then the right end, and takes the first spot that prints on none of `others`. With no free spot it keeps the first.
- * A spot under the plot is the row of the day labels, so a start line that rests on the bottom tick has no "below" spots (D-123).
+ * "Equity ...") land on that line too whenever the balance is still near its start, and the series themselves cross its left end (the
+ * first segment leaves the start point there). So the note tries the left end above the line, the left end below it, the right end,
+ * then steps along the line, and takes the first spot inside the plot box that prints on none of `others` and none of `lines`. With no
+ * free spot it keeps the first. A spot under the plot is the row of the day labels, so a start line that rests on the bottom tick has
+ * no "below" spots (D-123).
  */
-export function startNoteSpot(layout: Pick<SwingCurve, "plot" | "startY">, text: string, others: readonly CurveLabel[]): CurveLabel {
+export function startNoteSpot(layout: Pick<SwingCurve, "plot" | "startY">, text: string, others: readonly CurveLabel[], lines: ReadonlyArray<readonly Dot[]> = []): CurveLabel {
   const { plot, startY } = layout;
   const left = plot.x + 6;
   const right = plot.x + plot.width - 6;
-  const all: CurveLabel[] = [
+  const spots: CurveLabel[] = [
     { x: left, y: startY - 6, text, anchor: "start" },
     { x: left, y: startY + 14, text, anchor: "start" },
     { x: right, y: startY - 6, text, anchor: "end" },
     { x: right, y: startY + 14, text, anchor: "end" },
   ];
-  const spots = all.filter((spot) => spot.y <= plot.y + plot.height);
-  return spots.find((spot) => others.every((other) => !overlaps(spot, other))) ?? spots[0] ?? all[0]!;
+  const width = textWidth(text, LABEL_PX);
+  for (let x = left + 48; x + width <= right; x += 48) spots.push({ x, y: startY - 6, text, anchor: "start" }, { x, y: startY + 14, text, anchor: "start" });
+  return placeLabel(spots, { plot, others, lines });
 }
 
 /** The alt text of the curve for a screen reader. */

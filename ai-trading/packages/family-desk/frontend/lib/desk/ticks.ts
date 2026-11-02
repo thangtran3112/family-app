@@ -23,3 +23,27 @@ export function niceTicks(min: number, max: number, { target = 5, minStep = 0, i
   for (let value = first; value <= last + step / 2; value += step) ticks.push(Number((Math.round(value / step) * step).toFixed(10)) + 0);
   return ticks;
 }
+
+export type LabelAnchor = "start" | "middle" | "end";
+
+/**
+ * How wide a label prints, in the chart's own units. 7 units a character at the charts' 11 px labels, in proportion at other sizes.
+ * ponytail: an estimate, a little wide on purpose (a label dropped one pixel early is harmless, one cut is not); measure with
+ * getBBox or canvas measureText if a font change ever shifts it.
+ */
+export const textWidth = (text: string, fontPx: number): number => (text.length * fontPx * 7) / 11;
+
+/** The left and right edge of a label of `text` anchored at `x`. */
+export function labelSpan(x: number, text: string, fontPx: number, anchor: LabelAnchor): [number, number] {
+  const width = textWidth(text, fontPx);
+  return anchor === "end" ? [x - width, x] : anchor === "middle" ? [x - width / 2, x + width / 2] : [x, x + width];
+}
+
+/**
+ * True when the whole label lies inside [lo, hi]. An axis keeps a label whole or leaves it out; it never draws one cut at the edge
+ * (D-157, D-180). Every axis, SVG or canvas, asks this before it prints a label.
+ */
+export function fitsWhole(x: number, text: string, fontPx: number, anchor: LabelAnchor, lo: number, hi: number): boolean {
+  const [left, right] = labelSpan(x, text, fontPx, anchor);
+  return left >= lo && right <= hi;
+}
