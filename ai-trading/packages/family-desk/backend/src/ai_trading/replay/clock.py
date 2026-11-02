@@ -1,14 +1,21 @@
-"""The day-trade thread's clock (ADR-0018): play, pause, speed, step, jump and skip-day, and the clock and account a
-screen reads. Pure orchestration over `session` (`move_clock`, `settle_locked`) and `plan` (`end_day`, `open_next`).
+"""The day-trade thread's clock (ADR-0018): play, pause, speed, skip-day, and the clock and account a screen reads.
+Pure orchestration over `session` (`move_clock`, `settle_locked`) and `plan` (`end_day`, `open_next`).
 
-**Why it is a function of wall time.** The thread's time is `replay_day_lists.revealed_through`. While `clock_running`
-it advances `clock_speed` x wall time since `clock_anchor_at`, and is *settled* (written back with a fresh anchor)
+**The thread clock is real time, shifted.** Its time is `replay_day_lists.revealed_through`. While `clock_running` it
+advances `clock_speed` x wall time since `clock_anchor_at`, and is *settled* (written back with a fresh anchor)
 whenever a request reads or acts on it, under the day-list lock. Nothing ticks in a process, so a closed screen, a
-logout, a deploy or a restart cannot stop it. A viewer neither owns the time nor keeps it: it asks.
+logout, a deploy or a restart cannot stop it. While it runs at 1x the gap between the thread's time and real time is
+constant: the clock goes through the close, after-hours, the night, the weekend and the next session without a jump or
+a stop. Only Pause, the speed and Skip day change that gap. The clock exists from the day it belongs to opens: no name
+has to be opened first.
 
 **What a settle never does.** It never moves a name's session (a name is lifted to the clock only when she is on it:
-`session.advance`) and never reveals anything past the clock, so the no-lookahead cut is the day clock itself. The
-balance is read at that clock: realized P/L from the ledger plus every open position priced at the clock.
+`session.advance`, and only as far as its own tape goes) and never reveals anything past the clock, so the no-lookahead
+cut is the day clock itself. The balance is read at that clock: realized P/L from the ledger plus every open position
+priced at the clock (the last print at or before it: after-hours prints show, a night or a weekend adds none).
+
+**The hand-over.** The day list is the unit that holds a day's names and book. It hands over to the next trading day
+when the clock reaches that day's start (`roll`), carrying the clock unchanged. Nothing happens at the close.
 """
 
 from datetime import datetime
@@ -19,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ai_trading.core.calendar import et
-from ai_trading.db.models import PracticeThread, ReplayDayList
+from ai_trading.db.models import PracticePlan, PracticeThread, ReplayDayList
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as session_mod
@@ -51,22 +58,38 @@ def _open_day(db: Session, thread: PracticeThread, *, lock: bool) -> ReplayDayLi
     return day if day is not None and day.status != "ended" else None
 
 
-def _window(db: Session, day: ReplayDayList) -> tuple[pd.Timestamp, pd.Timestamp] | None:
-    """The day's run, from where she started it to the exchange close; every name of the day shares it. None before the
-    first name is opened. Her plan's `window.to` is not in it: that is the focus mark (`_focus_end`), never a stop."""
-    sessions = session_mod._sessions_of_day(db, day.id)
-    return None if not sessions else (_ts(sessions[0].window_start), session_mod.window_end_of(sessions[0]))
+def _plan(db: Session, day: ReplayDayList) -> PracticePlan:
+    plan = db.get(PracticePlan, day.plan_id)
+    assert plan is not None
+    return plan
 
 
-def _focus_end(db: Session, day: ReplayDayList, close: pd.Timestamp) -> pd.Timestamp | None:
-    """Where her plan's practice window ends: a mark for the timeline, display only. None when it is the close."""
+def _window(db: Session, day: ReplayDayList) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """The day's tape: from where practice on it starts to the end of its extended session (the last time the day has
+    bars). The clock itself is not bounded by it: it runs on past the end. Every name of the day shares it."""
     sessions = session_mod._sessions_of_day(db, day.id)
-    mark = None if not sessions else et(sessions[0].day, sessions[0].spec["window"]["to"])
-    return None if mark is None or mark >= close else mark
+    start = _ts(sessions[0].window_start) if sessions else plan_mod.day_start(_plan(db, day), day.day)
+    return start, session_mod.market_close(day.day, "extended")
+
+
+def _focus_end(db: Session, day: ReplayDayList, tape_end: pd.Timestamp) -> pd.Timestamp | None:
+    """Where her plan's practice window ends: a mark for the timeline, display only. None when it is not in the tape."""
+    sessions = session_mod._sessions_of_day(db, day.id)
+    window = sessions[0].spec["window"] if sessions else _plan(db, day).spec["setup"]["window"]
+    mark = et(day.day, window["to"])
+    return None if mark >= tape_end else mark
 
 
 def _started(day: ReplayDayList | None) -> bool:
-    return day is not None and day.status == "practicing" and day.revealed_through is not None
+    """The day has a clock. Every open day has one from the moment it opens; a day stored before that rule gets its
+    clock the first time it is read (`_ensure_clock`)."""
+    return day is not None and day.status != "ended" and day.revealed_through is not None
+
+
+def _ensure_clock(db: Session, day: ReplayDayList) -> None:
+    if day.revealed_through is None and day.status != "ended":
+        day.revealed_through = plan_mod.day_start(_plan(db, day), day.day).to_pydatetime()
+        db.flush()
 
 
 def _account(
@@ -101,27 +124,29 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "window_start": None,
         "window_end": None,
         "focus_end": None,
+        "next_start": None,
         "server_now": svc.wall(),
         "account": None,
         "label": threads_mod.SIMULATED_LABEL,
     }
-    if day is None:
+    if not _started(day):
         return out
-    window = _window(db, day) if _started(day) else None
-    clock = _ts(day.revealed_through) if _started(day) else None
-    state = "listed" if clock is None or window is None else "running" if day.clock_running else "paused"
+    assert day is not None and day.revealed_through is not None
+    clock = _ts(day.revealed_through)
+    start, tape_end = _window(db, day)
     return {
         **out,
-        "state": state,
+        "state": "running" if day.clock_running else "paused",
         "day_list_id": day.id,
         "day_no": day.day_no,
         "running": day.clock_running,
         "speed": day.clock_speed,
         "clock": clock,
-        "window_start": None if window is None else window[0],
-        "window_end": None if window is None else window[1],
-        "focus_end": None if window is None else _focus_end(db, day, window[1]),
-        "account": _account(db, svc, thread, day, clock if clock is not None else _ts(day.data_through)),
+        "window_start": start,
+        "window_end": tape_end,
+        "focus_end": _focus_end(db, day, tape_end),
+        "next_start": plan_mod.next_day_start(db, day),
+        "account": _account(db, svc, thread, day, clock),
     }
 
 
@@ -131,6 +156,8 @@ def read(db: Session, user_id: int, thread_id: int, svc: Services) -> dict[str, 
     thread = _day_thread(db, user_id, thread_id)
     day = _open_day(db, thread, lock=False)
     if day is not None:
+        if day.revealed_through is None:
+            _ensure_clock(db, day)
         session_mod.settle_day(db, svc, day.id)
         db.refresh(day)
     return view(db, svc, thread, day)
@@ -144,7 +171,8 @@ def _target(db: Session, day: ReplayDayList, *, to: datetime | None, step: str |
         return _ts(to)
     sessions = session_mod._sessions_of_day(db, day.id)
     if step == "bar":
-        return session_mod.next_bar_boundary(clock, INTERVAL_MINUTES[sessions[0].spec["interval"]])
+        interval = sessions[0].spec["interval"] if sessions else _plan(db, day).spec["setup"]["interval"]
+        return session_mod.next_bar_boundary(clock, INTERVAL_MINUTES[interval])
     fires = [fire for s in sessions for fire in signals_mod.load_fires(s.signals)]
     upcoming = signals_mod.next_after(fires, clock)
     if upcoming is None:
@@ -163,14 +191,15 @@ def control(
     to: datetime | None,
     step: str | None,
 ) -> dict[str, Any]:
-    """Play, pause, set the speed, step or jump the thread's clock, then answer it. The clock is settled first, so a
-    speed change or a pause never re-prices time that already passed. `to` and `step` are forward only and stop at the
-    close, where the day rolls over (`roll`); no stop crossing and no window of hers stops them."""
+    """Play, pause or set the speed of the thread's clock (and, for a test or a tool, step or jump it), then answer it.
+    The clock is settled first, so a speed change or a pause never re-prices time that already passed. The clock runs
+    from the day's start with no name opened: the Summary is where time is controlled. `to` and `step` are forward
+    only; no close, window or stop of hers stops them or a run."""
     thread = _day_thread(db, user_id, thread_id)
     day = _open_day(db, thread, lock=True)
-    if not _started(day):
-        raise ReplayProblem("Open a name from the day list to start the day", path="clock", status=409)
-    assert day is not None
+    if day is None:
+        raise ReplayProblem("No practice day is under way", path="clock", status=409)
+    _ensure_clock(db, day)
     if speed is not None and speed not in SPEEDS:
         raise ReplayProblem("Pick 1x, 2x, 5x or 10x", path="speed")
     if to is not None and step is not None:
@@ -184,10 +213,7 @@ def control(
     if to is not None or step is not None:
         session_mod.move_clock(db, svc, day, _target(db, day, to=to, step=step))
     if running:
-        window = _window(db, day)
-        assert window is not None
-        if _ts(day.revealed_through) < window[1]:  # at the close there is nothing left to run: `roll` takes the day on
-            day.clock_running, day.clock_anchor_at = True, now
+        day.clock_running, day.clock_anchor_at = True, now
     elif running is False:
         day.clock_running, day.clock_anchor_at = False, None
     day.updated_at = now
@@ -195,35 +221,47 @@ def control(
     return view(db, svc, thread, day)
 
 
-def closed(db: Session, day: ReplayDayList | None) -> bool:
-    """The clock of a started day is at the exchange close."""
-    window = _window(db, day) if day is not None and _started(day) else None
-    return window is not None and _ts(day.revealed_through) >= window[1]
+def due(db: Session, day: ReplayDayList | None) -> bool:
+    """The clock of an open day has reached the start of the plan's next trading day: the day hands over."""
+    if not _started(day):
+        return False
+    assert day is not None and day.revealed_through is not None
+    following = plan_mod.next_day_start(db, day)
+    return following is not None and _ts(day.revealed_through) >= following
 
 
 def roll(db: Session, user_id: int, thread_id: int, svc: Services) -> plan_mod.Opened | None:
-    """The market closed: end the day (every open position books at the close) and open the next one, with nothing for
-    her to press. The clock is settled first, so a day that ran into the close while nobody looked rolls on the next
-    look. None while the clock is short of the close (the usual answer; a paused clock costs one read, no lock). The
-    next list may not be ready (its data is being prepared): the caller then polls the hub, as after a Skip day."""
+    """The clock reached the next trading day's start: the day it was on ends (every open position books at its tape's
+    end, the price the clock showed since) and the next day opens, with the clock carried over as it is (same time,
+    speed and Play state). The clock is settled first, so a clock that ran past the start while nobody looked hands over
+    on the next look. A clock left running for several days hands over day by day. None while the clock is short of the
+    next start (the usual answer; a paused clock costs one read, no lock). The next list may not be ready (its data is
+    being prepared): the caller then polls the hub, as after a Skip day."""
     thread = _day_thread(db, user_id, thread_id)
-    day = _open_day(db, thread, lock=False)
-    if day is None:
-        return None
-    session_mod.settle_day(db, svc, day.id)
-    db.refresh(day)
-    if not closed(db, day):
-        return None
-    day = _open_day(db, thread, lock=True)  # the day again, locked: a parallel poll may have rolled it already
-    if day is None or not closed(db, day):
-        return None
-    plan_mod.end_day(db, user_id, day.id, svc)
-    return plan_mod.open_next(db, user_id, svc, thread.id)
+    opened: plan_mod.Opened | None = None
+    while True:
+        day = _open_day(db, thread, lock=False)
+        if day is None:
+            return opened
+        _ensure_clock(db, day)
+        session_mod.settle_day(db, svc, day.id)
+        db.refresh(day)
+        if not due(db, day):
+            return opened
+        day = _open_day(db, thread, lock=True)  # the day again, locked: a parallel poll may have handed it over already
+        if day is None or not due(db, day):
+            return opened
+        assert day.revealed_through is not None
+        carry = plan_mod.ClockCarry(at=day.revealed_through, running=day.clock_running, speed=day.clock_speed)
+        plan_mod.end_day(db, user_id, day.id, svc)
+        opened = plan_mod.open_next(db, user_id, svc, thread.id, carry=carry)
+        if opened.day_list is None:
+            return opened
 
 
 def roll_of_session(db: Session, user_id: int, session_id: int, svc: Services) -> plan_mod.Opened | None:
-    """`roll` for the thread a day-thread session belongs to (a chart that follows the clock is what finds the close
-    first when nobody has the Summary open). None for a standalone or swing session."""
+    """`roll` for the thread a day-thread session belongs to (a chart that follows a running clock is what finds the
+    next start first when nobody has the Summary open). None for a standalone or swing session."""
     row = db.get(session_mod.ReplaySession, session_id)
     if row is None or row.owner_user_id != user_id or row.day_list_id is None or row.thread_id is None:
         return None
@@ -232,17 +270,25 @@ def roll_of_session(db: Session, user_id: int, session_id: int, svc: Services) -
 
 
 def skip_day(db: Session, user_id: int, thread_id: int, svc: Services) -> tuple[ReplayDayList, plan_mod.Opened]:
-    """Skip to the next day: run the clock to the close, end the day so every open position flattens at that close, and
-    open the next day's list. The one deliberate way to move time past what she watched. A day never started is a Pass.
-    The next day may not be ready yet (its data is still being prepared): the caller then polls the hub as it does after
-    any open."""
+    """Skip to the next day: the one deliberate way to move time past what she watched. The clock jumps to the start of
+    the plan's next trading day (over the night and the weekend), the day it leaves ends (every open position
+    flattens at that day's tape end) and the next day's list opens with the clock there, at the same speed and Play
+    state. On the plan's last day it runs to the end of that day's tape and ends it. A day never started is a Pass.
+    The next day may not be ready yet (its data is still being prepared): the caller then polls the hub as it does
+    after any open."""
     thread = _day_thread(db, user_id, thread_id)
     day = _open_day(db, thread, lock=True)
     if day is None:
         raise ReplayProblem("No practice day is under way", path="clock", status=409)
-    window = _window(db, day) if _started(day) else None
-    if window is not None:
-        session_mod.settle_locked(db, svc, day)
-        session_mod.move_clock(db, svc, day, window[1])
+    _ensure_clock(db, day)
+    session_mod.settle_locked(db, svc, day)
+    following = plan_mod.next_day_start(db, day)
+    target = following if following is not None else _window(db, day)[1]
+    clock = session_mod.move_clock(db, svc, day, target)
+    carry = (
+        None
+        if following is None
+        else plan_mod.ClockCarry(at=clock.to_pydatetime(), running=day.clock_running, speed=day.clock_speed)
+    )
     ended = plan_mod.end_day(db, user_id, day.id, svc)
-    return ended, plan_mod.open_next(db, user_id, svc, thread.id)
+    return ended, plan_mod.open_next(db, user_id, svc, thread.id, carry=carry)

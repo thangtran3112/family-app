@@ -8,6 +8,7 @@ import {
   formatCompact,
   formatAsOfText,
   formatEtClock,
+  formatEtDateClock,
   formatEtDay,
   formatEtStamp,
   formatEtTime,
@@ -27,6 +28,10 @@ test("Eastern time formatting follows daylight saving", () => {
   assert.equal(formatEtTimeZone("2026-10-23T20:00:00Z"), "4:00 PM ET");
   assert.equal(formatEtTime("2026-12-01T14:30:00Z"), "9:30 AM");
   assert.equal(formatEtClock("2026-10-23T14:41:12Z"), "10:41:12 AM ET");
+  assert.equal(formatEtDateClock("2026-10-26T14:11:42Z"), "Mon, Oct 26 · 10:11:42 AM ET"); // the thread clock: the date is never hidden
+  assert.equal(formatEtDateClock("2026-10-31T03:05:09Z"), "Fri, Oct 30 · 11:05:09 PM ET"); // the evening before, in New York
+  assert.equal(formatEtDateClock("2026-10-27T13:30:00Z", { seconds: false }), "Tue, Oct 27 · 9:30 AM ET"); // the next session's start
+  assert.equal(formatEtDateClock(null), "—");
   assert.equal(formatEtStamp("2026-10-23T19:45:00Z"), "2026-10-23 15:45");
   assert.equal(formatEtDay("2026-10-23T20:00:00Z"), "Fri 2026-10-23");
   assert.equal(formatEtDay("2026-10-28"), "Wed 2026-10-28");

@@ -110,7 +110,8 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     assert [c["symbol"] for c in body["candidates"]] == ["GAPPER"]
     assert body["candidates"][0]["list_price"] == 106.0 and body["candidates"][0]["price_at"] == "2026-09-28T12:15:00Z"
     assert body["universe"]["prev_basis"] is True and "Practice universe" in body["universe"]["footnote"]
-    assert body["review"] is None and body["journal"] is None and body["clock"] is None
+    assert body["review"] is None and body["journal"] is None
+    assert body["clock"] == "2026-09-28T13:30:00Z"  # the day's clock stands at its start: 9:30 AM ET, no name opened
     assert body["peek"]["levels"]["premarket_high"] == 106.0 and body["peek"]["minutes"][-1]["t"] < body["data_through"]
     assert client.get(f"{BASE}/day-lists/{list_id}", params={"peek": "FLAT"}, headers=auth_headers()).status_code == 422
 
@@ -380,6 +381,9 @@ def test_the_rescan_route_answers_at_once_with_a_running_job_then_repopulates_th
     list_id = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
     morning = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()
     assert morning["rescan"] is None and morning["rescan_job"] is None
+    legacy = db_session.get(ReplayDayList, list_id)  # a day stored before every day had a clock from its start
+    legacy.revealed_through = None
+    db_session.commit()
     early = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
     assert early.status_code == 409
     assert early.json()["detail"]["problems"][0]["message"].startswith("Practice a name first")

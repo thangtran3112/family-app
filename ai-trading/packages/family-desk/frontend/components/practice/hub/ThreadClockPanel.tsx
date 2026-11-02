@@ -2,21 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { JumpMenu } from "@/components/practice/replay/JumpMenu";
 import { SpeedChips } from "@/components/practice/replay/SpeedChips";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
-import { formatEtClock, formatEtTime } from "@/lib/desk/format";
+import { formatEtDateClock, formatEtTime } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { endDay } from "@/lib/desk/replay";
 import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
-import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { clockControls, clockProgress, clockStateText, focusProgress, skippedText, type SkipDay } from "@/lib/replay/threadClock";
 import { formatBalance, formatDayResult } from "@/lib/replay/threadView";
 import type { ThreadClockApi } from "@/lib/replay/useThreadClock";
@@ -24,11 +22,13 @@ import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
 /**
- * The day thread's clock and its controls, on the Summary and nowhere else (ADR-0018): Play or Pause, Step, speed, Jump, Skip day and End day for
- * the whole thread. Both ways of finishing the day are here (the Day list has none): Skip day runs to the close and opens the next day; End day
- * stops at the clock, exits what is open at that price and opens the day's review. The time is the server's. It keeps running when this page is closed or she signs out; this panel only asks
- * for changes and shows the answer (polled every two seconds). Only Pause, the speed and Skip day change how time moves: the market's close rolls
- * the day over by itself, and the plan's practice window is a mark on the track, not a stop. The simulated account beside it is priced at that clock.
+ * The day thread's clock and its whole control board, on the Summary and nowhere else (ADR-0018): Play or Pause, the speed (1x, 2x, 5x, 10x),
+ * Skip day and End day for the whole thread. The board is always here: no stock has to be opened first. The clock is real time, shifted. It
+ * shows the full date and the time to the second, and it ticks every second through the close, after-hours, the night and the weekend; the
+ * gap to real time never changes unless she pauses it, speeds it up or skips a day. The time is the server's: it keeps running when this page
+ * is closed or she signs out, and this panel only asks for changes and shows the answer (polled every two seconds). Skip day jumps to the next
+ * session's start and ends the day; End day stops at the clock, exits what is open at that price and opens the day's review. The plan's
+ * practice window is a mark on the track, not a stop. The simulated account beside it is priced at that clock.
  */
 export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSkipped: (result: SkipDay) => void }) {
   const { clock, shown } = api;
@@ -94,44 +94,29 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
       </div>
 
       {clock.state === "no_day" && <p className={o.placeLine}>{PRACTICE_COPY.clockNoDay}</p>}
-      {clock.state === "listed" && <p className={o.placeLine}>{PRACTICE_COPY.clockNotStarted}</p>}
 
       {can.started && (
         <>
           <p className={o.clockTime}>
-            <span data-testid="thread-clock-time">{formatEtClock(shown)}</span>
+            <span data-testid="thread-clock-time">{formatEtDateClock(shown)}</span>
           </p>
           <div className={o.clockTrack} role="progressbar" aria-label="Day progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clockProgress(clock, shown) * 100)}>
             <div className={o.clockFill} style={{ width: `${clockProgress(clock, shown) * 100}%` }} />
             {focus !== null && <span className={o.clockFocus} style={{ left: `${focus * 100}%` }} title={clock.focus_end === null ? undefined : practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })} data-testid="thread-clock-focus" />}
           </div>
           {clock.focus_end !== null && <p className={styles.hint}>{practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })}</p>}
+          <p className={styles.hint} data-testid="thread-clock-next">
+            {clock.next_start !== null ? practiceText("clockNextStart", { when: formatEtDateClock(clock.next_start, { seconds: false }) }) : PRACTICE_COPY.clockLastDay}
+          </p>
         </>
       )}
 
       {clock.state !== "no_day" && (
         <div className={o.clockControls} role="group" aria-label="Clock controls">
-          {can.started && (
-            <>
-              <Button size="touch" variant="primary" disabled={!can.play || busy} aria-label={running ? PRACTICE_COPY.clockPause : PRACTICE_COPY.clockPlay} onClick={() => void (running ? api.pause() : api.play())}>
-                {running ? PRACTICE_COPY.clockPause : PRACTICE_COPY.clockPlay}
-              </Button>
-              <Button size="touch" disabled={!can.jump || busy} title="One bar forward" onClick={() => void api.step()}>{PRACTICE_COPY.clockStep}</Button>
-              <SpeedChips speed={speed} onSpeed={(next) => void api.setSpeed(next)} />
-              <JumpMenu
-                revealedThrough={shown ?? clock.clock ?? ""}
-                windowEnd={clock.window_end ?? ""}
-                disabled={!can.jump || busy}
-                onJumpBy={(minutes) => void api.jumpBy(minutes)}
-                onJumpToTime={(hhmm) => {
-                  const to = clock.clock === null ? null : etWallToUtcIso(etDayOf(clock.clock), hhmm);
-                  if (to !== null) void api.jumpTo(to);
-                }}
-                onNextSignal={() => void api.nextSignal()}
-                onJumpEnd={() => clock.window_end !== null && void api.jumpTo(clock.window_end)}
-              />
-            </>
-          )}
+          <Button size="touch" variant="primary" disabled={!can.play || busy} aria-label={running ? PRACTICE_COPY.clockPause : PRACTICE_COPY.clockPlay} onClick={() => void (running ? api.pause() : api.play())}>
+            {running ? PRACTICE_COPY.clockPause : PRACTICE_COPY.clockPlay}
+          </Button>
+          <SpeedChips speed={speed} onSpeed={(next) => void api.setSpeed(next)} />
           <Button ref={skipRef} size="touch" disabled={!can.skip || busy || confirming || confirmingEnd} onClick={() => setConfirming(true)}>{PRACTICE_COPY.clockSkipDay}</Button>
           <Button ref={endRef} size="touch" disabled={!can.skip || busy || confirming || confirmingEnd} aria-expanded={confirmingEnd} onClick={() => setConfirmingEnd(true)}>{PRACTICE_COPY.clockEndDay}</Button>
         </div>
@@ -156,7 +141,7 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
           label="Confirm ending the day"
           prompt={
             <>
-              <span>{practiceText("clockEndAsk", { clock: formatEtClock(shown) })}</span>
+              <span>{practiceText("clockEndAsk", { clock: formatEtDateClock(shown) })}</span>
               {exits && <span>{exits}</span>}
             </>
           }
