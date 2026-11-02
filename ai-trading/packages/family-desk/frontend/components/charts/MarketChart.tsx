@@ -111,7 +111,7 @@ export type MarketChartProps = {
   follow?: boolean;
   /** Bars on the first draw of a followed chart (90 by default). */
   firstDraw?: number;
-  /** Index of the session's first bar (the bars before it are lookback). While the revealed bars fit, the followed chart starts there, so the axis starts at the open. */
+  /** Index of the session's first bar (the bars before it are lookback). Before the open, with no session bar revealed yet, the followed chart waits there; from the first session bar on it follows the newest bar. */
   sessionStart?: number;
   /** Replay of a hidden day: axis, crosshair and data table show the time of day only, never the date. */
   hideDates?: boolean;
@@ -164,6 +164,7 @@ type PaneSeriesApi =
   | { kind: "line"; series: ISeriesApi<"Line", Time> }
   | { kind: "histogram"; series: ISeriesApi<"Histogram", Time> };
 type Library = typeof import("lightweight-charts");
+type TickFormat = (time: Time, tickType: number) => string;
 type MainKind = "Candlestick" | "Bar" | "Line" | "Area";
 type MainSeries = ISeriesApi<MainKind, Time>;
 
@@ -267,6 +268,7 @@ export function MarketChart({
   const fitKey = useRef<string | null>(null);
   const lastIndex = useRef(-1);
   const rightOffset = useRef<number | null>(null);
+  const tickFormat = useRef<TickFormat | null>(null);
   const paneSignature = useRef("");
   const paneLayout = useRef(panes);
   const [ready, setReady] = useState(false);
@@ -301,6 +303,7 @@ export function MarketChart({
     const paneLinesMap = panePriceLines.current;
     let resizeWatch: ResizeObserver | null = null;
     let detachPinch: (() => void) | null = null;
+    let detachRelabel: (() => void) | null = null;
     void import("lightweight-charts").then((module) => {
       if (cancelled || !container.current) return;
       library.current = module;
@@ -336,6 +339,25 @@ export function MarketChart({
       chart.current = currentChart;
       // A trackpad pinch (ctrl+wheel) zooms about the cursor at the fingers' pace; the library's own handler is a tenth as fast.
       detachPinch = attachPinchZoom(container.current, currentChart);
+      // The library keeps each tick's label from the first time it formats it, until options are applied again, and ours leaves a label out by
+      // where its tick sits (D-180). A label formatted in a layout that has since moved (the first after the data changes, before the range
+      // lands) kept its answer, so the axis printed nothing for seconds after an interval switch (D-187). Apply the formatter again whenever the
+      // view moves or resizes, once per frame.
+      const scale = currentChart.timeScale();
+      let relabel = 0;
+      const relabelSoon = () => {
+        cancelAnimationFrame(relabel);
+        relabel = requestAnimationFrame(() => {
+          if (tickFormat.current) currentChart.applyOptions({ timeScale: { tickMarkFormatter: tickFormat.current } });
+        });
+      };
+      scale.subscribeVisibleLogicalRangeChange(relabelSoon);
+      scale.subscribeSizeChange(relabelSoon);
+      detachRelabel = () => {
+        cancelAnimationFrame(relabel);
+        scale.unsubscribeVisibleLogicalRangeChange(relabelSoon);
+        scale.unsubscribeSizeChange(relabelSoon);
+      };
       resizeWatch = new ResizeObserver(() => {
         const tops = layoutPanes(currentChart, paneLayout.current);
         setPaneTops((current) => (sameTops(current, tops) ? current : tops));
@@ -388,6 +410,8 @@ export function MarketChart({
       cancelled = true;
       resizeWatch?.disconnect();
       detachPinch?.();
+      detachRelabel?.();
+      tickFormat.current = null;
       chart.current?.remove();
       chart.current = null;
       main.current = null;
@@ -441,6 +465,8 @@ export function MarketChart({
       return wholeAxisLabel(label, scale.timeToCoordinate(time), scale.width());
     };
     const tickLabel = dayName || !(follow || hideDates || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType, hideDates);
+    const formatTick: TickFormat = (time, tickType) => wholeLabel(tickLabel(time, tickType), time);
+    tickFormat.current = formatTick;
     // The overlays' last-value tags sit on the price axis at their newest value; a tick label under one is left out (D-181).
     const tagYs = () => {
       const series = main.current;
@@ -454,7 +480,7 @@ export function MarketChart({
     currentChart.applyOptions({
       timeScale: {
         timeVisible: interval !== "1d" && interval !== "1w",
-        tickMarkFormatter: (time: Time, tickType: number) => wholeLabel(tickLabel(time, tickType), time),
+        tickMarkFormatter: formatTick,
         ...rightOffsetOption(rightOffset.current, wantedOffset),
       },
       localization: {
@@ -621,19 +647,17 @@ export function MarketChart({
     // Fit on a new symbol or timeframe (or the first data), not on every refresh, so zoom survives a refetch.
     const key = `${symbol}:${interval}`;
     const count = candleData.length;
+    // Before the open the view waits at the session's first bar; from the first session bar on a followed chart shows the newest bars (D-186).
+    const waiting = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1);
     if (bars.length && fitKey.current !== key) {
-      if (follow) {
-        const pinned = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1, FOLLOW_RIGHT_PAD);
-        currentChart.timeScale().setVisibleLogicalRange(pinned ?? { from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
-      } else currentChart.timeScale().fitContent();
+      if (follow) currentChart.timeScale().setVisibleLogicalRange(waiting ?? { from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
+      else currentChart.timeScale().fitContent();
       fitKey.current = key;
     } else if (keepRange) {
       currentChart.timeScale().setVisibleLogicalRange(keepRange);
-    } else if (follow && atNewest) {
-      // The view keeps its zoom: pinned to the session's first bar while the revealed bars fit in it, else it scrolls with the newest bar.
-      const pinned = sessionStart === undefined || visible === null ? null : pinnedRange(count, sessionStart, visible.to - visible.from, FOLLOW_RIGHT_PAD, visible.from);
-      if (pinned) currentChart.timeScale().setVisibleLogicalRange(pinned);
-      else currentChart.timeScale().scrollToRealTime();
+    } else if (follow && atNewest && waiting === null) {
+      // The view keeps its zoom and scrolls with the newest bar. Still before the open it stays where it waits.
+      currentChart.timeScale().scrollToRealTime();
     }
     lastIndex.current = count - 1;
   }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, hideDates, clockTicks, chartType, moneyAxis]);

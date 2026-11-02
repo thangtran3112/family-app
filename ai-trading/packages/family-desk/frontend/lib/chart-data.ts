@@ -258,15 +258,13 @@ export function zoomedRange(range: LogicalRange, x: number, width: number, facto
 }
 
 /**
- * Where a followed replay chart sits while the session so far still fits: from `anchor` (the session's first bar) over `span`
- * slots. The axis then starts at the open, not in the pre-open lookback (D-099). Null once the newest bar and its `pad` no
- * longer fit, and the chart scrolls with the newest bar instead.
+ * Where a followed replay chart waits before the open: from `anchor` (the session's first bar) over `span` slots, so the axis starts at the
+ * open, not in the pre-open lookback (D-099). Null from the first session bar on: the chart then follows the newest bar with the lookback
+ * to its left. A pinned chart with a few session bars drew them against the left edge of a blank plot, and a time axis has ticks only at
+ * bars, so it printed no label at all (D-186).
  */
-export function pinnedRange(count: number, anchor: number, span: number, pad: number, from: number = anchor): LogicalRange | null {
-  // `from` is where the view starts now. Before `anchor` it already shows the lookback (she zoomed out or scrolled back to read
-  // the past days): pinning would take that away on the next bar, so the view is hers and the chart only follows the newest bar.
-  if (from < anchor - 0.5) return null;
-  return count - 1 + pad <= anchor + span ? { from: anchor, to: anchor + span } : null;
+export function pinnedRange(count: number, anchor: number, span: number): LogicalRange | null {
+  return count <= anchor ? { from: anchor, to: anchor + span } : null;
 }
 
 /**
