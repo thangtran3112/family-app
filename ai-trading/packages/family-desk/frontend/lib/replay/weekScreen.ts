@@ -2,6 +2,7 @@ import { DeskApiError } from "../api/client.ts";
 import { fillCopy, practiceText, prepPercent } from "../desk/freshness.ts";
 import type { SwingOpenNext, WeekOut } from "./swingApi.ts";
 import type { SwingState, ThreadDay, ThreadToday } from "./threads.ts";
+import { wholeParam } from "./routeId.ts";
 import { formatBalance } from "./threadView.ts";
 import { startWeekAction, type EquitySeries, type WeekDayRowView } from "./weekView.ts";
 
@@ -45,18 +46,12 @@ export const WEEK_TEXT = {
 
 // -- the URL ---------------------------------------------------------------------------------------------------
 
-const whole = (raw: string | null): number | null => {
-  if (raw === null || !/^\d+$/.test(raw)) return null;
-  const value = Number(raw);
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
-};
-
 /**
  * `?thread=7&week=2` as numbers, each null when it is missing, not a whole number, or zero. They are read apart because the route answers
  * for the thread first and only then for the week: one thread id gets one answer whatever the week says (D-183).
  */
 export function parseWeekParams(thread: string | null, week: string | null): { threadId: number | null; weekNo: number | null } {
-  return { threadId: whole(thread), weekNo: whole(week) };
+  return { threadId: wholeParam(thread), weekNo: wholeParam(week) };
 }
 
 export const threadHref = (threadId: number): string => `/practice/journal?thread=${threadId}`;

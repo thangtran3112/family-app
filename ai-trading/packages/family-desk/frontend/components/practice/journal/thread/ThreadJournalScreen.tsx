@@ -15,6 +15,7 @@ import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { useShellBand } from "@/lib/desk/useViewportBand";
+import { routeId } from "@/lib/replay/routeId";
 import { journalStatusLine } from "@/lib/replay/statusLine";
 import { formatBalance, formatDayResult, hasNoDays, realizedToday, startedWithText, summaryHintText, threadModeLabel, threadName, threadTiles, weeksInText, weeksOf } from "@/lib/replay/threadView";
 import type { Thread } from "@/lib/replay/threads";
@@ -31,12 +32,11 @@ import styles from "./threadJournal.module.css";
 
 /** `/practice/journal?thread=`: one practice thread's journal (02r). Every dollar on it is SIMULATED. Reads the URL, so the page wraps it in Suspense. */
 export function ThreadJournalScreen() {
-  const raw = useSearchParams().get("thread");
-  const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
+  const { id, given } = routeId(useSearchParams().get("thread"));
   const query = useDeskQuery(`replay-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null });
 
-  if (id === null) return <ThreadPicker />;
-  if (query.error instanceof DeskApiError && query.error.status === 404) {
+  if (id === null && !given) return <ThreadPicker />;
+  if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
     return <div className={styles.center}><PracticeNotice title={PRACTICE_COPY.threadPageNotFound} /></div>;
   }
   if (query.data === null) {

@@ -30,7 +30,6 @@ import {
   dayCellText,
   dayCellTone,
   dayColumns,
-  dayRouteProblem,
   dayTitle,
   type FollowState,
   filtersNote,
@@ -53,6 +52,7 @@ import {
   universeNote,
 } from "@/lib/replay/dayView";
 import { heldBlocked, heldHref, heldWhere } from "@/lib/replay/orderView";
+import { routeId } from "@/lib/replay/routeId";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
@@ -75,8 +75,7 @@ const RESCAN_POLL_MS = 1000;
 /** `/practice/day?id=`: the day's candidate list before the open, then the review after it (02o-b v1). Reads the URL, so the page wraps it in Suspense. */
 export function DayListScreen() {
   const router = useRouter();
-  const raw = useSearchParams().get("id");
-  const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
+  const { id, given } = routeId(useSearchParams().get("id"));
   const list = useDeskQuery(`day-list:${id}`, (signal) => loadAnyDayList(id ?? 0, {}, { signal }), { enabled: id !== null });
   // No id: the day she has open, if any, is the one she means (a bookmark or the bare route).
   const daily = useDeskQuery("replay-daily", (signal) => loadDaily({ signal }), { enabled: id === null });
@@ -86,10 +85,9 @@ export function DayListScreen() {
     if (id === null && openDayId !== null) router.replace(`/practice/day?id=${openDayId}`);
   }, [id, openDayId, router]);
 
-  // No id is "not chosen"; an id that is no number, or that the server does not know, is "not found" (D-117).
-  const problem = dayRouteProblem(raw);
-  const notFound = problem === "missing" || (list.error instanceof DeskApiError && list.error.status === 404);
-  if (id === null && problem === "missing") return <DayNotice title={PRACTICE_COPY.dayNotFound} />;
+  // No id is "not chosen"; an id that is no number, or that the server does not know, is "not found" (D-117, D-193).
+  const notFound = list.error instanceof DeskApiError && list.error.status === 404;
+  if (id === null && given) return <DayNotice title={PRACTICE_COPY.dayNotFound} />;
   if (id === null) {
     // A failed read is not "no day selected": say it failed and offer the retry (F-10).
     if (daily.data === null && daily.error !== null) {

@@ -158,16 +158,25 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await stepBars(page, 3);
     const plot = page.locator("section[aria-label='TSLA 1m market chart'] canvas").first();
     const box = (await plot.boundingBox())!;
-    // Candle pixels (up and down colours) grow with the bar width, so they tell a 1.8x zoom from a 1.06x one.
-    const candlePixels = () => plot.evaluate((canvas: HTMLCanvasElement, colours: string[]) => {
+    // A candle's body (up and down colours) grows with the bar width, so the widest run of candle pixels in a row tells a 1.8x zoom from a
+    // 1.06x one. A pixel count would not: with the bars across the whole plot, a zoom about the cursor also pushes some of them off it.
+    const candleWidth = () => plot.evaluate((canvas: HTMLCanvasElement, colours: string[]) => {
       const rgb = colours.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
-      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
-      let count = 0;
-      for (let i = 0; i < data.length; i += 4) if (data[i + 3]! > 0 && rgb.some(([r, g, b]) => Math.abs(data[i]! - r!) < 12 && Math.abs(data[i + 1]! - g!) < 12 && Math.abs(data[i + 2]! - b!) < 12)) count++;
-      return count;
+      const { width, height } = canvas;
+      const data = canvas.getContext("2d")!.getImageData(0, 0, width, height).data;
+      let widest = 0;
+      for (let y = 0; y < height; y++) {
+        let run = 0;
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          run = data[i + 3]! > 0 && rgb.some(([r, g, b]) => Math.abs(data[i]! - r!) < 12 && Math.abs(data[i + 1]! - g!) < 12 && Math.abs(data[i + 2]! - b!) < 12) ? run + 1 : 0;
+          widest = Math.max(widest, run);
+        }
+      }
+      return widest;
     }, [chartPalette.up, chartPalette.down]);
-    const before = await candlePixels();
-    expect(before).toBeGreaterThan(200);
+    const before = await candleWidth();
+    expect(before).toBeGreaterThanOrEqual(3);
     const pinch = await page.evaluate(async ({ x, y }) => {
       const target = document.elementFromPoint(x, y)!;
       let prevented = 0;
@@ -180,7 +189,7 @@ test.describe("Practice replay chart: full screen and settings", () => {
       return { tag: target.tagName, prevented };
     }, { x: box.x + box.width * 0.75, y: box.y + box.height / 2 });
     expect(pinch).toEqual({ tag: "CANVAS", prevented: 30 });
-    await expect.poll(candlePixels, { message: "30 pinch events of 2 px zoom the candles in by well over the library's 1.06x" }).toBeGreaterThan(before * 1.3);
+    await expect.poll(candleWidth, { message: "30 pinch events of 2 px widen the candles by well over the library's 1.06x" }).toBeGreaterThan(before * 1.3);
   });
 
   test("the type switch redraws the same bars and the legend still shows O H L C in Line and Area", async ({ page }) => {
