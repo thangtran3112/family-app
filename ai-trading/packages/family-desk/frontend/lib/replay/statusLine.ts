@@ -12,10 +12,10 @@ export type PracticeStatusLine = { left: readonly string[]; right: readonly stri
  * The day list: "Prices: Alpaca SIP · past days | Day lists built before the open ... List built 8:30 AM ET | Would-fire signals only".
  * One list time (D-165): after a re-scan it is the scan's clock, and "built before the open" goes once the day clock is past the open.
  */
-export function dayStatusLine(list: Pick<DayList, "list_at" | "rescan" | "clock">): PracticeStatusLine {
+export function dayStatusLine(list: Pick<DayList, "list_at" | "rescan" | "clock" | "list_pending">): PracticeStatusLine {
   return {
     left: [PRACTICE_COPY.statusPricesPast, ...(beforeOpen(list.clock) ? [PRACTICE_COPY.statusDayLists] : [])],
-    right: [practiceText("statusListBuilt", { listAt: formatEtTimeZone(listTime(list)) }), PRACTICE_COPY.statusSignals],
+    right: [practiceText(list.list_pending ? "statusListComesOut" : "statusListBuilt", { listAt: formatEtTimeZone(listTime(list)) }), PRACTICE_COPY.statusSignals],
   };
 }
 

@@ -17,7 +17,6 @@ import {
   followState,
   listTime,
   liveState,
-  endDayExitText,
   dayNumberText,
   dayTitle,
   filtersNote,
@@ -461,23 +460,6 @@ test("the footer is the server's day P/L: realized, open, how many are open, and
   assert.deepEqual(footer, { total: 154, split: "realized −$46.00 · open +$200.00", openOf: "2 open", asOf: "as of 10:30 AM ET" });
 });
 
-test("End day names the open trades it exits and the price she sees now", () => {
-  const rows = portfolioRows({
-    sessions: [
-      opened("SMCI", 12, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:52:00Z" } }),
-      opened("ANET", 13),
-      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, entry_at: "2026-03-10T13:45:00Z" } }),
-    ],
-  });
-  assert.equal(endDayExitText(rows), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI");
-  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "SMCI")), "Ending the day exits 1 open practice trade at the price you see now: SMCI");
-  assert.equal(endDayExitText(rows.filter((row) => row.symbol === "ANET")), null);
-  // F-06: a held name behind the day clock exits at the clock, so the line no longer promises the price on its chart.
-  const behind = rows.map((row) => (row.symbol === "NVDA" ? { ...row, behind: true } : row));
-  assert.equal(endDayExitText(behind, "2026-09-28T15:00:00Z"), "Ending the day exits 2 open practice trades at the day clock, 11:00 AM ET. A name behind the clock books its exit at the clock price, not the price on its chart: NVDA, SMCI");
-  assert.equal(endDayExitText(behind), "Ending the day exits 2 open practice trades at the price you see now: NVDA, SMCI", "without a clock the plain line stands");
-});
-
 test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with none open", () => {
   assert.equal(openTodayText({ open_count: 2, open_usd: 200 }), "2 open +$200.00");
   assert.equal(openTodayText({ open_count: 1, open_usd: -31.5 }), "1 open −$31.50");
@@ -690,10 +672,10 @@ test("a day thread's one action says what it does (D-078)", () => {
   assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Start Trading", "a day in progress opens too: the clock's Play resumes, this button never says Resume");
   assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 7, status: "practicing" } }), "Start Trading", "the same from the plan's cursor");
   assert.equal(dayActionLabel({ ...listed, day_no: 1 }, { ...plan, day_offset: 1 }), "Start Trading", "the label carries no day number, whatever the plan's offset");
-  // No open day: opening the next one starts it. The number is the thread's own (D-047).
-  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 7");
-  assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 10");
-  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Day 1");
+  // No open day: opening the next one says the same, with no day number (ADR-0023: a day runs open to open, the clock owns the day).
+  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Trading");
+  assert.equal(dayActionLabel(null, { ...plan, day_offset: 3, current: { id: 41, day_no: 6, status: "ended" } }), "Start Trading");
+  assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, next_day_no: 1 }), "Start Trading");
   assert.equal(dayActionLabel(null, { ...plan, days_opened: 0, current: null, prep: { state: "running", done: 1, total: 9, failed: 0 } }), null, "while the data prepares there is nothing to press");
   assert.equal(dayActionLabel(null, null), null);
 });
