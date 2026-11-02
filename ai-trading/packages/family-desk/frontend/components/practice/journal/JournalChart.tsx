@@ -6,12 +6,13 @@ import { buildChartSeries, type IndicatorId } from "@/lib/desk/workspace";
 import { levelLines, pnlValues, practiceMarkers, signalMarkers, windowIndex } from "@/lib/replay/marks";
 import type { ReplayFeed, ReplaySession } from "@/lib/replay/schemas";
 import { chartBars, viewFromFeed } from "@/lib/replay/feedState";
+import { serverSeries } from "@/lib/replay/serverIndicators";
 
 const INDICATORS: ReadonlySet<IndicatorId> = new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume"]);
 const AMBER = "#FFB020";
 
 /**
- * The session's whole window with her marks, the would-fire bells and a `Practice P/L` pane. Indicators are computed over
+ * The session's whole window with her marks, the would-fire bells and a `Practice P/L` pane. The indicators are the server's, over
  * the lookback plus the window, then the chart starts at the window start. After `end` the feed covers the whole day;
  * while a session is still open it holds only what is revealed, so nothing is unsealed early.
  */
@@ -20,7 +21,8 @@ export function JournalChart({ session, feed }: { session: ReplaySession; feed: 
     const view = viewFromFeed(feed, session.spec.interval);
     const all = chartBars(view);
     const from = windowIndex(all, feed.window_start ?? session.window_start);
-    const series = buildChartSeries(all, INDICATORS, view.interval);
+    // The lines are the server's own (ADR-0022), the same rows the replay chart drew: the journal's EMA 9/21 and VWAP are the ones she saw on the day.
+    const series = buildChartSeries(all, INDICATORS, view.interval, "stock", serverSeries(all, view.indicators, view.interval));
     const bars = all.slice(from);
     const pnl: MarketChartPane = {
       id: "pnl",

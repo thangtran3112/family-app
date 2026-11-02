@@ -21,8 +21,6 @@ export type ReplayHeaderProps = {
   lastPrice: number | null;
   /** Session VWAP at the playhead, from the chart's own series; null before there is one. */
   vwap: number | null;
-  /** Why VWAP has no value when the one-minute bars it is built from are not there; null otherwise. Shown as the figure's hover text (D-168). */
-  vwapNote?: string | null;
   /** The prior session's close; null when the feed has none. */
   priorClose: number | null;
   /** Closed trades plus the open trade marked at the last price. */
@@ -32,7 +30,7 @@ export type ReplayHeaderProps = {
 };
 
 /** One name: its symbol, day, last replayed price, VWAP, prior close and Practice P/L (02o §a3). The P/L is simulated: realized trades plus the open trade at the last price. It carries no clock and no player state: the time is the thread's (`ThreadClockBar`). A swing session adds its money bar. */
-export function ReplayHeader({ symbol, dayLabel, attempt, lastPrice, vwap, vwapNote, priorClose, pnl, swing }: ReplayHeaderProps) {
+export function ReplayHeader({ symbol, dayLabel, attempt, lastPrice, vwap, priorClose, pnl, swing }: ReplayHeaderProps) {
   return (
     <>
       <div className={styles.header}>
@@ -44,7 +42,7 @@ export function ReplayHeader({ symbol, dayLabel, attempt, lastPrice, vwap, vwapN
         </div>
         <dl className={styles.readout}>
           <div><dt>Last price</dt><dd>{formatPrice(lastPrice)}</dd></div>
-          <div title={vwapNote ?? undefined}><dt>VWAP</dt><dd>{formatPrice(vwap)}</dd></div>
+          <div><dt>VWAP</dt><dd>{formatPrice(vwap)}</dd></div>
           <div><dt>Prior close</dt><dd>{formatPrice(priorClose)}</dd></div>
           <div title="Closed practice trades plus the open trade at the last price">
             <dt>Practice P/L</dt>

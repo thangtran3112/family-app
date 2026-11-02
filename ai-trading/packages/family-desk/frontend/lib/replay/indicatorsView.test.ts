@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Bars } from "../api/schemas.ts";
+import { buildChartSeries, type IndicatorId } from "../desk/workspace.ts";
+import type { IndicatorTable } from "./feedState.ts";
 import { indicatorGroups, rsiState } from "./indicatorsView.ts";
+import { serverSeries } from "./serverIndicators.ts";
 
 // 60 one-minute bars from 9:30 ET on 2026-10-15 (13:30 UTC), closing along `close(i)`.
 const barsFor = (close: (i: number) => number, count = 60): Bars["bars"] =>
@@ -91,11 +94,36 @@ test("the rail on 150 real TSLA minute bars reads the session VWAP of the regula
   });
 });
 
-test("VWAP says in words when the one-minute bars it is built from are not there, and never 'Warming up' for that (D-168)", () => {
-  const bars = barsFor((i) => 100 + i, 40);
-  assert.deepEqual([row(indicatorGroups(bars, "15m", { values: null, status: "loading" }), "vwap").value, row(indicatorGroups(bars, "15m", { values: null, status: "loading" }), "vwap").state], ["—", "Reading 1-minute bars"]);
-  assert.equal(row(indicatorGroups(bars, "15m", { values: null, status: "unavailable" }), "vwap").state, "1-minute bars unavailable");
-  const ready = indicatorGroups(bars, "15m", { values: bars.map(() => 123.45), status: "ready" });
-  assert.equal(row(ready, "vwap").value, "123.45", "the value comes from the session VWAP, not from these bars");
-  assert.notEqual(row(ready, "vwap").state, "Warming up");
+test("parity: the rail reads the server's numbers as the browser's own calculation reads them on the same bars (ADR-0022)", () => {
+  const bars: Bars["bars"] = golden.minutes.rows.map(([t, h, l, c, v, phase]) => ({ t, o: c, h, l, c, v, ext: phase !== "regular" }));
+  const lastBar = bars.at(-1)!;
+  // The numbers the backend's `core/indicators.py` gives at the last of these 150 minute bars (pinned to the same fixture in the backend tests), as the
+  // server sends them: one row for the last bar (the forming candle's), nothing for the bars before it.
+  const table: IndicatorTable = {
+    interval: "1m",
+    asOfBar: lastBar.t,
+    rows: [{ t: lastBar.t, ema9: 370.6293, ema21: 370.2604, vwap: 373.1022, rsi14: 61.936, macd: 0.1508, macd_signal: -0.1831, macd_hist: 0.3338 }],
+  };
+  const fromServer = indicatorGroups(bars, "1m", serverSeries(bars, table, "1m"));
+  assert.deepEqual(valuesOf(fromServer), valuesOf(indicatorGroups(bars, "1m")), "same text on the rail, whichever side computed it");
+});
+
+test("a bar with no server row reads unknown, and rows of another interval are not laid on the bars", () => {
+  const bars = barsFor((i) => 100 + i, 3);
+  const rowAt = (i: number, ema9: number) => ({ t: bars[i]!.t, ema9, ema21: null, vwap: null, rsi14: null, macd: null, macd_signal: null, macd_hist: null });
+  const table: IndicatorTable = { interval: "1m", asOfBar: bars[2]!.t, rows: [rowAt(2, 102.5), rowAt(0, 100.5)] };
+  assert.deepEqual(serverSeries(bars, table, "1m").ema9, [100.5, null, 102.5], "laid by bar open, whatever order the rows came in");
+  assert.deepEqual(serverSeries(bars, table, "5m").ema9, [null, null, null], "another interval's rows are never drawn");
+  assert.deepEqual(serverSeries(bars, null, "1m").vwap, [null, null, null]);
+  assert.equal(row(indicatorGroups(bars, "1m", serverSeries(bars, table, "1m")), "ema9").value, "102.50");
+});
+
+test("the chart series from server rows has the same lines and panes as the browser's, with the server's values and none computed", () => {
+  const bars = barsFor((i) => 100 + i, 3);
+  const server = serverSeries(bars, { interval: "1m", asOfBar: bars[2]!.t, rows: [{ t: bars[2]!.t, ema9: 1, ema21: 2, vwap: 3, rsi14: 4, macd: 5, macd_signal: 6, macd_hist: 7 }] }, "1m");
+  const live = buildChartSeries(bars, new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume", "rsi", "macd"]), "1m");
+  const replay = buildChartSeries(bars, new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume", "rsi", "macd"]), "1m", "stock", server);
+  assert.deepEqual(replay.overlays.map((overlay) => overlay.id), live.overlays.map((overlay) => overlay.id));
+  assert.deepEqual(replay.panes.map((pane) => [pane.id, pane.series.map((item) => item.id)]), live.panes.map((pane) => [pane.id, pane.series.map((item) => item.id)]));
+  assert.deepEqual(replay.overlays.map((overlay) => [overlay.id, overlay.values]), [["vwap", [null, null, 3]], ["ema9", [null, null, 1]], ["ema21", [null, null, 2]]]);
 });

@@ -59,9 +59,8 @@ import { freeCashText } from "@/lib/replay/swing";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
 import { buildTicket, buyingPowerMessage, initialTicket, type PowerBasis, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
-import { useMinuteBars } from "@/lib/replay/useMinuteBars";
 import { useShownClock } from "@/lib/replay/useShownClock";
-import { sessionVwap } from "@/lib/replay/sessionVwap";
+import { serverSeries } from "@/lib/replay/serverIndicators";
 import { chartBars, dailyBlock, viewClock, type ReplayView } from "@/lib/replay/feedState";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { ChartToolbar } from "./ChartToolbar";
@@ -195,12 +194,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   useReportPracticeChrome({ day: spec.day, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock) });
 
-  // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series. VWAP is the session's, built from
-  // one-minute bars whatever the chart's interval (D-168), so the header, the left rail and the chart line agree on 1m, 5m and 15m.
+  // The chart's bars and series are built once: the chart draws them, the header reads VWAP from the same series and the left rail reads the same rows.
+  // EMA 9/21, VWAP, RSI and MACD are the server's, computed from the same cut as the price and the forming candle (ADR-0022): the browser computes none
+  // of them and asks for no one-minute feed, so the header, the left rail and the chart cannot disagree on 1m, 5m and 15m.
   const bars = useMemo(() => chartBars(view), [view]);
-  const minutes = useMinuteBars(session.id, view.interval !== "1m" && !(swing && chartMode === "daily"), view.revealedThrough);
-  const vwapOf = useMemo(() => sessionVwap(bars, view.interval, minutes), [bars, view.interval, minutes]);
-  const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval, "stock", vwapOf.values), [bars, view.interval, vwapOf]);
+  const server = useMemo(() => serverSeries(bars, view.indicators, view.interval), [bars, view.indicators, view.interval]);
+  const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval, "stock", server), [bars, view.interval, server]);
   const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
   // The left rail's indicators are read off what the chart shows: the intraday bars, or the rebased daily bars while a swing session is on Daily.
   const { daily, dailyForming } = view;
@@ -454,7 +453,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         attempt={session.attempt}
         lastPrice={view.last?.price ?? null}
         vwap={vwap}
-        vwapNote={vwapOf.status === "ready" ? null : vwapOf.status === "loading" ? PRACTICE_COPY.vwapLoading : PRACTICE_COPY.vwapNoMinutes}
         priorClose={view.levels.prior_close ?? null}
         pnl={pnl}
         swing={swing && session.thread ? { money: swingMoneyLine(session.thread), tapeNote: tapeNote(session.tape_feed) } : undefined}
@@ -558,7 +556,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
               />
             </>
           )}
-          <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} vwap={indicatorBars.bars === bars ? vwapOf : undefined} />
+          <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} server={indicatorBars.bars === bars ? server : undefined} />
           <section className={tapeOff ? styles.sessionSection : styles.tapeSection} aria-label="Tape" data-testid="tape-panel">
             <h2 className={styles.railTitle}>Tape</h2>
             {tapeOff ? (
