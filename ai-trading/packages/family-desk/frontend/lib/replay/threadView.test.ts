@@ -10,6 +10,7 @@ import {
   formatDayResult,
   formatWhole,
   hasNoDays,
+  headlineFigure,
   improvementOf,
   planRows,
   startedWithText,
@@ -54,7 +55,7 @@ test("the thread card reads in plain words", () => {
   assert.equal(adherenceTrendText({}), "—");
   assert.equal(todayLine(null as never), "No practice day open · the next list opens when you resume");
   assert.equal(todayLine(activeThread.today), "+$112.00 realized so far · 1 practice trade");
-  assert.equal(briefLine(threadBrief), "Thread balance $50,123.00 · today +$112.00");
+  assert.equal(briefLine(threadBrief), "Thread balance $50,123.00 · realized today +$112.00");
   assert.equal(briefLine({ ...threadBrief, today_pnl_usd: null }), "Thread balance $50,123.00");
   assert.equal(weeksInText(1), "first week");
   assert.equal(weeksInText(4), "4 weeks in");
@@ -116,6 +117,15 @@ test("the ten tiles carry the stats, and an empty thread has no days", () => {
   assert.deepEqual([fresh.win_rate!.value, fresh.win_rate!.sub], ["—", "no wins or losses yet"]);
   assert.equal(hasNoDays(freshThread), true);
   assert.equal(hasNoDays(thread), false);
+});
+
+test("the Summary headline says Equity when it is equity and Balance when it is the realized figure (D-156)", () => {
+  // A day thread with its clock account read: equity (the realized balance plus the open P/L at the clock), labelled as such.
+  assert.deepEqual(headlineFigure(50_000, { equity_usd: 49_761 }), { label: "Equity", value: "$49,761.00" });
+  // No account (a swing thread, a closed thread, the clock not read yet): the ledger balance, labelled Balance.
+  assert.deepEqual(headlineFigure(50_000, null), { label: "Balance", value: "$50,000.00" });
+  // The header says what "today" holds (D-158): the realized result only, as the Portfolio's "Day P/L (realized · open)" splits it.
+  assert.match(briefLine({ balance: 50_000, today_pnl_usd: 0 }), /realized today \$0\.00$/);
 });
 
 test("the plan recap reads yes, no and none in plain words, and no thread copy trips the banned-term check", () => {

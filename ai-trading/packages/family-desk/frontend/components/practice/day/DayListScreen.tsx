@@ -502,7 +502,7 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                       ? [
                           { id: "balance", label: PRACTICE_COPY.threadBalance, value: <>{formatBalance(list.thread.balance)} <SimulatedBadge /></> },
                           ...(list.thread.today_pnl_usd !== null
-                            ? [{ id: "today", label: PRACTICE_COPY.threadToday, value: formatDayResult(list.thread.today_pnl_usd), tone: signTone(list.thread.today_pnl_usd) }]
+                            ? [{ id: "today", label: PRACTICE_COPY.threadRealizedToday, value: formatDayResult(list.thread.today_pnl_usd), tone: signTone(list.thread.today_pnl_usd) }]
                             : []),
                         ]
                       : []),

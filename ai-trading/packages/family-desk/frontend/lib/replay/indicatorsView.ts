@@ -1,7 +1,9 @@
 import type { Tone } from "../../components/ui/tone.ts";
 import { currentValue, type ChartBar } from "../chart-data.ts";
 import { formatNumber, formatPrice } from "../desk/format.ts";
+import { PRACTICE_COPY } from "../desk/freshness.ts";
 import { buildChartSeries, type IndicatorId } from "../desk/workspace.ts";
+import type { SessionVwap } from "./sessionVwap.ts";
 
 // The Practice replay's left rail (owner, 2026-11-01): the popular indicators, read off the bars the server has revealed so far.
 // They come from `buildChartSeries`, the same functions that draw the live workspace's lines and panes, so a value here is the
@@ -48,12 +50,20 @@ function lineState(line: number | null, price: number | null): Pick<IndicatorRow
   return { state: "Price at", tone: "neutral" };
 }
 
+/** VWAP's row: its value and state, or the words for why there is no value when the one-minute bars are not there (D-168). */
+function vwapRow(row: IndicatorRow, vwap: SessionVwap | undefined): IndicatorRow {
+  if (vwap === undefined || vwap.status === "ready") return row;
+  return { ...row, state: vwap.status === "loading" ? PRACTICE_COPY.vwapLoading : PRACTICE_COPY.vwapNoMinutes, tone: "neutral" };
+}
+
 /**
  * RSI (14) and MACD (12, 26, 9) first, then VWAP and the two EMAs against the last price. VWAP is intraday only, so the daily view
- * (`interval` "1d") leaves it out. A value that has not warmed up yet reads "—" and says so; nothing is filled in.
+ * (`interval` "1d") leaves it out. A value that has not warmed up yet reads "—" and says so; nothing is filled in. `vwap` is the session VWAP
+ * built from one-minute bars (`sessionVwap`, D-168): VWAP then never depends on the chart's interval, and when no one-minute bars could be read the
+ * row says that in words instead of "Warming up".
  */
-export function indicatorGroups(bars: readonly ChartBar[], interval: string): IndicatorGroup[] {
-  const series = buildChartSeries(bars.map((bar) => ({ ...bar, v: bar.v ?? null, ext: bar.ext ?? false })), SET, interval);
+export function indicatorGroups(bars: readonly ChartBar[], interval: string, vwap?: SessionVwap): IndicatorGroup[] {
+  const series = buildChartSeries(bars.map((bar) => ({ ...bar, v: bar.v ?? null, ext: bar.ext ?? false })), SET, interval, "stock", vwap?.values);
   const price = bars.at(-1)?.c ?? null;
   const overlay = (id: string) => currentValue(series.overlays.find((item) => item.id === id)?.values ?? []);
   const pane = (paneId: string, seriesId: string) => currentValue(series.panes.find((item) => item.id === paneId)?.series.find((item) => item.id === seriesId)?.values ?? []);
@@ -68,7 +78,7 @@ export function indicatorGroups(bars: readonly ChartBar[], interval: string): In
   const line = (id: string, name: string, value: number | null): IndicatorRow => ({ id, name, value: formatPrice(value), ...lineState(value, price) });
 
   const trend: IndicatorRow[] = [
-    ...(series.overlays.some((item) => item.id === "vwap") ? [line("vwap", "VWAP", overlay("vwap"))] : []),
+    ...(series.overlays.some((item) => item.id === "vwap") ? [vwapRow(line("vwap", "VWAP", overlay("vwap")), vwap)] : []),
     line("ema9", "EMA 9", overlay("ema9")),
     line("ema21", "EMA 21", overlay("ema21")),
   ];

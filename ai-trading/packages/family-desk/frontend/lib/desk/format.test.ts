@@ -32,6 +32,11 @@ test("Eastern time formatting follows daylight saving", () => {
   assert.equal(formatEtDateClock("2026-10-31T03:05:09Z"), "Fri, Oct 30 · 11:05:09 PM ET"); // the evening before, in New York
   assert.equal(formatEtDateClock("2026-10-27T13:30:00Z", { seconds: false }), "Tue, Oct 27 · 9:30 AM ET"); // the next session's start
   assert.equal(formatEtDateClock(null), "—");
+  // Hide dates while a day is open (D-155): the weekday and the time, never the calendar date, in the evening and the morning alike.
+  assert.equal(formatEtDateClock("2026-09-25T13:30:00Z", { hideDate: true }), "Fri · 9:30:00 AM ET");
+  assert.equal(formatEtDateClock("2026-09-28T13:30:00Z", { seconds: false, hideDate: true }), "Mon · 9:30 AM ET");
+  assert.equal(formatEtDateClock("2026-10-31T03:05:09Z", { hideDate: true }), "Fri · 11:05:09 PM ET");
+  assert.equal(formatEtDateClock(null, { hideDate: true }), "—");
   assert.equal(formatEtStamp("2026-10-23T19:45:00Z"), "2026-10-23 15:45");
   assert.equal(formatEtDay("2026-10-23T20:00:00Z"), "Fri 2026-10-23");
   assert.equal(formatEtDay("2026-10-28"), "Wed 2026-10-28");
