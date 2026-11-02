@@ -147,6 +147,24 @@ def _everything(cut: frames.Cut) -> tuple:
 
 
 @pytest.mark.parametrize("width", [1, 5])
+def test_a_microsecond_index_is_cut_like_a_nanosecond_one(width: int) -> None:
+    """pandas 3 parses timestamps to microseconds (`pd.to_datetime`, the stub fixture, a provider's JSON). The cut must
+    not read those integers as nanoseconds: it would then treat every 1-minute bar as closed long ago and hand a 1m
+    chart the whole day after T (found by the Practice e2e, whose stub bars are microseconds)."""
+    minutes = _minutes(11)
+    micro = minutes.copy()
+    micro.index = micro.index.as_unit("us")
+    assert micro.index.unit == "us"
+    through = et(DAY, "10:12:30")
+    nano_cut, micro_cut = _series(minutes, width).bars(through), _series(micro, width).bars(through)
+    assert micro_cut.index.max() + width * MINUTE <= through, "nothing past T"
+    assert list(micro_cut.index) == list(nano_cut.index)
+    nano_ind = _series(minutes, width).indicators(nano_cut.index[-3:], None, through, f"{width}m")
+    micro_ind = _series(micro, width).indicators(micro_cut.index[-3:], None, through, f"{width}m")
+    assert nano_ind is not None and micro_ind is not None and micro_ind["rows"] == nano_ind["rows"]
+
+
+@pytest.mark.parametrize("width", [1, 5])
 def test_bending_every_bar_after_t_changes_nothing_a_cut_returns(width: int) -> None:
     minutes = _minutes(8)
     for through in _times(9, 12):

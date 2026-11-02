@@ -94,8 +94,8 @@ test("the curve reads out in words for a screen reader, and every new copy row i
 
 test("a swing thread's plan rows say a week where the day rule says a day", () => {
   const rows = planRows({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "no", maxLossUsd: 600, maxTrades: 6 }, "swing");
-  assert.deepEqual(rows.map((row) => row.label), ["Shares per trade", "Stop on every entry", "Trade only on a signal", "Max loss, pretend dollars a week", "Max trades a week"]);
-  assert.deepEqual(rows.map((row) => row.value), ["You set it on each entry", "Yes", "No", "$600", "6"]);
+  assert.deepEqual(rows.map((row) => row.label), ["Shares per trade", "Trade only on a signal", "Max loss, pretend dollars a week", "Max trades a week"]);
+  assert.deepEqual(rows.map((row) => row.value), ["You set it on each entry", "No", "$600", "6"]);
 });
 
 test("the Starting balance note moves off the end labels when the balance is still at its start", () => {

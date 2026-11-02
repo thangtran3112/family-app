@@ -298,7 +298,6 @@ export const ReplaySessionSummarySchema = z.object({
   day: z.iso.date(),
   attempt: finite.int(),
   status: SessionStatusSchema,
-  hide_date: z.enum(["yes", "no"]),
   revealed_through: timestamp,
   window_end: timestamp,
   trades: finite.int(),
@@ -368,12 +367,45 @@ const LevelsSchema = z.object({
   opening_range_low: finite.nullable().optional(),
 }) satisfies z.ZodType<components["schemas"]["ReplayLevelsOut"]>;
 
+/** The exchange's state at the thread time (a day thread's payloads; ADR-0022). After `tape_end` the day has no bars: nothing is filled. */
+export const MarketSchema = z.object({
+  phase: z.enum(["premarket", "regular", "after_hours", "closed"]),
+  tape_end: timestamp,
+  last_bar_at: timestamp.nullable(),
+  next_open_at: timestamp.nullable(),
+}) satisfies z.ZodType<components["schemas"]["MarketOut"]>;
+
+const IndicatorRowSchema = z.object({
+  t: timestamp,
+  ema9: finite.nullable(),
+  ema21: finite.nullable(),
+  vwap: finite.nullable(),
+  rsi14: finite.nullable(),
+  macd: finite.nullable(),
+  macd_signal: finite.nullable(),
+  macd_hist: finite.nullable(),
+}) satisfies z.ZodType<components["schemas"]["IndicatorRowOut"]>;
+
+/** Server-computed indicators of the bars this payload carries, then the forming candle (whose close is the price). A value that has not warmed up is null. */
+export const IndicatorsSchema = z.object({
+  interval: ReplayIntervalSchema,
+  as_of_bar: timestamp.nullable(),
+  rows: z.array(IndicatorRowSchema),
+}) satisfies z.ZodType<components["schemas"]["IndicatorsOut"]>;
+
 const LastSchema = z.object({ price: finite, at: timestamp, age_s: finite.int() }) satisfies z.ZodType<components["schemas"]["LastPrintOut"]>;
 
 /** What `advance` returns for `(previous, revealed_through]`; `feed` returns the same object for everything revealed so far. */
 export const ReplayDeltaSchema = z.object({
   revealed_through: timestamp,
   day_clock: timestamp.nullable(),
+  /** The thread's own time T, uncapped and never extrapolated by the server; null for a standalone or swing session (ADR-0022). */
+  thread_time: timestamp.nullish(),
+  /** `min(T, tape end)` for a day-thread name; the playhead for every other session. */
+  data_through: timestamp,
+  market: MarketSchema.nullish(),
+  /** The indicators of this payload's bars, from the same cut as the bars, the price and the forming candle. */
+  indicators: IndicatorsSchema.nullish(),
   behind_clock: z.boolean(),
   at_end: z.boolean(),
   bars: z.array(ReplayBarSchema),
@@ -468,6 +500,9 @@ export type ReplayPace = NonNullable<ReplayPrints["pace"]>;
 export type ReplaySignal = z.infer<typeof ReplaySignalSchema>;
 export type ReplayLevels = z.infer<typeof ReplayDeltaSchema>["levels"];
 export type ReplayDelta = z.infer<typeof ReplayDeltaSchema>;
+export type Market = z.infer<typeof MarketSchema>;
+export type Indicators = z.infer<typeof IndicatorsSchema>;
+export type IndicatorBar = Indicators["rows"][number];
 export type ReplayFeed = z.infer<typeof ReplayFeedSchema>;
 export type MarkResult = z.infer<typeof MarkResultSchema>;
 export type PracticeOrder = z.infer<typeof OrderSchema>;

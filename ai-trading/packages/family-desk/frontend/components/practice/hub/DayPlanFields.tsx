@@ -28,7 +28,7 @@ import modal from "./newplan.module.css";
 
 /**
  * The daily-list half of the New plan modal (02r2, D-075, D-076): her filters as one vertical column of checkboxes, then the
- * settings in one two-column grid (first day, days, hide dates, list time, list size, interval, window). The
+ * settings in one two-column grid (first day, days, list time, list size, interval, start). The
  * parent owns the draft and the first day (the recorded default only applies until she picks one). Nothing is armed (D-076),
  * and the list time moves up for a cadence filter.
  */
@@ -113,13 +113,6 @@ export function DayPlanFields({
               onChange={(sessions) => onDraft({ ...draft, sessions })}
             />
           </Field>
-          <Field id="plan-hide" label={PRACTICE_COPY.planHideDates} group className={modal.span} note={PRACTICE_COPY.planHideDatesHint}>
-            <Segmented
-              value={draft.hideDates ? "yes" : "no"}
-              options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
-              onChange={(value) => onDraft({ ...draft, hideDates: value === "yes" })}
-            />
-          </Field>
           <Field id="plan-list-at" label={PRACTICE_COPY.planListAt} group className={modal.span} note={anyHeld ? needText : PRACTICE_COPY.planListAtHint} error={problems.listAt} reserve>
             <Segmented
               fill
@@ -141,9 +134,6 @@ export function DayPlanFields({
           </Field>
           <Field id="plan-from" label={PRACTICE_COPY.planWindowFrom} error={problems.window}>
             <Input type="time" value={setup.from} onChange={(event) => patchSetup({ ...setup, from: event.target.value })} />
-          </Field>
-          <Field id="plan-to" label={PRACTICE_COPY.planWindowTo} note={PRACTICE_COPY.planWindowToNote}>
-            <Input type="time" value={setup.to} aria-invalid={problems.window ? true : undefined} onChange={(event) => patchSetup({ ...setup, to: event.target.value })} />
           </Field>
         </div>
       </fieldset>

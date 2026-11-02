@@ -3,9 +3,8 @@ import test from "node:test";
 import { attemptsText, dayCell, orderDays, rankText, tagLabel, tagsText } from "./daysView.ts";
 import { daysResponse } from "./fixtures.ts";
 
-test("the day cell shows the weekday date only while dates are on", () => {
-  assert.equal(dayCell({ day: "2026-04-07" }, true), "Tue 2026-04-07");
-  assert.equal(dayCell({ day: "2026-04-07" }, false), "Hidden day");
+test("the day cell always shows the weekday and the date", () => {
+  assert.equal(dayCell({ day: "2026-04-07" }), "Tue 2026-04-07");
 });
 
 test("tags read as words; gap tags carry their size when the API gives one", () => {

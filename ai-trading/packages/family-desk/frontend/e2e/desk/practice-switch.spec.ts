@@ -487,7 +487,6 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByLabel("Status")).toContainText("List built 9:35 AM ET");
     await expect(page.getByLabel("Status")).not.toContainText("Day lists built before the open");
     await expect(page.getByTestId("rescan-counts")).toHaveText("2 of 2 matched · 0 new in this scan");
-    await expect(label).not.toContainText("2026"); // dates stay hidden
     await expect(page.getByRole("table", { name: "Re-scan" })).toHaveCount(0);
     await expect(list.getByRole("row")).toHaveCount(3); // the header and its two names
     await expect(list.getByRole("row", { name: /TSLA/ })).toHaveCount(1);

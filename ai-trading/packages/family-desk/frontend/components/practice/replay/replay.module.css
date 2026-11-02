@@ -61,6 +61,8 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 /* The thread's time on a chart, read-only (ADR-0018): the controls are on the Summary. */
 .timeReadout { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin: 0; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
 .timeReadout > [data-testid="thread-clock-time"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+/* The chart is not being updated: the readout is held and this says so (ADR-0022). */
+.staleNote { color: var(--color-amber); }
 .status { margin: 0 0 0 auto; color: var(--color-muted); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
 .quick { display: inline-flex; gap: var(--space-1); }
 .timelineWrap { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -72,7 +74,6 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .timelineFill { height: 100%; border-radius: var(--radius-full); background: var(--color-hairline); }
 .tick { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--color-text); }
 .tick[data-kind="signal"] { background: var(--color-amber); }
-.tick[data-kind="focus"] { background: var(--color-muted); }
 .jump { display: inline-flex; }
 .menu { display: flex; flex-direction: column; padding: var(--space-1); }
 .menuItem { display: flex; min-height: var(--size-lg); align-items: center; justify-content: space-between; gap: var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-2); color: var(--color-text); font: inherit; font-size: var(--text-label); text-align: left; cursor: pointer; }

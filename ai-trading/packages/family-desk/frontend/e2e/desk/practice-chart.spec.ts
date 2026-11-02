@@ -1,6 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { chartPalette } from "../../lib/desk/chartPalette.ts";
 import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
+import { formatEtDay } from "../../lib/desk/format.ts";
 import { defaultDraft, draftToSpec } from "../../lib/replay/setup.ts";
 import { origin } from "../helpers";
 import { expect, openDesk, prepareDesk, test } from "./helpers";
@@ -370,23 +371,18 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
     await prepareDesk(context);
   });
 
-  // D-100: after End day the review shows the date, but the replay still said "Hidden day" and offered Show date.
-  test("an ended session's replay shows its date and drops the Hidden day chip, the banner and Show date (R-04)", async ({ page, context }) => {
-    const id = await createStubSession(context, { dayHidden: true });
+  // ADR-0022: an open session and an ended one both name their date; there is no hidden state and no Show date.
+  test("an open and an ended session's replay both show their date (R-04)", async ({ page, context }) => {
+    const id = await createStubSession(context);
     await openReplay(page, id);
-    await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toBeVisible();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toBeVisible();
-    await expect(page.getByText(PRACTICE_COPY.hiddenDay, { exact: true })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText(DAY);
+    await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
+    await expect(page.locator("body")).toContainText(formatEtDay(DAY));
 
     const ended = await context.request.post(`${origin}/api/desk/replay/sessions/${id}/end`);
     expect(ended.ok(), await ended.text()).toBeTruthy();
     await openDesk(page, `/practice/replay?id=${id}`);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
-    await expect(page.getByText(PRACTICE_COPY.bandHiddenWhy)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.showDate })).toHaveCount(0);
-    await expect(page.getByText(PRACTICE_COPY.hiddenDay, { exact: true })).toHaveCount(0);
     await expect(page.locator("h1").locator("xpath=..")).toContainText(/2026-09-25/);
   });
 

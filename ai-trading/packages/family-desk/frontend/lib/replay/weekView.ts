@@ -10,7 +10,7 @@ import { sourceLabel } from "./universeView.ts";
 
 // The weekly review (02p e1, e2), view logic: tiles, the selection and timing sentence, the equity series, the days and
 // holds tables, the universe heat strip, the adherence checks and the "Start Week" step. Pure, so the node tests cover
-// it. A week names its days by number and weekday only, so no date is revealed. Every dollar figure is SIMULATED, and
+// it. A week names its days by number and weekday (the week review carries no date; the thread screens add it). Every dollar figure is SIMULATED, and
 // every sign is a real minus (U+2212) or a plus.
 
 const MINUS = "−";
@@ -124,7 +124,7 @@ export type EquityPoint = {
   dayNo: number;
   /** "D3" */
   label: string;
-  /** A stand-in weekday date for the chart's time axis: the real dates stay hidden. */
+  /** A stand-in weekday date that only spaces the bars: the week review's API names a day by number and weekday, so no date is printed from it. */
   t: string;
   balance: number;
   equity: number;

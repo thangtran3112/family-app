@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { MarketChart, type MarketChartLevel } from "@/components/charts/MarketChart";
-import { Badge } from "@/components/ui/Badge";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { ChartLegend } from "@/components/workspace/ChartLegend";
@@ -10,7 +9,6 @@ import { EMPTY_VALUE, formatPrice, formatSignedPct, signTone } from "@/lib/desk/
 import { levelsLegend } from "@/lib/desk/workspace";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { Candidate, Peek } from "@/lib/replay/daily";
-import { peekDailyBars } from "@/lib/replay/dayView";
 import styles from "./day.module.css";
 import { FactList } from "@/components/ui/FactList";
 
@@ -36,7 +34,7 @@ function levelLines(peek: Peek, view: "daily" | "today"): MarketChartLevel[] {
 
 /**
  * Peek (02o-b v1): one candidate's chart before the open, cut at the time the list was built. The daily bars are the
- * list's own share-adjusted frame (never the raw one), and with dates hidden they sit on a stand-in timeline. The day list
+ * list's own share-adjusted frame (never the raw one), each on its real date. The day list
  * shows it in a drawer (`ui/Dialog` size "drawer"), wide enough for the chart and its level legend.
  */
 export function PeekPanel({
@@ -46,7 +44,6 @@ export function PeekPanel({
   loading,
   failed,
   onRetry,
-  hideDates,
 }: {
   symbol: string;
   /** The list row of the peeked name: its prev close, list-price change and earnings flag (P7's facts under the chart). */
@@ -55,10 +52,8 @@ export function PeekPanel({
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
-  hideDates: boolean;
 }) {
   const [view, setView] = useState<"daily" | "today">("today");
-  const daily = useMemo(() => (peek ? peekDailyBars(peek.daily, hideDates) : []), [peek, hideDates]);
   const levels = useMemo(() => (peek ? levelLines(peek, view) : []), [peek, view]);
   const legend = useMemo(() => levelsLegend(PRACTICE_COPY.dayPeekLevels, levels), [levels]);
 
@@ -70,7 +65,6 @@ export function PeekPanel({
     <div className={styles.peek}>
       <div className={styles.peekHead}>
         <h3 className={styles.peekTitle}>{peek.symbol}</h3>
-        {hideDates && <Badge tone="neutral">Dates hidden</Badge>}
         <Tabs
           idBase={PEEK_TABS_ID}
           label="Peek view"
@@ -92,7 +86,6 @@ export function PeekPanel({
           asOf={peek.data_through}
           levels={levels}
           volume
-          hideDates={hideDates}
           clockTicks
           sessionShading
           chrome="bare"
@@ -102,12 +95,11 @@ export function PeekPanel({
         <MarketChart
           symbol={peek.symbol}
           interval="1d"
-          bars={daily}
+          bars={peek.daily}
           quality="eod"
           asOf={null}
           levels={levels}
           volume
-          hideDates={hideDates}
           chrome="bare"
           height={PEEK_CHART_HEIGHT}
         />

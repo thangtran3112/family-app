@@ -2,6 +2,9 @@ import type {
   DailyBar,
   DailyBlock,
   Hold,
+  IndicatorBar,
+  Indicators,
+  Market,
   OpenTrade,
   Paused,
   ReplayBar,
@@ -30,6 +33,9 @@ export type TapeMeta = { feed: TapeFeed; count: number; volume: number; shown: n
 /** One advance: the playhead span it covered and the prints it carried. */
 export type PaceSample = { fromMs: number; toMs: number; count: number; volume: number };
 
+/** The server's indicator rows, one per bar open (a closed bar, or the forming candle), oldest first. */
+export type IndicatorTable = { interval: ReplayInterval; asOfBar: string | null; rows: IndicatorBar[] };
+
 export type ReplayView = {
   interval: ReplayInterval;
   /** Closed display bars (lookback plus the revealed window), oldest first, one per start time. */
@@ -47,6 +53,14 @@ export type ReplayView = {
   quietS: number | null;
   openTrade: OpenTrade | null;
   revealedThrough: string;
+  /** The thread's own time T from this payload (ADR-0022): uncapped, never extrapolated by the server. Null for a standalone or swing session. */
+  threadTime: string | null;
+  /** How far this payload's data runs: `min(T, tape end)` for an open day-thread name, the playhead for every other session. */
+  dataThrough: string;
+  /** The exchange at T (a day thread's payloads): the phase, the day's tape end, this name's last bar and when the next day's data starts. */
+  market: Market | null;
+  /** The server's EMA 9/21, VWAP, RSI and MACD for the bars held (and the forming candle), from the same cut as the price: the chart and the left rail read these. */
+  indicators: IndicatorTable | null;
   /** The day list's shared clock (null for a standalone session) and whether this name's playhead is behind it. */
   dayClock: string | null;
   behindClock: boolean;
@@ -64,6 +78,22 @@ export type ReplayView = {
   /** Swing only: the stop that paused the last advance, kept for the toast until she dismisses it or the next advance. */
   paused: Paused | null;
 };
+
+/** Indicator rows keyed by bar open: a later answer replaces the same bar, new bars append, order stays ascending. */
+function mergeIndicators(existing: IndicatorTable | null, incoming: Indicators | null | undefined): IndicatorTable | null {
+  if (incoming == null) return existing;
+  const kept = existing !== null && existing.interval === incoming.interval ? existing.rows : [];
+  const byTime = new Map<number, IndicatorBar>(kept.map((row) => [ms(row.t), row]));
+  for (const row of incoming.rows) byTime.set(ms(row.t), row);
+  return { interval: incoming.interval, asOfBar: incoming.as_of_bar, rows: [...byTime.entries()].sort(([a], [b]) => a - b).map(([, row]) => row) };
+}
+
+/**
+ * The one time a name's screen shows: the payload's own thread time T. A swing or standalone session has no T, so its time is its playhead, or the
+ * day list's shared clock when a name was left behind it (the thread's time, not that name's older playhead).
+ */
+export const viewClock = (view: Pick<ReplayView, "threadTime" | "revealedThrough" | "dayClock">): string =>
+  view.threadTime ?? (view.dayClock !== null && ms(view.dayClock) > ms(view.revealedThrough) ? view.dayClock : view.revealedThrough);
 
 const toRow = ([t, price, size, tick]: ReplayDelta["prints"]["rows"][number]): TapeRow => ({ t, price, size, tick });
 
@@ -110,6 +140,10 @@ export function viewFromFeed(feed: ReplayFeed, interval: ReplayInterval): Replay
     quietS: feed.quiet_s,
     openTrade: feed.open_trade,
     revealedThrough: feed.revealed_through,
+    threadTime: feed.thread_time ?? null,
+    dataThrough: feed.data_through,
+    market: feed.market ?? null,
+    indicators: mergeIndicators(null, feed.indicators),
     dayClock: feed.day_clock,
     behindClock: feed.behind_clock,
     clockRunning: feed.thread_clock?.running === true,
@@ -142,6 +176,10 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
     quietS: delta.quiet_s,
     openTrade: delta.open_trade,
     revealedThrough: delta.revealed_through,
+    threadTime: delta.thread_time ?? null,
+    dataThrough: delta.data_through,
+    market: delta.market ?? null,
+    indicators: mergeIndicators(view.indicators, delta.indicators),
     dayClock: delta.day_clock,
     behindClock: delta.behind_clock,
     clockRunning: delta.thread_clock?.running === true,

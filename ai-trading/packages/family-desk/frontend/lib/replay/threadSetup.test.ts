@@ -65,7 +65,7 @@ test("a max loss above the starting balance is refused in the server's words", (
 test("a thread's plan round-trips through the edit draft into a patch", () => {
   const draft = planToDraft(activeThread.thread.plan, activeThread.thread.startingBalance);
   assert.equal(draft.maxLossUsd, "600");
-  assert.deepEqual(threadPatchToSpec(draft), { schemaVersion: 1, plan: activeThread.thread.plan });
+  assert.deepEqual(threadPatchToSpec(draft), { schemaVersion: 1, plan: { ...activeThread.thread.plan, stopNoteOnEntry: "no" } }, "a stop is not asked for: the contract's field goes as no");
   assert.equal(validatePlanEdit(draft, 50000).ok, true);
   assert.equal(planToDraft({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }, 50000).planNote, "");
 });

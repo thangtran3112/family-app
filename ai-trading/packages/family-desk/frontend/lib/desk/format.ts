@@ -49,16 +49,16 @@ export function formatEtClock(iso: string | null): string {
 }
 
 /**
- * "Mon, Oct 26 · 10:11:42 AM ET": the thread clock, a full date and the time of day to the second (`seconds: false` drops them).
- * `hideDate` is the hidden form while a day is open on a thread made with Hide dates: "Mon · 10:11:42 AM ET", the weekday and the time only,
- * as the "Replay · hidden day" chip says it (ADR-0018: the full date is the unhidden form).
+ * "Fri 2026-10-23 · 1:22:24 AM ET": the one format of a thread time everywhere in Practice (ADR-0022): weekday, ISO date, time of day to
+ * the second (`seconds: false` drops them) and the zone. The date is the instant's own New York calendar date, so Thursday's list at
+ * 1:22 AM reads Friday.
  */
-export function formatEtDateClock(iso: string | null, { seconds = true, hideDate = false }: { seconds?: boolean; hideDate?: boolean } = {}): string {
+export function formatEtDateClock(iso: string | null, { seconds = true }: { seconds?: boolean } = {}): string {
   if (!iso) return EMPTY_VALUE;
-  const p = partsOf(iso, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...(seconds ? { second: "2-digit" as const } : {}), hour12: true });
-  if (!p.hour) return EMPTY_VALUE;
-  const time = `${p.hour}:${p.minute}${seconds ? `:${p.second}` : ""} ${p.dayPeriod} ET`;
-  return hideDate ? `${p.weekday} · ${time}` : `${p.weekday}, ${p.month} ${p.day} · ${time}`;
+  const p = partsOf(iso, { hour: "numeric", minute: "2-digit", ...(seconds ? { second: "2-digit" as const } : {}), hour12: true });
+  const day = formatEtDay(iso);
+  if (!p.hour || day === EMPTY_VALUE) return EMPTY_VALUE;
+  return `${day} · ${p.hour}:${p.minute}${seconds ? `:${p.second}` : ""} ${p.dayPeriod} ET`;
 }
 
 /** "2026-10-23 15:45": the mocks' `time_et` text. */

@@ -127,25 +127,19 @@ test("Practice markers on a bar that is not loaded are dropped; the rest come ou
   assert.deepEqual(markers.map((marker) => marker.time), [chartTime("2026-10-23T13:30:00Z"), chartTime("2026-10-23T13:45:00Z")]);
 });
 
-test("replay axes read as time of day, with the date only on day ticks and never when hidden", () => {
+test("replay axes read as time of day, with the date on day ticks", () => {
   const time = chartTime("2026-10-23T14:07:00Z");
   assert.equal(formatChartClock(time), "10:07 AM");
   assert.equal(formatChartClock({ year: 2026, month: 10, day: 23 }), "");
-  assert.equal(replayTickLabel(time, 3, false), "10:07 AM");
-  assert.equal(replayTickLabel(time, 4, true), "10:07 AM");
-  assert.equal(replayTickLabel(time, 2, false), "Oct 23");
-  assert.equal(replayTickLabel(time, 2, true), "");
-  assert.equal(replayTickLabel({ year: 2026, month: 10, day: 23 }, 2, false), "");
+  assert.equal(replayTickLabel(time, 3), "10:07 AM");
+  assert.equal(replayTickLabel(time, 4), "10:07 AM");
+  assert.equal(replayTickLabel(time, 2), "Oct 23");
+  assert.equal(replayTickLabel({ year: 2026, month: 10, day: 23 }, 2), "");
 });
 
-test("the data table's source time: the bar's ET day and time, the caller's label while dates are hidden, else the clock (M4, V-Technicals-05)", () => {
-  const stamp = "2001-01-02"; // a stand-in date: its clock time reads "07:00 PM" and says nothing
-  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false), "Fri 2026-10-23 10:07 AM", "dates shown: New York day and time, never a raw UTC string");
-  assert.equal(sourceTimeLabel("2026-10-23", 0, false), "Fri 2026-10-23", "a daily bar has no clock");
-  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, false, ["D-1"]), "Fri 2026-10-23 10:07 AM", "labels are for hidden dates only");
-  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z", 0, true), "10:07 AM", "hidden, no labels: the time of day, as intraday charts keep it");
-  assert.equal(sourceTimeLabel(stamp, 1, true, ["D-2", "D-1"]), "D-1");
-  assert.equal(sourceTimeLabel(stamp, 2, true, ["D-2", "D-1"]), formatChartClock(chartTime(`${stamp}T00:00:00Z`)), "a row without a label falls back");
+test("the data table's source time is the bar's ET day and time, never a raw UTC string (M4, V-Technicals-05)", () => {
+  assert.equal(sourceTimeLabel("2026-10-23T14:07:00Z"), "Fri 2026-10-23 10:07 AM");
+  assert.equal(sourceTimeLabel("2026-10-23"), "Fri 2026-10-23", "a daily bar has no clock");
 });
 
 test("the price pane keeps at least 60% of the chart; indicator panes shrink to fit, never past their own height (V-Technicals-04)", () => {

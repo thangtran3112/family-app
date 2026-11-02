@@ -7,7 +7,7 @@ import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { savePlanPatiently } from "@/lib/desk/patience";
-import { createThread, loadDaily, loadUniverseDays, openNextDay } from "@/lib/desk/replay";
+import { createThread, loadDaily, loadThreadCapacity, loadUniverseDays, openNextDay } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { hubSwingText, startBlockedBy, type ThreadMode } from "@/lib/replay/hubSwing";
 import { defaultPlanDraft, effectiveFirstDay, livePlanProblems, planProblems, startLabel, validatePlanDraft, type PlanDraft, type PlanProblems } from "@/lib/replay/planSetup";
@@ -76,6 +76,10 @@ export function NewPlanModal({
   const recorded = useDeskQuery("practice:universe-days", (signal) => loadUniverseDays({}, { signal }));
   const [dayPicked, setDayPicked] = useState(false);
   const [swingDayPicked, setSwingDayPicked] = useState(false);
+  // Every user shares the day-trade slots (ADR-0022): with all taken a new day thread is refused, so the form says so before she fills it in.
+  const capacity = useDeskQuery("thread-capacity", (signal) => loadThreadCapacity({ signal }), { enabled: thread === null });
+  const dayFull = thread === null && capacity.data !== null && capacity.data.day_active >= capacity.data.day_max;
+  const dayFullText = capacity.data === null ? null : practiceText("daySlotsFull", { max: capacity.data.day_max });
   const recordedDay = recorded.data?.first_day_default ?? null;
   const firstDay = effectiveFirstDay(plan.firstDay, dayPicked, recordedDay);
   // A swing thread starts on the same recorded morning (M-04): the guess three months back can lie outside the data.
@@ -170,7 +174,8 @@ export function NewPlanModal({
         );
       onSaved(id);
     } catch (error) {
-      if (error instanceof DeskApiError && error.status === 422 && error.problems.length > 0) {
+      // 422: a field is wrong. 409 on starting a thread: every day-trade slot is taken, and the server names the `mode` field with its sentence.
+      if (error instanceof DeskApiError && (error.status === 422 || (error.status === 409 && stage === "thread")) && error.problems.length > 0) {
         setProblems(stage === "thread" ? (swing ? swingProblems(error.problems) : threadProblems(error.problems)) : planProblems(error.problems));
       } else {
         setFailure(problemMessage(error, swing ? PRACTICE_COPY.swingStartThreadError : stage === "thread" ? PRACTICE_COPY.threadStartError : PRACTICE_COPY.newPlanError));
@@ -195,7 +200,7 @@ export function NewPlanModal({
   const formError = failure ?? formProblem ?? null;
   const echo = Object.values(fieldProblems).find((text) => text) ?? null;
   // Why Start is off, in the footer: a problem first, then what is still missing. null means it can start.
-  const held = echo ?? (swing ? blocker : noFilters ? PRACTICE_COPY.planSaveFilterFirst : null);
+  const held = echo ?? (swing ? blocker : dayFull ? dayFullText : noFilters ? PRACTICE_COPY.planSaveFilterFirst : null);
   const note = swing
     ? hubSwingText("startsWith", { balance: formatWhole(shownBalance), n: preview.preview?.rows.length ?? 0 })
     : planOnly
@@ -271,7 +276,7 @@ export function NewPlanModal({
           <Field id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
             <Segmented
               value={mode}
-              options={[{ value: "day", label: PRACTICE_COPY.threadModeDay }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
+              options={[{ value: "day", label: PRACTICE_COPY.threadModeDay, ...(dayFull && dayFullText !== null ? { disabledReason: dayFullText, reasonId: "new-plan-note" } : {}) }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
               onChange={(next) => editThread({ ...threadDraft, mode: next })}
             />
           </Field>

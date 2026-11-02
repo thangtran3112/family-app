@@ -13,7 +13,7 @@ import { createReplaySession, loadReplayFeed, loadReplaySession, patchReplaySess
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { adherenceHint, journalDatesHidden, noTradesText, signalRows, summaryTiles, swingJournalDay, tradeRows } from "@/lib/replay/journalView";
+import { adherenceHint, noTradesText, signalRows, summaryTiles, swingJournalDay, tradeRows } from "@/lib/replay/journalView";
 import { sessionResumeHref } from "@/lib/replay/dayView";
 import { isSwingSession } from "@/lib/replay/playView";
 import type { ReplaySession } from "@/lib/replay/schemas";
@@ -55,18 +55,16 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
   const router = useRouter();
   const { spec, journal } = session;
   const ended = session.status === "ended";
-  // The date stays masked while the session is open, and for a swing session while its thread goes on (one date names every later day).
-  const hidden = journalDatesHidden(session);
   const swing = isSwingSession(session);
   const swingDay = useDeskQuery(`journal-swing-day:${session.day_list_id}`, (signal) => loadAnyDayList(session.day_list_id ?? 0, {}, { signal }), {
-    enabled: hidden && swing && session.day_list_id !== null,
+    enabled: swing && session.day_list_id !== null,
   });
   const feed = useDeskQuery(`replay-feed:${session.id}:${session.status}`, (signal) => loadReplayFeed(session.id, { interval: spec.interval }, { signal }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [again, setAgain] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null });
 
-  useReportPracticeChrome({ day: spec.day, hidden, playhead: ended ? session.window_end : session.revealed_through });
+  useReportPracticeChrome({ day: spec.day, playhead: ended ? session.window_end : session.revealed_through });
 
   const save = (patch: { notes?: string | null; rating?: number | null }) => {
     setSaving(true);
@@ -89,7 +87,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
   };
 
   const swingList = swingDay.data !== null && isSwingDayList(swingDay.data) ? swingDay.data : null;
-  const dayLabel = hidden ? (swing ? swingJournalDay(swingList) : PRACTICE_COPY.hiddenDay) : formatEtDay(spec.day);
+  const dayLabel = swingList !== null ? swingJournalDay(swingList) : formatEtDay(spec.day);
   const tiles = summaryTiles(journal);
   const signalCount = feed.data?.signals.length ?? 0;
 
@@ -110,7 +108,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
         <section className={styles.section} aria-label="Chart">
           <h2 className={styles.sectionTitle}>Chart</h2>
           {feed.data ? (
-            <JournalChart session={session} feed={feed.data} hideDates={hidden} />
+            <JournalChart session={session} feed={feed.data} />
           ) : feed.error === null ? (
             <LoadingBlock label="Loading the chart…" height={320} />
           ) : (

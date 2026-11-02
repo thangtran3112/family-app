@@ -25,7 +25,6 @@ export type ReplayChartProps = {
   /** The displayed bars and the series computed from them (the header reads VWAP from the same series). */
   bars: ReplayBar[];
   series: ChartSeries;
-  hideDates: boolean;
   focus: { time: string; at: number } | null;
   dimmed?: boolean;
   /** What she chose to see (design-replay-chart §b): the series type, the lines and the levels. */
@@ -50,16 +49,15 @@ export function ReplayChart(props: ReplayChartProps) {
 
 /**
  * Swing Daily view (02p a3 rule 4): the API's rebased daily bars through the prior close plus the forming candle, her hold's
- * entry marker and stop line across the days. With dates hidden the axis prints no date and the legend names a bar "D-3"
- * or "Today" (the chart component draws no tick text for a stand-in timeline).
+ * entry marker and stop line across the days. The axis and the legend name each bar by its real date.
  */
-function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps) {
+function DailyChart({ symbol, view, dimmed, prefs }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
   const { daily, dailyForming } = view;
   const model = useMemo(() => {
     const block = dailyBlock({ daily, dailyForming });
-    return block === null ? null : dailyChartModel(block, hideDates);
-  }, [daily, dailyForming, hideDates]);
+    return block === null ? null : dailyChartModel(block);
+  }, [daily, dailyForming]);
   if (model === null) return null;
   const legend = dailyLegend(symbol, model, crosshair);
   return (
@@ -79,8 +77,6 @@ function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps
           onCrosshair={setCrosshair}
           chrome="bare"
           height="fill"
-          hideDates={hideDates}
-          rowLabels={model.offsets ?? undefined}
           dimmed={dimmed}
         />
       </div>
@@ -89,7 +85,7 @@ function DailyChart({ symbol, view, hideDates, dimmed, prefs }: ReplayChartProps
   );
 }
 
-function IntradayChart({ symbol, view, bars, series, hideDates, focus, dimmed, prefs, onTogglePref, order }: ReplayChartProps) {
+function IntradayChart({ symbol, view, bars, series, focus, dimmed, prefs, onTogglePref, order }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
   // Only the replayed signals are marked: her entries and exits are not drawn on the chart. Their labels that would print over each other lose their text; the shapes stay (D-099).
   const markers = useMemo(() => declutterMarkers(signalMarkers(view.signals, bars), bars), [bars, view.signals]);
@@ -134,7 +130,6 @@ function IntradayChart({ symbol, view, bars, series, hideDates, focus, dimmed, p
         follow
         firstDraw={firstDrawBars(view.interval)}
         sessionStart={sessionStart}
-        hideDates={hideDates}
         focus={focus}
         dimmed={dimmed}
       />

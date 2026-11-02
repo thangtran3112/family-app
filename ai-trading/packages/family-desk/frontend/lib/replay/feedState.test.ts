@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyAdvance, applyFeedSwing, chartBars, dailyBlock, dismissPause, isQuietTape, mergeBars, paceOf, TAPE_CAP, viewFromFeed, withHoldMarker } from "./feedState.ts";
-import { delta, feed } from "./fixtures.ts";
+import { applyAdvance, applyFeedSwing, chartBars, dailyBlock, dismissPause, isQuietTape, mergeBars, paceOf, TAPE_CAP, viewClock, viewFromFeed, withHoldMarker } from "./feedState.ts";
+import { delta, feed, overnightDelta, overnightFeed } from "./fixtures.ts";
 import { ReplayDeltaSchema, ReplayFeedSchema } from "./schemas.ts";
 import { amdHold, closedHold, nvdaHold, pausedCross, stripRows, swingDelta, swingDeltaQuiet, swingFeed } from "./swingFixtures.ts";
 
@@ -176,4 +176,41 @@ test("the view carries the day clock and whether this name is behind it, from a 
   const caught = applyAdvance(behind, ReplayDeltaSchema.parse({ ...delta, revealed_through: "2026-04-07T14:30:00Z", day_clock: "2026-04-07T14:30:00Z", behind_clock: false }));
   assert.deepEqual([caught.dayClock, caught.behindClock], ["2026-04-07T14:30:00Z", false]);
   assert.equal(viewFromFeed(ReplayFeedSchema.parse(feed), "5m").dayClock, null);
+});
+
+test("the view carries the payload's own thread time, data end and market, from a feed and from an advance (ADR-0022)", () => {
+  const plain = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
+  assert.deepEqual([plain.threadTime, plain.dataThrough, plain.market], [null, "2026-04-07T14:07:12Z", null], "a standalone session has no thread time; its data runs to its playhead");
+  const overnight = viewFromFeed(ReplayFeedSchema.parse(overnightFeed), "5m");
+  assert.deepEqual([overnight.threadTime, overnight.dataThrough, overnight.market?.phase], ["2026-04-08T05:22:24Z", "2026-04-08T00:00:00Z", "closed"]);
+  const later = applyAdvance(overnight, ReplayDeltaSchema.parse({ ...overnightDelta, thread_time: "2026-04-08T05:22:26Z" }));
+  assert.equal(later.threadTime, "2026-04-08T05:22:26Z", "T moves with the answer while data_through stays at the tape end");
+  assert.equal(later.dataThrough, "2026-04-08T00:00:00Z");
+});
+
+test("one time source: the thread time of the payload, else the playhead or the day clock a name was left behind", () => {
+  const overnight = viewFromFeed(ReplayFeedSchema.parse(overnightFeed), "5m");
+  assert.equal(viewClock(overnight), "2026-04-08T05:22:24Z", "past the tape T still ticks; the name's capped playhead never stands in for it");
+  const behind = { threadTime: null, revealedThrough: "2026-04-07T14:00:00Z", dayClock: "2026-04-07T14:30:00Z" };
+  assert.equal(viewClock(behind), "2026-04-07T14:30:00Z", "a swing name left behind shows the thread's time");
+  assert.equal(viewClock({ ...behind, dayClock: "2026-04-07T13:00:00Z" }), "2026-04-07T14:00:00Z", "the playhead is never pulled back by a stale clock");
+  assert.equal(viewClock({ ...behind, dayClock: null }), "2026-04-07T14:00:00Z", "a standalone session has only its own playhead");
+});
+
+test("indicator rows merge by bar open: a later answer replaces the forming bar's row and new bars append (one payload, one cut)", () => {
+  const first = viewFromFeed(ReplayFeedSchema.parse(overnightFeed), "5m");
+  assert.deepEqual(first.indicators?.rows.map((row) => row.t), ["2026-04-07T23:50:00Z", "2026-04-07T23:55:00Z"]);
+  const second = applyAdvance(
+    first,
+    ReplayDeltaSchema.parse({
+      ...overnightDelta,
+      indicators: { interval: "5m", as_of_bar: "2026-04-08T00:00:00Z", rows: [{ t: "2026-04-07T23:55:00Z", ema9: 188.1, ema21: 187.7, vwap: 187.72, rsi14: 60, macd: 0.5, macd_signal: 0.35, macd_hist: 0.15 }, { t: "2026-04-08T00:00:00Z", ema9: 188.2, ema21: 187.8, vwap: 187.73, rsi14: 61, macd: 0.52, macd_signal: 0.36, macd_hist: 0.16 }] },
+    }),
+  );
+  assert.deepEqual(second.indicators?.rows.map((row) => [row.t, row.ema9]), [["2026-04-07T23:50:00Z", 187.9], ["2026-04-07T23:55:00Z", 188.1], ["2026-04-08T00:00:00Z", 188.2]]);
+  assert.equal(second.indicators?.asOfBar, "2026-04-08T00:00:00Z");
+  const without = applyAdvance(second, ReplayDeltaSchema.parse({ ...overnightDelta, indicators: undefined }));
+  assert.equal(without.indicators, second.indicators, "an answer without indicators leaves the table as it was");
+  const switched = viewFromFeed(ReplayFeedSchema.parse({ ...overnightFeed, interval: "15m", indicators: { ...overnightFeed.indicators, interval: "15m", rows: [overnightFeed.indicators.rows[1]] } }), "15m");
+  assert.equal(switched.indicators?.rows.length, 1, "a new feed (an interval switch) starts the table again");
 });

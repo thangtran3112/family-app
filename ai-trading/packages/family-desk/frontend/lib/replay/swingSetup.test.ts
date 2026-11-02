@@ -53,7 +53,6 @@ test("the form starts as 02p c1 says", () => {
   assert.deepEqual(start, {
     firstDay: "2026-07-20",
     sessions: "20",
-    hideDates: true,
     interval: "15m",
     tape: "off",
     riskPerHoldUsd: "",
@@ -90,10 +89,10 @@ test("the preview request is the draft in the API's names", () => {
 test("the swing block and the create body carry the contract's names and no empty optional", () => {
   const block = swingBlock(draft(), rows);
   assert.deepEqual(Object.keys(block), ["firstDay", "sessions", "hideDates", "universe", "interval", "tape", "armed"]);
-  assert.deepEqual([block.firstDay, block.sessions, block.hideDates, block.interval, block.tape], ["2026-07-20", 20, "yes", "15m", "off"]);
+  assert.deepEqual([block.firstDay, block.sessions, block.hideDates, block.interval, block.tape], ["2026-07-20", 20, "no", "15m", "off"]);
   assert.equal((block.universe as unknown[]).length, 50);
   assert.deepEqual(block.armed, [], "D-153: a new swing thread is created with nothing armed");
-  const withRisk = swingBlock(draft({ riskPerHoldUsd: "1,500", hideDates: false, tape: "on" }), rows);
+  const withRisk = swingBlock(draft({ riskPerHoldUsd: "1,500", tape: "on" }), rows);
   assert.deepEqual([withRisk.riskPerHoldUsd, withRisk.hideDates, withRisk.tape, withRisk.armed], [1500, "no", "on", []]);
 
   const body = swingCreateBody(defaultThreadDraft(), draft(), rows) as Record<string, unknown>;

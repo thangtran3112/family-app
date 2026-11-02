@@ -39,7 +39,7 @@ test("a filled draft validates against the contract and becomes the contract JSO
 });
 
 test("the session draft holds only session-scope fields: no shares, stop, signal, loss, trades or note (D-008)", () => {
-  assert.deepEqual(Object.keys(defaultDraft()).sort(), ["armed", "day", "dayHidden", "from", "interval", "session", "symbol", "to"]);
+  assert.deepEqual(Object.keys(defaultDraft()).sort(), ["armed", "day", "from", "interval", "session", "symbol", "to"]);
 });
 
 test("an empty draft reports a message per field, never a raw Zod message", () => {
@@ -78,13 +78,11 @@ test("no more than 5 strategies arm, and toggling twice removes one", () => {
   assert.equal(toggleArmed([], { source: "filter", id: 1 }).length, 1);
 });
 
-test("a hidden notable day stays masked and is stored hidden; a typed date is shown", () => {
-  const picked = withNotableDay(defaultDraft(), { symbol: "NVDA", day: "2026-04-07" }, true);
-  assert.equal(picked.dayHidden, true);
-  assert.equal((draftToSpec(picked) as { hideDate: string }).hideDate, "yes");
-  const typed = withTypedDay(picked, "2026-04-08");
-  assert.equal(typed.dayHidden, false);
-  assert.equal(withNotableDay(defaultDraft(), { symbol: "NVDA", day: "2026-04-07" }, false).dayHidden, false);
+test("a notable day or a typed date fills the draft, and the spec sends hideDate \"no\" (the contract's field, ignored by the server)", () => {
+  const picked = withNotableDay(defaultDraft(), { symbol: "NVDA", day: "2026-04-07" });
+  assert.deepEqual([picked.symbol, picked.day], ["NVDA", "2026-04-07"]);
+  assert.equal((draftToSpec(picked) as { hideDate: string }).hideDate, "no");
+  assert.equal(withTypedDay(picked, "2026-04-08").day, "2026-04-08");
 });
 
 test("local day checks use the plan's wording", () => {
