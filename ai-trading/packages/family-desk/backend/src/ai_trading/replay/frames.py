@@ -34,6 +34,7 @@ import pandas as pd
 from ai_trading.core.calendar import annotate
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.core.evaluate import _resample
+from ai_trading.core.indicators import ema, macd, rsi, session_vwap
 from ai_trading.replay.journal import fill_price
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,35 @@ MINUTE = pd.Timedelta(minutes=1)
 LRU_SERIES = 128  # prepared series kept (a series is about 0.5 MB: see the measurement in the A7 commit)
 
 LastPrint = Callable[[pd.Timestamp], tuple[pd.Timestamp, float] | None]  # `through` -> (print time, price) or None
+
+#: The indicator block of a payload (the replay chart's overlays and panes and the left rail): EMA 9 and 21, the session
+#: VWAP, RSI 14 and MACD (12, 26, 9). Every one is causal: a value depends only on bars up to its own, so a cut of the
+#: whole-series arrays at T is exactly the indicator of the bars closed by T (`test_frames.py` fails the build for one
+#: that is not). A value that has not warmed up is NaN here and null in the payload, never filled.
+INDICATORS = ("ema9", "ema21", "vwap", "rsi14", "macd", "macd_signal", "macd_hist")
+
+
+def indicator_columns(close: pd.Series, vwap: np.ndarray) -> pd.DataFrame:
+    """The indicator columns over `close` (display-bar closes) and `vwap` (the session VWAP read onto each bar)."""
+    line = macd(close, 12, 26, 9)
+    return pd.DataFrame(
+        {
+            "ema9": ema(close, 9),
+            "ema21": ema(close, 21),
+            "vwap": vwap,
+            "rsi14": rsi(close, 14),
+            "macd": line.line,
+            "macd_signal": line.signal,
+            "macd_hist": line.histogram,
+        },
+        index=close.index,
+    )
+
+
+def _rows(index: pd.Index, frame: pd.DataFrame) -> list[dict[str, Any]]:
+    """`{t, <indicator>...}` per row, NaN as None."""
+    columns = {name: frame[name].astype(object).where(frame[name].notna(), None).tolist() for name in INDICATORS}
+    return [{"t": t, **{name: columns[name][i] for name in INDICATORS}} for i, t in enumerate(index)]
 
 
 @dataclass(frozen=True)
@@ -61,6 +91,7 @@ class Cut:
     forming: dict[str, Any] | None
     quote: Quote | None
     levels: dict[str, Any]
+    indicators: dict[str, Any] | None  # {"interval", "as_of_bar", "rows"} for every bar of `bars` plus the forming one
 
 
 def tape_end(day: date) -> pd.Timestamp:
@@ -107,12 +138,15 @@ class PreparedSeries:
         self._display = display
         self._end_ns = self._ends(display)
         self.memo: dict[str, Any] = {}  # per-series caches of the callers (the as-of daily frame, the live metric rows)
+        # built on first use; private (they cover the whole day)
+        self._ind: pd.DataFrame | None = None  # indicators of every display bar
+        self._vwap: tuple[np.ndarray, np.ndarray] | None = None  # (minute starts ns, session VWAP as of each minute)
 
     # -- construction ----------------------------------------------------------------------------------------
 
     def _ends(self, display: pd.DataFrame) -> np.ndarray:
         """When each display bar's period ends (it is exposed once T has reached it): the bin's end, capped at the end
-        its own phase. Non-decreasing, so a cut at T is one binary search."""
+        of its own phase. Non-decreasing, so a cut at T is one binary search."""
         if display.empty:
             return np.array([], dtype="int64")
         caps: dict[tuple[date, str], int] = {}
@@ -162,8 +196,10 @@ class PreparedSeries:
         hi = int(np.searchsorted(self._end_ns, self._clamp(through).value, side="right"))
         return self._display.iloc[lo : max(hi, lo)].copy()
 
-    def forming(self, through: pd.Timestamp) -> dict[str, Any] | None:
-        """The display bar now forming, built from closed minutes of the same phase bin (None on a bin boundary)."""
+    def forming(self, through: pd.Timestamp, quote: Quote | None = None) -> dict[str, Any] | None:
+        """The display bar now forming, built from closed minutes of the same phase bin (None on a bin boundary). With a
+        `quote` printed inside the bin it takes the quote as its close and widens its high and low to include it, so the
+        candle, the header price and the indicators read one number."""
         through = self._clamp(through)
         minutes = self.closed_minutes(through)
         if minutes.empty:
@@ -180,12 +216,15 @@ class PreparedSeries:
         part = minutes[(minutes.index >= bin_start)]
         if part.empty:
             return None
+        high, low, close = float(part["high"].max()), float(part["low"].min()), float(part["close"].iloc[-1])
+        if quote is not None and quote.at >= bin_start:
+            high, low, close = max(high, quote.price), min(low, quote.price), quote.price
         return {
             "t": bin_start,
             "o": float(part["open"].iloc[0]),
-            "h": float(part["high"].max()),
-            "l": float(part["low"].min()),
-            "c": float(part["close"].iloc[-1]),
+            "h": high,
+            "l": low,
+            "c": close,
             "v": float(part["volume"].sum()),
         }
 
@@ -208,7 +247,8 @@ class PreparedSeries:
 
     def quote(self, through: pd.Timestamp, last_print: LastPrint | None = None) -> Quote | None:
         """The price at `through`: THE price function (module docstring). A print wins when the caller serves the tape
-        one exists at or before `through`; else the last closed 1-minute bar's close, stamped with its close time."""
+        and one exists at or before `through`; else the last closed 1-minute bar's close, stamped with its close
+        time."""
         through = self._clamp(through)
         if last_print is not None:
             found = last_print(through)
@@ -219,15 +259,74 @@ class PreparedSeries:
             return None
         return Quote(fill_price(float(closed["close"].iloc[-1])), closed.index[-1] + MINUTE)
 
-    def at(self, through: pd.Timestamp, last_print: LastPrint | None = None) -> Cut:
+    # -- indicators ------------------------------------------------------------------------------------------
+
+    def _minute_vwap(self) -> tuple[np.ndarray, np.ndarray]:
+        """The session VWAP as of each 1-minute bar (NaN outside the regular session), whatever the display interval
+        (D-168). Causal, so computed once for the whole series and only ever read below T."""
+        if self._vwap is None:
+            ann = annotate(self._minutes, "stock") if len(self._minutes) else self._minutes.assign(day=None, phase=None)
+            if ann.empty:
+                self._vwap = (np.array([], dtype="int64"), np.array([], dtype="float64"))
+            else:
+                self._vwap = (ann.index.asi8, session_vwap(ann).to_numpy(dtype="float64"))
+        return self._vwap
+
+    def _closed_indicators(self) -> pd.DataFrame:
+        """Indicators of every display bar (private). A bar reads the VWAP as of the last minute inside it."""
+        if self._ind is None:
+            display = self._display
+            starts, values = self._minute_vwap()
+            if len(starts):
+                last = np.searchsorted(starts, self._end_ns, side="left") - 1
+                inside = (last >= 0) & (starts[np.clip(last, 0, None)] >= display.index.asi8)
+                vwap = np.where(inside, values[np.clip(last, 0, None)], np.nan)
+            else:
+                vwap = np.full(len(display), np.nan)
+            self._ind = indicator_columns(display["close"], vwap)
+        return self._ind
+
+    def indicators(
+        self, bars: pd.Index, forming: dict[str, Any] | None, through: pd.Timestamp, interval: str
+    ) -> dict[str, Any] | None:
+        """The indicator block for `bars` (the start times of display bars closed by `through`, all of them for a feed
+        or the new ones of an advance) plus the forming candle. Closed rows are slices of the whole-series arrays
+        (causality makes that the indicator of the bars closed by `through`); the forming row is computed over the
+        closed bars plus the forming candle, so it moves with the price. `as_of_bar` is the last bar included. None
+        without any bar."""
+        through = self._clamp(through)
+        stop = int(np.searchsorted(self._end_ns, through.value, side="right"))
+        if stop == 0 and forming is None:
+            return None
+        rows = _rows(bars, self._closed_indicators().loc[bars]) if len(bars) else []
+        as_of = self._display.index[stop - 1] if stop else None
+        if forming is not None:
+            rows.append({"t": forming["t"], **self._forming_indicators(stop, forming, through)})
+            as_of = forming["t"]
+        return {"interval": interval, "as_of_bar": as_of, "rows": rows}
+
+    def _forming_indicators(self, stop: int, forming: dict[str, Any], through: pd.Timestamp) -> dict[str, Any]:
+        closes = pd.Series(np.append(self._display["close"].to_numpy(dtype="float64")[:stop], forming["c"]))
+        starts, values = self._minute_vwap()
+        vwap = np.full(len(closes), np.nan)
+        last = int(np.searchsorted(starts, (through - MINUTE).value, side="right")) - 1
+        if last >= 0 and starts[last] >= forming["t"].value:
+            vwap[-1] = values[last]
+        tail = indicator_columns(closes, vwap).iloc[-1]
+        return {name: None if np.isnan(tail[name]) else float(tail[name]) for name in INDICATORS}
+
+    def at(self, through: pd.Timestamp, last_print: LastPrint | None = None, interval: str = "") -> Cut:
         """Everything a screen reads of the name at `through`, cut once at `min(through, tape_end)`."""
         through = self._clamp(through)
+        quote = self.quote(through, last_print)
+        bars, forming = self.bars(through), self.forming(through, quote)
         return Cut(
             through=through,
-            bars=self.bars(through),
-            forming=self.forming(through),
-            quote=self.quote(through, last_print),
+            bars=bars,
+            forming=forming,
+            quote=quote,
             levels=self.levels(through),
+            indicators=self.indicators(bars.index, forming, through, interval),
         )
 
 

@@ -454,6 +454,29 @@ class LastPrintOut(BaseModel):
     age_s: int  # seconds from this print to the playhead; a mark priced off an old print carries a warning
 
 
+class IndicatorRowOut(BaseModel):
+    """The indicators of one bar (`t` is its open), computed on the server from the same cut as the bars, the price and
+    the forming candle. A value that has not warmed up is null, never filled."""
+
+    t: datetime
+    ema9: FiniteFloat | None
+    ema21: FiniteFloat | None
+    vwap: FiniteFloat | None  # the session VWAP as of the last minute inside the bar (regular session only)
+    rsi14: FiniteFloat | None
+    macd: FiniteFloat | None
+    macd_signal: FiniteFloat | None
+    macd_hist: FiniteFloat | None
+
+
+class IndicatorsOut(BaseModel):
+    """`rows` are the indicators of the bars this payload carries (an advance: the new bars; a feed: every returned bar)
+    and then of the forming candle, whose close is the price. `as_of_bar` is the open of the last bar included."""
+
+    interval: Interval
+    as_of_bar: datetime | None
+    rows: list[IndicatorRowOut]
+
+
 class AdvanceOut(SwingOptional):
     """What the playhead revealed in `(previous, revealed_through]`: display-interval bars that closed inside
     it, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,
@@ -475,6 +498,7 @@ class AdvanceOut(SwingOptional):
     at_end: bool
     bars: list[ReplayBarOut]
     forming: FormingBarOut | None
+    indicators: IndicatorsOut | None = None  # EMA 9 and 21, VWAP, RSI 14 and MACD of the bars above and the forming one
     prints: PrintsOut
     signals: list[ReplaySignalOut]
     levels: ReplayLevelsOut

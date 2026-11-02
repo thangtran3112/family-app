@@ -292,6 +292,25 @@ def test_a_stale_name_is_read_at_the_thread_time_never_past_it_and_still_cannot_
     assert _mark(db_session, user_id, svc, flat.id, "long_entry", shares=1)["mark"]["at"] == at
 
 
+def test_the_indicator_block_is_cut_from_the_same_payload_as_the_price_and_the_candle(
+    db_session, user_id, svc, world, pinned
+) -> None:
+    """I4: bars, forming candle, price and indicators of one name come from one cut. The forming candle closes at the
+    header price and its indicator row is the last one; the closed rows are the indicators of the bars it carries."""
+    svc.tape = Tape(svc.sources.__class__(**{**svc.sources.__dict__, "trades": PrintTrades()}), now=lambda: NOW)
+    _, _, _, flat = _night(db_session, user_id, svc, world, at=LATE)
+    out = _sync(db_session, user_id, svc, flat.id)
+    feed = _feed(db_session, user_id, svc, flat.id)
+    for frame in (out, feed):
+        assert frame["last"]["price"] == 52.37 and frame["forming"]["c"] == 52.37
+        assert frame["forming"]["h"] >= 52.37
+        block = frame["indicators"]
+        assert block["interval"] == "5m" and block["as_of_bar"] == frame["forming"]["t"]
+        assert block["rows"][-1]["t"] == frame["forming"]["t"]  # the forming candle's own row, last
+        assert [r["t"] for r in block["rows"][:-1]] == [b["t"] for b in frame["bars"]]
+    assert feed["indicators"]["rows"][-1]["ema9"] is not None and feed["indicators"]["rows"][-1]["rsi14"] is not None
+
+
 # -- what stays true (guards, green before and after) ------------------------------------------------------------------
 
 

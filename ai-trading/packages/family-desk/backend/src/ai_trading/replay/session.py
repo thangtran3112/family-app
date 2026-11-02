@@ -879,11 +879,16 @@ def _frame(
     bars: list[dict[str, Any]],
     through: pd.Timestamp,
     width: int,
+    interval: str,
     prints: dict[str, Any],
     signals: list[Fire],
 ) -> dict[str, Any]:
     series = _series(ctx, width)
     price = last_price(ctx, through)
+    # A day-thread session's forming candle closes at the price the header shows, so the candle, the header and the
+    # indicators read one number; a swing or standalone session keeps its candle as the minutes built it.
+    quote = None if price is None or ctx.thread_time is None else frames.Quote(price[0], price[1])
+    forming = series.forming(through, quote)
     live = ctx.thread_time is not None and ctx.row.status != "ended"  # an open day-thread session follows the thread
     data_through = min(ctx.thread_time, series.tape_end) if live and ctx.thread_time is not None else through
     return {
@@ -895,7 +900,8 @@ def _frame(
         "behind_clock": ctx.day_clock is not None and ctx.through < ctx.day_clock,
         "at_end": through >= ctx.window_end,
         "bars": bars,
-        "forming": series.forming(through),
+        "forming": forming,
+        "indicators": series.indicators(pd.DatetimeIndex([b["t"] for b in bars]), forming, through, interval),
         "prints": prints,
         "signals": [
             {
@@ -1105,7 +1111,15 @@ def advance(
         ctx, previous, target, min_size=min_size, min_notional=min_notional, max_prints=max_prints, pace_too=True
     )
     fresh = [f for f in ctx.fires if previous < f.bar_close <= target]
-    frame = _frame(ctx, bars=_bar_rows(new_bars), through=target, width=width, prints=prints, signals=fresh)
+    frame = _frame(
+        ctx,
+        bars=_bar_rows(new_bars),
+        through=target,
+        width=width,
+        interval=interval or ctx.interval,
+        prints=prints,
+        signals=fresh,
+    )
     frame["paused"] = paused  # a swing day only (play stops at its first crossed stop); the response leaves None out
     frame["fills"] = [mark_out(m) for m in fills] or None  # working orders the tape filled inside this advance
     if ctx.swing:
@@ -1192,7 +1206,9 @@ def feed(
         pace_too=True,
     )
     shown = ctx.fires if row.status == "ended" else signals_mod.released(ctx.fires, through)
-    frame = _frame(ctx, bars=_bar_rows(display), through=through, width=width, prints=prints, signals=shown)
+    frame = _frame(
+        ctx, bars=_bar_rows(display), through=through, width=width, interval=name, prints=prints, signals=shown
+    )
     out = {**frame, "interval": name, "window_start": ctx.window_start}
     if ctx.swing:  # the strip reads the shared day clock; the daily block never reads the day's own daily bar
         clock = swing_play.day_clock(ctx)
