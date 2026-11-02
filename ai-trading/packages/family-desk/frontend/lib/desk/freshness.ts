@@ -700,6 +700,7 @@ export const PRACTICE_COPY = {
   swingAsOfPriorClose: "as of the prior close",
   swingDayOver: "Day over",
   swingCardNames: "Swing · {n} names",
+  swingLineNames: "{n} names",
   swingCardWeek: "Week {week} of {weeks}",
   swingFinished: "Finished · Day {days} of {days}",
   swingNoHoldsOpen: "No holds open",
@@ -910,7 +911,13 @@ export const PRACTICE_COPY = {
   portfolioNoDayLink: "Go to Summary",
   // The Order tab (/practice/order): no stock is picked there, so it asks for one. `{list}` is the Day list, or the Board of a swing thread.
   orderPickTitle: "Pick a stock to trade",
-  orderPickBody: "Open a stock from the {list} or the Portfolio. Its chart and order ticket open from there.",
+  orderPickBody: "Pick a name from today's {list} to open its chart and order ticket at the day clock.",
+  orderFind: "Find a stock",
+  orderFindNone: "No name on today's list matches that",
+  orderNoNames: "No name is on today's list",
+  orderNames: "Names on today's list",
+  orderStatusHolding: "Open trade",
+  orderStatusOpened: "Opened",
   orderOpenList: "Open the {list}",
   orderOpenPortfolio: "Open the Portfolio",
   orderNoDayTitle: "No day is open",
@@ -958,7 +965,7 @@ export const PRACTICE_COPY = {
   // Fix wave 5S, stream 3 (the replay chart and its controls).
   // Fix wave 5S, stream 1 (practice UX): the hub, the day list and the week review.
   threadStartedSwing: "Started with {start} · realized {realized} · open holds {open}",
-  planResumeDay: "Resume Day {n}",
+  // "Resume" is the clock's word alone (its Play/Pause on the Summary); a button that only goes to the day says "Open Day {n}".
   planOpenDay: "Open Day {n}",
   planStartDayN: "Start Day {n}",
   threadDeleteTitleNamed: "Delete {name}?",

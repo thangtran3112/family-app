@@ -132,17 +132,18 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
 /** What a `/practice/day` URL says before any load (D-117): no id is not chosen, an id that is not a number is not found, a number has no problem yet (the server answers 404 for an unknown one). */
 export const dayRouteProblem = (raw: string | null): "none" | "missing" | null => (raw === null ? "none" : /^\d+$/.test(raw) ? null : "missing");
 
-/** The label of a day thread's one action (D-078): a day in progress resumes, a listed day opens, and opening the next day starts it.
+/** The label of a day thread's one action (D-078): an open day opens, and opening the next day starts it. It never says "Resume":
+ *  the button only goes to the day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control).
  *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */
 export function dayActionLabel(today: Pick<ThreadToday, "status" | "day_no"> | null, plan: PracticePlan | null): string | null {
   // `today.day_no` counts the plan's own days; the thread's number adds the days an earlier plan already ended (D-047).
-  if (today !== null) return practiceText(today.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: plan === null ? today.day_no : threadDayNo(plan, today.day_no) });
+  if (today !== null) return practiceText("planOpenDay", { n: plan === null ? today.day_no : threadDayNo(plan, today.day_no) });
   if (plan === null) return null;
   const card = planCard(plan);
   if (card.action === "none" || card.action === "new") return null;
   const current = plan.current;
   if (current !== null && current.status !== "ended") {
-    return practiceText(current.status === "practicing" ? "planResumeDay" : "planOpenDay", { n: threadDayNo(plan, current.day_no) });
+    return practiceText("planOpenDay", { n: threadDayNo(plan, current.day_no) });
   }
   return practiceText("planStartDayN", { n: threadDayNo(plan, plan.next_day_no ?? plan.days_opened + 1) });
 }
@@ -477,7 +478,7 @@ export const positionText = (row: Pick<PortfolioRow, "position">): string => {
  *  belongs to the thread's day (one shared clock for every name), never to a single name. */
 export const nameActionLabel = (opened: boolean): string => (opened ? "Switch" : "Open");
 
-/** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Resume Day N" reopens the
+/** Where a session's Resume goes: a day-list session resumes through its day (the list, whose "Open Day N" reopens the
  *  day at the shared clock); only a standalone session, which has no day, opens on its own. */
 export const sessionResumeHref = (session: { id: number; day_list_id: number | null }): string =>
   session.day_list_id === null ? `/practice/replay?id=${session.id}` : `/practice/day?id=${session.day_list_id}`;

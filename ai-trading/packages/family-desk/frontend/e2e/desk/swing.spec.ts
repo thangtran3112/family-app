@@ -64,13 +64,16 @@ test.describe("Swing practice", () => {
     await page.waitForURL(THREAD_URL);
     await expectBacktestChrome(page, "Practice"); // ADR-0014: the thread page is Backtest mode
     const balance = page.getByRole("region", { name: "Thread balance" });
-    await expect(balance).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
+    await expect(balance).toContainText("12 names · Week 1 of 3 · No holds open"); // D-112: names, week and holds; the mode is the header chip
+    await expect(balance).toContainText("Day 1 of 15"); // the place line, once
+    await expect(balance).not.toContainText("Swing");
     await expect(balance).toContainText("$50,000.00");
     await expect(balance).toContainText("Equity $50,000");
     await expect(balance).toContainText(PRACTICE_COPY.threadSimulated);
     await openDesk(page, "/practice");
     const row = swingRow(page);
-    await expect(row).toContainText("Swing · 12 names · Week 1 of 3 · Day 1 of 15");
+    await expect(row).toContainText("12 names · Week 1 of 3 · No holds open");
+    await expect(row).toContainText("Day 1 of 15"); // D-112: the day is the Progress cell's, not the sub-line's
     await expect(row).toContainText("$50,000.00"); // D-112: the balance sits in its own cell, not in the sub-line
     await expect(row).toContainText("Equity $50,000");
     await expect(row).toContainText(PRACTICE_COPY.threadSimulated);
@@ -622,7 +625,7 @@ test.describe("Swing practice", () => {
 
     // End the day from the board it opened on, then close the thread: the holds leave at that last close.
     await openDesk(page, `/practice/day?id=${(await get(context, `/threads/${threadId}`)).today.day_list_id}`);
-    await page.getByRole("button", { name: "Resume Day 3" }).click();
+    await page.getByRole("button", { name: "Open Day 3" }).click();
     await page.waitForURL(SESSION_URL);
     // S01 was left at 11:00 while S04 ran to the close: it comes back at the shared day clock, not at its own old playhead.
     await expect(page.getByText(/^End Day 3 · 2 holds stay open overnight/)).toBeVisible();
@@ -682,7 +685,7 @@ test.describe("Swing practice", () => {
     expect(closed[0]!.exit_price).toBeLessThan(86);
     await expectNoDates(page);
   });
-  test("a name left behind the day clock comes back at the clock: from the strip and from Resume Day, and a mark is accepted", async ({ page, context }) => {
+  test("a name left behind the day clock comes back at the clock: from the strip and from Open Day, and a mark is accepted", async ({ page, context }) => {
     test.setTimeout(120_000);
     const threadId = await createSwingThread(context);
     const dayList = await openNextDay(context, threadId);
@@ -717,14 +720,14 @@ test.describe("Swing practice", () => {
     await expect(practice.getByRole("definition").filter({ hasText: "Long 100" })).toBeVisible();
     await expect(page.getByRole("alert").filter({ hasText: "behind the day clock" })).toHaveCount(0);
 
-    // S02 runs on to 12:00; Resume Day 1 on the board asks for S01's session at the clock and a mark is accepted there too.
+    // S02 runs on to 12:00; Open Day 1 on the board asks for S01's session at the clock and a mark is accepted there too.
     await strip.getByRole("button", { name: /^S02, focus name/ }).click();
     await expect(page.getByRole("heading", { name: "S02", level: 1 })).toBeVisible();
     await jumpTo("12:00");
     await expect(playhead(page)).toContainText("12:00");
     await backToDayList(page, true);
     await page.waitForURL(BOARD_URL);
-    await page.getByRole("button", { name: "Resume Day 1" }).click();
+    await page.getByRole("button", { name: "Open Day 1" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
     await expect(playhead(page)).toContainText("12:00");

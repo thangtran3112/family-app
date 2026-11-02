@@ -153,9 +153,9 @@ test.describe("Practice: switching names", () => {
     // The day list is only the list of names: its portfolio is the Portfolio tab's, not a section of this screen.
     await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
-    // Resume is the day's, never a name's: no per-name button says Resume, and the header resumes the whole day on its shared clock.
+    // The day's header opens the whole day on its shared clock; Resume is the thread clock's word alone, so no button on this screen says it.
     await expect(page.getByRole("button", { name: /^Resume/ })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /^Resume Day \d+$/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Open Day \d+$/ })).toBeVisible();
     await expectCleanScreen(page);
 
     // The whole day ends together: every opened name scores.
