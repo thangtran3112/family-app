@@ -2168,6 +2168,21 @@
       "CandidateOut": {
         "description": "One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.",
         "properties": {
+          "earnings_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "reported",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earnings State"
+          },
           "filters": {
             "items": {
               "type": "string"
@@ -2285,10 +2300,6 @@
             ],
             "title": "Rank Value"
           },
-          "reported_before_open": {
-            "title": "Reported Before Open",
-            "type": "boolean"
-          },
           "symbol": {
             "title": "Symbol",
             "type": "string"
@@ -2304,7 +2315,6 @@
           "list_price",
           "price_at",
           "prior_close",
-          "reported_before_open",
           "metrics"
         ],
         "title": "CandidateOut",
@@ -9914,6 +9924,20 @@
               }
             ],
             "title": "Thread Id"
+          },
+          "weekdays": {
+            "items": {
+              "enum": [
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu",
+                "Fri"
+              ],
+              "type": "string"
+            },
+            "title": "Weekdays",
+            "type": "array"
           }
         },
         "required": [
@@ -9928,6 +9952,7 @@
           "next_day",
           "next_weekday",
           "next_day_no",
+          "weekdays",
           "finished",
           "prep"
         ],

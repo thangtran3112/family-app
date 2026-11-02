@@ -119,7 +119,7 @@ export function PeekPanel({
   );
 }
 
-/** Prev close, the list price against it, and the earnings flag: dashes where the payload has no value (the flag is a positive claim only). */
+/** Prev close, the list price against it, and the earnings state: dashes where the payload has no value (a name not checked reads a dash, not "none"). */
 function PeekFacts({ row }: { row: Candidate }) {
   const change = row.metrics.list_change_pct ?? null;
   return (
@@ -128,7 +128,7 @@ function PeekFacts({ row }: { row: Candidate }) {
       facts={[
         { id: "prev", label: PRACTICE_COPY.dayPeekPrevClose, value: row.prior_close === null ? EMPTY_VALUE : formatPrice(row.prior_close) },
         { id: "vs", label: PRACTICE_COPY.dayPeekVsPrev, value: change === null ? EMPTY_VALUE : formatSignedPct(change, 2), tone: change === null ? undefined : signTone(change) },
-        { id: "earnings", label: PRACTICE_COPY.dayPeekEarnings, value: row.reported_before_open ? PRACTICE_COPY.dayPeekEarningsFlagged : PRACTICE_COPY.dayPeekEarningsNone },
+        { id: "earnings", label: PRACTICE_COPY.dayPeekEarnings, value: row.earnings_state === null ? EMPTY_VALUE : row.earnings_state === "reported" ? PRACTICE_COPY.dayPeekEarningsFlagged : PRACTICE_COPY.dayPeekEarningsNone },
       ]}
     />
   );

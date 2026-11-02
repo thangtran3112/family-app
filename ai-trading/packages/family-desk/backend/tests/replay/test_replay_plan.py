@@ -328,7 +328,7 @@ def test_the_first_list_has_the_gapper_priced_at_the_0814_bar_and_counts_what_it
     assert [c["symbol"] for c in out["candidates"]] == ["GAPPER"]
     candidate = out["candidates"][0]
     assert candidate["list_price"] == 106.0 and candidate["metrics"]["last"] == 100.0
-    assert candidate["filters"] == ["Gap up"] and candidate["reported_before_open"] is False
+    assert candidate["filters"] == ["Gap up"] and candidate["earnings_state"] is None  # no earnings history: unknown
     assert out["data_through"] == et(DAYS[0], "08:15") and out["universe"]["size"] == 3
     assert "Practice universe · 3 symbols the Desk has scanned" in out["universe"]["label"]
     assert out["warnings"] == [
@@ -351,6 +351,8 @@ def test_days_open_in_order_one_at_a_time_and_a_split_makes_no_false_gap(db_sess
     assert seen == [["GAPPER"], [], ["GAPPER"], [], []]  # SPLITTER's 2-for-1 on day 4 is not a -50% gap down
     done = _open(db_session, user_id, svc)
     assert done.day_list is None and plan_mod.plan_out(db_session, done.plan)["finished"] is True
+    weekdays = plan_mod.plan_out(db_session, done.plan)["weekdays"]
+    assert weekdays == [day.strftime("%a") for day in DAYS]  # one per block day, in order
 
 
 def test_an_empty_list_says_why_in_the_words_of_the_cause(db_session, user_id, svc) -> None:

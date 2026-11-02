@@ -529,6 +529,7 @@ export const PRACTICE_COPY = {
   dayPeekLevels: "Key levels",
   dayPeekClose: "Close",
   dayReported: "Reported before the open",
+  dayEarningsNone: "None",
   dayStartError: "Couldn't start the practice · Try again",
   dayRelistError: "Couldn't re-list the day · Try again",
   dayRelistWindow: "The practice window then starts at {time} ET",
