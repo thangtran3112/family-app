@@ -32,7 +32,6 @@ import {
   openPositionsText,
   openAtClock,
   openTodayText,
-  portfolioCells,
   portfolioFooter,
   portfolioRows,
   portfolioTotal,
@@ -501,41 +500,14 @@ test("a position reads Long or Short with its shares and entry price, a flat nam
   assert.equal(positionText({ position: { ...smciLong, entry_at: null } }), "Long 100 @ $812.40"); // an older payload has no entry time
 });
 
-test("a held row carries its cost, its move since entry and its P/L as a percent of cost; a flat row has none of them", () => {
-  const [long, short, flat] = portfolioRows({
-    sessions: [
-      opened("SMCI", 12, { has_open_trade: true, position: smciLong }), // 100 @ 812.40 = 81,240; last 814.54, +$214
-      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } }),
-      opened("ANET", 13, { trades: 1, realized_usd: -38 }),
-    ],
+test("a row's prior close comes from the day list's candidates; a name the list does not hold has none", () => {
+  const candidate = (symbol: string, prior_close: number | null) => ({ symbol, prior_close }) as Candidate;
+  const rows = portfolioRows({
+    sessions: [opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("ANET", 13), opened("ZZZZ", 14)],
+    candidates: [candidate("SMCI", 812.4), candidate("ANET", null)],
   });
-  assert.equal(long!.basis, 81240);
-  assert.ok(Math.abs(long!.dayPct! - (100 * 214) / 81240) < 1e-9);
-  assert.ok(Math.abs(long!.priceChange! - 2.14) < 1e-9);
-  assert.ok(Math.abs(long!.priceChangePct! - (100 * 2.14) / 812.4) < 1e-9);
-  // A short wins when the stock falls: the price change is the market's (−$10, −5%), the P/L is hers (+$500, +5% of the $10,000 cost).
-  assert.deepEqual([short!.priceChange, short!.priceChangePct, short!.dayPnl, short!.dayPct], [-10, -5, 500, 5]);
-  assert.deepEqual([flat!.basis, flat!.dayPct, flat!.priceChange, flat!.priceChangePct], [null, null, null, null]);
-});
-
-test("a row's cells read in dollars or percent, with the arrow on the P/L's direction", () => {
-  const [long, short, flat, even] = portfolioRows({
-    sessions: [
-      opened("SMCI", 12, { has_open_trade: true, position: smciLong }),
-      opened("NVDA", 14, { has_open_trade: true, position: { ...smciLong, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } }),
-      opened("ANET", 13, { trades: 1, realized_usd: -38 }),
-      opened("AMD", 15),
-    ],
-  });
-  assert.deepEqual(portfolioCells(long!, "usd"), { last: "$814.54", change: "+$2.14", changeTone: "up", pnl: "+$214.00", pnlTone: "up", arrow: "up" });
-  assert.deepEqual(portfolioCells(long!, "pct"), { last: "$814.54", change: "+0.26%", changeTone: "up", pnl: "+0.26%", pnlTone: "up", arrow: "up" });
-  // The short's stock fell (red) while her P/L rose (green, up arrow): the two columns do not share a tone.
-  assert.deepEqual(portfolioCells(short!, "usd"), { last: "$190.00", change: "−$10.00", changeTone: "down", pnl: "+$500.00", pnlTone: "up", arrow: "up" });
-  assert.deepEqual(portfolioCells(short!, "pct"), { last: "$190.00", change: "−5.00%", changeTone: "down", pnl: "+5.00%", pnlTone: "up", arrow: "up" });
-  // A flat name with a closed loss has dollars but no cost to take a percent of.
-  assert.deepEqual(portfolioCells(flat!, "usd"), { last: null, change: null, changeTone: "flat", pnl: "−$38.00", pnlTone: "down", arrow: "down" });
-  assert.deepEqual(portfolioCells(flat!, "pct"), { last: null, change: null, changeTone: "flat", pnl: "—", pnlTone: "flat", arrow: null });
-  assert.deepEqual(portfolioCells(even!, "usd"), { last: null, change: null, changeTone: "flat", pnl: "$0.00", pnlTone: "flat", arrow: null });
+  assert.deepEqual(rows.map((row) => [row.symbol, row.priorClose]), [["SMCI", 812.4], ["ANET", null], ["ZZZZ", null]]);
+  assert.equal(portfolioRows({ sessions: [opened("SMCI", 12)] })[0]!.priorClose, null, "a read without candidates holds no close");
 });
 
 test("the Portfolio head counts the open positions from the rows", () => {

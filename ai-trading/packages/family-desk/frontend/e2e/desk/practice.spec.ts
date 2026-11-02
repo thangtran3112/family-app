@@ -7,6 +7,7 @@ import { origin } from "../helpers";
 import { skipDayToReview, stepBar, stepSession } from "./clock-helpers";
 import { brokenTileValues, expect, expectBacktestChrome, expectCleanScreen, expectTableFits, openDesk, prepareDesk, test, watchApi } from "./helpers";
 import { DAY, START_BUTTON, THREAD_URL, clickNewPlan, createStubSession, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, setRiskPlan, startThread, START_TRADING } from "./hub-helpers";
+import { positionCells } from "./position-table";
 import { backToDayList, openNextDay, placeOrder, replayRail, send } from "./swing-helpers";
 
 // The Practice lane (02o §i, step 5): the landing and its New plan modal (02r2) start a thread; play, step, Buy, Set stop, Close position, end, the
@@ -920,7 +921,8 @@ test.describe("Practice day list · fix wave 5S", () => {
     // The Portfolio tab holds the row and a day total.
     await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: "Portfolio", exact: true }).click();
     await page.waitForURL(/\/practice\/thread\?id=\d+&tab=portfolio/);
-    await expect(portfolioRegion.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$[\d,.]+/);
+    await expect.poll(async () => (await positionCells(portfolioRegion, "TSLA"))["Position"] ?? "", { message: "TSLA is a long: unsigned shares" }).toMatch(/^\d[\d,]*$/);
+    expect((await positionCells(portfolioRegion, "TSLA"))["Avg price"], "and the price it was built at").toMatch(/^[\d,]+\.\d{2}$/);
     await expect(portfolioRegion.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
     await expect(portfolioRegion.getByTestId("portfolio-count")).toHaveText("1 open position");
   });
