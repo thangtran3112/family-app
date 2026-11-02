@@ -36,6 +36,7 @@ Everything she looks at is a pure function of `(ledger, marks at the clock)`: `e
 - **Push buys nothing here.** The clock needs no tick loop (it is computed on read), so a push channel would add a connection registry, heartbeat and reconnect logic, and WebSocket/SSE buffering through the Cloudflare tunnel and the Caddy/Clerk gate, for one household user per thread. Polling is one idempotent request, easy to test with an injected clock, and it works the same after a restart.
 - **Cost.** A settle on a running clock is one row lock and, at most, a stop scan; a stopped clock costs one indexed read. Polling pauses when the tab is hidden and resumes with an immediate read.
 - **Not a ceiling.** If sub-second prices or many viewers ever matter, SSE can wrap the same `settle`; the server model does not change.
+- **Several windows on one name (D-198).** A session has one playhead, and a sync moves it once, to the clock. The answer to a sync carries the bars, prints and signals that closed after the playhead the *caller* last read, sent as `since` (the `revealed_through` of its last answer, never earlier than the session's window start), not only after the session's playhead. A window that sends no `since` gets the playhead's own delta, as before. The answer therefore never depends on who else polled, which is what keeps the poll idempotent, and no window can lose a bar to another. Only `sync` takes `since`.
 
 ## Edge cases decided
 
