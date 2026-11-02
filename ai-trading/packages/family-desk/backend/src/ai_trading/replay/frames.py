@@ -69,6 +69,13 @@ def indicator_columns(close: pd.Series, vwap: np.ndarray) -> pd.DataFrame:
     )
 
 
+def _ns(index: pd.DatetimeIndex) -> np.ndarray:
+    """The index as integer nanoseconds since the epoch, whatever its resolution. pandas 3 parses timestamps to
+    microseconds (`pd.to_datetime`, a provider's JSON, the stub fixture) and `asi8` is then microseconds: read against a
+    `Timestamp.value` (always nanoseconds) it would treat every bar as closed long ago."""
+    return index.as_unit("ns").asi8
+
+
 def _rows(index: pd.Index, frame: pd.DataFrame) -> list[dict[str, Any]]:
     """`{t, <indicator>...}` per row, NaN as None."""
     columns = {name: frame[name].astype(object).where(frame[name].notna(), None).tolist() for name in INDICATORS}
@@ -153,7 +160,7 @@ class PreparedSeries:
         caps: dict[tuple[date, str], int] = {}
         out = np.empty(len(display), dtype="int64")
         width_ns = int(pd.Timedelta(minutes=self.width).value)
-        for i, (start, day, phase) in enumerate(zip(display.index.asi8, display["day"], display["phase"], strict=True)):
+        for i, (start, day, phase) in enumerate(zip(_ns(display.index), display["day"], display["phase"], strict=True)):
             key = (day, phase)
             if key not in caps:
                 found = trading_session("stock", day)
@@ -270,7 +277,7 @@ class PreparedSeries:
             if ann.empty:
                 self._vwap = (np.array([], dtype="int64"), np.array([], dtype="float64"))
             else:
-                self._vwap = (ann.index.asi8, session_vwap(ann).to_numpy(dtype="float64"))
+                self._vwap = (_ns(ann.index), session_vwap(ann).to_numpy(dtype="float64"))
         return self._vwap
 
     def _closed_indicators(self) -> pd.DataFrame:
@@ -280,7 +287,7 @@ class PreparedSeries:
             starts, values = self._minute_vwap()
             if len(starts):
                 last = np.searchsorted(starts, self._end_ns, side="left") - 1
-                inside = (last >= 0) & (starts[np.clip(last, 0, None)] >= display.index.asi8)
+                inside = (last >= 0) & (starts[np.clip(last, 0, None)] >= _ns(display.index))
                 vwap = np.where(inside, values[np.clip(last, 0, None)], np.nan)
             else:
                 vwap = np.full(len(display), np.nan)

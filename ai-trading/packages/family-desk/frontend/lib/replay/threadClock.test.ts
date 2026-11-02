@@ -12,7 +12,6 @@ import {
   commandThreadClock,
   extrapolate,
   shownClock,
-  focusProgress,
   loadThreadClock,
   rolledText,
   skippedText,
@@ -87,10 +86,7 @@ test("progress runs 0 to 1 over the day's tape, is full after it and is 0 before
   assert.equal(clockProgress(clock(), null), 0);
 });
 
-test("her practice window is a mark on the track, and the clock reaching the next session is told once as a hand-over to the next day", () => {
-  assert.equal(focusProgress(clock({ window_start: "2026-09-28T13:30:00Z", window_end: "2026-09-28T20:00:00Z", focus_end: "2026-09-28T15:30:00Z" })), 2 / 6.5);
-  assert.equal(focusProgress(clock({ focus_end: null })), null);
-  assert.equal(focusProgress(clock({ window_start: null })), null);
+test("the clock reaching the next session is told once as a hand-over to the next day", () => {
   assert.equal(rolledText(2, { day_no: 3 }), "The clock reached the next session. Day 2 ended and every open position closed with it. Day 3 is on the Day list.");
   assert.equal(rolledText(2, { day_no: null }), "The clock reached the next session. Day 2 ended and every open position closed with it.");
 });
@@ -124,7 +120,7 @@ test("one visible clock: the readout, the status bar and the chip read the same 
   assert.equal(shown, "2026-09-25T13:32:25.000Z");
   assert.equal(formatEtClock(shown), "9:32:25 AM ET");
   assert.equal(replayStatusLine("sip", shown as string).right[0], "Replay clock 9:32:25 AM ET");
-  assert.equal(replayBadgeText("2026-09-25", shown, true), "Replay · hidden day · 9:32 AM ET");
+  assert.equal(replayBadgeText(shown), "Replay · Fri 2026-09-25 · 9:32:25 AM ET");
   // Paused: no second reading of the polled value moves it.
   assert.equal(extrapolate({ clock: "2026-09-25T13:32:05Z", running: false, speed: 10, state: "paused" }, 2000), "2026-09-25T13:32:05Z");
 });
@@ -133,7 +129,7 @@ test("the status bar and the chip are reported in the commit that draws the read
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
   const workspace = source("../../components/practice/replay/ReplayWorkspace.tsx");
   // One value feeds all three: the readout, the chip's playhead and the status line.
-  assert.match(workspace, /<span data-testid="thread-clock-time">\{formatEtClock\(shownClock\)\}<\/span>/);
+  assert.match(workspace, /<span data-testid="thread-clock-time">\{formatEtDateClock\(shownClock\)\}<\/span>/);
   assert.match(workspace, /useReportPracticeChrome\(\{[^}]*playhead: shownClock, status: replayStatusLine\(session\.tape_feed, shownClock\)/);
   // The report is a layout effect (a passive one ran after the chart's effects and the paint, so the footer trailed the readout by about
   // 400 ms), and it reads only the setter, so a report does not re-render the screen that made it.

@@ -9,7 +9,6 @@ import {
   cellText,
   cellTone,
   dayBalanceText,
-  dayFinishedLine,
   dayRecordText,
   dayCellText,
   dayCellTone,
@@ -30,8 +29,6 @@ import {
   listWarning,
   moveText,
   ordinal,
-  peekDailyBars,
-  peekOffsets,
   planArmedText,
   openPositionsText,
   openAtClock,
@@ -44,7 +41,7 @@ import {
   stopCrossedText,
   dayActionLabel,
   blockOpenByDefault,
-  practiceWindow,
+  practiceStart,
   tradeTotalRow,
   planCard,
   heldOverCount,
@@ -80,9 +77,8 @@ test("the daily payloads parse, and the contract's required fields are required"
   assert.equal(DayListSchema.safeParse({ ...dayList, status: "open" }).success, false);
 });
 
-test("the day title names the weekday and shows the date only when dates are on", () => {
-  assert.equal(dayTitle(dayList, true), "Day 7 of 20 · Tue");
-  assert.equal(dayTitle(dayList, false), "Day 7 of 20 · Tue 2026-03-10");
+test("the day title names the day by its number, weekday and date", () => {
+  assert.equal(dayTitle(dayList), "Day 7 of 20 · Tue 2026-03-10");
 });
 
 test("the list header says when the list was built and from which data", () => {
@@ -95,12 +91,12 @@ test("the list header says when the list was built and from which data", () => {
 test("the hub card reads Day N of M, next weekday, Continue; preparing and finished have their own lines", () => {
   assert.deepEqual(planCard(null), { headline: "No daily plan yet · set one up to start Day 1", detail: null, action: "new" });
   const next = planCard(plan);
-  assert.equal(next.headline, "Day 7 of 20 · next: Tue");
+  assert.equal(next.headline, "Day 7 of 20 · next: Tue 2026-03-10");
   assert.equal(next.action, "continue");
   assert.equal(next.detail, "Day 6 done · 2 symbols could not be loaded and read as no data");
   assert.equal(planCard({ ...plan, prep: { ...plan.prep, failed: 0 } }).detail, "Day 6 done", "an ended day reads done, and Continue opens the next");
-  const shown = planCard({ ...plan, spec: { ...plan.spec, hideDates: "no" } });
-  assert.equal(shown.headline, "Day 7 of 20 · next: Tue 2026-03-10");
+  const stored = planCard({ ...plan, spec: { ...plan.spec, hideDates: "yes" } });
+  assert.equal(stored.headline, next.headline, "a stored plan's hideDates is accepted and ignored: the date always shows");
   const open = planCard({ ...plan, current: { id: 42, day_no: 7, status: "practicing" } });
   assert.deepEqual([open.headline, open.action], ["Day 7 of 20 · in progress", "continue"]);
   // D-035: a day that is only listed is not "in progress", and an ended day is never shown as open.
@@ -111,9 +107,9 @@ test("the hub card reads Day N of M, next weekday, Continue; preparing and finis
   assert.doesNotMatch(planCard({ ...plan, current: { id: 40, day_no: 1, status: "listed" } }).detail ?? "", /done/, "Day 1 has no day before it");
   const ended = planCard({ ...plan, current: { id: 41, day_no: 6, status: "ended" } });
   assert.doesNotMatch(ended.headline, /in progress|list ready/);
-  assert.equal(ended.headline, "Day 7 of 20 · next: Tue");
+  assert.equal(ended.headline, "Day 7 of 20 · next: Tue 2026-03-10");
   const first = planCard({ ...plan, days_opened: 0, current: null, next_day_no: 1, next_weekday: "Mon", next_day: "2026-03-02", prep: { state: "done", done: 3, total: 3, failed: 0 } });
-  assert.deepEqual([first.headline, first.action], ["Day 1 of 20 · next: Mon", "start"]);
+  assert.deepEqual([first.headline, first.action], ["Day 1 of 20 · next: Mon 2026-03-02", "start"]);
   const preparing = planCard({ ...plan, days_opened: 0, current: null, prep: { state: "running", done: 12, total: 131, failed: 0 } });
   assert.deepEqual([preparing.headline, preparing.action], ["Preparing data · 12 of 131 names", "none"], "D-084: the count has a unit");
   const done = planCard({ ...plan, finished: true, next_day: null, next_weekday: null, next_day_no: null });
@@ -125,11 +121,11 @@ test("D-047, D-118: a plan after another plan names each day by its place in the
   assert.equal(threadDayNo(after, 1), 3, "the plan's Day 1 is the thread's third day");
   assert.equal(dayNumberText(plan, 7), "Day 7 of 20", "with no earlier plan the two numbers agree and one is said");
   assert.equal(dayNumberText(after, 1), "Day 3", "one counter: the plan's own count is not said beside it (D-118)");
-  assert.equal(dayTitle({ ...dayList, plan: after }, true), "Day 9 · Tue");
+  assert.equal(dayTitle({ ...dayList, plan: after }), "Day 9 · Tue 2026-03-10");
   assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "practicing" } }).headline, "Day 9 · in progress");
   assert.equal(planCard({ ...after, current: { id: 42, day_no: 7, status: "listed" } }).headline, "Day 9 · list ready");
   const between = planCard(after);
-  assert.equal(between.headline, "Day 9 · next: Tue");
+  assert.equal(between.headline, "Day 9 · next: Tue 2026-03-10");
   assert.equal(between.detail?.startsWith("Day 8 done"), true, "the day that ended is the thread's day too");
   const rows = blockLadder({ day_no: 2, of: 5, status: "listed", weekday: "Wed" }, 2);
   assert.deepEqual(rows.map((row) => row.detail), ["Ended · review", "Open now", "Opens after day 4", "Locked", "Locked"]);
@@ -222,10 +218,8 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
   assert.deepEqual(tradeLineRows({ lines: [] }), []);
 });
 
-test("the review says the day is finished when the plan hid its date, and says nothing otherwise (D-029)", () => {
-  assert.equal(dayFinishedLine({ dates_hidden: true }), "Day finished");
-  assert.equal(dayFinishedLine({ dates_hidden: false }), null);
-  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to the end of your practice window, biggest gain first");
+test("the review ranks the list by the move from the list price", () => {
+  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to the close, biggest gain first");
 });
 
 test("the strings the day screens build contain no banned term", () => {
@@ -241,14 +235,13 @@ test("the strings the day screens build contain no banned term", () => {
     sourceNote(dayList),
     filtersNote(2),
     PRACTICE_COPY.dayNoNames,
-    riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }),
-    dayTitle(dayList, true),
+    riskPlanText({ tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }),
+    dayTitle(dayList),
     selectionText(endedDayList.review!)!,
     journalLine(endedDayList.journal!),
     dayRecordText(meta),
     dayBalanceText(meta)!,
     PRACTICE_COPY.reviewRankNote,
-    PRACTICE_COPY.reviewDayFinished,
     PRACTICE_COPY.reviewDayHint,
     PRACTICE_COPY.reviewDayNone,
     ...tradeLineRows(meta).flatMap((row) => [row.entry, row.exit, row.pnl]),
@@ -258,17 +251,9 @@ test("the strings the day screens build contain no banned term", () => {
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
 });
 
-test("with dates hidden the Peek chart gets a stand-in timeline, never the real dates", () => {
-  const bars = [
-    { t: "2026-03-06", o: 1, h: 2, l: 1, c: 2, v: 10 },
-    { t: "2026-03-09", o: 2, h: 3, l: 2, c: 3, v: 12 },
-  ];
-  assert.deepEqual(peekDailyBars(bars, false), bars);
-  const hidden = peekDailyBars(bars, true);
-  assert.deepEqual(hidden.map((bar) => bar.t), ["2001-01-01", "2001-01-02"]);
-  assert.deepEqual(hidden.map((bar) => bar.c), [2, 3]);
+test("the stand-in timeline that spaces a dateless chart skips weekends and starts on a Monday", () => {
+  assert.deepEqual(syntheticDays(2), ["2001-01-01", "2001-01-02"]);
   assert.equal(syntheticDays(6).at(-1), "2001-01-08"); // weekends are skipped
-  assert.equal(JSON.stringify(hidden).includes("2026"), false);
 });
 
 test("the counts and the built line are two lines, as P7 has them", () => {
@@ -294,9 +279,9 @@ test("a day the Desk recorded keeps the server's note instead of the line about 
 });
 
 test("the risk plan reads as one sentence; no limits says so", () => {
-  assert.equal(riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day.");
-  assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");
-  assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade a day.");
+  assert.equal(riskPlanText({ tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: trade only on a signal, max loss $600, up to 3 trades a day.");
+  assert.equal(riskPlanText({ tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");
+  assert.equal(riskPlanText({ tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade a day.");
 });
 
 test("the block ladder: earlier days ended, this one open, the next waits for it, the rest are locked", () => {
@@ -405,11 +390,6 @@ test("before the regular session opens only the price moves: the metric columns 
   assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Prev volume", "Since"]);
   assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now"]);
   assert.equal(dayCellText(columns.find((column) => column.key === "prev_rvol")!, atClock(liveSmci).candidates[0]!), "1.10×");
-});
-
-test("hidden Peek bars are named by how many sessions back they are: D-12 up to D-1, the prior close (M4)", () => {
-  assert.deepEqual(peekOffsets(3), ["D-3", "D-2", "D-1"]);
-  assert.deepEqual(peekOffsets(0), []);
 });
 
 // ---- the day's names (02o-b2) ---------------------------------------------------------------------------------
@@ -732,12 +712,12 @@ test("a long block's days start collapsed, a short block's open (D-097)", () => 
   assert.equal(blockOpenByDefault(30), false);
 });
 
-// D-144: the Thread plan said Window 09:30 to 11:30, the list was built at 8:30 and Re-list said the window then starts at 10:00.
-test("the practice window starts at the later of the plan's window and the list time, so a re-list moves it (D-144)", () => {
-  const window = { from: "09:30", to: "11:30" };
-  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T13:30:00Z", plan: { spec: { setup: { window } } } }), { from: "09:30", to: "11:30" }, "built at 9:30 ET: the plan's own start");
-  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T12:30:00Z", plan: { spec: { setup: { window } } } }), { from: "09:30", to: "11:30" }, "built at 8:30 ET, before the window");
-  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T15:00:00Z", plan: { spec: { setup: { window } } } }), { from: "11:00", to: "11:30" }, "re-listed at 11:00 ET: the window starts then");
+// D-144: the Thread plan said the day started at 09:30, the list was built at 8:30 and Re-list said the day then starts at 10:00.
+test("the day starts at the later of the plan's start and the list time, so a re-list moves it (D-144)", () => {
+  const window = { from: "09:30" };
+  assert.equal(practiceStart({ list_at: "2026-03-10T13:30:00Z", plan: { spec: { setup: { window } } } }), "09:30", "built at 9:30 ET: the plan's own start");
+  assert.equal(practiceStart({ list_at: "2026-03-10T12:30:00Z", plan: { spec: { setup: { window } } } }), "09:30", "built at 8:30 ET, before the start");
+  assert.equal(practiceStart({ list_at: "2026-03-10T15:00:00Z", plan: { spec: { setup: { window } } } }), "11:00", "re-listed at 11:00 ET: the day starts then");
 });
 
 // D-142: the total of the day's trades, and one precision for the selection's moves (the table shows two decimals).

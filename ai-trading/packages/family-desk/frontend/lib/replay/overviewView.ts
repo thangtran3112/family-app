@@ -1,4 +1,4 @@
-import { EMPTY_VALUE, type Tone } from "../desk/format.ts";
+import { EMPTY_VALUE, formatEtDay, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { swingCardView } from "./swing.ts";
 import type { WeekRow } from "./swingApi.ts";
@@ -9,7 +9,7 @@ import { weekReviewable, weekRowView } from "./weekView.ts";
 
 // View logic of the thread overview (`/practice/thread?id=`, 5R) and of the landing's Progress column: the progress
 // text, the days table rows, the week list and the adherence stat. Pure, so the node tests cover it. Every dollar figure
-// is SIMULATED. A day is named by number and weekday only: the replayed calendar date is never shown.
+// is SIMULATED. A day is named by number, weekday and date ("Day 3 · Wed 2026-03-11").
 
 // -- progress (the landing's one Progress column) ------------------------------------------------------------------------
 
@@ -102,7 +102,7 @@ export const overviewDayRows = (daily: readonly ThreadDay[], equity?: EquityDays
       return {
         key: String(day.n),
         n: day.n,
-        title: practiceText("swingDayShort", { day: day.n, weekday: day.weekday }),
+        title: practiceText("swingDayShort", { day: day.n, weekday: formatEtDay(day.day) }),
         href: dayBoardHref(day.day_list_id),
         practiced,
         status: practiced ? PRACTICE_COPY.overviewDayPracticed : passedText(day.n, equity),

@@ -101,9 +101,9 @@ test("Start Week opens the day's board, or says why nothing opened", () => {
 
 test("a day row opens that day's ended board once the thread's day list is known", () => {
   const daily = [
-    { n: 1, day_list_id: 61 },
-    { n: 2, day_list_id: 62 },
-    { n: 4, day_list_id: 64 },
+    { n: 1, day_list_id: 61, day: "2026-09-14" },
+    { n: 2, day_list_id: 62, day: "2026-09-15" },
+    { n: 4, day_list_id: 64, day: "2026-09-17" },
   ];
   assert.equal(dayListIdOf(daily, 2), 62);
   assert.equal(dayListIdOf(daily, 3), null);
@@ -117,7 +117,8 @@ test("a day row opens that day's ended board once the thread's day list is known
     [4, "/practice/day?id=64"],
     [5, null],
   ]);
-  assert.equal(rows[0]!.title, "Day 1 · Mon");
+  assert.equal(rows[0]!.title, "Day 1 · Mon 2026-09-14", "the thread's own day gives the row its date");
+  assert.equal(rows[2]!.title, "Day 3 · Wed", "a day the thread does not list keeps the week review's weekday");
   assert.ok(linkDayRows(weekDayRows(weekClosed.review), null).every((row) => row.href === null));
 });
 

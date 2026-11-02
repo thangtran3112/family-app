@@ -50,26 +50,33 @@ export function toggleIndicator(current: ReadonlySet<IndicatorId>, id: Indicator
 
 export type ChartSeries = { overlays: MarketChartOverlay[]; panes: MarketChartPane[]; volume: boolean };
 
+/** Indicator values the server computed, one entry per bar drawn (null where a value has not warmed up). The replay chart draws these (ADR-0022). */
+export type ServerSeries = {
+  vwap: Array<number | null>;
+  ema9: Array<number | null>;
+  ema21: Array<number | null>;
+  rsi14: Array<number | null>;
+  macd: { dif: Array<number | null>; signal: Array<number | null>; histogram: Array<number | null> };
+};
+
 /**
- * Series computed in the browser from the bars (02m §f decision 5). VWAP is intraday only. `vwap` is the VWAP the caller already built from
- * finer bars than `bars` (the Practice chart, D-168: one value per bar of `bars`); null means it could not be built, so the line is empty.
- * Left out, VWAP is computed from `bars` themselves.
+ * Series for the bars (02m §f decision 5). The live workspace computes them in the browser; the Practice replay passes `server`, the values the
+ * server computed from the same cut as the price (ADR-0022), and nothing is computed here. VWAP is intraday only.
  */
 export function buildChartSeries(
   bars: Bars["bars"],
   indicators: ReadonlySet<IndicatorId>,
   apiInterval: string,
   asset: "stock" | "future" = "stock",
-  vwap?: Array<number | null> | null,
+  server?: ServerSeries,
 ): ChartSeries {
   const closes = bars.map((bar) => bar.c);
   const overlays: MarketChartOverlay[] = [];
   if (indicators.has("vwap") && isIntraday(apiInterval)) {
-    const values = vwap === undefined ? calcVWAPWithGaps(bars, asset) : (vwap ?? bars.map(() => null));
-    overlays.push({ id: "vwap", label: "VWAP", ...OVERLAY_LOOK.vwap, values });
+    overlays.push({ id: "vwap", label: "VWAP", ...OVERLAY_LOOK.vwap, values: server ? server.vwap : calcVWAPWithGaps(bars, asset) });
   }
-  if (indicators.has("ema9")) overlays.push({ id: "ema9", label: "EMA 9", ...OVERLAY_LOOK.ema9, values: calcEMAWithGaps(closes, 9) });
-  if (indicators.has("ema21")) overlays.push({ id: "ema21", label: "EMA 21", ...OVERLAY_LOOK.ema21, values: calcEMAWithGaps(closes, 21) });
+  if (indicators.has("ema9")) overlays.push({ id: "ema9", label: "EMA 9", ...OVERLAY_LOOK.ema9, values: server ? server.ema9 : calcEMAWithGaps(closes, 9) });
+  if (indicators.has("ema21")) overlays.push({ id: "ema21", label: "EMA 21", ...OVERLAY_LOOK.ema21, values: server ? server.ema21 : calcEMAWithGaps(closes, 21) });
   if (indicators.has("sma50")) overlays.push({ id: "sma50", label: "SMA 50", color: TEXT, style: "dashed", values: calcMAWithGaps(closes, 50) });
   if (indicators.has("sma200")) overlays.push({ id: "sma200", label: "SMA 200", color: MUTED, values: calcMAWithGaps(closes, 200) });
 
@@ -80,11 +87,11 @@ export function buildChartSeries(
       label: "RSI (14)",
       height: 120,
       references: [{ value: 70, label: "70" }, { value: 30, label: "30" }],
-      series: [{ id: "rsi-line", label: "RSI (14)", color: TEXT, kind: "line", values: calcRSIWithGaps(closes, 14) }],
+      series: [{ id: "rsi-line", label: "RSI (14)", color: TEXT, kind: "line", values: server ? server.rsi14 : calcRSIWithGaps(closes, 14) }],
     });
   }
   if (indicators.has("macd")) {
-    const macd = calcMACDWithGaps(closes);
+    const macd = server ? server.macd : calcMACDWithGaps(closes);
     panes.push({
       id: "macd",
       label: "MACD (12, 26, 9)",

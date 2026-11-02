@@ -1097,12 +1097,34 @@ export interface paths {
         /**
          * Create Thread
          * @description Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-         *     risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
-         *     each with its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
+         *     risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day
+         *     threads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each
+         *     thread has its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
          *     she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
          *     check out (every rejection is a plain problem), and starts preparing its bars in the background.
          */
         post: operations["create_thread_api_desk_replay_threads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desk/replay/threads/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Thread Capacity
+         * @description The day-trade slots in use across all users and the most there can be (10). Declared before
+         *     `/threads/{thread_id}`, which would otherwise read "capacity" as an id.
+         */
+        get: operations["thread_capacity_api_desk_replay_threads_capacity_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1978,13 +2000,20 @@ export interface components {
             /** Behind Clock */
             behind_clock: boolean;
             daily_forming?: components["schemas"]["DailyBarOut"] | null;
+            /**
+             * Data Through
+             * Format: date-time
+             */
+            data_through: string;
             /** Day Clock */
             day_clock: string | null;
             /** Fills */
             fills?: components["schemas"]["MarkOut"][] | null;
             forming: components["schemas"]["FormingBarOut"] | null;
+            indicators?: components["schemas"]["IndicatorsOut"] | null;
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
+            market?: components["schemas"]["MarketOut"] | null;
             open_trade: components["schemas"]["OpenTradeOut"] | null;
             /**
              * Orders
@@ -2006,6 +2035,8 @@ export interface components {
             /** Strip */
             strip?: components["schemas"]["StripRowOut"][] | null;
             thread_clock?: components["schemas"]["ThreadClockStateOut"] | null;
+            /** Thread Time */
+            thread_time?: string | null;
         };
         /** AiContextOut */
         AiContextOut: {
@@ -3151,6 +3182,7 @@ export interface components {
              * Format: date-time
              */
             list_at: string;
+            market?: components["schemas"]["MarketOut"] | null;
             /** Notes */
             notes: string | null;
             /** Of */
@@ -3173,6 +3205,8 @@ export interface components {
              */
             status: "listed" | "practicing" | "ended";
             thread: components["schemas"]["ThreadBriefOut"] | null;
+            /** Thread Time */
+            thread_time?: string | null;
             universe: components["schemas"]["ListUniverseOut"];
             /** Warnings */
             warnings: string[];
@@ -3376,11 +3410,17 @@ export interface components {
             behind_clock: boolean;
             daily?: components["schemas"]["DailyBlockOut"] | null;
             daily_forming?: components["schemas"]["DailyBarOut"] | null;
+            /**
+             * Data Through
+             * Format: date-time
+             */
+            data_through: string;
             /** Day Clock */
             day_clock: string | null;
             /** Fills */
             fills?: components["schemas"]["MarkOut"][] | null;
             forming: components["schemas"]["FormingBarOut"] | null;
+            indicators?: components["schemas"]["IndicatorsOut"] | null;
             /**
              * Interval
              * @enum {string}
@@ -3388,6 +3428,7 @@ export interface components {
             interval: "1m" | "5m" | "15m";
             last: components["schemas"]["LastPrintOut"] | null;
             levels: components["schemas"]["ReplayLevelsOut"];
+            market?: components["schemas"]["MarketOut"] | null;
             open_trade: components["schemas"]["OpenTradeOut"] | null;
             /**
              * Orders
@@ -3409,6 +3450,8 @@ export interface components {
             /** Strip */
             strip?: components["schemas"]["StripRowOut"][] | null;
             thread_clock?: components["schemas"]["ThreadClockStateOut"] | null;
+            /** Thread Time */
+            thread_time?: string | null;
             /**
              * Window Start
              * Format: date-time
@@ -4128,6 +4171,48 @@ export interface components {
             ytd_premium: number | null;
         };
         /**
+         * IndicatorRowOut
+         * @description The indicators of one bar (`t` is its open), computed on the server from the same cut as the bars, the price and
+         *     the forming candle. A value that has not warmed up is null, never filled.
+         */
+        IndicatorRowOut: {
+            /** Ema21 */
+            ema21: number | null;
+            /** Ema9 */
+            ema9: number | null;
+            /** Macd */
+            macd: number | null;
+            /** Macd Hist */
+            macd_hist: number | null;
+            /** Macd Signal */
+            macd_signal: number | null;
+            /** Rsi14 */
+            rsi14: number | null;
+            /**
+             * T
+             * Format: date-time
+             */
+            t: string;
+            /** Vwap */
+            vwap: number | null;
+        };
+        /**
+         * IndicatorsOut
+         * @description `rows` are the indicators of the bars this payload carries (an advance: the new bars; a feed: every returned bar)
+         *     and then of the forming candle, whose close is the price. `as_of_bar` is the open of the last bar included.
+         */
+        IndicatorsOut: {
+            /** As Of Bar */
+            as_of_bar: string | null;
+            /**
+             * Interval
+             * @enum {string}
+             */
+            interval: "1m" | "5m" | "15m";
+            /** Rows */
+            rows: components["schemas"]["IndicatorRowOut"][];
+        };
+        /**
          * JournalOut
          * @description Live while the session is active (realized plus the open trade marked at the playhead); final after
          *     `end`. `signals_vs_trades` and the 15/30-minute changes look past the playhead, so they are empty until
@@ -4634,6 +4719,28 @@ export interface components {
             preferred: string;
             /** Serving */
             serving: string;
+        };
+        /**
+         * MarketOut
+         * @description The exchange's state at the thread time (a day thread's payloads): `phase`, when the day's tape ends, when the
+         *     last bar of the name closed (null where the payload names no single name), and when the next trading day's data
+         *     starts (null on the plan's last day). After `tape_end` the day has no bars: nothing is filled across the gap.
+         */
+        MarketOut: {
+            /** Last Bar At */
+            last_bar_at: string | null;
+            /** Next Open At */
+            next_open_at: string | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "premarket" | "regular" | "after_hours" | "closed";
+            /**
+             * Tape End
+             * Format: date-time
+             */
+            tape_end: string;
         };
         /** MarketStripTileOut */
         MarketStripTileOut: {
@@ -5504,11 +5611,6 @@ export interface components {
             day: string;
             /** Day List Id */
             day_list_id: number | null;
-            /**
-             * Hide Date
-             * @enum {string}
-             */
-            hide_date: "yes" | "no";
             /** Id */
             id: number;
             /** Pnl Usd */
@@ -5666,13 +5768,12 @@ export interface components {
         };
         /**
          * ReviewOut
-         * @description Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
-         *     window end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen
-         *     hid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029).
+         * @description Every candidate's move from its list price to the regular close, ranked by the signed move, biggest gain
+         *     first. `window_end` is the yardstick the moves were measured to (the regular close; a day ended earlier keeps its
+         *     own). Only present once the day ended. `day` is the finished day's date, always shown
+         *     (a plan's `hideDates` is accepted and ignored).
          */
         ReviewOut: {
-            /** Dates Hidden */
-            dates_hidden: boolean;
             /**
              * Day
              * Format: date
@@ -5711,8 +5812,6 @@ export interface components {
             rank: number | null;
             /** Symbol */
             symbol: string;
-            /** Window End Price */
-            window_end_price: number | null;
         };
         /** RevisionsOut */
         RevisionsOut: {
@@ -6879,6 +6978,17 @@ export interface components {
             week_no?: number | null;
         };
         /**
+         * ThreadCapacityOut
+         * @description The day-trade slots, shared by every user: at most `day_max` active day threads at once. Closing a day thread
+         *     frees a slot; swing threads do not use one.
+         */
+        ThreadCapacityOut: {
+            /** Day Active */
+            day_active: number;
+            /** Day Max */
+            day_max: number;
+        };
+        /**
          * ThreadClockOut
          * @description The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a
          *     running clock was settled before this was built); a client may extrapolate it with `speed` between polls but never
@@ -6896,6 +7006,7 @@ export interface components {
             focus_end: string | null;
             /** Label */
             label: string;
+            market?: components["schemas"]["MarketOut"] | null;
             /** Next Start */
             next_start: string | null;
             /** Running */
@@ -9778,6 +9889,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+        };
+    };
+    thread_capacity_api_desk_replay_threads_capacity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadCapacityOut"];
                 };
             };
         };

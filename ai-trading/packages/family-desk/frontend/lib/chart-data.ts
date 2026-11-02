@@ -167,10 +167,10 @@ export function formatChartClock(time: Time): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-/** Replay axes: time of day on time ticks, "Oct 22" on day ticks, nothing for a day tick when dates are hidden. `tickType` is the library's TickMarkType (3 and up are time ticks). */
-export function replayTickLabel(time: Time, tickType: number, hideDates: boolean): string {
+/** Replay axes: time of day on time ticks, "Oct 22" on day ticks. `tickType` is the library's TickMarkType (3 and up are time ticks). */
+export function replayTickLabel(time: Time, tickType: number): string {
   if (tickType >= 3) return formatChartClock(time);
-  if (hideDates || typeof time === "object") return "";
+  if (typeof time === "object") return "";
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" }).format(new Date(typeof time === "number" ? time * 1000 : time));
 }
 
@@ -197,14 +197,9 @@ export function clearTickLabel(label: string, y: number | null, tagYs: readonly 
   return y === null || tagYs.every((tag) => Math.abs(tag - y) >= TAG_CLEARANCE) ? label : "";
 }
 
-/**
- * The "Source time" cell of a chart's data table. Dates hidden: the caller's label for the row when it has one ("D-3",
- * "Day 6"; a stand-in timeline's own clock time says nothing), else the time of day.
- */
-export function sourceTimeLabel(t: string, index: number, hideDates: boolean, rowLabels?: readonly string[]): string {
-  // Dates shown: the New York day and time ("Fri 2026-10-23 10:07 AM"), never the raw UTC string (V-Technicals-05).
-  if (!hideDates) return /^\d{4}-\d{2}-\d{2}$/.test(t) ? formatEtDay(t) : `${formatEtDay(t)} ${formatEtTime(t)}`;
-  return rowLabels?.[index] ?? formatChartClock(Math.floor(Date.parse(t) / 1000) as UTCTimestamp);
+/** The "Source time" cell of a chart's data table: the New York day and time ("Fri 2026-10-23 10:07 AM"), never the raw UTC string (V-Technicals-05). */
+export function sourceTimeLabel(t: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? formatEtDay(t) : `${formatEtDay(t)} ${formatEtTime(t)}`;
 }
 
 /** The least share of the chart the price pane keeps when the indicator panes ask for more than the rest. */

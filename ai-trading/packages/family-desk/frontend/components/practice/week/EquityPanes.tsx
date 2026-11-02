@@ -21,8 +21,8 @@ const COLUMNS: DenseColumn<EquityDayRow>[] = [
 
 /**
  * Balance and equity at each close from Day 1, drawn on `MarketChart` as two lines on one money scale with this week
- * shaded (the chart's session shading, fed by the series' flat bars). The time axis names each close "D1", "D2" (no date: the
- * real ones stay hidden) and the price axis reads in dollars (D-087, D-128). The same numbers sit under the chart as a caption
+ * shaded (the chart's session shading, fed by the series' flat bars). The week review's API names each close by day number and weekday
+ * only, so the time axis names it "D1", "D2" and the data table's rows say "Day 3 · Wed"; the price axis reads in dollars (D-087, D-128). The same numbers sit under the chart as a caption
  * and a table: a screen reader and a keyboard get the whole picture too.
  */
 export function EquityPanes({ series }: { series: EquitySeries }) {
@@ -53,7 +53,6 @@ export function EquityPanes({ series }: { series: EquitySeries }) {
         overlays={overlays}
         sessionShading
         lastPricePill={false}
-        hideDates
         rowLabels={rows.map((row) => row.day)}
         moneyAxis={moneyAxis}
         chrome="bare"
