@@ -18,7 +18,7 @@ import { FactList } from "@/components/ui/FactList";
 
 /** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. */
 export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
-  const { id, plan, startingBalance, status, mode } = thread.thread;
+  const { id, plan, shares, startingBalance, status, mode } = thread.thread;
   const swing = mode === "swing";
   const closed = status === "closed";
   const [draft, setDraft] = useState<ThreadDraft | null>(null);
@@ -28,7 +28,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
   const busy = saving;
 
   const edit = () => {
-    setDraft(planToDraft(plan, startingBalance));
+    setDraft(planToDraft(plan, startingBalance, shares));
     setProblems({});
     setSaveError(null);
   };
@@ -92,7 +92,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
         <>
           <FactList
             divided
-            facts={planRows(plan, mode).map((row) => ({
+            facts={planRows(plan, mode, shares).map((row) => ({
               id: row.id,
               label: row.label,
               value: (

@@ -52,7 +52,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
   const empty = hasNoDays(thread);
   const closed = status === "closed";
   const balance = formatBalance(stats.balance);
-  const name = threadName(thread.thread).replace(" thread", "");
+  const name = threadName(thread.thread);
   // At the 1180 band the right rail is a tab strip: each tab opens its own drawer, and the screen leaves room for them (D-038, D-040).
   const band = useShellBand();
   const [railOpen, setRailOpen] = useState<string[]>([]);
@@ -64,7 +64,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
       <header className={styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>{`Thread · ${name} · ${weeksInText(weeks.length)}`}</h1>
+            <h1 className={styles.title}>{`${name} · ${weeksInText(weeks.length)}`}</h1>
             <Badge tone="neutral">{threadModeLabel(mode)}</Badge>
           </div>
           <p className={styles.sub}>

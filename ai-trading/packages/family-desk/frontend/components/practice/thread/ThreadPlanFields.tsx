@@ -9,7 +9,7 @@ import styles from "./thread.module.css";
 /** The risk plan of a practice thread (02r, D-007): stop on every entry, trade only on a signal, max loss, max trades and a
  *  note. The journal's Edit plan form uses it (the New plan modal no longer asks for a risk plan, D-076); the parent owns the
  *  draft. `idPrefix` keeps the ids unique when two forms are on screen. `perWeek` (a swing thread, 02p) labels max loss and
- *  max trades as weekly. */
+ *  max trades as weekly and leaves out Shares, which is a day thread's entry size (D-042). */
 export function ThreadPlanFields({
   draft,
   onDraft,
@@ -30,6 +30,11 @@ export function ThreadPlanFields({
         <YesNo id={id("stop")} label={PRACTICE_COPY.threadStopOnEntry} value={draft.stopNoteOnEntry} error={problems.stopNoteOnEntry} onChange={(stopNoteOnEntry) => onDraft({ ...draft, stopNoteOnEntry })} />
         <YesNo id={id("signal")} label={PRACTICE_COPY.threadSignalOnly} value={draft.tradeOnlyOnSignal} error={problems.tradeOnlyOnSignal} onChange={(tradeOnlyOnSignal) => onDraft({ ...draft, tradeOnlyOnSignal })} />
       </div>
+      {!perWeek && (
+        <Field id={id("shares")} label={PRACTICE_COPY.threadShares} error={problems.shares}>
+          <NumberInput fill inputMode="numeric" min={1} step={1} placeholder={PRACTICE_COPY.threadSharesPlaceholder} value={draft.shares} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
+        </Field>
+      )}
       <div className={styles.row}>
         <Field id={id("max-loss")} label={perWeek ? PRACTICE_COPY.swingMaxLossWeek : PRACTICE_COPY.threadMaxLoss} error={problems.maxLossUsd}>
           <NumberInput fill inputMode="numeric" min={1} max={100000} step={1} placeholder="Optional" value={draft.maxLossUsd} onChange={(event) => onDraft({ ...draft, maxLossUsd: event.target.value })} />

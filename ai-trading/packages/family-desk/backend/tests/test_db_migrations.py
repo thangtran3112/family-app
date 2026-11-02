@@ -89,11 +89,12 @@ def _alembic_config(url: str) -> Config:
     return cfg
 
 
-def test_migration_chain_has_a_single_head_at_0019() -> None:
+def test_migration_chain_has_a_single_head_at_0020() -> None:
     # No database needed: the script directory alone shows the chain. A second head (e.g. a
     # renumbering clash between two lanes) fails here before any upgrade runs.
     script = ScriptDirectory.from_config(_alembic_config("postgresql+psycopg://localhost/placeholder"))
-    assert script.get_heads() == ["0019"]
+    assert script.get_heads() == ["0020"]
+    assert script.get_revision("0020").down_revision == "0019"
     assert script.get_revision("0019").down_revision == "0018"
     assert script.get_revision("0018").down_revision == "0017"
     assert script.get_revision("0017").down_revision == "0016"
@@ -248,6 +249,24 @@ def test_0019_adds_the_thread_clock_columns_paused_for_every_existing_day(db_eng
         assert gone == {"clock_running", "clock_speed", "clock_anchor_at", "clock_pause"}
         command.upgrade(_alembic_config(url), "head")
         assert set(_columns(db_engine, "replay_day_lists")) == set(days)
+    finally:
+        command.upgrade(_alembic_config(url), "head")
+
+
+def test_0020_adds_the_thread_name_and_entry_size_columns(db_engine: Engine) -> None:
+    """Thread name and entry size (0020, D-069, D-042): `practice_threads.name` (NOT NULL, no default: the server names
+    every thread) and `practice_threads.shares` (nullable, at least 1 by a check)."""
+    url = db_engine.url.render_as_string(hide_password=False)
+    threads = _columns(db_engine, "practice_threads")
+    assert not threads["name"]["nullable"] and threads["name"]["default"] is None
+    assert threads["shares"]["nullable"] and threads["shares"]["default"] is None
+    checks = {c["name"] for c in inspect(db_engine).get_check_constraints("practice_threads")}
+    assert "ck_practice_threads_shares" in checks
+    try:
+        command.downgrade(_alembic_config(url), "0019")
+        assert set(threads) - set(_columns(db_engine, "practice_threads")) == {"name", "shares"}
+        command.upgrade(_alembic_config(url), "head")
+        assert set(_columns(db_engine, "practice_threads")) == set(threads)
     finally:
         command.upgrade(_alembic_config(url), "head")
 

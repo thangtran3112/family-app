@@ -64,7 +64,7 @@ async function readThread(context: BrowserContext, id: number) {
   const answer = await context.request.get(`${origin}/api/desk/replay/threads/${id}`);
   expect(answer.ok()).toBeTruthy();
   return (await answer.json()) as {
-    thread: { id: number; startingBalance: number; status: string; stats: { balance: number; daysPracticed: number; daysSkipped: number; wins: number; losses: number } };
+    thread: { id: number; startingBalance: number; shares?: number; status: string; stats: { balance: number; daysPracticed: number; daysSkipped: number; wins: number; losses: number } };
     daily: Array<{ n: number; kind: string; pnl_usd: number; balance: number }>;
     curve: Array<{ n: number; balance: number }>;
   };
@@ -507,7 +507,7 @@ test.describe("Practice", () => {
     await openRow(page, card);
     await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("thread ·");
     await expect(page.getByText(PRACTICE_COPY.balanceNow)).toBeVisible();
     await expect(page.getByText(balance).first()).toBeVisible();
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toBeVisible();
@@ -537,11 +537,16 @@ test.describe("Practice", () => {
     const plan = await railSection(page, "Thread details", PRACTICE_COPY.threadPlanTitle);
     await expect(plan).toContainText("$600");
     await expect(plan).toContainText(PRACTICE_COPY.threadShares); // D-042: the full plan, Shares included
+    await expect(plan).toContainText(PRACTICE_COPY.threadSharesNotSet); // a thread that never set an entry size says so
     await expect(plan).toContainText(`${PRACTICE_COPY.threadPlanNote}: Trade only clean pullbacks.`);
     await plan.getByRole("button", { name: PRACTICE_COPY.threadEditPlan }).click();
     await plan.getByLabel("Max loss ($)").fill("400");
+    await plan.getByLabel(PRACTICE_COPY.threadShares).fill("250");
     await plan.getByRole("button", { name: PRACTICE_COPY.threadSavePlan }).click();
     await expect(plan).toContainText("$400");
+    await expect(plan).toContainText("250"); // D-042: the entry size she set reads as the Shares row
+    await expect(plan).not.toContainText(PRACTICE_COPY.threadSharesNotSet);
+    expect((await readThread(context, threadId)).thread.shares).toBe(250);
     await expect(plan.getByRole("button", { name: PRACTICE_COPY.threadSavePlan })).toHaveCount(0);
     // D-040: Close thread is its own section of the rail (a tab of its own at 1180).
     const closing = await railSection(page, "Thread details", PRACTICE_COPY.threadClose);

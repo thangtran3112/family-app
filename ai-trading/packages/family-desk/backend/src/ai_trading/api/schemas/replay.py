@@ -696,6 +696,10 @@ class CandidateOut(BaseModel):
     list_price: FiniteFloat
     price_at: datetime
     prior_close: FiniteFloat | None
+    # The previous session's own RVOL (10-session daily) and close-to-close change %, read from the same cut daily bars
+    # whether the list was built before or after the open (D-018). Null on a list stored before they existed.
+    prev_rvol: FiniteFloat | None = None
+    prev_change_pct: FiniteFloat | None = None
     reported_before_open: bool  # an explicit before-the-open report (or yesterday's after-close one); never directional
     metrics: dict[str, FiniteFloat | None]
     # A re-scan repopulates the list (2026-11-01). `new_since_list`: the scan added it, the list before did not hold it.
