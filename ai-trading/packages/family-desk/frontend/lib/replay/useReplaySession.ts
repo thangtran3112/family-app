@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { DeskApiError } from "../api/client.ts";
+import { DeskApiError, READ_TIMEOUT_MS } from "../api/client.ts";
+import { backoffMs } from "../desk/backoff.ts";
 import { advanceReplay, cancelOrder, endReplay, loadReplayFeed, loadReplaySession, placeMark, placeOrder, undoMark, type AdvanceTarget, type OrderBody, type TapeParams } from "../desk/replay.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { DEFAULT_SPEED, delayUntilNextTick, isSpeed, jumpMinutes, nextTo, threadClock, type Speed } from "./clock.ts";
@@ -160,7 +161,8 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
           // shows the clock the strip shows. A day thread's clock runs on the server (ADR-0018): `sync` brings it to now
           // and reveals this name through it, so a chart opened at any moment shows the market as it is at that moment.
           const target: AdvanceTarget = followsClock ? { sync: true } : { to: feed.revealed_through };
-          const delta = await advanceReplay(id, target, { interval: loaded.spec.interval }, { signal: controller.signal }).catch(() => null);
+          // A sync that hangs must not hold the whole screen on its skeleton: the session is shown as the feed has it, and the poll below catches up.
+          const delta = await advanceReplay(id, target, { interval: loaded.spec.interval }, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(READ_TIMEOUT_MS)]) }).catch(() => null);
           if (controller.signal.aborted) return;
           if (delta) {
             shown = applyAdvance(shown, delta);
@@ -283,14 +285,24 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
   // no Play here: leaving this screen and coming back finds the clock where the server has it, and the load above syncs once.
   const follows = session !== null && session.day_list_id !== null && session.thread?.mode !== "swing" && session.status === "active";
   const syncing = useRef(false);
+  // Failed polls in a row and when the last one failed: while the server does not answer, the poll waits twice as long after each failure.
+  const syncFailed = useRef({ count: 0, at: 0 });
   useEffect(() => {
     if (!follows) return;
+    syncFailed.current = { count: 0, at: 0 };
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible" || syncing.current || busy.current) return;
+      const failed = syncFailed.current;
+      if (failed.count > 0 && Date.now() - failed.at < backoffMs(POLL_MS, failed.count)) return;
       syncing.current = true;
-      void exec(() => advance({ sync: true }, true)).finally(() => {
-        syncing.current = false;
-      });
+      void exec(() => advance({ sync: true }, true))
+        .then((ok) => {
+          if (ok === true) syncFailed.current = { count: 0, at: 0 };
+          else if (ok === false) syncFailed.current = { count: failed.count + 1, at: Date.now() };
+        })
+        .finally(() => {
+          syncing.current = false;
+        });
     }, POLL_MS);
     return () => window.clearInterval(timer);
   }, [follows, exec, advance]);

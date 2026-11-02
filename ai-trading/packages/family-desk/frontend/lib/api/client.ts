@@ -1,7 +1,13 @@
 import type { ZodType } from "zod";
 import { hubLoginUrl } from "../auth.ts";
 
-export type DeskApiErrorKind = "http" | "unauthenticated" | "malformed";
+export type DeskApiErrorKind = "http" | "unauthenticated" | "malformed" | "timeout";
+
+/**
+ * A read (GET) that has no answer after this long is a failure, not a wait: a screen on a skeleton shows an error with Retry instead.
+ * Writes are not bounded here: Skip day and a day open legitimately run for a minute or more, and the gateway cuts them (see `patience.ts`).
+ */
+export const READ_TIMEOUT_MS = 30_000;
 
 export type DeskApiProblem = { path: string; message: string };
 export type DeskApiErrorBody = { detail?: string; problems?: DeskApiProblem[] };
@@ -47,9 +53,31 @@ export function parseErrorBody(value: unknown): DeskApiErrorBody {
 
 type DeskLocation = Pick<Location, "href">;
 
+/** The caller's signal joined with a timer: aborts when either fires. `timedOut()` tells which, and `done()` clears the timer. */
+function boundedSignal(caller: AbortSignal | null | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const forward = () => controller.abort(caller?.reason);
+  if (caller?.aborted) forward();
+  else caller?.addEventListener("abort", forward, { once: true });
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    done: () => {
+      clearTimeout(timer);
+      caller?.removeEventListener("abort", forward);
+    },
+  };
+}
+
 export function createDeskApiClient(
   fetchImplementation: typeof fetch = fetch,
   getLocation: () => DeskLocation = () => window.location,
+  readTimeoutMs: number = READ_TIMEOUT_MS,
 ) {
   let redirected = false;
 
@@ -73,35 +101,45 @@ export function createDeskApiClient(
     const headers = new Headers(init?.headers);
     headers.delete("Cf-Access-Authenticated-User-Email");
 
-    const response = await fetchImplementation(target, {
-      ...init,
-      headers,
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    if (response.status === 401) {
-      if (!redirected) {
-        redirected = true;
-        const location = getLocation();
-        location.href = hubLoginUrl(location.href);
-      }
-      throw new DeskApiError("unauthenticated", response.status);
-    }
-    if (!response.ok) {
-      let body: DeskApiErrorBody = {};
-      try {
-        body = parseErrorBody(await response.json());
-      } catch {
-        // Not JSON (or an empty body): the status alone is the error.
-      }
-      throw new DeskApiError("http", response.status, body);
-    }
-
+    const bound = (init?.method ?? "GET").toUpperCase() === "GET" ? boundedSignal(init?.signal, readTimeoutMs) : null;
     try {
-      return schema.parse(response.status === 204 ? undefined : await response.json());
-    } catch {
-      throw new DeskApiError("malformed", response.status);
+      const response = await fetchImplementation(target, {
+        ...init,
+        signal: bound?.signal ?? init?.signal,
+        headers,
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
+        if (!redirected) {
+          redirected = true;
+          const location = getLocation();
+          location.href = hubLoginUrl(location.href);
+        }
+        throw new DeskApiError("unauthenticated", response.status);
+      }
+      if (!response.ok) {
+        let body: DeskApiErrorBody = {};
+        try {
+          body = parseErrorBody(await response.json());
+        } catch {
+          // Not JSON (or an empty body): the status alone is the error.
+        }
+        throw new DeskApiError("http", response.status, body);
+      }
+
+      try {
+        return schema.parse(response.status === 204 ? undefined : await response.json());
+      } catch {
+        throw new DeskApiError("malformed", response.status);
+      }
+    } catch (error) {
+      // The timer fired, not the caller: a read with no answer is a failed read.
+      if (bound?.timedOut()) throw new DeskApiError("timeout");
+      throw error;
+    } finally {
+      bound?.done();
     }
   };
 }

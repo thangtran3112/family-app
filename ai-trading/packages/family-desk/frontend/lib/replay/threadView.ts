@@ -33,6 +33,17 @@ export function formatDayResult(value: number | null | undefined): string {
   return `${value > 0 ? "+" : MINUS}$${cents(value)}`;
 }
 
+/**
+ * What the day in progress has realized so far, which the balance counts and the end-of-day charts do not yet: the thread balance (starting
+ * balance plus every closed trade) less the curve's last point (ended days only). null when they agree, so only a real gap is ever shown.
+ */
+export function realizedToday(thread: { thread: { stats: { balance: number } }; curve: ReadonlyArray<{ balance: number }> }): number | null {
+  const last = thread.curve.at(-1);
+  if (last === undefined) return null;
+  const gap = Math.round((thread.thread.stats.balance - last.balance) * 100) / 100;
+  return gap === 0 ? null : gap;
+}
+
 /** "$50,000": an amount she chose (starting balance, max loss), whole dollars; a figure the ledger produced uses `formatBalance`. */
 export const formatWhole = (value: number): string => `${value < 0 ? MINUS : ""}$${whole(value)}`;
 

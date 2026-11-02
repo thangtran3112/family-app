@@ -8,6 +8,8 @@ export type QueryState<T> = {
   error: unknown;
   status: QueryStatus;
   updatedAt: number | null;
+  /** Failed reads in a row since the last answer: a poll waits longer after each (`backoffMs`). */
+  failures: number;
 };
 export type QueryAction<T> =
   | { type: "start"; key: string }
@@ -15,7 +17,7 @@ export type QueryAction<T> =
   | { type: "failure"; key: string; error: unknown };
 
 export function initialQueryState<T>(key: string): QueryState<T> {
-  return { key, data: null, error: null, status: "loading", updatedAt: null };
+  return { key, data: null, error: null, status: "loading", updatedAt: null, failures: 0 };
 }
 
 export function queryReducer<T>(state: QueryState<T>, action: QueryAction<T>): QueryState<T> {
@@ -25,10 +27,10 @@ export function queryReducer<T>(state: QueryState<T>, action: QueryAction<T>): Q
     case "start":
       return base.data === null ? { ...base, status: "loading", error: null } : { ...base, status: "updating" };
     case "success":
-      return { key: action.key, data: action.data, error: null, status: "ready", updatedAt: action.at };
+      return { key: action.key, data: action.data, error: null, status: "ready", updatedAt: action.at, failures: 0 };
     case "failure":
       // A failed refresh keeps the old values on screen; only a first load becomes an error screen.
-      return base.data === null ? { ...base, status: "error", error: action.error } : { ...base, status: "ready", error: action.error };
+      return base.data === null ? { ...base, status: "error", error: action.error, failures: base.failures + 1 } : { ...base, status: "ready", error: action.error, failures: base.failures + 1 };
   }
 }
 

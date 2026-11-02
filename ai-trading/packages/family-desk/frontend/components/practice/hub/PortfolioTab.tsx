@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
+import type { ClockAccount } from "@/lib/replay/threadClock";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
 import { freeCashText, holdRowView, type HoldRowView } from "@/lib/replay/swing";
@@ -30,19 +31,24 @@ const HOLD_COLUMNS: DenseColumn<HoldRow>[] = [
  * Exit on a held one), the same panel the day list and the replay carry. A swing thread: its equity and free cash, and the holds
  * carried between days. With no day open a day thread has nothing to show and says where to start one. All SIMULATED.
  */
-export function PortfolioTab({ summary, clockRevision = 0 }: { summary: Thread; clockRevision?: number }) {
+export function PortfolioTab({ summary, clockRevision = 0, account = null }: { summary: Thread; clockRevision?: number; account?: ClockAccount | null }) {
   const { thread, today, swing: state } = summary;
   if (thread.mode === "swing" && state) return <SwingPortfolio summary={summary} />;
   if (today === null) return <EmptyBlock title={PRACTICE_COPY.portfolioNoDay} />;
-  return <DayPortfolio dayListId={today.day_list_id} clockRevision={clockRevision} />;
+  return <DayPortfolio dayListId={today.day_list_id} clockRevision={clockRevision} account={account} />;
 }
 
 /** The names of the open day, priced at the thread clock: it is read again whenever the clock moves (ADR-0018). */
-function DayPortfolio({ dayListId, clockRevision }: { dayListId: number; clockRevision: number }) {
+function DayPortfolio({ dayListId, clockRevision, account }: { dayListId: number; clockRevision: number; account: ClockAccount | null }) {
   const query = useDayPortfolio(dayListId, clockRevision);
   return (
     <section className={styles.panel} aria-label={PRACTICE_COPY.dayPortfolio}>
       <h2 className={styles.panelTitle}>{PRACTICE_COPY.dayPortfolio}</h2>
+      {account !== null && (
+        <p className={hub.muted} data-testid="portfolio-account">
+          {`${practiceText("swingEquity", { amount: formatBalance(account.equity_usd) })} · ${practiceText("buyingPowerLine", { label: PRACTICE_COPY.clockAccountBuyingPower, amount: formatBalance(account.buying_power_usd) })}`}
+        </p>
+      )}
       <QueryBoundary query={query} loading="Loading the portfolio…" height={96} message={PRACTICE_COPY.dayLoadError}>
         {() => <PortfolioPanel dayListId={dayListId} query={query} />}
       </QueryBoundary>

@@ -90,6 +90,17 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .newestMark + .bottomToggle { margin-left: var(--space-2); }
 /* One fixed height, empty or full: a new mark scrolls inside it and never moves the chart (D-146). Newest first, so the top rows show. */
 .bottomBody { height: 72px; overflow-y: auto; padding: var(--space-2) var(--space-4); }
+/* A row that is still below the fold says so: a shade at the edge that has more behind it. It shows only while that edge can scroll (the "local" layers cover it at the end). */
+.bottomBody {
+  background:
+    linear-gradient(var(--color-ground) 30%, transparent) center top,
+    linear-gradient(transparent, var(--color-ground) 70%) center bottom,
+    radial-gradient(farthest-side at 50% 0, rgb(255 255 255 / 0.12), transparent) center top,
+    radial-gradient(farthest-side at 50% 100%, rgb(255 255 255 / 0.12), transparent) center bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 20px, 100% 20px, 100% 8px, 100% 8px;
+  background-attachment: local, local, scroll, scroll;
+}
 
 /* Left rail: technical indicators on top, the tape below */
 .session { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }

@@ -36,7 +36,7 @@ async function portfolioPanel(page: Page) {
 
 /** From the Portfolio tab back onto a name's chart, through its row (the tab's way into a chart). */
 async function openFromPortfolio(page: Page, symbol: string) {
-  await page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true }).getByRole("button", { name: `Switch to ${symbol}` }).click();
+  await page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true }).getByRole("button", { name: `Open ${symbol}` }).click();
   await page.waitForURL(SESSION_URL);
   await expect(page.getByRole("heading", { name: symbol, level: 1 })).toBeVisible();
 }
@@ -120,7 +120,7 @@ test.describe("Practice: switching names", () => {
     await placeOrder(page, "Buy");
     portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText(/Long \d+ @ \$/);
-    const tslaRow = portfolio.getByRole("button", { name: "Switch to TSLA" });
+    const tslaRow = portfolio.getByRole("button", { name: "Open TSLA" });
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText(/Close LRCX first/);
     await openFromPortfolio(page, "LRCX");
@@ -156,7 +156,7 @@ test.describe("Practice: switching names", () => {
     await backToDayList(page);
     await page.waitForURL(dayUrl);
     await expect(page.locator("body")).not.toContainText(/names practiced today|allows \d+ names/);
-    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Switch to LRCX" })).toHaveText("Switch"); // a name in hand switches back
+    await expect(page.getByRole("row", { name: /LRCX/ }).getByRole("button", { name: "Open LRCX" })).toHaveText("Open"); // a name in hand reads Open like every other
     // The day list is only the list of names: its portfolio is the Portfolio tab's, not a section of this screen.
     await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
@@ -492,7 +492,7 @@ test.describe("Practice: switching names", () => {
     await expectCleanScreen(page);
 
     // The clock moves on: the scan says it is older, and a new scan replaces the list, it does not add to it.
-    await page.getByRole("button", { name: "Switch to TSLA" }).first().click(); // the name in hand: its button reads Switch
+    await page.getByRole("button", { name: "Open TSLA" }).first().click(); // the name in hand: its button reads Open like every other
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await stepBar(page);

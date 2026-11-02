@@ -298,6 +298,8 @@ def test_the_balance_follows_the_open_positions_as_the_clock_runs(db_session, us
 
     start = _read(db_session, user_id, svc, thread_id)["account"]
     assert (start["balance"], start["equity_usd"], start["positions"]) == (50_000.0, 50_000.0, 2)
+    # buying power: the balance less what the open positions cost (a short counts as a long)
+    assert start["buying_power_usd"] == pytest.approx(50_000.0 - 10 * bought - 20 * sold, abs=0.005)
 
     _control(db_session, user_id, svc, thread_id, running=True, speed=10)
     wall[0] += timedelta(minutes=3)  # 30 market minutes: the clock is at 10:00
@@ -312,6 +314,7 @@ def test_the_balance_follows_the_open_positions_as_the_clock_runs(db_session, us
     assert later["account"]["open_pnl_usd"] == open_pnl and later["account"]["equity_usd"] == 50_000.0 + open_pnl
     assert later["account"]["balance"] == 50_000.0 and later["account"]["positions"] == 2  # nothing realized yet
     assert later["account"]["as_of"] == later["clock"]  # priced at the clock, never past it
+    assert later["account"]["buying_power_usd"] == start["buying_power_usd"]  # the cost of the positions does not move
     assert open_pnl != mid["account"]["open_pnl_usd"]  # the balance moved with nobody asking
 
 

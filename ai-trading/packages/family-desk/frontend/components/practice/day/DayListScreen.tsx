@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
+import { backoffMs } from "@/lib/desk/backoff";
 import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
@@ -36,7 +37,6 @@ import {
   listCountsText,
   listWarning,
   liveState,
-  nameActionLabel,
   practiceWindow,
   rescanCounts,
   rescanCurrent,
@@ -109,7 +109,7 @@ export function DayListScreen() {
   }
   // A swing thread's day answers the swing board (02p d1); a day thread's list is the screen below.
   if (isSwingDayList(list.data)) return <SwingBoard key={list.data.id} initial={list.data} />;
-  return <DayList key={list.data.id} list={list.data} onChanged={list.refresh} />;
+  return <DayList key={list.data.id} list={list.data} onChanged={list.refresh} failures={list.failures} />;
 }
 
 /** One empty layout for a day that is not chosen or not found, with the way back (D-117). */
@@ -149,7 +149,7 @@ function DaySkeleton() {
   );
 }
 
-function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) {
+function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () => void; failures: number }) {
   const router = useRouter();
   const ended = list.status === "ended";
   const hidden = datesHidden(list.plan.spec) && !ended;
@@ -190,7 +190,6 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
 
   // The name she was last on is the one Resume opens; every name she has opened can be switched back to.
   const practicing = list.sessions.at(-1) ?? null;
-  const opened = new Set(list.sessions.map((session) => session.symbol));
   // The list is a snapshot of the list time; the day clock runs on the server (ADR-0018). Once the clock has started, the table is read again with
   // `live`, which prices every name at the clock (nothing later than it). A bar closes once a minute, so a new clock minute (or a new re-scan) is the
   // only thing worth a read. Not the clock's every poll: a read of the whole list takes a while and would be cancelled by the next one.
@@ -264,10 +263,18 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
   // Latch while rendering (React's "adjust state when a value changes" pattern), not in an effect: a scan seen running is one this
   // screen can announce when it ends. The click clears it, so the previous scan's "done" never shows for the new one.
   if (scanRunning && !scanSeen) setScanSeen(true);
+  // The day list is read again every RESCAN_POLL_MS while a scan runs; after reads that failed in a row it waits twice as long per failure (up to a minute).
+  const failuresRef = useRef(failures);
+  const lastPoll = useRef(0);
+  useEffect(() => {
+    failuresRef.current = failures;
+  });
   useEffect(() => {
     if (!scanRunning) return;
     const timer = setInterval(() => {
-      if (!document.hidden) onChanged();
+      if (document.hidden || (failuresRef.current > 0 && Date.now() - lastPoll.current < backoffMs(RESCAN_POLL_MS, failuresRef.current))) return;
+      lastPoll.current = Date.now();
+      onChanged();
     }, RESCAN_POLL_MS);
     return () => clearInterval(timer);
   }, [scanRunning, onChanged]);
@@ -400,10 +407,10 @@ function DayList({ list, onChanged }: { list: DayList; onChanged: () => void }) 
                       variant="primary"
                       disabled={busy}
                       loading={here}
-                      aria-label={here ? undefined : practiceText(opened.has(row.symbol) ? "daySwitch" : "dayOpen", { symbol: row.symbol })}
+                      aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
                       onClick={() => void practice(row.symbol)}
                     >
-                      {here ? practiceText("dayOpening", { symbol: row.symbol }) : nameActionLabel(opened.has(row.symbol))}
+                      {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
                     </Button>
                     <Button size="sm" variant="primary" disabled={busy} aria-label={practiceText("dayPeekAt", { symbol: row.symbol })} onClick={() => peekAt(row.symbol)}>
                       {PRACTICE_COPY.dayPeek}

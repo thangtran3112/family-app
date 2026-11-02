@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import { backoffMs } from "./backoff.ts";
 import { connectionOf, initialQueryState, queryReducer, type QueryState } from "./queryState.ts";
 import type { Connection } from "./freshness.ts";
 
 export type DeskQueryOptions = {
-  /** Refetch every this many ms while the tab is visible; old values stay on screen meanwhile. */
+  /** Refetch every this many ms while the tab is visible; old values stay on screen meanwhile. After a failed read the wait doubles per failure (up to a minute). */
   intervalMs?: number;
   /** Skip fetching (for example until a symbol is known). */
   enabled?: boolean;
@@ -23,6 +24,8 @@ export type DeskQueryResult<T> = {
   /** The last refresh failed but `data` is still the previous answer ("Reconnecting…"). */
   connection: Connection;
   updatedAt: number | null;
+  /** Failed reads in a row since the last answer (0 when the last read worked). */
+  failures: number;
   refresh: () => void;
 };
 
@@ -38,6 +41,9 @@ export function useDeskQuery<T>(
   const [raw, dispatch] = useReducer(queryReducer<T>, key, initialQueryState<T>);
   const fetcherRef = useRef(fetcher);
   const runRef = useRef<(background: boolean) => void>(() => undefined);
+  // The interval tick below reads these: when the last read failed, it waits out the backoff before asking again.
+  const failuresRef = useRef(0);
+  const failedAtRef = useRef(0);
 
   useEffect(() => {
     fetcherRef.current = fetcher;
@@ -50,13 +56,21 @@ export function useDeskQuery<T>(
       if (background) dispatch({ type: "start", key });
       fetcherRef.current(controller.signal).then(
         (data) => { if (!controller.signal.aborted) dispatch({ type: "success", key, data, at: Date.now() }); },
-        (error: unknown) => { if (!controller.signal.aborted) dispatch({ type: "failure", key, error }); },
+        (error: unknown) => {
+          if (controller.signal.aborted) return;
+          failedAtRef.current = Date.now();
+          dispatch({ type: "failure", key, error });
+        },
       );
     };
     runRef.current = run;
     run(false);
     const timer = intervalMs
-      ? setInterval(() => { if (!document.hidden) run(true); }, intervalMs)
+      ? setInterval(() => {
+          if (document.hidden) return;
+          if (failuresRef.current > 0 && Date.now() - failedAtRef.current < backoffMs(intervalMs, failuresRef.current)) return;
+          run(true);
+        }, intervalMs)
       : undefined;
     return () => {
       controller.abort();
@@ -67,6 +81,9 @@ export function useDeskQuery<T>(
   const refresh = useCallback(() => runRef.current(true), []);
   // Derived, not stored: when the key changes before the first answer, show a clean loading state.
   const state: QueryState<T> = raw.key === key ? raw : initialQueryState<T>(key);
+  useEffect(() => {
+    failuresRef.current = state.failures;
+  });
 
   return {
     data: state.data,
@@ -75,6 +92,7 @@ export function useDeskQuery<T>(
     updating: state.status === "updating",
     connection: connectionOf(state),
     updatedAt: state.updatedAt,
+    failures: state.failures,
     refresh,
   };
 }

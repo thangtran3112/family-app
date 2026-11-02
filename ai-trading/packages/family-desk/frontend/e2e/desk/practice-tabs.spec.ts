@@ -125,7 +125,7 @@ test.describe("Practice thread tabs", () => {
     await expect(page.getByTestId("chart-slot")).toHaveCount(0);
     expect(api.paths().filter((path) => path.includes("/replay/sessions/")), "no session is requested").toEqual([]);
 
-    await page.getByRole("button", { name: "Switch to TSLA" }).click();
+    await page.getByRole("button", { name: "Open TSLA" }).click();
     await page.waitForURL(SESSION_URL);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
   });
