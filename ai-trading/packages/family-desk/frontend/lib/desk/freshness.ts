@@ -450,6 +450,8 @@ export const PRACTICE_COPY = {
   dayPortfolio: "Portfolio",
   indicatorsTitle: "Technical indicators",
   indicatorsFootnote: "Read from the bars shown on the chart, up to the replay time. Nothing here looks ahead. VWAP is the session's, from 1-minute bars, on every chart interval.",
+  // The Daily rail has no VWAP row, so its note stops before the VWAP sentence (D-203).
+  indicatorsFootnoteDaily: "Read from the bars shown on the chart, up to the replay time. Nothing here looks ahead.",
   dayPortfolioEmpty: "Click a name in Candidates to open its chart · it joins your portfolio",
   dayPortfolioTotal: "Day P/L",
   dayPortfolioSplit: "realized {realized} · open {open}",
