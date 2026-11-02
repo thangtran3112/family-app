@@ -261,19 +261,13 @@ test("a pinch on a chart with no visible range yet is swallowed without a zoom",
   assert.equal(calls.length, 0);
 });
 
-test("a followed replay chart opens on the session's first bar while the revealed bars fit, then scrolls with the newest bar (D-099)", () => {
+test("a followed replay chart waits at the session's first bar only before the open, and follows the newest bar from the first session bar on (D-099, D-186)", () => {
   // 40 lookback bars, the session opens at index 40; the view is 35 slots (26 bars and a pad of 10) wide.
-  assert.deepEqual(pinnedRange(40, 40, 35, 10), { from: 40, to: 75 }, "before the open: the view waits at the first session bar");
-  assert.deepEqual(pinnedRange(45, 40, 35, 10), { from: 40, to: 75 }, "5 bars in: still the session's first bar at the left edge");
-  assert.deepEqual(pinnedRange(66, 40, 35, 10), { from: 40, to: 75 }, "26 bars in: the newest bar and its pad still fit");
-  assert.equal(pinnedRange(67, 40, 35, 10), null, "27 bars in: the pad no longer fits, so the chart follows the newest bar");
-});
-
-test("a followed replay chart does not pin back to the open once she has zoomed out or scrolled back to the lookback", () => {
-  assert.deepEqual(pinnedRange(45, 40, 35, 10, 40), { from: 40, to: 75 }, "still at the open: pinned as before");
-  assert.deepEqual(pinnedRange(45, 40, 35, 10, 39.6), { from: 40, to: 75 }, "within half a bar of the open counts as the open");
-  assert.equal(pinnedRange(45, 40, 130, 10, -60), null, "a week-wide view that starts in the lookback keeps its left edge");
-  assert.equal(pinnedRange(45, 40, 35, 10, 12), null, "scrolled back into the lookback: the next bar must not take her back to the open");
+  assert.deepEqual(pinnedRange(40, 40, 35), { from: 40, to: 75 }, "before the open: the view waits at the first session bar");
+  assert.equal(pinnedRange(41, 40, 35), null, "1 bar in: the chart follows the newest bar, with the lookback to its left");
+  // A few candles pinned at the left edge of a blank plot left the time axis with no label to print (D-186): 5 and 26 bars in follow too.
+  assert.equal(pinnedRange(45, 40, 35), null, "5 bars in: not bunched at the left edge");
+  assert.equal(pinnedRange(66, 40, 35), null, "26 bars in");
 });
 
 test("the right offset is sent to the time scale once, not on every data update (the library scrolls to it each time it is set)", () => {

@@ -188,6 +188,21 @@ test("the end label sits on the side of its point the line does not come from, i
   assert.deepEqual([above.x, above.y, above.anchor], [now.x - 8, now.y - 8, "end"]);
 });
 
+test("the end label of a newest point on the right edge clears the line that falls to it, even when the plot has no room below (D-188)", () => {
+  const text = "After day 1 $49,246.00";
+  // The day journal after one lost day ($50,000 to $49,246): the point is at the right edge and 11 units above the bottom tick, so the two
+  // right-hand spots and the spots below leave the plot, and the one left in it (above-left) has the line through its right half.
+  const now = { x: 736, y: 193.19 };
+  const line = [{ x: 76, y: 16 }, now];
+  const label = placeLabel(endLabelSpots(now, text), { plot: BOX_PLOT, lines: [line] });
+  assert.equal(insideBox(label), true, "inside the plot box");
+  assert.equal(lineTouches(label, line), false, `clear of the line (${JSON.stringify(label)})`);
+  assert.equal(label.anchor, "end", "right-aligned on its point");
+  assert.equal(label.x, now.x - 8);
+  // The nearest of the further spots wins: not higher than it has to be.
+  assert.equal(label.y < now.y - 8 && label.y > now.y - 8 - 16 * 5, true);
+});
+
 test("a label never leaves the plot box when a spot inside it exists: day 1 goes right of its point, a low point stays above the day labels", () => {
   const text = "After day 1 $49,246.00";
   const early = { x: 100, y: 120 }; // 24 units in: no room to the left for 154 units of text

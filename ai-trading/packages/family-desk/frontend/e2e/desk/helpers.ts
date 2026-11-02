@@ -1,6 +1,7 @@
 import { expect, test as base, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { BANNED_TERMS } from "../../lib/desk/freshness.ts";
 import { authenticate, origin, prepare } from "../helpers";
+import { ORDER_TARGET, isOrderTarget } from "./orderTarget";
 
 // The Technical desktop MVP's E2E world (02m §d5). Every spec in this folder imports `test` from here: it
 // runs `expectCleanScreen` and the no-order-request check after the spec's own steps, so no spec can finish
@@ -102,13 +103,13 @@ export async function bannedWordingOnScreen(page: Page): Promise<string[]> {
 // ("Strong Buy", "Sell") are labels, not controls, so only things a person can press or follow are scanned.
 const ORDER_CONTROL =
   /\b(place|submit|send|create|new|stage|preview|confirm|cancel|modify|close)\s+(an?\s+)?(paper\s+|live\s+|limit\s+|market\s+|stop\s+|bracket\s+)?(order|trade|position)s?\b|\b(buy|sell)\s+(now|at market|market|limit|\d)|\b(market|limit|stop|bracket|paper)\s+order\b|\btrade ticket\b|\border (ticket|entry|form)\b|\b(go|get)\s+long\b|\b(go|get)\s+short\b|\bshort\s+(sell|this)\b/i;
-const ORDER_TARGET = /\/(orders?|positions?|broker|trade|trading)(\/|\?|$)|\/(paper|backtests)(\/|\?|$)/i;
 
 /** Buttons, links, inputs and menu items that look like an operable order control (empty when there is none). A control
  * that is disabled cannot place anything, so the broker rows' "Place orders" switch, which 02m §e keeps on screen
  * disabled beside the orders-off reason, passes; the Settings spec asserts that it is disabled. */
 export async function orderControlsOnScreen(page: Page): Promise<string[]> {
-  return page.evaluate(
+  // The page lists every control whose words or address look like an order; `isOrderTarget` (Node) then decides the addresses, so the Order tab's own picker address (D-190) is one rule in one place.
+  const found = await page.evaluate(
     ({ control, target }) => {
       const named = (node: Element) => {
         const labelled = (node.getAttribute("aria-labelledby") ?? "")
@@ -137,12 +138,14 @@ export async function orderControlsOnScreen(page: Page): Promise<string[]> {
         if (disabled(node)) return [];
         const href = node.getAttribute("href") ?? "";
         const text = named(node);
-        const offending = new RegExp(control, "i").test(text) || (href !== "" && new RegExp(target, "i").test(href));
-        return offending ? [`${node.tagName.toLowerCase()} "${text}" ${href}`.trim()] : [];
+        const byText = new RegExp(control, "i").test(text);
+        const byAddress = href !== "" && new RegExp(target, "i").test(href);
+        return byText || byAddress ? [{ label: `${node.tagName.toLowerCase()} "${text}" ${href}`.trim(), byText, href }] : [];
       });
     },
     { control: ORDER_CONTROL.source, target: ORDER_TARGET.source },
   );
+  return found.filter((item) => item.byText || isOrderTarget(item.href)).map((item) => item.label);
 }
 
 // The Practice replay workspace is the one screen with an order ticket (owner decision, 2026-11-01): a broker-style ticket whose
