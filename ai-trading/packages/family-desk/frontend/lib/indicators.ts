@@ -1,7 +1,10 @@
 // Adapted from Vibe-Trading `frontend/src/lib/indicators.ts` at commit
 // `8be01c8fe25f25c2e699ea8d2ab0b322f58c8c9e`, MIT License. Copied unchanged except
-// `tradingDay` and `calcVWAP` at the end, which are Family Desk additions (02m §a3.3);
-// see `indicators.LICENSE` and `packages/family-desk/THIRD_PARTY_NOTICES.md`.
+// `tradingDay` and `calcVWAP` at the end (Family Desk additions, 02m §a3.3), and three audit changes
+// (2026-11-01) that make these functions agree with the backend's `core/indicators.py`, the single source of
+// truth: `calcEMA` seeds with the first value (not an SMA), `calcRSI` reads 50 when nothing moved, and
+// `calcVWAP` leaves out pre- and after-hours bars. `lib/indicators.golden.test.ts` pins all three against
+// `contracts/fixtures/indicator-golden-v1`. See `indicators.LICENSE` and `packages/family-desk/THIRD_PARTY_NOTICES.md`.
 type N = number | null;
 
 export function calcMA(data: number[], period: number): N[] {
@@ -13,22 +16,19 @@ export function calcMA(data: number[], period: number): N[] {
   });
 }
 
+/**
+ * EMA with alpha = 2 / (period + 1), seeded with the FIRST value and unknown (null) until `period` values exist:
+ * the backend's `ema` (pandas `ewm(adjust=False, min_periods=period)`). TA-Lib and StockCharts seed with the SMA of
+ * the first `period` values instead; the two differ only by a transient that decays by (1 - alpha) per bar
+ * (about 1e-12 after 300 bars of a 21-EMA).
+ */
 export function calcEMA(data: number[], period: number): N[] {
   const k = 2 / (period + 1);
   const out: N[] = [];
   let ema: number | null = null;
   for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      out.push(null);
-    } else if (ema === null) {
-      let s = 0;
-      for (let j = 0; j < period; j++) s += data[j];
-      ema = s / period;
-      out.push(ema);
-    } else {
-      ema = data[i] * k + ema * (1 - k);
-      out.push(ema);
-    }
+    ema = ema === null ? data[i] : data[i] * k + ema * (1 - k);
+    out.push(i < period - 1 ? null : ema);
   }
   return out;
 }
@@ -82,14 +82,20 @@ export function calcRSI(data: number[], period = 14): N[] {
   }
   avgG /= period;
   avgL /= period;
-  out[period] = avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+  out[period] = rsiValue(avgG, avgL);
   for (let i = period + 1; i < data.length; i++) {
     const c = data[i] - data[i - 1];
     avgG = (avgG * (period - 1) + (c > 0 ? c : 0)) / period;
     avgL = (avgL * (period - 1) + (c < 0 ? -c : 0)) / period;
-    out[i] = avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+    out[i] = rsiValue(avgG, avgL);
   }
   return out;
+}
+
+/** 100 when there were no losses, 0 when there were no gains, 50 when nothing moved (the backend's `rsi`). */
+function rsiValue(avgG: number, avgL: number): number {
+  if (avgG === 0 && avgL === 0) return 50;
+  return avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
 }
 
 export function calcKDJ(highs: number[], lows: number[], closes: number[], period = 9) {
@@ -125,14 +131,18 @@ export function tradingDay(t: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : etDayFormat.format(new Date(t));
 }
 
-export type VwapBar = { t: string; h: number; l: number; c: number; v: number };
+export type VwapBar = { t: string; h: number; l: number; c: number; v: number; ext?: boolean };
 
-/** Session-anchored VWAP of the typical price (h+l+c)/3, reset at each New York trading day. */
+/**
+ * Session-anchored VWAP of the typical price (h+l+c)/3, reset at each New York trading day. A pre- or after-hours bar
+ * (`ext`) reads unknown and adds nothing: the backend's `session_vwap` covers the regular session only.
+ */
 export function calcVWAP(bars: VwapBar[]): N[] {
   let day = "";
   let priceVolume = 0;
   let volume = 0;
   return bars.map((bar) => {
+    if (bar.ext) return null;
     const barDay = tradingDay(bar.t);
     if (barDay !== day) {
       day = barDay;
