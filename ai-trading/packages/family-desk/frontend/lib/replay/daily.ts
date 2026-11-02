@@ -107,6 +107,16 @@ export const ListColumnSchema = z.object({ key: z.string(), label: z.string(), f
   components["schemas"]["ListColumnOut"]
 >;
 
+/** A listed name as of the day clock (read with `live`): the price, the move from the prior close and the metric block, from bars closed by the clock. */
+export const CandidateLiveSchema = z.object({
+  at: timestamp,
+  price: metric,
+  change_pct: metric,
+  /** False while no regular-session bar has closed: `metrics` is then the previous session's, not today's. */
+  today: z.boolean(),
+  metrics: z.record(z.string(), metric),
+}) satisfies z.ZodType<components["schemas"]["CandidateLiveOut"]>;
+
 export const CandidateSchema = z.object({
   rank: finite.int(),
   symbol: z.string(),
@@ -123,6 +133,8 @@ export const CandidateSchema = z.object({
   new_since_list: z.boolean(),
   /** The scan no longer matches it, and it stays because she opened or starred it. */
   held_over: z.boolean(),
+  /** The name at the day clock: only on a read with `live`, once the clock has started and while the day is open. */
+  live: CandidateLiveSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["CandidateOut"]>;
 
 /** The latest re-scan, run at the day clock `as_of` on data through `data_through` (02o-b2). Its names ARE the day list:

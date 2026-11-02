@@ -370,6 +370,40 @@ def build_list(
     )
 
 
+# -- the list at the clock --------------------------------------------------------------------------------------
+
+
+def live_quote(
+    daily: pd.DataFrame, minutes: pd.DataFrame | None, day: date, clock: pd.Timestamp
+) -> dict[str, Any] | None:
+    """A listed name as of the day clock: the last closed 1-minute bar of `day` (extended hours included), its move
+    from the prior close, and the metric block, with EVERY input cut at `clock` by `cut_frames` (the same one cut as
+    the list, so a bar that has not closed by the clock is never read). Unlike the list there is no 15-minute embargo:
+    the practice clock is the replayed present and the chart, the marks and the Portfolio already show bars through
+    it. `today` is False while no regular-session bar has closed (the metric block is then the previous session's,
+    never passed off as today's). None when the name has too little history. The list's own `metrics` and
+    `list_price` are never touched: they stay the snapshot of the list time."""
+    found = trading_session("stock", day)
+    assert found is not None
+    cut = cut_frames(SymbolBars(daily, minutes), clock)
+    if len(cut.daily) < 2:
+        return None
+    # No minute bars through the cut: `today` stays empty rather than reading an index-less frame.
+    today = cut.minutes[cut.minutes.index >= found.extended_open] if cut.minutes is not None else None
+    price = None if today is None or today.empty else float(today["close"].iloc[-1])
+    prior = float(cut.daily["close"].iloc[-1])
+    regular = bool(
+        today is not None and ((today.index >= found.regular_open) & (today.index < found.regular_close)).any()
+    )
+    return {
+        "at": clock,
+        "price": _num(price),
+        "change_pct": None if price is None else _num((price / prior - 1) * 100, 2),
+        "today": regular,
+        "metrics": metric_row(cut.daily, cut.minutes),
+    }
+
+
 # -- earnings flag --------------------------------------------------------------------------------------------
 
 

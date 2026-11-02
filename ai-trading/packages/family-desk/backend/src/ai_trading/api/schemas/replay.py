@@ -672,6 +672,18 @@ class ListColumnOut(BaseModel):
     format: str
 
 
+class CandidateLiveOut(BaseModel):
+    """A listed name as of the day clock `at`, from bars closed by it. `price`: the last closed 1-minute bar of the day
+    (null before the first); `change_pct`: its move from the prior close; `metrics`: the metric block cut at the clock,
+    which is today's when `today` and the previous session's while no regular-session bar has closed."""
+
+    at: datetime
+    price: FiniteFloat | None
+    change_pct: FiniteFloat | None
+    today: bool
+    metrics: dict[str, FiniteFloat | None]
+
+
 class CandidateOut(BaseModel):
     """One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut."""
 
@@ -691,6 +703,9 @@ class CandidateOut(BaseModel):
     # no re-scan has touched (and on days stored before they existed).
     new_since_list: bool = False
     held_over: bool = False
+    # Only on a read with `?live=true` while the day clock runs: the name at the clock (the fields above stay the
+    # list's).
+    live: CandidateLiveOut | None = None
 
 
 class RescanOut(BaseModel):
