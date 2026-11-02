@@ -4,7 +4,7 @@ import { BalanceCurve } from "@/components/practice/journal/thread/BalanceCurve"
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { PracticePlan } from "@/lib/replay/daily";
-import { planCard } from "@/lib/replay/dayView";
+import { datesHidden, planCard } from "@/lib/replay/dayView";
 import type { Thread } from "@/lib/replay/threads";
 import { hasNoDays } from "@/lib/replay/threadView";
 import type { ThreadClockApi } from "@/lib/replay/useThreadClock";
@@ -30,7 +30,8 @@ export function DayOverview({ summary, plan, onChanged, onNewPlan, clock }: { su
     <div className={o.grid}>
       <div className={o.main}>
         <PlaceStrip summary={summary} planFinished={planHere?.finished === true} account={closed ? null : (clock.clock?.account ?? null)} />
-        {!closed && <ThreadClockPanel api={clock} onSkipped={onChanged} />}
+        {/* No plan read yet counts as hidden: a date shown too early cannot be taken back (D-155). */}
+        {!closed && <ThreadClockPanel api={clock} datesHidden={planHere === null || datesHidden(planHere.spec)} onSkipped={onChanged} />}
         <div className={o.topRow}>
           <NextStep summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
           {planHere && !closed && (

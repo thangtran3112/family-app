@@ -20,7 +20,7 @@ import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
-import { threadClock } from "@/lib/replay/clock";
+import { isSpeed, threadClock } from "@/lib/replay/clock";
 import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { formatEtClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
@@ -57,6 +57,9 @@ import { freeCashText } from "@/lib/replay/swing";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
 import { buildTicket, buyingPowerMessage, initialTicket, type PowerBasis, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
+import { useMinuteBars } from "@/lib/replay/useMinuteBars";
+import { useShownClock } from "@/lib/replay/useShownClock";
+import { sessionVwap } from "@/lib/replay/sessionVwap";
 import { chartBars, dailyBlock, type ReplayView } from "@/lib/replay/feedState";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { ChartToolbar } from "./ChartToolbar";
@@ -176,6 +179,10 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const behind = view.behindClock && !ended;
   // The thread's one time: the day clock for a name on a day list (a name left behind it shows the thread's time, not its own old playhead).
   const clock = threadClock(view.revealedThrough, view.dayClock);
+  // What a day thread's chart SHOWS of that time ticks every second between two polls; the readout, the status bar and the top-bar chip all read this one
+  // value (D-166). `clock` stays the polled time for everything that prices or compares.
+  const ticking = useShownClock(clock, followed && view.clockRunning, isSpeed(view.clockSpeed) ? view.clockSpeed : 1);
+  const shownClock = followed ? ticking : clock;
   // A day's portfolio: every name she holds, read here only for the stop-pause toast (which name to exit). The chart view shows no portfolio panel: it is the Portfolio tab's (owner, 2026-11-01).
   // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
   // jump, a stop pause), not on every bar of a running replay: each read prices up to five names.
@@ -189,11 +196,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
   const masked = hidden && !dateShown && !(ended && !swing);
-  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: clock, status: replayStatusLine(session.tape_feed, clock), onShowDate: masked ? () => setDateShown(true) : null });
+  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock), onShowDate: masked ? () => setDateShown(true) : null });
 
-  // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series.
+  // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series. VWAP is the session's, built from
+  // one-minute bars whatever the chart's interval (D-168), so the header, the left rail and the chart line agree on 1m, 5m and 15m.
   const bars = useMemo(() => chartBars(view), [view]);
-  const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval), [bars, view.interval]);
+  const minutes = useMinuteBars(session.id, view.interval !== "1m" && !(swing && chartMode === "daily"), view.revealedThrough);
+  const vwapOf = useMemo(() => sessionVwap(bars, view.interval, minutes), [bars, view.interval, minutes]);
+  const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval, "stock", vwapOf.values), [bars, view.interval, vwapOf]);
   const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
   // The left rail's indicators are read off what the chart shows: the intraday bars, or the rebased daily bars while a swing session is on Daily.
   const { daily, dailyForming } = view;
@@ -429,7 +439,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         // Read-only: the thread's time and whether it is running. Play or Pause, the speed and Skip day are on the Summary.
         <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
           <span>{PRACTICE_COPY.threadTime}</span>
-          <span data-testid="thread-clock-time">{formatEtClock(clock)}</span>
+          <span data-testid="thread-clock-time">{formatEtClock(shownClock)}</span>
           <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : atEnd ? PRACTICE_COPY.clockStateClosed : PRACTICE_COPY.clockStatePaused}</span>
           {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
         </p>
@@ -440,6 +450,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
         attempt={session.attempt}
         lastPrice={view.last?.price ?? null}
         vwap={vwap}
+        vwapNote={vwapOf.status === "ready" ? null : vwapOf.status === "loading" ? PRACTICE_COPY.vwapLoading : PRACTICE_COPY.vwapNoMinutes}
         priorClose={view.levels.prior_close ?? null}
         pnl={pnl}
         swing={swing && session.thread ? { money: swingMoneyLine(session.thread), tapeNote: tapeNote(session.tape_feed) } : undefined}
@@ -543,7 +554,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
               />
             </>
           )}
-          <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} />
+          <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} vwap={indicatorBars.bars === bars ? vwapOf : undefined} />
           <section className={tapeOff ? styles.sessionSection : styles.tapeSection} aria-label="Tape" data-testid="tape-panel">
             <h2 className={styles.railTitle}>Tape</h2>
             {tapeOff ? (
