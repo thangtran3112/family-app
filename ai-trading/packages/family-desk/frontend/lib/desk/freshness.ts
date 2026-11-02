@@ -580,6 +580,8 @@ export const PRACTICE_COPY = {
   threadAdherenceNone: "no scored day yet",
   threadAdherenceMeaning: "Adherence is the share of your plan's rules you followed, not the share of trades you won",
   threadToday: "Today",
+  // The landing's cell above a day still under way: its figure is the realized result, the open position is not in it (D-179).
+  landingTodayRealized: "Today · realized",
   threadLastDay: "Last day",
   threadLastDayLine: "{pnl} realized · {trades}",
   threadLastDaySkipped: "Passed · no practice trades",
@@ -592,6 +594,11 @@ export const PRACTICE_COPY = {
   threadPlanNoteNone: "None",
   threadPickTitle: "No practice thread selected",
   threadPickHint: "Pick a thread to open its journal.",
+  // Each screen that lists the threads names its own next step (D-183); the rows go to the same place.
+  threadPickHintOrder: "Pick a thread to open its Order tab.",
+  threadPickHintThread: "Pick a thread to open its Summary.",
+  threadPickHintReplay: "Pick a thread, then open a name from its day.",
+  threadPickHintWeek: "Pick a swing thread to open its weekly reviews.",
   threadPickNone: "No practice thread yet · start one on Practice to get a pretend balance",
   threadNoToday: "No practice day open · the next list opens when you resume",
   threadTodayLine: "{pnl} realized so far · {trades}",
@@ -679,6 +686,8 @@ export const PRACTICE_COPY = {
   clockSkipConfirm: "Skip to next day",
   clockSkipCancel: "Keep playing",
   clockNoDay: "No day is open yet. Start the next day to get a clock.",
+  // While the first day's data is prepared there is no Start button yet; the clock card and the disabled Replace plan give this one reason (D-182).
+  clockPreparing: "The clock starts with the first day, once the data is ready.",
   clockFocusMark: "Your practice window ends at {time} · a mark, the clock does not stop there",
   clockNextStart: "Next session starts {when} · the day hands over there; Skip day gets there sooner",
   clockLastDay: "This is the last day of the plan",

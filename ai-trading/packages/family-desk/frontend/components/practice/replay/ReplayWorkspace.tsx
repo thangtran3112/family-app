@@ -24,6 +24,7 @@ import { isSpeed, threadClock } from "@/lib/replay/clock";
 import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { formatEtClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
+import { threadPageHref } from "@/lib/replay/practiceTabs";
 import { openRailTab } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { buildChartSeries } from "@/lib/desk/workspace";
@@ -89,7 +90,7 @@ export function ReplayWorkspace() {
   if (id === null) {
     return (
       <div className={styles.page}>
-        <ThreadPicker />
+        <ThreadPicker hint={PRACTICE_COPY.threadPickHintReplay} href={threadPageHref} />
       </div>
     );
   }
