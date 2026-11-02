@@ -374,3 +374,8 @@ export function weekRowView(row: WeekRow): WeekRowView {
 
 /** A week row links to its review once a day of it has ended (an open week with no ended day answers 404). */
 export const weekReviewable = (row: Pick<WeekRow, "status" | "first_day_no">, daysEnded: number): boolean => row.status === "closed" || daysEnded >= row.first_day_no;
+
+/** The week "No week selected" offers (D-192): the last one that has started, so its review opens. The thread's own `week_no` is not it:
+ *  that number moves on to the next week as soon as the current one ends, before a day of the next has ended. Null before the first day ends. */
+export const lastStartedWeek = (rows: ReadonlyArray<Pick<WeekRow, "week_no" | "status" | "first_day_no">>, daysEnded: number): number | null =>
+  rows.reduce<number | null>((last, row) => (weekReviewable(row, daysEnded) && (last === null || row.week_no > last) ? row.week_no : last), null);

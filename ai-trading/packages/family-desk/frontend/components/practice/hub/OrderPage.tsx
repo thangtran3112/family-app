@@ -14,6 +14,7 @@ import { loadThread, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { practiceTabLabel, threadPageHref } from "@/lib/replay/practiceTabs";
 import { heldBlocked, heldHref, heldWhere, orderNames, type OrderName } from "@/lib/replay/orderView";
+import { routeId } from "@/lib/replay/routeId";
 import { problemMessage } from "@/lib/replay/setup";
 import { loadAnyDayList } from "@/lib/replay/swingApi";
 import { threadName } from "@/lib/replay/threadView";
@@ -28,22 +29,21 @@ import { PracticeTabs } from "./PracticeTabs";
  * the same call the Day list makes. The Day list and the Portfolio stay one link away. Reads the URL, so the page wraps it in Suspense.
  */
 export function OrderPage() {
-  const raw = useSearchParams().get("thread");
-  const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
+  const { id, given } = routeId(useSearchParams().get("thread"));
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
   }, []);
   const query = useDeskQuery(`practice-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null });
 
-  if (id === null) {
+  if (id === null && !given) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
         <ThreadPicker hint={PRACTICE_COPY.threadPickHintOrder} href={(threadId) => `/practice/order?thread=${threadId}`} />
       </OverviewShell>
     );
   }
-  if (query.error instanceof DeskApiError && query.error.status === 404) {
+  if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
     return (
       <OverviewShell title="Practice thread" titleRef={titleRef}>
         <PracticeNotice title={PRACTICE_COPY.threadPageNotFound} />
