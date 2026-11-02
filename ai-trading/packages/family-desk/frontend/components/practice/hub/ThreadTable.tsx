@@ -12,7 +12,7 @@ import { loadDaily } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { threadProgress } from "@/lib/replay/overviewView";
 import { swingCardView } from "@/lib/replay/swing";
-import type { PracticeThread, ThreadSummary } from "@/lib/replay/threads";
+import type { ThreadSummary } from "@/lib/replay/threads";
 import {
   dayResultTone,
   formatBalance,
@@ -56,7 +56,7 @@ export function ThreadTable({
   onChanged: () => void;
   /** A thread was deleted: its name, for the page's status line (the row is gone by then). */
   onDeleted?: (name: string) => void;
-  onNewPlan: (thread: PracticeThread) => void;
+  onNewPlan: () => void;
 }) {
   // The last-day column is the first to go at the 1180 band (02l §b3 rule 4).
   const wide = useShellBand() === "1440";
@@ -125,7 +125,7 @@ function ThreadRow({
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
   onDeleted?: (name: string) => void;
-  onNewPlan: (thread: PracticeThread) => void;
+  onNewPlan: () => void;
 }) {
   const { thread, last_day: lastDay, today } = summary;
   const href = `/practice/thread?id=${thread.id}`;
@@ -201,7 +201,7 @@ function ThreadRow({
           ) : dayActive && daily.loading ? (
             <Skeleton width={84} height={32} className={styles.skelEnd} />
           ) : (
-            <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={() => onNewPlan(thread)} />
+            <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={onNewPlan} />
           )}
           <DeleteThread
             thread={thread}

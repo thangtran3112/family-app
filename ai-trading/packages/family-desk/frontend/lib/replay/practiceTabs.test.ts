@@ -16,17 +16,16 @@ test("the thread page's tab comes from ?tab=: missing or unknown is Summary, so 
   assert.equal(threadPageHref(12, "portfolio"), "/practice/thread?id=12&tab=portfolio");
 });
 
-test("the strip lists Summary, Portfolio, Day list, Order, Trades; a swing thread's Day list is the Board", () => {
-  assert.deepEqual(PRACTICE_TABS.map((tab) => practiceTabLabel(tab, "day")), ["Summary", "Portfolio", "Day list", "Order", "Trades"]);
+test("the strip lists Summary, Portfolio, Day list, Trades (no Order tab: orders are placed on the chart); a swing thread's Day list is the Board", () => {
+  assert.deepEqual(PRACTICE_TABS.map((tab) => practiceTabLabel(tab, "day")), ["Summary", "Portfolio", "Day list", "Trades"]);
   assert.equal(practiceTabLabel("day", "swing"), "Board");
 });
 
-test("fixed tabs never ask the server, and Order is the thread's own page: no session, no stock", async () => {
+test("fixed tabs never ask the server", async () => {
   const load = loaders({ day_list_id: 31 });
   assert.equal(await resolveTabHref(7, "summary", load), "/practice/thread?id=7");
   assert.equal(await resolveTabHref(7, "portfolio", load), "/practice/thread?id=7&tab=portfolio");
   assert.equal(await resolveTabHref(7, "journal", load), "/practice/journal?thread=7");
-  assert.equal(await resolveTabHref(7, "order", load), "/practice/order?thread=7");
   assert.deepEqual(load.calls, []);
 });
 

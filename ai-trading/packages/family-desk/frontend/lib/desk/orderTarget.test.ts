@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isOrderTarget } from "../../e2e/desk/orderTarget.ts";
 
-// D-190: the Desk's screen guard learns the Order tab's own picker address and nothing else.
-test("the Order tab's picker address is not an order target", () => {
-  for (const href of ["/practice/order?thread=1", "/practice/order?thread=42"]) assert.equal(isOrderTarget(href), false, href);
-});
-
-test("ticket-shaped and broker addresses stay order targets", () => {
+// The Order tab and its /practice/order page are gone (orders are placed on the chart), so the screen guard lets no such address through.
+test("ticket-shaped, picker and broker addresses are order targets", () => {
   for (const href of [
+    "/practice/order?thread=1",
+    "/practice/order?thread=42",
     "/practice/order?thread=1&side=buy",
     "/practice/order?thread=abc",
     "/practice/order?id=1",

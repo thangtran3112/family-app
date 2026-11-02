@@ -7,7 +7,6 @@ import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThreadCapacity, loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import type { PracticeThread } from "@/lib/replay/threads";
 import { NewPlanModal } from "./NewPlanModal";
 import { ThreadTable } from "./ThreadTable";
 import hub from "./hub.module.css";
@@ -21,8 +20,8 @@ export function PracticeLanding() {
   const router = useRouter();
   const [revision, setRevision] = useState(0);
   const changed = useCallback(() => setRevision((n) => n + 1), []);
-  // `thread` set: the modal replaces that day thread's plan instead of starting a thread.
-  const [modal, setModal] = useState<{ thread: PracticeThread | null } | null>(null);
+  // The New plan modal: a plan is never edited, a new plan is a new thread.
+  const [modal, setModal] = useState(false);
   // True while any row's action is opening a day: every row's action waits, so a second click cannot race the first.
   const [busy, setBusy] = useState(false);
   // "Deleted Day thread · Oct 15": the row is gone by then, so the page says it (D-079). The region exists from the start so it is announced.
@@ -49,7 +48,7 @@ export function PracticeLanding() {
           {/* Swing threads use no slot, so the button stays: with every slot taken the Day choice in the form is off, with the reason, and Swing starts. */}
           <Button variant="primary" disabled={threads.loading} onClick={() => {
               setDeleted(null);
-              setModal({ thread: null });
+              setModal(true);
             }}
           >
             {PRACTICE_COPY.planNew}
@@ -69,19 +68,18 @@ export function PracticeLanding() {
               primary: true,
               onClick: () => {
                 setDeleted(null);
-                setModal({ thread: null });
+                setModal(true);
               },
             }}
           />
         ) : (
-          <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} onNewPlan={(thread) => setModal({ thread })} />
+          <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} onNewPlan={() => setModal(true)} />
         )}
       </div>
       {modal && (
         <NewPlanModal
-          thread={modal.thread}
           onClose={() => {
-            setModal(null);
+            setModal(false);
             changed();
           }}
           onSaved={(id) => router.push(`/practice/thread?id=${id}`)}

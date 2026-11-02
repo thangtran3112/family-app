@@ -310,7 +310,7 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     await expect(page.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
   });
 
-  test("while the plan's data prepares the step card says so once: one state, a unit on the count, Replace plan waits (D-084)", async ({ page, context }) => {
+  test("while the plan's data prepares the step card says so once: one state, a unit on the count, Delete plan stays and Replace plan is gone (D-084)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     const id = threadIdOf(page);
@@ -328,7 +328,8 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     await expect(page.getByText(PRACTICE_COPY.planPreparingHint)).toHaveCount(1);
     await expect(step).not.toContainText("Your thread is ready");
     await expect(step).not.toContainText("Day 1 is next");
-    await expect(step.getByRole("button", { name: PRACTICE_COPY.threadPageReplace })).toBeDisabled();
+    await expect(step.getByRole("button", { name: "Replace plan" })).toHaveCount(0);
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true })).toBeEnabled();
     // The card keeps its height when the preparation ends (it used to be 40 px shorter then).
     const preparing = (await step.boundingBox())!.height;
     await page.unroute(/\/api\/desk\/replay\/daily(\?|$)/);

@@ -234,7 +234,7 @@ test.describe("Practice: the thread clock", () => {
     await expect(panel(page).getByText(/^Skipped/)).toBeVisible({ timeout: 90_000 });
 
     // Day 1 ended with its trade booked, and Day 2 is the open day: its clock stands at the day's start, paused as the old one was.
-    await expect(page.getByRole("link", { name: /^Open Day 2$/ }).or(page.getByRole("button", { name: /^Start Day 2$/ }))).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("link", { name: /^Start Trading$/ }).or(page.getByRole("button", { name: /^Start Day 2$/ }))).toBeVisible({ timeout: 90_000 });
     await expect(page.getByTestId("thread-clock-state")).toContainText(PRACTICE_COPY.clockStatePaused);
     await expect(readout(page)).toContainText(/ 9:3\d:\d{2} AM ET/);
     const days = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}`)).json();

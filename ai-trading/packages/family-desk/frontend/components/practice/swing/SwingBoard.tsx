@@ -214,7 +214,7 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
               aria-describedby={start.kind === "none" ? "swing-star-hint" : undefined}
               onClick={() => void startNow()}
             >
-              {practiceText(start.kind === "resume" ? "planOpenDay" : "swingStartDay", { n: list.day_no })}
+              {start.kind === "resume" ? PRACTICE_COPY.planStartTrading : practiceText("swingStartDay", { n: list.day_no })}
             </Button>
           )}
           {!ended && canPass(list) && !confirmPass && (

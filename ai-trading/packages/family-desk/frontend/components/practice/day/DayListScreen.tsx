@@ -4,7 +4,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
 import { backoffMs } from "@/lib/desk/backoff";
-import { LeftRailPortal } from "@/components/shell/desktop/LeftRailPortal";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
@@ -47,7 +46,6 @@ import {
   rescanRunning,
   rescanStaleText,
   sourceNote,
-  threadDayNo,
   universeNote,
 } from "@/lib/replay/dayView";
 import { heldBlocked, heldHref, heldWhere } from "@/lib/replay/orderView";
@@ -56,12 +54,11 @@ import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine, type PracticeStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
-import { NewPlanModal } from "@/components/practice/hub/NewPlanModal";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { SwingBoard } from "@/components/practice/swing/SwingBoard";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { formatBalance, formatDayResult, planRows } from "@/lib/replay/threadView";
-import { DayLeftPanel } from "./DayLeftPanel";
+import { BlockDays } from "./BlockDays";
 import { PeekPanel } from "./PeekPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { UniverseFootnote } from "./UniverseFootnote";
@@ -123,7 +120,7 @@ function DayNotice({ title }: { title: string }) {
   );
 }
 
-/** The day page while it loads: grey blocks where the header, the counts, the candidate rows and the left rail will be (D-116). */
+/** The day page while it loads: grey blocks where the header, the counts and the candidate rows will be (D-116). */
 function DaySkeleton() {
   return (
     <div className={styles.screen} role="status" aria-busy="true" aria-label={PRACTICE_COPY.dayLoading}>
@@ -135,18 +132,6 @@ function DaySkeleton() {
         <Skeleton width="60%" />
         <Skeleton height={240} />
       </div>
-      <LeftRailPortal>
-        <div className={styles.side} aria-hidden="true">
-          <section className={styles.sideSection}>
-            <Skeleton width={96} height={11} />
-            <Skeleton height={72} />
-          </section>
-          <section className={styles.sideSection}>
-            <Skeleton width={120} height={11} />
-            <Skeleton height={96} />
-          </section>
-        </div>
-      </LeftRailPortal>
     </div>
   );
 }
@@ -166,8 +151,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   const [scanning, setScanning] = useState(false);
   // This screen saw a scan run, so when the job reads "done" it can tell her it finished, not just show a new label.
   const [scanSeen, setScanSeen] = useState(false);
-  // The plan replaced from a day with no names (D-094).
-  const [changing, setChanging] = useState(false);
   // Keyboard focus follows the flow (D-092): the page heading on arrival.
   const titleRef = useRef<HTMLHeadingElement>(null);
   // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
@@ -335,7 +318,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
         <DayClock day={list.day} shown={(!ended ? liveClock.shown : null) ?? threadTime ?? list.clock ?? list.list_at} status={dayStatusLine(list)} show={!ended && list.clock !== null} market={market} />
         <div className={styles.actions}>
           {practicing && !ended && (
-            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{practiceText("planOpenDay", { n: threadDayNo(list.plan, list.day_no) })}</Button>
+            <Button client href={`/practice/replay?id=${practicing.id}`} variant="primary">{PRACTICE_COPY.planStartTrading}</Button>
           )}
           {ended &&
             (finishHref !== null ? (
@@ -407,7 +390,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
                     {list.sessions.length === 0 && threadId !== null && (
                       <Button client href={`/practice/thread?id=${threadId}`} variant="primary">{PRACTICE_COPY.daySkipOnSummary}</Button>
                     )}
-                    {thread.data !== null && <Button onClick={() => setChanging(true)}>{PRACTICE_COPY.dayChangePlan}</Button>}
                   </div>
                 </EmptyBlock>
               }
@@ -490,7 +472,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
 
         {ended && list.plan.finished && <p className={styles.muted}>{PRACTICE_COPY.dayFinished}</p>}
       </div>
-      <DayLeftPanel list={list} />
       {peeking && selected !== null && !ended && (
         <Dialog
           title={PRACTICE_COPY.dayPeek}
@@ -507,9 +488,6 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
             onRetry={peek.refresh}
           />
         </Dialog>
-      )}
-      {changing && thread.data !== null && (
-        <NewPlanModal thread={thread.data.thread} onClose={() => setChanging(false)} onSaved={(id) => router.push(`/practice/thread?id=${id}`)} />
       )}
       <RightRail
         label="Day context"
@@ -542,6 +520,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
               </>
             ),
           },
+          { id: "block", label: PRACTICE_COPY.dayBlockRail, node: <BlockDays list={list} /> },
         ]}
       />
     </div>

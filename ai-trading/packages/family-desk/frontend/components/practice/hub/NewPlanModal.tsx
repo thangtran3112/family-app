@@ -14,8 +14,7 @@ import { defaultPlanDraft, effectiveFirstDay, livePlanProblems, planProblems, st
 import { latestReplayDay, problemMessage } from "@/lib/replay/setup";
 import { defaultSwingDraft, swingProblems, validateSwingDraft, type SwingDraft, type SwingProblems } from "@/lib/replay/swingSetup";
 import { defaultThreadDraft, formatBalanceInput, threadProblems, validateThreadDraft, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
-import type { PracticeThread } from "@/lib/replay/threads";
-import { formatWhole, threadName } from "@/lib/replay/threadView";
+import { formatWhole } from "@/lib/replay/threadView";
 import { DEFAULT_STARTING_BALANCE } from "@ai-trading/contracts/practice-thread-v1";
 import { DayPlanFields } from "./DayPlanFields";
 import { Button } from "@/components/ui/Button";
@@ -41,16 +40,14 @@ const SLOW_START_MS = 10_000;
  *
  * It is a `ui/Dialog`, which owns the scrim, the focus trap, Escape and the focus handed back to the button that opened it.
  *
- * Any number of threads of either mode may be active, so Day and Swing are always offered. With `thread` set the modal only
- * replaces that day thread's plan: its balance and risk plan stay with it. The settings are checked as she edits, and a
+ * Any number of threads of either mode may be active, so Day and Swing are always offered. A plan is never replaced or edited:
+ * a new plan is always a new thread. The settings are checked as she edits, and a
  * form she has edited asks before it is thrown away (M-05). Nothing here reaches a broker.
  */
 export function NewPlanModal({
-  thread = null,
   onClose,
   onSaved,
 }: {
-  thread?: PracticeThread | null;
   onClose: () => void;
   /** The thread and its plan are saved; the page decides where to go next. */
   onSaved: (threadId: number) => void;
@@ -77,8 +74,8 @@ export function NewPlanModal({
   const [dayPicked, setDayPicked] = useState(false);
   const [swingDayPicked, setSwingDayPicked] = useState(false);
   // Every user shares the day-trade slots (ADR-0022): with all taken a new day thread is refused, so the form says so before she fills it in.
-  const capacity = useDeskQuery("thread-capacity", (signal) => loadThreadCapacity({ signal }), { enabled: thread === null });
-  const dayFull = thread === null && capacity.data !== null && capacity.data.day_active >= capacity.data.day_max;
+  const capacity = useDeskQuery("thread-capacity", (signal) => loadThreadCapacity({ signal }));
+  const dayFull = capacity.data !== null && capacity.data.day_active >= capacity.data.day_max;
   const dayFullText = capacity.data === null ? null : practiceText("daySlotsFull", { max: capacity.data.day_max });
   const recordedDay = recorded.data?.first_day_default ?? null;
   const firstDay = effectiveFirstDay(plan.firstDay, dayPicked, recordedDay);
@@ -90,8 +87,7 @@ export function NewPlanModal({
   const [pristine] = useState(snapshot);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
-  const planOnly = thread !== null;
-  const mode: ThreadMode = planOnly ? "day" : threadDraft.mode;
+  const mode: ThreadMode = threadDraft.mode;
   const swing = mode === "swing";
   const preview = useUniversePreview(swingNow, swing, now);
   const blocker = swing ? startBlockedBy({ preview: preview.preview, fresh: preview.fresh, problems: preview.problems }) : null;
@@ -127,7 +123,7 @@ export function NewPlanModal({
 
   async function submit() {
     const day = swing ? null : validatePlanDraft({ ...plan, firstDay }, now);
-    const started = planOnly || swing ? null : validateThreadDraft({ ...threadDraft, mode: "day" });
+    const started = swing ? null : validateThreadDraft({ ...threadDraft, mode: "day" });
     const swingResult = swing ? validateSwingDraft(threadDraft, swingNow, preview.preview?.rows ?? [], now) : null;
     const found: Problems = {
       ...(day && !day.ok ? day.problems : {}),
@@ -151,7 +147,7 @@ export function NewPlanModal({
         return;
       }
       if (!day?.ok) return;
-      let threadId = thread?.id ?? startedId;
+      let threadId = startedId;
       if (threadId === null && started?.ok) {
         threadId = (await createThread(started.spec)).thread.id;
         setStartedId(threadId);
@@ -190,7 +186,6 @@ export function NewPlanModal({
   const shownBalance = threadDraft.startingBalance.trim() === "" || !Number.isFinite(typed) ? DEFAULT_STARTING_BALANCE : typed;
   // What is wrong, as she edits (the draft read now) with what the last try or the server said on top.
   const liveThread: ThreadProblems = (() => {
-    if (planOnly) return {};
     const result = validateThreadDraft({ ...threadDraft, mode: "day" });
     return result.ok ? {} : result.problems;
   })();
@@ -203,14 +198,12 @@ export function NewPlanModal({
   const held = echo ?? (swing ? blocker : dayFull ? dayFullText : noFilters ? PRACTICE_COPY.planSaveFilterFirst : null);
   const note = swing
     ? hubSwingText("startsWith", { balance: formatWhole(shownBalance), n: preview.preview?.rows.length ?? 0 })
-    : planOnly
-      ? PRACTICE_COPY.threadPlanFrom
-      : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
+    : practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
   const status = confirmingDiscard ? PRACTICE_COPY.newPlanDiscardTitle : still ? PRACTICE_COPY.planStillWorking : submitting && slow ? PRACTICE_COPY.planSlowStart : (held ?? note);
 
   return (
     <Dialog
-      title={planOnly ? practiceText("landingNewPlanFor", { name: threadName(thread) }) : PRACTICE_COPY.newPlanTitle}
+      title={PRACTICE_COPY.newPlanTitle}
       size="lg"
       // Escape on the question keeps the form; anywhere else it asks first once the form has been edited.
       onClose={() => (confirmingDiscard ? setConfirmingDiscard(false) : requestClose())}
@@ -251,37 +244,35 @@ export function NewPlanModal({
         </>
       }
     >
-      <p className={modal.help}>{planOnly ? PRACTICE_COPY.newPlanIntroPlan : swing ? PRACTICE_COPY.newPlanSwingNote : PRACTICE_COPY.newPlanIntroThread}</p>
+      <p className={modal.help}>{swing ? PRACTICE_COPY.newPlanSwingNote : PRACTICE_COPY.newPlanIntroThread}</p>
       <p className={modal.help}>{PRACTICE_COPY.newPlanFooter}</p>
 
-      {!planOnly && (
-        <div className={modal.topRow}>
-          <Field
-            id="new-plan-balance"
-            label={PRACTICE_COPY.threadStartingBalance}
-            aside={<SimulatedBadge />}
-            note={PRACTICE_COPY.threadBalanceHint}
-            error={shown.startingBalance}
-            reserve
-          >
-            <Input
-              adornment="$"
-              inputMode="numeric"
-              autoComplete="off"
-              value={threadDraft.startingBalance}
-              onChange={(event) => editThread({ ...threadDraft, startingBalance: event.target.value })}
-              onBlur={() => editThread({ ...threadDraft, startingBalance: formatBalanceInput(threadDraft.startingBalance) })}
-            />
-          </Field>
-          <Field id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
-            <Segmented
-              value={mode}
-              options={[{ value: "day", label: PRACTICE_COPY.threadModeDay, ...(dayFull && dayFullText !== null ? { disabledReason: dayFullText, reasonId: "new-plan-note" } : {}) }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
-              onChange={(next) => editThread({ ...threadDraft, mode: next })}
-            />
-          </Field>
-        </div>
-      )}
+      <div className={modal.topRow}>
+        <Field
+          id="new-plan-balance"
+          label={PRACTICE_COPY.threadStartingBalance}
+          aside={<SimulatedBadge />}
+          note={PRACTICE_COPY.threadBalanceHint}
+          error={shown.startingBalance}
+          reserve
+        >
+          <Input
+            adornment="$"
+            inputMode="numeric"
+            autoComplete="off"
+            value={threadDraft.startingBalance}
+            onChange={(event) => editThread({ ...threadDraft, startingBalance: event.target.value })}
+            onBlur={() => editThread({ ...threadDraft, startingBalance: formatBalanceInput(threadDraft.startingBalance) })}
+          />
+        </Field>
+        <Field id="new-plan-mode" label={PRACTICE_COPY.threadMode} group>
+          <Segmented
+            value={mode}
+            options={[{ value: "day", label: PRACTICE_COPY.threadModeDay, ...(dayFull && dayFullText !== null ? { disabledReason: dayFullText, reasonId: "new-plan-note" } : {}) }, { value: "swing", label: PRACTICE_COPY.swingModeLabel }]}
+            onChange={(next) => editThread({ ...threadDraft, mode: next })}
+          />
+        </Field>
+      </div>
 
       {swing ? (
         <SwingSetupSection draft={swingNow} onDraft={editSwing} preview={preview} problems={shown} now={now} />
