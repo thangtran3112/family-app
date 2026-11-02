@@ -108,7 +108,7 @@ const ORDER_CONTROL =
  * that is disabled cannot place anything, so the broker rows' "Place orders" switch, which 02m §e keeps on screen
  * disabled beside the orders-off reason, passes; the Settings spec asserts that it is disabled. */
 export async function orderControlsOnScreen(page: Page): Promise<string[]> {
-  // The page lists every control whose words or address look like an order; `isOrderTarget` (Node) then decides the addresses, so the Order tab's own picker address (D-190) is one rule in one place.
+  // The page lists every control whose words or address look like an order; `isOrderTarget` (Node) then decides the addresses, so the address rule (an Order page is an order target, there is none) is one rule in one place.
   const found = await page.evaluate(
     ({ control, target }) => {
       const named = (node: Element) => {

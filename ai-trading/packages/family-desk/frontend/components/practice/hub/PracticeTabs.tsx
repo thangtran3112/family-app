@@ -17,9 +17,9 @@ export const PRACTICE_TABS_ID = "practice-tabs";
 const LOADERS: TabLoaders = { today: async (id) => (await loadThread(id)).today };
 
 /**
- * The strip of one practice thread: Summary, Portfolio, Day list (Board for a swing thread), Order, Trades. It stands in the
- * row the "Back to practice" link used to take, on the thread page, the day list, the replay workspace, the Order page and the
- * Trades screen. A click asks the server where the thread's open day is now (`resolveTabHref`), so a tab never sends her to a stale id.
+ * The strip of one practice thread: Summary, Portfolio, Day list (Board for a swing thread), Trades. It stands in the
+ * row the "Back to practice" link used to take, on the thread page, the day list, the replay workspace and the Trades screen.
+ * The replay chart is where orders are placed, so no tab is selected there. A click asks the server where the thread's open day is now (`resolveTabHref`), so a tab never sends her to a stale id.
  * A session with no thread has no strip and keeps the plain back link. Summary and Portfolio share the thread page, which wraps
  * its content in a `TabPanel` and passes `panelMounted`; on the other screens the tabs are navigation and name no panel.
  */
@@ -31,7 +31,8 @@ export function PracticeTabs({
   panelMounted = false,
 }: {
   threadId: number | null;
-  active: PracticeTab;
+  /** The tab this screen is; null on the chart, which is a screen of the thread but no tab of it. */
+  active: PracticeTab | null;
   mode?: "day" | "swing";
   /** The thread page already shows its own back link in its header. */
   back?: boolean;

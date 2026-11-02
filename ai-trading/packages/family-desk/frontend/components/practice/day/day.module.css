@@ -40,16 +40,8 @@
 .peekHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .peekTitle { margin: 0; font-size: var(--text-row); font-weight: var(--weight-bold); }
 
-/* Left rail: the block's days, the thread box, the starred names (P7) */
-.side:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
-.side { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
-.sideSection { display: flex; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--color-hairline); padding: var(--space-3); }
-.sideHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.sideSummary { cursor: pointer; }
-.sideSummary .sideTitle { display: inline; }
-.watchName[data-inert="true"] { cursor: default; }
-.sideTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-bold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.sideHint { color: var(--color-muted); font-size: var(--text-meta); }
+/* Right rail: the block's days, stacked under the thread plan (P7) */
+.sideSummary { cursor: pointer; margin-bottom: var(--space-2); font-size: var(--text-meta); }
 .ladder { display: flex; margin: 0; padding: 0; flex-direction: column; list-style: none; }
 .ladderRow { display: grid; min-height: 28px; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); font-size: var(--text-label); }
 .ladderMark { color: var(--color-muted); font-size: var(--text-meta); text-align: center; }

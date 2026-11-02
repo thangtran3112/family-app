@@ -64,6 +64,14 @@ def _plan_body(db_session, user_id: int, **screen: Any) -> dict[str, Any]:
     }
 
 
+def _skip_day(client: TestClient, list_id: int):
+    """End a day-trade day the only way left (it has no manual End day): skip to the next open, then read it."""
+    thread_id = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["thread"]["id"]
+    skipped = client.post(f"{BASE}/threads/{thread_id}/skip-day", headers=auth_headers())
+    assert skipped.status_code == 200, skipped.text
+    return client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers())
+
+
 def _start_plan(daily, db_session) -> dict[str, Any]:
     client, services, user_id = daily
     response = client.post(f"{BASE}/daily/next", json={"plan": _plan_body(db_session, user_id)}, headers=auth_headers())
@@ -149,7 +157,14 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     )
     assert marked.status_code == 200 and marked.json()["warning"] is None
 
-    ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    # A day-trade day has no manual end: it ends at the next open, so the position rides the night to the tape's end.
+    manual = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    assert manual.status_code == 409 and "next open" in manual.json()["detail"]["problems"][0]["message"]
+    assert client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers()).json()["status"] == "practicing"
+    skipped = client.post(f"{BASE}/threads/{body['thread']['id']}/skip-day", headers=auth_headers())
+    assert skipped.status_code == 200 and skipped.json()["ended_day_list_id"] == list_id
+    assert skipped.json()["clock"]["clock"] == "2026-09-29T13:30:00Z"  # Tuesday's open, 9:30 AM ET
+    ended = client.get(f"{BASE}/day-lists/{list_id}", headers=auth_headers())
     assert ended.status_code == 200
     review = ended.json()["review"]
     assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == -5.66  # to the regular close
@@ -158,16 +173,16 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     assert review["day"] == "2026-09-28" and "dates_hidden" not in review  # a date is always shown (hideDates ignored)
     journal = ended.json()["journal"]
     assert journal["trades"] == 1 and ended.json()["status"] == "ended"
-    (line,) = journal["lines"]  # a scratch: entered and exited at 110.00 (D-032)
+    (line,) = journal["lines"]  # entered at 110.00 at 10:00; GAPPER fell to 100.00 by the tape's end, the exit
     assert (line["symbol"], line["side"], line["shares"], line["entry_price"], line["exit_price"]) == (
         "GAPPER",
         "long",
         100,
         110.0,
-        110.0,
+        100.0,
     )
-    assert (journal["wins"], journal["losses"], journal["scratches"], journal["pnl_usd"]) == (0, 0, 1, 0.0)
-    assert (journal["balance_before"], journal["balance_after"]) == (50_000.0, 50_000.0)
+    assert (journal["wins"], journal["losses"], journal["scratches"], journal["pnl_usd"]) == (0, 1, 0, -1000.0)
+    assert (journal["balance_before"], journal["balance_after"]) == (50_000.0, 49_000.0)
     assert ended.json()["relist"] is None
     assert client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers()).json()["review"] == review
     assert client.get(f"{BASE}/sessions/{sid}", headers=auth_headers()).json()["status"] == "ended"
@@ -342,7 +357,7 @@ def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) ->
     )
     assert stars.status_code == 200, stars.text
     assert [w["symbol"] for w in stars.json()["watch"]] == ["GAPPER", "FLAT", "SPLITTER"]
-    ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    ended = _skip_day(client, list_id)
     assert ended.status_code == 200 and ended.json()["journal"]["trades"] == 1
 
 
@@ -432,7 +447,7 @@ def test_the_rescan_route_answers_at_once_with_a_running_job_then_repopulates_th
 
     other = auth_headers(OTHER_EMAIL)
     assert client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=other).status_code == 404
-    assert client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers()).status_code == 200
+    assert _skip_day(client, list_id).status_code == 200
     closed = client.post(f"{BASE}/day-lists/{list_id}/rescan", headers=auth_headers())
     assert closed.status_code == 409
     assert closed.json()["detail"]["problems"][0]["message"] == "The day is over · scans are closed"
@@ -485,7 +500,7 @@ def test_day_list_sessions_carry_position_and_realized(daily, db_session) -> Non
     assert exited.status_code == 200, exited.text
     done = row()
     assert (done["position"], done["trades"], done["realized_usd"], done["has_open_trade"]) == (None, 1, 200.0, False)
-    ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
+    ended = _skip_day(client, list_id)
     assert ended.json()["journal"]["pnl_usd"] == done["realized_usd"]  # the same figure the ledger books
 
 

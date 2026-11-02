@@ -1,4 +1,4 @@
-"""The day-trade thread's clock (ADR-0018): play, pause, speed, skip-day, and the clock and account a screen reads.
+"""The day-trade thread's clock (ADR-0018): play, pause, speed, jump, skip-day, and the clock and account it reads.
 Pure orchestration over `session` (`move_clock`, `settle_locked`) and `plan` (`end_day`, `open_next`).
 
 **The thread clock is real time, shifted.** Its time is `replay_day_lists.revealed_through`. While `clock_running` it
@@ -6,8 +6,8 @@ advances `clock_speed` x wall time since `clock_anchor_at`, and is *settled* (wr
 whenever a request reads or acts on it, under the day-list lock. Nothing ticks in a process, so a closed screen, a
 logout, a deploy or a restart cannot stop it. While it runs at 1x the gap between the thread's time and real time is
 constant: the clock goes through the close, after-hours, the night, the weekend and the next session without a jump or
-a stop. Only Pause, the speed and Skip day change that gap. The clock exists from the day it belongs to opens: no name
-has to be opened first.
+a stop. Only Pause, the speed, a Jump and Skip day change that gap. The clock exists from the day it belongs to opens:
+no name has to be opened first.
 
 **What a settle never does.** It never moves a name's session (a name is lifted to the clock only when she is on it:
 `session.advance`, and only as far as its own tape goes) and never reveals anything past the clock, so the no-lookahead
@@ -15,7 +15,15 @@ cut is the day clock itself. The balance is read at that clock: realized P/L fro
 priced at the clock (the last print at or before it: after-hours prints show, a night or a weekend adds none).
 
 **The hand-over.** The day list is the unit that holds a day's names and book. It hands over to the next trading day
-when the clock reaches that day's start (`roll`), carrying the clock unchanged. Nothing happens at the close.
+when the clock reaches that day's open (`roll`: the exchange's 9:30 ET, never the plan's "Start at" time), carrying the
+clock unchanged. Nothing happens at the close. That hand-over is the one end of a day: it books the open positions at
+the tape's end and stores the day's review. There is no manual End day, so a day cannot skip the night. The plan's
+last day ends the same way, at the open that follows it (`plan.plan_end`), and nothing opens after it.
+
+**Jump and Skip day** are the user's two ways to move the clock: `control(to=...)` jumps it to any later instant up to
+`plan.plan_end` (the same forward-only, no-lookahead move as any other), and `skip_day` is the jump to the next open
+that ends the day it leaves. Both land on the same instant a running clock would reach, so the lists and the prices a
+screen reads at that instant are the ones the hand-over builds.
 """
 
 from datetime import datetime
@@ -25,7 +33,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_trading.core.calendar import et
+from ai_trading.core.calendar import ET, et
 from ai_trading.db.models import PracticePlan, PracticeThread, ReplayDayList
 from ai_trading.replay import frames as frames_mod
 from ai_trading.replay import journal as journal_mod
@@ -66,11 +74,12 @@ def _plan(db: Session, day: ReplayDayList) -> PracticePlan:
 
 
 def _window(db: Session, day: ReplayDayList) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """The day's tape: from where practice on it starts to the end of its extended session (the last time the day has
-    bars). The clock itself is not bounded by it: it runs on past the end. Every name of the day shares it."""
+    """The day's tape: from the exchange's open (or where practice on it starts, when that is earlier) to the end of its
+    extended session (the last time the day has bars). The clock itself is not bounded by it: it runs on past the end.
+    Every name of the day shares it."""
     sessions = session_mod._sessions_of_day(db, day.id)
     start = _ts(sessions[0].window_start) if sessions else plan_mod.day_start(_plan(db, day), day.day)
-    return start, session_mod.market_close(day.day, "extended")
+    return min(start, session_mod.market_open(day.day)), session_mod.market_close(day.day, "extended")
 
 
 def _focus_end(db: Session, day: ReplayDayList, tape_end: pd.Timestamp) -> pd.Timestamp | None:
@@ -127,6 +136,7 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "window_end": None,
         "focus_end": None,
         "next_start": None,
+        "jump_limit": None,
         "market": None,
         "server_now": svc.wall(),
         "account": None,
@@ -150,6 +160,7 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "window_end": tape_end,
         "focus_end": _focus_end(db, day, tape_end),
         "next_start": following,
+        "jump_limit": plan_mod.plan_end(_plan(db, day)),
         "market": frames_mod.market_block(day.day, clock, None, following),
         "account": _account(db, svc, thread, day, clock),
     }
@@ -196,10 +207,11 @@ def control(
     to: datetime | None,
     step: str | None,
 ) -> dict[str, Any]:
-    """Play, pause or set the speed of the thread's clock (and, for a test or a tool, step or jump it), then answer it.
-    The clock is settled first, so a speed change or a pause never re-prices time that already passed. The clock runs
-    from the day's start with no name opened: the Summary is where time is controlled. `to` and `step` are forward
-    only; no close, window or stop of hers stops them or a run."""
+    """Play, pause or set the speed of the thread's clock, step it, or jump it to a time (`to`), then answer it. The
+    clock is settled first, so a speed change or a pause never re-prices time that already passed. The clock runs from
+    the day's start with no name opened: the Summary is where time is controlled. `to` and `step` are forward only (a
+    `to` in the past leaves the clock where it is) and `to` stops at the end of the plan; no close, window or stop of
+    hers stops them or a run. A jump past the next open hands the day over, and past several, day by day (`roll`)."""
     thread = _day_thread(db, user_id, thread_id)
     day = _open_day(db, thread, lock=True)
     if day is None:
@@ -209,6 +221,11 @@ def control(
         raise ReplayProblem("Pick 1x, 2x, 5x or 10x", path="speed")
     if to is not None and step is not None:
         raise ReplayProblem("Send either to or step", path="to")
+    if to is not None and _ts(to) > (limit := plan_mod.plan_end(_plan(db, day))):
+        raise ReplayProblem(
+            f"The plan ends {limit.tz_convert(ET):%a %Y-%m-%d %H:%M} ET · jump to a time before it",
+            path="to",
+        )
     session_mod.settle_locked(db, svc, day)
     now = svc.wall()
     if speed is not None:
@@ -227,21 +244,22 @@ def control(
 
 
 def due(db: Session, day: ReplayDayList | None) -> bool:
-    """The clock of an open day has reached the start of the plan's next trading day: the day hands over."""
+    """The clock of an open day has reached the open that ends it (the plan's next trading day, or the open after its
+    last day): the day hands over."""
     if not _started(day):
         return False
     assert day is not None and day.revealed_through is not None
-    following = plan_mod.next_day_start(db, day)
-    return following is not None and _ts(day.revealed_through) >= following
+    return _ts(day.revealed_through) >= plan_mod.next_day_start(db, day)
 
 
 def roll(db: Session, user_id: int, thread_id: int, svc: Services) -> plan_mod.Opened | None:
-    """The clock reached the next trading day's start: the day it was on ends (every open position books at its tape's
-    end, the price the clock showed since) and the next day opens, with the clock carried over as it is (same time,
-    speed and Play state). The clock is settled first, so a clock that ran past the start while nobody looked hands over
-    on the next look. A clock left running for several days hands over day by day. None while the clock is short of the
-    next start (the usual answer; a paused clock costs one read, no lock). The next list may not be ready (its data is
-    being prepared): the caller then polls the hub, as after a Skip day."""
+    """The clock reached the open that ends the day: the day it was on ends (every open position books at its tape's
+    end, the price the clock showed since, and the day's review is stored) and the next day opens, with the clock
+    carried over as it is (same time, speed and Play state). After the plan's last day nothing opens (no list in the
+    answer). The clock is settled first, so a clock that ran past the open while nobody looked hands over on the
+    next look. A clock left running for several days hands over day by day. None while the clock is short of the
+    next open (the usual answer; a paused clock costs one read, no lock). The next list may not be ready (its data
+    is being prepared): the caller then polls the hub, as after a Skip day."""
     thread = _day_thread(db, user_id, thread_id)
     opened: plan_mod.Opened | None = None
     while True:
@@ -275,10 +293,11 @@ def roll_of_session(db: Session, user_id: int, session_id: int, svc: Services) -
 
 
 def skip_day(db: Session, user_id: int, thread_id: int, svc: Services) -> tuple[ReplayDayList, plan_mod.Opened]:
-    """Skip to the next day: the one deliberate way to move time past what she watched. The clock jumps to the start of
-    the plan's next trading day (over the night and the weekend), the day it leaves ends (every open position
-    flattens at that day's tape end) and the next day's list opens with the clock there, at the same speed and Play
-    state. On the plan's last day it runs to the end of that day's tape and ends it. A day never started is a Pass.
+    """Skip to the next day: the one deliberate way to move time past what she watched. The clock jumps to the next
+    trading day's market open (9:30 ET: never the plan's "Start at" time, which would hide the open from her), over the
+    night and the weekend; the day it leaves ends (every open position flattens at that day's tape end, and the day's
+    review is stored) and the next day's list opens with the clock there, at the same speed and Play state. On the
+    plan's last day it jumps to the open that follows and ends it, and nothing opens. A day never started is a Pass.
     The next day may not be ready yet (its data is still being prepared): the caller then polls the hub as it does
     after any open."""
     thread = _day_thread(db, user_id, thread_id)
@@ -287,13 +306,7 @@ def skip_day(db: Session, user_id: int, thread_id: int, svc: Services) -> tuple[
         raise ReplayProblem("No practice day is under way", path="clock", status=409)
     _ensure_clock(db, day)
     session_mod.settle_locked(db, svc, day)
-    following = plan_mod.next_day_start(db, day)
-    target = following if following is not None else _window(db, day)[1]
-    clock = session_mod.move_clock(db, svc, day, target)
-    carry = (
-        None
-        if following is None
-        else plan_mod.ClockCarry(at=clock.to_pydatetime(), running=day.clock_running, speed=day.clock_speed)
-    )
+    clock = session_mod.move_clock(db, svc, day, plan_mod.next_day_start(db, day))
+    carry = plan_mod.ClockCarry(at=clock.to_pydatetime(), running=day.clock_running, speed=day.clock_speed)
     ended = plan_mod.end_day(db, user_id, day.id, svc)
     return ended, plan_mod.open_next(db, user_id, svc, thread.id, carry=carry)

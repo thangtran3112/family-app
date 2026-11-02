@@ -32,7 +32,7 @@ test.describe("Practice: one thread time", () => {
     await prepareDesk(context);
   });
 
-  test("overnight at 1:22 AM the Summary, the Order tab and the Day list show the same date and time, and the price stands still with the market closed", async ({ page, context }) => {
+  test("overnight at 1:22 AM the Summary, the chart and the Day list show the same date and time, and the price stands still with the market closed", async ({ page, context }) => {
     test.setTimeout(300_000);
     const { clockUrl } = await startDay(page, context);
     const dayUrl = page.url();
@@ -59,7 +59,7 @@ test.describe("Practice: one thread time", () => {
     await expect(readout(page)).toHaveText(WHEN);
     await expect(page.getByText(/hidden day|show date|replayed market date/i)).toHaveCount(0);
 
-    // The Order tab's chart (the tab opens a name's chart at the clock): the same date and time in the readout, the top-bar chip and the status bar, the closed
+    // The chart (a name's chart opens at the clock): the same date and time in the readout, the top-bar chip and the status bar, the closed
     // market beside the still-counting time, and a price that is the last print and does not move.
     await openDesk(page, chartPath);
     await expect(readout(page)).toHaveText(WHEN);
