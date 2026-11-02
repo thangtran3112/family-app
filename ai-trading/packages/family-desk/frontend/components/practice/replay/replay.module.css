@@ -90,7 +90,7 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 /* One fixed height, empty or full: a new mark scrolls inside it and never moves the chart (D-146). Newest first, so the top rows show. */
 .bottomBody { height: 72px; overflow-y: auto; padding: var(--space-2) var(--space-4); }
 
-/* Left rail: Session panel */
+/* Left rail: technical indicators on top, the tape below */
 .session { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow-y: auto; }
 .sessionSection { border-bottom: 1px solid var(--color-hairline); padding: var(--space-3); }
 .railHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
@@ -99,8 +99,11 @@ textarea.control { padding: var(--space-2); resize: vertical; }
 .railHint { color: var(--color-muted); font-size: var(--text-meta); white-space: nowrap; }
 .railTitle { margin: 0 0 var(--space-2); color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 
-/* Right rail */
-.tapeSlot { display: flex; height: clamp(260px, 50dvh, 540px); min-height: 0; flex-direction: column; margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-3)) 0; }
+/* Left rail, under the indicators: the tape fills the rest of the rail, never under 450 px (room for the filters and pace, and about five prints); the rail scrolls when the window is short. */
+.tapeSection { display: flex; flex: 1 0 450px; flex-direction: column; padding: var(--space-3); }
+.tapeSlot { display: flex; min-height: 0; flex: 1 1 0; flex-direction: column; }
+
+/* Right rail: the order ticket and the position */
 .controls { display: flex; flex-direction: column; gap: var(--space-4); }
 /* The order ticket and the position share one two-column track, so the fields and the buttons line up on both edges. */
 .ticket, .position, .orders { display: flex; flex-direction: column; gap: var(--space-2); }
