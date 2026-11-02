@@ -18,10 +18,12 @@ import { nearestLevel, roundToCents } from "@/lib/replay/chartOrder";
 import type { ChartType } from "@/lib/replay/chartPrefs";
 import {
   attachPinchZoom,
+  axisTagPrices,
   candlestickData,
   chartTime,
   clearTickLabel,
   crosshairPoint,
+  followsNewest,
   sourceTimeLabel,
   replayTickLabel,
   currentValue,
@@ -463,16 +465,20 @@ export function MarketChart({
     const tickLabel = dayName || !(follow || clockTicks) ? (time: Time) => timeLabel(time) : (time: Time, tickType: number) => replayTickLabel(time, tickType);
     const formatTick: TickFormat = (time, tickType) => wholeLabel(tickLabel(time, tickType), time);
     tickFormat.current = formatTick;
-    // The overlays' last-value tags sit on the price axis at their newest value; a tick label under one is left out (D-181).
+    // The tags on the price axis (the overlays' last values, the level lines' numbers, the last price) are the numbers that matter; a tick label
+    // under one is left out, never cut (D-181, D-196). The money axis and the replay charts (`levelTips`) do this; a chart with indicator panes does
+    // not, because the library takes one tick formatter for every price scale and the panes' scales are not this one.
+    const tagPrices = axisTagPrices(overlays.map(({ values }) => currentValue(values)), levels, lastPricePill ? bars.reduce<number | null>((found, bar) => bar.c ?? found, null) : null);
     const tagYs = () => {
       const series = main.current;
       if (!series) return [];
-      return overlays.flatMap(({ values }) => {
-        const last = currentValue(values);
-        const y = last === null ? null : series.priceToCoordinate(last);
+      return tagPrices.flatMap((price) => {
+        const y = series.priceToCoordinate(price);
         return y === null ? [] : [y];
       });
     };
+    const clearsTags = moneyAxis !== undefined || (levelTips && panes.length === 0);
+    const priceTick = moneyAxis ? moneyAxis.tick : (price: number) => main.current?.priceFormatter().format(price) ?? "";
     currentChart.applyOptions({
       timeScale: {
         timeVisible: interval !== "1d" && interval !== "1w",
@@ -481,12 +487,12 @@ export function MarketChart({
       },
       localization: {
         timeFormatter: timeLabel,
-        ...(moneyAxis
+        ...(moneyAxis ? { priceFormatter: moneyAxis.label } : {}),
+        ...(clearsTags
           ? {
-              priceFormatter: moneyAxis.label,
               tickmarksPriceFormatter: (prices: readonly number[]) => {
                 const tags = tagYs();
-                return prices.map((price) => clearTickLabel(moneyAxis.tick(price), main.current?.priceToCoordinate(price) ?? null, tags));
+                return prices.map((price) => clearTickLabel(priceTick(price), main.current?.priceToCoordinate(price) ?? null, tags));
               },
             }
           : {}),
@@ -600,9 +606,8 @@ export function MarketChart({
     });
 
     mainSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
-    // Before the data changes: was the view parked at the newest bar (within a bar or two)? Then it stays there.
+    // Before the data changes: where is the view? If it is parked at the newest bar (within a bar or two), it stays there.
     const visible = keepRange ?? currentChart.timeScale().getVisibleLogicalRange();
-    const atNewest = visible === null || visible.to >= lastIndex.current - 1.5;
     const candleData = candlestickData(bars);
     barAt.current = new Map(candleData.map((point) => [timeId(point.time), point]));
     if (wantKind === "Line" || wantKind === "Area") (mainSeries as ISeriesApi<"Line", Time>).setData(lineData(bars, bars.map((bar) => bar.c)));
@@ -651,9 +656,12 @@ export function MarketChart({
       fitKey.current = key;
     } else if (keepRange) {
       currentChart.timeScale().setVisibleLogicalRange(keepRange);
-    } else if (follow && atNewest && waiting === null) {
-      // The view keeps its zoom and scrolls with the newest bar. Still before the open it stays where it waits.
-      currentChart.timeScale().scrollToRealTime();
+    } else if (followsNewest(follow, visible, lastIndex.current, waiting)) {
+      // The view keeps its zoom and the newest bar goes back to its place at once, as a load puts it. `scrollToRealTime` is a 400 ms animation on the
+      // library's own frame clock; under a held clock (every e2e page runs on a fixed one) it stopped part-way, with the right offset at 66 to 79 slots
+      // instead of 10, and the newest bars sat bunched to the left of a blank plot with the ticks behind them (D-195). Still before the open the
+      // view stays where it waits.
+      currentChart.timeScale().scrollToPosition(FOLLOW_RIGHT_PAD, false);
     }
     lastIndex.current = count - 1;
   }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, clockTicks, chartType, moneyAxis]);
