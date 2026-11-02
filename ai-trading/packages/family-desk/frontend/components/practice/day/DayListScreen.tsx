@@ -52,6 +52,7 @@ import {
   threadDayNo,
   universeNote,
 } from "@/lib/replay/dayView";
+import { heldBlocked, heldHref, heldWhere } from "@/lib/replay/orderView";
 import { problemMessage } from "@/lib/replay/setup";
 import { dayStatusLine } from "@/lib/replay/statusLine";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
@@ -230,6 +231,12 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   // A click on a candidate opens its practice chart at the day clock; a second click while one opens does nothing.
   const practice = (symbol: string) => {
     if (busy) return Promise.resolve();
+    // A name open in another day or thread is refused by the open (one active session per name and day): say where, do not call.
+    const elsewhere = list.held_elsewhere.find((item) => item.symbol === symbol);
+    if (elsewhere !== undefined) {
+      setMessage(heldBlocked(elsewhere));
+      return Promise.resolve();
+    }
     setOpening(symbol);
     return run(async () => {
       const session = await startDaySession(list.id, symbol);
@@ -406,18 +413,25 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
               }
               rowActions={(row) => {
                 const here = opening === row.symbol;
+                const elsewhere = list.held_elsewhere.find((item) => item.symbol === row.symbol);
                 return (
                   <span className={styles.actions}>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      disabled={busy}
-                      loading={here}
-                      aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
-                      onClick={() => void practice(row.symbol)}
-                    >
-                      {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
-                    </Button>
+                    {elsewhere !== undefined ? (
+                      <Button client size="sm" href={heldHref(elsewhere)} aria-label={practiceText("dayHeldGoLabel", { symbol: row.symbol, where: heldWhere(elsewhere) })}>
+                        {PRACTICE_COPY.dayHeldGo}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={busy}
+                        loading={here}
+                        aria-label={here ? undefined : practiceText("dayOpen", { symbol: row.symbol })}
+                        onClick={() => void practice(row.symbol)}
+                      >
+                        {here ? practiceText("dayOpening", { symbol: row.symbol }) : PRACTICE_COPY.dayOpenButton}
+                      </Button>
+                    )}
                     <Button size="sm" variant="primary" disabled={busy} aria-label={practiceText("dayPeekAt", { symbol: row.symbol })} onClick={() => peekAt(row.symbol)}>
                       {PRACTICE_COPY.dayPeek}
                     </Button>

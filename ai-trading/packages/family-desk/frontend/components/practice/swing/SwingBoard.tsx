@@ -16,6 +16,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlock
 import { PRACTICE_COPY, practiceText, prepPercent } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { loadThread, startDaySession } from "@/lib/desk/replay";
+import { heldBlocked } from "@/lib/replay/orderView";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import {
   boardColumns,
@@ -168,6 +169,8 @@ export function SwingBoard({ initial }: { initial: SwingDayList }) {
   const startNow = () =>
     run(async () => {
       if (start.kind === "none") return;
+      const elsewhere = list.held_elsewhere.find((item) => item.symbol === start.symbol);
+      if (elsewhere !== undefined) return setMessage(heldBlocked(elsewhere)); // open in another day or thread: the open would be a 409
       const session = await startDaySession(list.id, start.symbol);
       router.push(`/practice/replay?id=${session.id}`);
     }, PRACTICE_COPY.swingStartError);

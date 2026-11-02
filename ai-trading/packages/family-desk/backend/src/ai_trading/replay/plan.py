@@ -1021,6 +1021,7 @@ def day_list_out(
         "sessions": [
             _session_brief(s, row, holding, books[s.id], held[s.id].price if s.id in held else None) for s in sessions
         ],
+        "held_elsewhere": session_mod.held_elsewhere(db, user_id, row.day, row.id),
         "day_pnl": session_mod.day_pnl(
             books, list(held.values()), row.revealed_through if clock is not None else row.data_through
         ),

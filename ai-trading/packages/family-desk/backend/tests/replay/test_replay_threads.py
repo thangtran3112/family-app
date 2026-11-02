@@ -975,6 +975,82 @@ def test_two_day_threads_keep_independent_plans_ledgers_and_balances(db_session,
     assert plan_mod.hub(db_session, user_id)["plan"]["id"] == second_plan.id
 
 
+def _two_threads_on_one_day(db_session, user_id, svc):
+    """Two day threads whose Day 1 is the same real day, with GAPPER open in the first one's day."""
+    first, second = make_thread(db_session, user_id), make_thread(db_session, user_id)
+    _ready_plan(db_session, user_id, svc, first)
+    _ready_plan(db_session, user_id, svc, second)
+    day_a = plan_mod.open_next(db_session, user_id, svc, first.id).day_list
+    plan_mod.start_session(db_session, user_id, day_a.id, "GAPPER", svc)
+    day_b = plan_mod.open_next(db_session, user_id, svc, second.id).day_list
+    db_session.commit()
+    return first, second, day_a, day_b
+
+
+def test_the_day_list_shows_a_name_the_open_refuses_and_both_agree_on_every_name(db_session, user_id, svc) -> None:
+    """The defect: the second thread's list read "not opened" for a name its open refused with a 409, because the read
+    looked at the list's own sessions and the refusal at the user's (one active session per name and day). Now the read
+    names every refused name, where it is open, and the refusal says the same."""
+    first, _, day_a, day_b = _two_threads_on_one_day(db_session, user_id, svc)
+    out = plan_mod.day_list_out(db_session, user_id, day_b.id, svc)
+    assert out["sessions"] == []  # nothing is open in THIS day, so the list's own sessions stay empty
+    held = out["held_elsewhere"]
+    assert [(h["symbol"], h["day_list_id"], h["thread_id"], h["thread_name"]) for h in held] == [
+        ("GAPPER", day_a.id, first.id, first.name)
+    ]
+    # The holder's own list is not "elsewhere" to itself.
+    assert plan_mod.day_list_out(db_session, user_id, day_a.id, svc)["held_elsewhere"] == []
+
+    refused = set()
+    for symbol in [c["symbol"] for c in day_b.candidates]:
+        try:
+            plan_mod.start_session(db_session, user_id, day_b.id, symbol, svc)
+        except ReplayProblem as problem:
+            assert problem.status == 409 and "end it first" in problem.message and first.name in problem.message
+            db_session.rollback()
+            refused.add(symbol)
+    assert refused == {h["symbol"] for h in held} == {"GAPPER"}  # the read and the open agree, name by name
+
+    # Ending the holder's day frees the name: the read drops it and the open works.
+    plan_mod.end_day(db_session, user_id, day_a.id, svc)
+    db_session.commit()
+    assert plan_mod.day_list_out(db_session, user_id, day_b.id, svc)["held_elsewhere"] == []
+    assert plan_mod.start_session(db_session, user_id, day_b.id, "GAPPER", svc).day_list_id == day_b.id
+
+
+def test_a_standalone_session_on_the_day_is_held_elsewhere_with_no_list(db_session, user_id, svc) -> None:
+    _, _, day_a, day_b = _two_threads_on_one_day(db_session, user_id, svc)
+    plan_mod.end_day(db_session, user_id, day_a.id, svc)
+    session = db_session.execute(select(ReplaySession).where(ReplaySession.day_list_id == day_a.id)).scalar_one()
+    session.day_list_id, session.thread_id, session.status = None, None, "active"  # as if it were opened on its own
+    db_session.commit()
+    (held,) = plan_mod.day_list_out(db_session, user_id, day_b.id, svc)["held_elsewhere"]
+    assert (held["symbol"], held["day_list_id"], held["thread_id"], held["thread_name"]) == ("GAPPER", None, None, None)
+    with pytest.raises(ReplayProblem) as clash:
+        plan_mod.start_session(db_session, user_id, day_b.id, "GAPPER", svc)
+    assert clash.value.status == 409 and "standalone" in clash.value.message
+
+
+def test_a_lost_create_race_against_another_days_session_is_a_409_not_that_session(
+    db_session, user_id, svc, monkeypatch
+) -> None:
+    """Two lists open the same name at once: both pass the lookup, the unique index lets one in. The loser used to be
+    handed the winner's session, which belongs to the other day, and flip its own day to practising."""
+    _, _, day_a, day_b = _two_threads_on_one_day(db_session, user_id, svc)
+    real, calls = session_mod._active_for, []
+
+    def racy(*args):  # the first lookup is the one that ran before the winner's insert
+        calls.append(args)
+        return None if len(calls) == 1 else real(*args)
+
+    monkeypatch.setattr(session_mod, "_active_for", racy)
+    with pytest.raises(ReplayProblem) as clash:
+        plan_mod.start_session(db_session, user_id, day_b.id, "GAPPER", svc)
+    assert clash.value.status == 409 and len(calls) == 2
+    db_session.rollback()
+    assert db_session.get(ReplayDayList, day_b.id).status == "listed"
+
+
 def test_deleting_a_thread_waits_for_an_open_day_then_removes_only_its_own_rows(db_session, user_id, svc) -> None:
     keep = make_thread(db_session, user_id)
     gone = make_thread(db_session, user_id)
