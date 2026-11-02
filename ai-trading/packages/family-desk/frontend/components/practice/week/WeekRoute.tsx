@@ -10,8 +10,9 @@ import { PRACTICE_COPY, fillCopy } from "@/lib/desk/freshness";
 import { loadThread } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { threadPageHref } from "@/lib/replay/practiceTabs";
-import { loadWeek } from "@/lib/replay/swingApi";
+import { loadWeek, loadWeeks } from "@/lib/replay/swingApi";
 import type { SwingState } from "@/lib/replay/threads";
+import { lastStartedWeek } from "@/lib/replay/weekView";
 import { WEEK_TEXT, parseWeekParams, threadOverviewHref, weekHref, weekLoadProblem, weekMissingText } from "@/lib/replay/weekScreen";
 import { WeekReview } from "./WeekReview";
 import styles from "./week.module.css";
@@ -33,7 +34,7 @@ export function WeekRoute() {
   if (!given) {
     return (
       <div className={styles.center}>
-        <ThreadPicker hint={PRACTICE_COPY.threadPickHintWeek} href={threadPageHref} />
+        <ThreadPicker hint={PRACTICE_COPY.threadPickHintThread} href={threadPageHref} />
       </div>
     );
   }
@@ -85,9 +86,12 @@ export function WeekRoute() {
   return <WeekReview key={`${threadId}:${weekNo}`} threadId={threadId} week={week.data} thread={thread.data} />;
 }
 
-/** A swing thread opened with no week (or week 0): says so, and offers the week she is on once it has begun (D-183). */
+/** A swing thread opened with no week (or week 0): says so, and offers the last week that has started, the one with a review to open (D-183, D-192). */
 function NoWeek({ threadId, swing }: { threadId: number; swing: SwingState | null }) {
-  const current = swing !== null && swing.days_ended > 0 ? swing.week_no : null;
+  const daysEnded = swing?.days_ended ?? 0;
+  const weeks = useDeskQuery(`swing-weeks:${threadId}:${daysEnded}`, (signal) => loadWeeks(threadId, { signal }), { enabled: daysEnded > 0 });
+  // The link waits for the weeks (or goes without them if they fail to load): the back link is always there.
+  const current = weeks.data === null ? null : lastStartedWeek(weeks.data.weeks, daysEnded);
   return (
     <div className={styles.missing}>
       <h1 className={styles.title}>{WEEK_TEXT.none}</h1>
