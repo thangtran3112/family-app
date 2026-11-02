@@ -16,7 +16,7 @@ import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
 /**
- * The overview of a day thread (5R): the balance and the day it is on, Resume with the daily plan right beside it (so what is
+ * The overview of a day thread (5R): the balance and the day it is on, Open Day n with the daily plan right beside it (so what is
  * armed is above the fold), the history of ended days, the balance curve, and the stats at the side. Every dollar is SIMULATED.
  */
 export function DayOverview({ summary, plan, onChanged, onNewPlan, clock }: { summary: Thread; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void; clock: ThreadClockApi }) {

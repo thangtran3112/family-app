@@ -630,10 +630,13 @@ test("a scan older than the day clock says so, and a current one does not", () =
 });
 
 // D-078: "Resume" was the label of a day never started and of opening the next day after an ended one (a mutation).
+// Then: a day in progress said "Resume Day N" under the thread clock's own Play, so it read as a second clock control. The clock
+// resumes; this button only goes to the day, so it says "Open Day N" whether or not the day was started.
 test("a day thread's one action says what it does (D-078)", () => {
   const listed = { day_list_id: 41, day: "2026-03-10", weekday: "Tue", day_no: 7, status: "listed", trades: 0, pnl_usd: 0 } as const;
   assert.equal(dayActionLabel(listed, plan), "Open Day 7", "a listed day that was never started opens");
-  assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Resume Day 7", "only a day in progress resumes");
+  assert.equal(dayActionLabel({ ...listed, status: "practicing" }, plan), "Open Day 7", "a day in progress opens too: the clock's Play resumes, this button never says Resume");
+  assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 7, status: "practicing" } }), "Open Day 7", "the same from the plan's cursor");
   assert.equal(dayActionLabel({ ...listed, day_no: 1 }, { ...plan, day_offset: 1 }), "Open Day 2", "a plan that replaced another counts on from the days the thread already ended");
   // No open day: opening the next one starts it. The number is the thread's own (D-047).
   assert.equal(dayActionLabel(null, { ...plan, current: { id: 41, day_no: 6, status: "ended" } }), "Start Day 7");
