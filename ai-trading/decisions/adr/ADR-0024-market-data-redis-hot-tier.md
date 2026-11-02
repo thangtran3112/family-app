@@ -1,0 +1,15 @@
+# ADR-0024: Market-data cache is a Redis hot tier behind a decorator provider; no time-series store yet
+
+Status: accepted 2026-11-02, owner's directive on caching market data: "Make Redis cache a provider inside market-data, so it is standalone and expandable for future providers" and "historical data caching is a must." The planner (Claude Sonnet) was authorized to recommend a store; here is the decision on its recommendation.
+
+**Why.** The market-data bridge refetched the provider for every bar and API answer, so the Desk re-hit Alpaca on each poll and the day list's live read re-decoded 720 blobs per clock minute. The owner wants a store that stops that re-fetching, and requires that it stand as a provider (not call-site plumbing) so a future provider gets the cache with no cache code of its own.
+
+**The decision.**
+
+- **Redis is a small hot tier, wrapped as a decorator provider** in `bridge/internal/providers/cache/`. It wraps any `router.Provider`; one loop in `bridge/cmd/bridge/main.go` wraps every provider, so future providers inherit caching with zero cache code. Key normalization is whole-ET-day windows.
+- **No time-series database now.** The planner recommended TimescaleDB as a runner-up. It was declined because the shared cluster runs the `pgvector` image and a second container would ripple into the expense-tax stack; the pain it would solve is not yet measured. Reopen only when the archive's 1m table shows a real query-cost problem.
+- **The durable historical store stays the existing H1 Postgres write-once archive** (`bridge/internal/archive/`, PR #229) — the "historical data caching is a must" win already exists there. It remains gated behind a `market-data-bridge` profile flag and is **not enabled in production yet**: the bridge is not on the Postgres network, and the archive's database, role and backup coverage do not exist. Those are a separate infrastructure change, not this PR.
+- **TTL table.** Historical (settled) bars are write-once, cached 30 days (10 minutes when the archive is enabled); the open session's bars 60 s; realtime quotes and pinned requests are never cached.
+- **Failure is quiet.** Redis down (or any error) counts as a miss with short timeouts, a circuit breaker trips repeated misses, and concurrent identical requests collapse into one provider call (single-flight). A missing Firestore profile leaves the cache off and never fails the deploy.
+
+**Consequences.** Cached reads stop the per-poll provider round-trips; live quotes and the open session still reach the provider (no stale price risk on the moving bar). The archive stays unbeaten until the bridge can reach Postgres and the archive is backed up. Compose runs one extra container (`market-data-cache`, 128 MB `maxmemory`, `allkeys-lru`, no persistence) attached through the internal Docker network to the bridge only.
