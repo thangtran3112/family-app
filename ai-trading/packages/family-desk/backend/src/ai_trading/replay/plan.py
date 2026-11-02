@@ -992,9 +992,30 @@ def _live_candidates(
         daily = series.memo["asof"]
         prints = session_mod._tape_lookup(svc, store, symbol, tape[symbol]) if symbol in tape else None
         quote = series.quote(clock, prints)
-        live = None if daily is None else screen.live_quote(daily, series.minutes_through(clock), row.day, clock, quote)
+        live = (
+            None
+            if daily is None
+            else screen.live_quote(daily, series.minutes_through(clock), row.day, clock, quote, series.memo)
+        )
         out.append({**candidate, "live": jsonable(live)})
     return out
+
+
+def warm_day(db: Session, svc: Services, day_list_id: int, interval: str | None = None) -> int:
+    """Prepare every name of a day list at the chart interval (the plan's, or `interval`: the one she switched to), so
+    the first read of the day is a slice of memory (`frames.warm`). A swing or an ended day has nothing to prepare.
+    Returns how many names were prepared."""
+    row = db.get(ReplayDayList, day_list_id)
+    plan = None if row is None else db.get(PracticePlan, row.plan_id)
+    if row is None or plan is None or row.status == "ended" or _is_swing(plan):
+        return 0
+    store = svc.store_factory(db)
+    width = INTERVAL_MINUTES[interval or plan.spec["setup"]["interval"]]
+    symbols = [c["symbol"] for c in row.candidates]
+    done = frames_mod.warm(svc.history, store, symbols, row.day, width, screen.asof_loader(svc.history, store, row.day))
+    if row.revealed_through is not None:  # prime the live block at the clock as it stands: the first read is a hit
+        _live_candidates(svc, db, row, _utc(row.revealed_through), plan.spec["setup"]["interval"], {})
+    return done
 
 
 def day_list_out(
@@ -1619,4 +1640,5 @@ __all__ = (
     "run_rescan",
     "start_rescan",
     "start_session",
+    "warm_day",
 )

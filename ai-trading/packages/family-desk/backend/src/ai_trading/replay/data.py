@@ -37,7 +37,9 @@ EARLIEST_DAY = date(2016, 1, 4)  # Alpaca's SIP history floor
 LOOKBACK_SESSIONS = 10
 DAILY_BARS = 300
 EMBARGO = timedelta(minutes=15)
-LRU_DAYS = 8
+# Decoded (symbol, day) inputs kept in memory: about 0.5 MB each (11 sessions of 1-minute bars). 64 holds one full
+# 49-name day and more; a read past it re-decodes from the blob cache, never from the provider (measured in A7).
+LRU_DAYS = 64
 _DAILY_LOOKBACK_DAYS = 460  # calendar days that hold 300 sessions with room for holidays
 _BARS_FEED = "sip"
 

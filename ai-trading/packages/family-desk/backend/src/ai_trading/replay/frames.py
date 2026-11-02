@@ -353,9 +353,19 @@ class SeriesCache:
         return series
 
 
-def warm(history: Any, store: Any, symbols: list[str], day: date, width: int) -> int:
-    """Prepare the series of every name at `width`, so the first read of a day is a slice. A name whose bars are not
-    there (no trades that day, a blob missing) is skipped: its first read says so. Returns how many were prepared."""
+def warm(
+    history: Any,
+    store: Any,
+    symbols: list[str],
+    day: date,
+    width: int,
+    daily_of: Callable[[str], pd.DataFrame | None] | None = None,
+) -> int:
+    """Prepare the series of every name at `width`, so the first read of a day is a slice: the decoded inputs (into
+    `History`'s LRU) and the series (into its `SeriesCache`), plus the as-of daily frame the day list's live block reads
+    when `daily_of` is given. A name whose bars are not there (no trades that day, a blob missing) is skipped: its first
+    read says so. Local blob decodes only: the prep guarantees the blobs, so no provider request. Returns how many
+    names were prepared."""
     from ai_trading_common.errors import ProviderError
 
     from ai_trading.replay.data import ReplayDayError
@@ -363,7 +373,9 @@ def warm(history: Any, store: Any, symbols: list[str], day: date, width: int) ->
     done = 0
     for symbol in symbols:
         try:
-            history.series.get(history.day_inputs(store, symbol, day), width)
+            series = history.series.get(history.day_inputs(store, symbol, day), width)
+            if daily_of is not None and "asof" not in series.memo:
+                series.memo["asof"] = daily_of(symbol)
             done += 1
         except (ReplayDayError, ProviderError) as exc:
             log.warning("warm: %s %s not prepared: %s", symbol, day, exc)

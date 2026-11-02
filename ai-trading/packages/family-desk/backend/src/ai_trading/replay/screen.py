@@ -395,7 +395,12 @@ def build_list(
 
 
 def live_quote(
-    daily: pd.DataFrame, minutes: pd.DataFrame | None, day: date, clock: pd.Timestamp, quote: Quote | None
+    daily: pd.DataFrame,
+    minutes: pd.DataFrame | None,
+    day: date,
+    clock: pd.Timestamp,
+    quote: Quote | None,
+    memo: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """A listed name as of the day clock: its price (`quote`, from `frames.PreparedSeries.quote`: the one price
     function the chart and the positions use), its move from the prior close, and the metric block, with EVERY input
@@ -404,7 +409,9 @@ def live_quote(
     marks and the Portfolio already show bars through it. `today` is False while no regular-session bar has closed (the
     metric block is then the previous session's, never passed off as today's). None when the name has too little
     history. The list's own `metrics` and `list_price` are never touched: they stay the snapshot of the list time.
-    `minutes` is the name's prepared 1-minute frame (lookback sessions and the day, already cut at the clock or not)."""
+    `minutes` is the name's prepared 1-minute frame (lookback sessions and the day, already cut at the clock or not).
+    `memo` is the name's own scratch dict: the metric row (about 55 ms, the dearest part of a read) is a pure function
+    of the cut, so it is computed once per closed minute and reused by every read inside that minute."""
     found = trading_session("stock", day)
     assert found is not None
     cut = cut_frames(SymbolBars(daily, minutes), clock)
@@ -417,12 +424,19 @@ def live_quote(
     regular = bool(
         today is not None and ((today.index >= found.regular_open) & (today.index < found.regular_close)).any()
     )
+    key = (len(cut.daily), None if cut.minutes is None else (len(cut.minutes), cut.minutes.index[-1]))
+    if memo is not None and memo.get("metrics", (None, None))[0] == key:
+        metrics = memo["metrics"][1]
+    else:
+        metrics = metric_row(cut.daily, cut.minutes)
+        if memo is not None:
+            memo["metrics"] = (key, metrics)
     return {
         "at": clock,
         "price": _num(price),
         "change_pct": None if price is None else _num((price / prior - 1) * 100, 2),
         "today": regular,
-        "metrics": metric_row(cut.daily, cut.minutes),
+        "metrics": metrics,
     }
 
 

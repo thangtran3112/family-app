@@ -511,3 +511,24 @@ def test_the_poll_of_a_stranded_prep_starts_it_again_once(daily, db_session, mon
     assert started == [plan.id]
     client.get(f"{BASE}/daily?threadId={thread_id}", headers=auth_headers())
     assert started == [plan.id]  # the claim moved updated_at: the next poll sees a live prep
+
+
+def test_opening_a_day_and_switching_the_chart_interval_start_a_background_warm(daily, db_session, monkeypatch) -> None:
+    """A7: the day's names are prepared after the response (never in it): when a day opens, and for a new interval when
+    a day session's chart switches to it. The warm runs on the existing detached-task pool."""
+    client, services, _ = daily
+    started: list[tuple] = []
+    monkeypatch.setattr(replay_api, "_detach", lambda task, *args: started.append((task.__name__, *args[2:])))
+    opened = _start_plan(daily, db_session)
+    plan_mod.run_prep(db_session, services, db_session.execute(select(PracticePlan.id)).scalar_one())
+    day = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    assert ("_warm_in_background", day, None) in started, started
+    assert opened["day_list_id"] is None or ("_warm_in_background", opened["day_list_id"], None) in started
+    session_id = client.post(
+        f"{BASE}/day-lists/{day}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()
+    ).json()["id"]
+    started.clear()
+    client.get(f"{BASE}/sessions/{session_id}/feed", headers=auth_headers())  # no interval asked: nothing to warm
+    assert started == []
+    client.get(f"{BASE}/sessions/{session_id}/feed?interval=1m", headers=auth_headers())
+    assert started == [("_warm_in_background", day, "1m")], started
