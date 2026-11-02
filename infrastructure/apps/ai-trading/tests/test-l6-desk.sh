@@ -339,5 +339,39 @@ fi
 # check landing in this deliverable.
 echo "SKIP - Case 13 (Dockerfile build) run manually instead; see ai-trading/AGENTS.md Verification"
 
+# --- Case 14: the scheduler's Docker healthcheck gives a cold start a real budget ---
+# Incident 41472449417 (2026-11-02): start_period 60s let Docker mark the scheduler unhealthy 181 s
+# after start (cold Postgres wait up to 60 s, then a first iteration that ran long), which aborted
+# every deploy and its rollback. A start_period only suppresses failures; it never turns a missing or
+# stale heartbeat into a pass, so the gate still cannot pass a dead loop (ai_trading.jobs.healthcheck).
+sched_hc() { service_block scheduler | awk -v k="$1" '$1 == k ":" { print $2; exit }'; }
+sched_seconds() { local v; v="$(sched_hc "$1")"; printf '%s' "${v%s}"; }
+sched_start="$(sched_seconds start_period)"
+sched_interval="$(sched_seconds interval)"
+sched_retries="$(sched_hc retries)"
+if [[ "$sched_start" =~ ^[0-9]+$ ]] && ((sched_start >= 300)); then
+  ok "scheduler healthcheck start_period is ${sched_start}s (>= 300s: cold DB wait + a long first iteration)"
+else
+  fail "scheduler healthcheck start_period is '${sched_start:-missing}'; need >= 300s"
+fi
+if [[ "$sched_interval" =~ ^[0-9]+$ && "$sched_retries" =~ ^[0-9]+$ ]] \
+  && ((sched_interval >= 10 && sched_interval <= 60 && sched_retries >= 3 && sched_retries <= 10)); then
+  ok "scheduler healthcheck keeps a sane interval (${sched_interval}s) and retries ($sched_retries)"
+else
+  fail "scheduler healthcheck interval '${sched_interval:-missing}' / retries '${sched_retries:-missing}' out of range (10-60 s, 3-10)"
+fi
+if service_block scheduler | grep -qF 'ai_trading.jobs.healthcheck'; then
+  ok "scheduler healthcheck still runs ai_trading.jobs.healthcheck (heartbeat freshness, not a bare process check)"
+else
+  fail "scheduler healthcheck no longer runs ai_trading.jobs.healthcheck"
+fi
+# compose's own --wait-timeout must not end the wait before Docker's start_period does.
+deploy_wait="$(grep -oE -- '--wait-timeout [0-9]+' "$DEPLOY_SH" | awk '{ print $2 }' | sort -n | head -n 1)"
+if [[ "$deploy_wait" =~ ^[0-9]+$ && "$sched_start" =~ ^[0-9]+$ ]] && ((deploy_wait >= sched_start)); then
+  ok "deploy.sh --wait-timeout (${deploy_wait}s) outlasts the scheduler start_period (${sched_start}s)"
+else
+  fail "deploy.sh shortest --wait-timeout '${deploy_wait:-missing}' is below the scheduler start_period '${sched_start:-missing}'"
+fi
+
 printf '\n%d checks passed, %d failed (test-l6-desk.sh)\n' "$PASS" "$FAIL_COUNT"
 [[ "$FAIL_COUNT" -eq 0 ]]

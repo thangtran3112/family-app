@@ -6,6 +6,7 @@ import sys
 import time as _time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 from ai_trading_common.registry import DataSources
 from sqlalchemy import text
@@ -157,7 +158,24 @@ def _log_result(result: JobResult) -> None:
         logger.debug("job %s ran (ok=%s)", result.name, result.ok)
 
 
-def main() -> None:  # pragma: no cover -- the real loop; exercised through `run_due`'s own tests
+def run_once(factory, sources: DataSources, clock: JobClock, heartbeat: Path) -> None:
+    """One loop iteration: seed the market strip, run every due job, commit.
+
+    The heartbeat is touched at the START and at the END. The start touch proves the loop reached
+    this iteration, so a cold first iteration with a long job (or a slow bridge call) does not leave
+    the Docker healthcheck failing while the loop is alive and working. The end touch proves the
+    iteration finished: a job that hangs never reaches it, so the heartbeat still ages out."""
+    healthcheck.touch(heartbeat)
+    with factory() as session:
+        now = datetime.now(UTC)
+        seed_strip(session, sources, now=now)
+        for result in run_due(session, sources, clock, now=now):
+            _log_result(result)
+        session.commit()
+    healthcheck.touch(heartbeat)  # F4b
+
+
+def main() -> None:  # pragma: no cover -- the real loop; the iteration is covered through `run_once`
     from ai_trading.db.engine import make_engine, make_session_factory
 
     engine = make_engine(os.environ["DESK_RUNTIME_DATABASE_URL"])
@@ -167,13 +185,7 @@ def main() -> None:  # pragma: no cover -- the real loop; exercised through `run
     clock = JobClock()
     heartbeat = healthcheck.heartbeat_path()
     while True:
-        with factory() as session:
-            now = datetime.now(UTC)
-            seed_strip(session, sources, now=now)
-            for result in run_due(session, sources, clock, now=now):
-                _log_result(result)
-            session.commit()
-        healthcheck.touch(heartbeat)  # F4b: proves this loop iteration to ai_trading.jobs.healthcheck
+        run_once(factory, sources, clock, heartbeat)
         _time.sleep(60)
 
 
@@ -181,4 +193,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ("due_now", "run_due", "seed_strip", "main")
+__all__ = ("due_now", "run_due", "run_once", "seed_strip", "main")

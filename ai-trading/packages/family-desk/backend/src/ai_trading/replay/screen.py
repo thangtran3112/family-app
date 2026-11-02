@@ -39,6 +39,7 @@ from ai_trading.data.metrics import AVG_VOLUME_DAYS, INTRADAY_LOOKBACK_DAYS, RVO
 from ai_trading.data.universe import MIN_AVG_VOLUME, MIN_DAILY_BARS, MIN_PRICE
 from ai_trading.replay.cache import BlobKey, BlobStore, decode_daily, encode_daily
 from ai_trading.replay.data import DAILY_BARS, EMBARGO, History, prior_sessions
+from ai_trading.replay.frames import Quote
 from ai_trading.screener.columns import table_columns
 from ai_trading.screener.evaluator import DAILY_RUN_ON, Frames, Match, SymbolBars, scan
 from ai_trading.screener.runner import MINUTE_LOOKBACK_DAYS
@@ -394,15 +395,23 @@ def build_list(
 
 
 def live_quote(
-    daily: pd.DataFrame, minutes: pd.DataFrame | None, day: date, clock: pd.Timestamp
+    daily: pd.DataFrame,
+    minutes: pd.DataFrame | None,
+    day: date,
+    clock: pd.Timestamp,
+    quote: Quote | None,
+    memo: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """A listed name as of the day clock: the last closed 1-minute bar of `day` (extended hours included), its move
-    from the prior close, and the metric block, with EVERY input cut at `clock` by `cut_frames` (the same one cut as
-    the list, so a bar that has not closed by the clock is never read). Unlike the list there is no 15-minute embargo:
-    the practice clock is the replayed present and the chart, the marks and the Portfolio already show bars through
-    it. `today` is False while no regular-session bar has closed (the metric block is then the previous session's,
-    never passed off as today's). None when the name has too little history. The list's own `metrics` and
-    `list_price` are never touched: they stay the snapshot of the list time."""
+    """A listed name as of the day clock: its price (`quote`, from `frames.PreparedSeries.quote`: the one price
+    function the chart and the positions use), its move from the prior close, and the metric block, with EVERY input
+    cut at `clock` by `cut_frames` (the same one cut as the list, so a bar that has not closed by the clock is never
+    read). Unlike the list there is no 15-minute embargo: the practice clock is the replayed present and the chart, the
+    marks and the Portfolio already show bars through it. `today` is False while no regular-session bar has closed (the
+    metric block is then the previous session's, never passed off as today's). None when the name has too little
+    history. The list's own `metrics` and `list_price` are never touched: they stay the snapshot of the list time.
+    `minutes` is the name's prepared 1-minute frame (lookback sessions and the day, already cut at the clock or not).
+    `memo` is the name's own scratch dict: the metric row (about 55 ms, the dearest part of a read) is a pure function
+    of the cut, so it is computed once per closed minute and reused by every read inside that minute."""
     found = trading_session("stock", day)
     assert found is not None
     cut = cut_frames(SymbolBars(daily, minutes), clock)
@@ -410,17 +419,24 @@ def live_quote(
         return None
     # No minute bars through the cut: `today` stays empty rather than reading an index-less frame.
     today = cut.minutes[cut.minutes.index >= found.extended_open] if cut.minutes is not None else None
-    price = None if today is None or today.empty else float(today["close"].iloc[-1])
+    price = None if quote is None else quote.price
     prior = float(cut.daily["close"].iloc[-1])
     regular = bool(
         today is not None and ((today.index >= found.regular_open) & (today.index < found.regular_close)).any()
     )
+    key = (len(cut.daily), None if cut.minutes is None else (len(cut.minutes), cut.minutes.index[-1]))
+    if memo is not None and memo.get("metrics", (None, None))[0] == key:
+        metrics = memo["metrics"][1]
+    else:
+        metrics = metric_row(cut.daily, cut.minutes)
+        if memo is not None:
+            memo["metrics"] = (key, metrics)
     return {
         "at": clock,
         "price": _num(price),
         "change_pct": None if price is None else _num((price / prior - 1) * 100, 2),
         "today": regular,
-        "metrics": metric_row(cut.daily, cut.minutes),
+        "metrics": metrics,
     }
 
 

@@ -173,7 +173,13 @@ def test_a_name_left_behind_catches_up_to_the_clock_and_cannot_be_marked_before(
     db_session.commit()
     behind = _feed(db_session, user_id, svc, gapper.id)
     assert behind["behind_clock"] is True and behind["day_clock"] == et(DAYS[0], "10:30")
-    assert behind["revealed_through"] == et(DAYS[0], "10:00") and behind["signals"] == []  # nothing past her playhead
+    # The feed of an open day-thread name is read at the thread's time (a name nobody synced shows the Summary's 10:30),
+    # while her stored playhead stays at 10:00 (a GET writes none) and the name stays behind the clock, so unmarkable.
+    assert behind["revealed_through"] == et(DAYS[0], "10:30")
+    assert _row(db_session, gapper.id).revealed_through == et(DAYS[0], "10:00")
+    assert [(s["name"], s["seen"]) for s in behind["signals"]] == [
+        ("mid", False)
+    ]  # fired while she was away; 10:45 not yet
     assert session_mod.session_out(session_mod.context(db_session, svc, _row(db_session, gapper.id)))["behind_clock"]
     assert [s["behind_clock"] for s in plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"]] == [
         True,
@@ -235,13 +241,15 @@ def test_a_step_is_a_step_of_the_shared_clock_whichever_name_is_on_screen(db_ses
     assert stepped["day_clock"] == et(DAYS[0], "10:35")
     db_session.refresh(row)
     assert row.revealed_through == et(DAYS[0], "10:35")  # every name's clock is this one
-    # FLAT was not touched, and it reads the same thread time: it is one bar behind it, not on a clock of its own.
+    # FLAT was not touched (its stored playhead stays at 10:30, so it is still behind the clock), but its feed reads the
+    # same thread time as every other surface: not a clock of its own.
     flat_feed = _feed(db_session, user_id, svc, flat.id)
     assert (flat_feed["revealed_through"], flat_feed["day_clock"], flat_feed["behind_clock"]) == (
-        et(DAYS[0], "10:30"),
+        et(DAYS[0], "10:35"),
         et(DAYS[0], "10:35"),
         True,
     )
+    assert _row(db_session, flat.id).revealed_through == et(DAYS[0], "10:30")
     again = _step(db_session, user_id, svc, flat.id, "bar")  # FLAT was behind the 10:35 clock: one bar past it
     assert again["revealed_through"] == et(DAYS[0], "10:40")
     assert [s["behind_clock"] for s in plan_mod.day_list_out(db_session, user_id, row.id, svc)["sessions"]] == [

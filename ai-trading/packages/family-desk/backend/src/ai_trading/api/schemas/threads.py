@@ -10,7 +10,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, FiniteFloat, field_serializer, model_validator
 
-from ai_trading.api.schemas.common import SwingOptional
+from ai_trading.api.schemas.common import MarketOut, SwingOptional
 from ai_trading.contracts.practice_thread import PracticeLedgerEntryV1, PracticeThreadV1
 
 ThreadMode = Literal["day", "swing"]
@@ -166,6 +166,14 @@ class ClockAccountOut(BaseModel):
     as_of: datetime
 
 
+class ThreadCapacityOut(BaseModel):
+    """The day-trade slots, shared by every user: at most `day_max` active day threads at once. Closing a day thread
+    frees a slot; swing threads do not use one."""
+
+    day_active: int
+    day_max: int
+
+
 class ThreadClockOut(BaseModel):
     """The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a
     running clock was settled before this was built); a client may extrapolate it with `speed` between polls but never
@@ -182,6 +190,7 @@ class ThreadClockOut(BaseModel):
     window_end: datetime | None  # the end of the day's tape (extended close): the clock runs on past it
     focus_end: datetime | None  # where her plan's practice window ends: a mark on the timeline, never a stop
     next_start: datetime | None  # when the next trading day starts and the day hands over; null on the plan's last day
+    market: MarketOut | None = None  # the exchange's phase at `clock` (`last_bar_at` is null: a name's frame has it)
     server_now: datetime
     account: ClockAccountOut | None
     label: str
