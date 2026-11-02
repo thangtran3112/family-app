@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { loadDayList } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { openTodayText, planCard } from "@/lib/replay/dayView";
+import { openAtClock, openTodayText, planCard } from "@/lib/replay/dayView";
 import type { PracticePlan } from "@/lib/replay/daily";
 import { planFinishedLine, swingGate } from "@/lib/replay/overviewView";
 import { swingCardView } from "@/lib/replay/swing";
+import type { ClockAccount } from "@/lib/replay/threadClock";
 import type { ThreadSummary } from "@/lib/replay/threads";
 import { todayView } from "@/lib/replay/threadView";
 import { ThreadAction, planOpensIn } from "./ThreadAction";
@@ -23,7 +24,7 @@ import styles from "./landing.module.css";
  * Replace plan beside it. A swing thread: Continue or Start Day n, or while its week review is owed (the gate) the review first
  * and, beneath it, what unlocks after it. A closed thread has none. The last day's result sits under the button.
  */
-export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; onChanged: () => void; onNewPlan: () => void }) {
+export function NextStep({ summary, plan, account = null, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; /** A day thread's account at the clock: the open figure on the Today row is its, as the headline's is (D-169). */ account?: ClockAccount | null; onChanged: () => void; onNewPlan: () => void }) {
   const { thread, today, last_day: lastDay } = summary;
   const closed = thread.status === "closed";
   const swing = swingCardView(summary);
@@ -44,18 +45,20 @@ export function NextStep({ summary, plan, onChanged, onNewPlan }: { summary: Thr
   // and the result keeps its own "Last day" label, so the card never reads "Last day" above a button that says "Open Day 3".
   const showsLastDay = !swing && today !== null && view.label === PRACTICE_COPY.threadLastDay;
   const title = closed ? PRACTICE_COPY.threadClosedTitle : swing || showsLastDay ? PRACTICE_COPY.overviewNext : view.label;
-  // A day under way may hold open trades: the server prices them at the day clock (the day list's `day_pnl`).
+  // A day under way may hold open trades. A day thread reads them from its clock account, the one the headline is built from, so the row never
+  // shows a second, older open P/L (D-169); a swing thread has no clock and reads the day list's `day_pnl` (the server prices it at the day clock).
   const live = useDeskQuery(`thread-open:${today?.day_list_id}`, (signal) => loadDayList(today?.day_list_id ?? 0, {}, { signal }), {
-    enabled: !closed && today?.status === "practicing",
+    enabled: !closed && today?.status === "practicing" && thread.mode !== "day",
   });
-  const openText = live.data === null ? null : openTodayText(live.data.day_pnl);
+  const open = thread.mode === "day" ? openAtClock(account) : live.data === null ? null : live.data.day_pnl;
+  const openText = open === null ? null : openTodayText(open);
   const result = (
     <>
       <ResultLine pnl={view.pnl} line={view.line} />
-      {live.data !== null && openText !== null && (
+      {open !== null && openText !== null && (
         <>
           {" · "}
-          <span data-testid="today-open"><ResultLine pnl={live.data.day_pnl.open_usd} line={openText} /></span>
+          <span data-testid="today-open"><ResultLine pnl={open.open_usd} line={openText} /></span>
           {" "}
           <SimulatedBadge />
         </>

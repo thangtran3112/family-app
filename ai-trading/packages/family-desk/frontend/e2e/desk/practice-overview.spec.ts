@@ -327,6 +327,9 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     await openDesk(page, overviewUrl(id));
     const step = practiceDay(page);
     await expect(step).toContainText("Preparing data · 2 of 18 names");
+    // D-176: the state is said once on the screen: the plan card keeps its filters and says nothing of the preparation.
+    await expect(page.getByText("Preparing data · 2 of 18 names")).toHaveCount(1);
+    await expect(page.getByText(PRACTICE_COPY.planPreparingHint)).toHaveCount(1);
     await expect(step).not.toContainText("Your thread is ready");
     await expect(step).not.toContainText("Day 1 is next");
     await expect(step.getByRole("button", { name: PRACTICE_COPY.threadPageReplace })).toBeDisabled();

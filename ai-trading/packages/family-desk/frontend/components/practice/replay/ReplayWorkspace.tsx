@@ -31,6 +31,7 @@ import { placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
 import { whenReady } from "@/lib/desk/patience";
 import { endAnyDay } from "@/lib/replay/swingApi";
 import { portfolioRows } from "@/lib/replay/dayView";
+import { showDayDate, useDayDateShown } from "@/lib/replay/dateShown";
 import { readChartPrefs, togglePref, writeChartPrefs, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import { exitMark } from "@/lib/replay/markInput";
 import { entrySince, levelRows, markRows, openSide } from "@/lib/replay/marks";
@@ -162,8 +163,14 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   }, [full, setChartFocus]);
   // At the 1180 band the right rail is a tab strip; each tab opens its own drawer and none closes another (D-020).
   const [railOpen, setRailOpen] = useState<string[]>([]);
-  // "Show date" is the viewer's own choice for this view; the chart stays on clock ticks (D-023).
-  const [dateShown, setDateShown] = useState(false);
+  // "Show date" is the viewer's own choice for this day; the chart stays on clock ticks (D-023). The Summary's clock reads the same choice (D-174).
+  const [localShown, setLocalShown] = useState(false);
+  const daySaysShown = useDayDateShown(session.day_list_id);
+  const dateShown = localShown || daySaysShown;
+  const showDate = () => {
+    setLocalShown(true);
+    if (session.day_list_id !== null) showDayDate(session.day_list_id);
+  };
   const [bottomTab, setBottomTab] = useState<"marks" | "levels">("marks");
   const [bottomOpen, setBottomOpen] = useState<boolean | null>(null);
   const [dayBusy, setDayBusy] = useState(false);
@@ -196,7 +203,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   // An ended day session has been scored and its review shows the date, so the replay stops hiding it (D-100). A swing thread keeps its dates hidden across the block.
   const masked = hidden && !dateShown && !(ended && !swing);
-  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock), onShowDate: masked ? () => setDateShown(true) : null });
+  useReportPracticeChrome({ day: spec.day, hidden: masked, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock), onShowDate: masked ? showDate : null });
 
   // The chart's bars and series are built once: the chart draws them and the header reads VWAP from the same series. VWAP is the session's, built from
   // one-minute bars whatever the chart's interval (D-168), so the header, the left rail and the chart line agree on 1m, 5m and 15m.
