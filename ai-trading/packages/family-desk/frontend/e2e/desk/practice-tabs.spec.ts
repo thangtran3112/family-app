@@ -84,7 +84,7 @@ test.describe("Practice thread tabs", () => {
 
     await tab(page, "Trades").click();
     await page.waitForURL(`**/practice/journal?thread=${threadId}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Thread ·");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("thread ·");
     await expectSelected(page, "Trades");
     await expect(page.getByRole("region", { name: PRACTICE_COPY.fillsTitle, exact: true })).toContainText(PRACTICE_COPY.fillsEmpty); // a name is open, nothing is bought yet
 
@@ -115,9 +115,19 @@ test.describe("Practice thread tabs", () => {
     await expectSelected(page, "Order");
     await expect(page.getByText(PRACTICE_COPY.orderPickTitle)).toBeVisible();
     await expect(page.getByRole("link", { name: "Open the Day list" })).toHaveAttribute("href", /\/practice\/day\?id=\d+$/);
+    // The names of the open day are right here: the opened one says so, and a click opens a chart.
+    const names = page.getByRole("table", { name: PRACTICE_COPY.orderNames });
+    await expect(names.getByRole("row", { name: /TSLA/ })).toContainText(PRACTICE_COPY.orderStatusOpened);
+    await page.getByLabel(PRACTICE_COPY.orderFind).fill("zzzz");
+    await expect(page.getByText(PRACTICE_COPY.orderFindNone)).toBeVisible();
+    await page.getByLabel(PRACTICE_COPY.orderFind).fill("tsla");
     await expect(page.getByRole("link", { name: PRACTICE_COPY.orderOpenPortfolio })).toHaveAttribute("href", `/practice/thread?id=${threadId}&tab=portfolio`);
     await expect(page.getByTestId("chart-slot")).toHaveCount(0);
     expect(api.paths().filter((path) => path.includes("/replay/sessions/")), "no session is requested").toEqual([]);
+
+    await page.getByRole("button", { name: "Switch to TSLA" }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
   });
 
   test("a swing thread's Day list tab is the Board; with no day open Board lands on Summary and Order says to start the day there", async ({ page, context }) => {

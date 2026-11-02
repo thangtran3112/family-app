@@ -309,9 +309,13 @@ def rvol_intraday(ann: pd.DataFrame, lookback_days: int) -> pd.Series:
     )
     table = table.T.groupby(level=0).ffill().T
     baseline = table.shift(1).rolling(lookback_days, min_periods=lookback_days).mean()
-    lookup = baseline.stack([0, 1], future_stack=True)
-    rows = pd.MultiIndex.from_arrays([ann["day"], key.get_level_values(0), key.get_level_values(1)])
-    expected = lookup.reindex(rows).to_numpy()
+    # Each bar's expected cumulative volume is the baseline cell of its (day, phase, time): look the cells up by
+    # position (stacking the whole table first is the same answer, 10x slower; a triple the table lacks stays NaN).
+    day_at = baseline.index.get_indexer(ann["day"])
+    time_at = baseline.columns.get_indexer(
+        pd.MultiIndex.from_arrays([key.get_level_values(0), key.get_level_values(1)])
+    )
+    expected = np.where((day_at >= 0) & (time_at >= 0), baseline.to_numpy()[day_at, time_at], np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
         out = cumulative.to_numpy() / np.where(expected > 0, expected, np.nan)
     return pd.Series(out, index=ann.index)

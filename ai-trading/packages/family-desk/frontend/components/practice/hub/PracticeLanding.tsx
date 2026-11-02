@@ -25,7 +25,7 @@ export function PracticeLanding() {
   const [modal, setModal] = useState<{ thread: PracticeThread | null } | null>(null);
   // True while any row's action is opening a day: every row's action waits, so a second click cannot race the first.
   const [busy, setBusy] = useState(false);
-  // "Deleted October thread #12": the row is gone by then, so the page says it (D-079). The region exists from the start so it is announced.
+  // "Deleted Day thread · Oct 15": the row is gone by then, so the page says it (D-079). The region exists from the start so it is announced.
   const [deleted, setDeleted] = useState<string | null>(null);
   const threads = useDeskQuery("replay-threads", (signal) => loadThreads({ signal }), { revision });
   // The server lists every active thread first (newest first), then the closed ones.

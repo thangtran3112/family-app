@@ -2106,6 +2106,65 @@
         "title": "BriefRunOut",
         "type": "object"
       },
+      "CandidateLiveOut": {
+        "description": "A listed name as of the day clock `at`, from bars closed by it. `price`: the last closed 1-minute bar of the day\n(null before the first); `change_pct`: its move from the prior close; `metrics`: the metric block cut at the clock,\nwhich is today's when `today` and the previous session's while no regular-session bar has closed.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "today": {
+            "title": "Today",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "at",
+          "price",
+          "change_pct",
+          "today",
+          "metrics"
+        ],
+        "title": "CandidateLiveOut",
+        "type": "object"
+      },
       "CandidateOut": {
         "description": "One name on the list, as of `data_through`. `list_price` is the price at the evaluating filter's cut.",
         "properties": {
@@ -2124,6 +2183,16 @@
           "list_price": {
             "title": "List Price",
             "type": "number"
+          },
+          "live": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateLiveOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "matched_since": {
             "format": "date-time",
@@ -2162,6 +2231,28 @@
             },
             "title": "Operands",
             "type": "object"
+          },
+          "prev_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Change Pct"
+          },
+          "prev_rvol": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Rvol"
           },
           "price_at": {
             "format": "date-time",
@@ -10152,6 +10243,13 @@
             "title": "Mode",
             "type": "string"
           },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "pattern": "^[ -~\u00a0-\ud7ff\ue000-\uffff]+$",
+            "title": "Name",
+            "type": "string"
+          },
           "plan": {
             "$ref": "#/components/schemas/PracticeThreadPlanV1"
           },
@@ -10159,6 +10257,19 @@
             "const": 1,
             "title": "Schemaversion",
             "type": "integer"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
           },
           "startingBalance": {
             "maximum": 10000000.0,
@@ -10192,6 +10303,7 @@
           "createdAt",
           "id",
           "mode",
+          "name",
           "plan",
           "schemaVersion",
           "startingBalance",
@@ -19761,7 +19873,7 @@
     },
     "/api/desk/replay/day-lists/{day_list_id}": {
       "get": {
-        "description": "One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's\nsession, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null\nuntil the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).",
+        "description": "One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's\nsession, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null\nuntil the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).\nWith `live`, each candidate also carries `live`: the name priced at the day clock (its price, move from the prior\nclose and metric block, nothing later than the clock); the list-time values stay in the candidate itself.",
         "operationId": "get_day_list_api_desk_replay_day_lists__day_list_id__get",
         "parameters": [
           {
@@ -19789,6 +19901,16 @@
                 }
               ],
               "title": "Peek"
+            }
+          },
+          {
+            "in": "query",
+            "name": "live",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Live",
+              "type": "boolean"
             }
           }
         ],
@@ -20751,7 +20873,7 @@
         ]
       },
       "post": {
-        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,\neach with its own plan and balance. A swing thread freezes its universe and calendar here, after the days, the data\nand the arms check out (every rejection is a plain problem), and starts preparing its bars in the background.",
+        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,\neach with its own plan and balance, and its own `name` (the server gives it one: \"Day thread \u00b7 Oct 15\", \"(2)\" when\nshe already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms\ncheck out (every rejection is a plain problem), and starts preparing its bars in the background.",
         "operationId": "create_thread_api_desk_replay_threads_post",
         "requestBody": {
           "content": {
@@ -20901,7 +21023,7 @@
         ]
       },
       "patch": {
-        "description": "Replace the risk plan while the thread is active (a closed thread is a 409). It applies from the next session:\na session already started keeps the plan it began with.",
+        "description": "Replace the risk plan and the entry size (`shares`, a day thread only; left out clears it) while the thread is\nactive (a closed thread is a 409). It applies from the next session: a session already started keeps the plan and\nthe size it began with.",
         "operationId": "patch_thread_api_desk_replay_threads__thread_id__patch",
         "parameters": [
           {

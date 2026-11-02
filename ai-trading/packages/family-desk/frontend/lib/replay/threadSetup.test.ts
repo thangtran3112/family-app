@@ -101,3 +101,19 @@ test("the balance box groups thousands on blur and leaves anything else as typed
   assert.equal(formatBalanceInput("abc"), "abc");
   assert.equal(validateThreadDraft({ ...defaultThreadDraft(), startingBalance: "50,000" }).ok, true);
 });
+
+test("D-042: the Edit plan form carries the thread's entry size; empty is not set and a New thread never sends one", () => {
+  const draft = planToDraft(activeThread.thread.plan, 50000, 250);
+  assert.equal(draft.shares, "250");
+  assert.equal(planToDraft(activeThread.thread.plan, 50000).shares, "", "a thread that never set one starts the box empty");
+  assert.deepEqual(threadPatchToSpec(draft), { schemaVersion: 1, plan: (threadPatchToSpec({ ...draft, shares: "" }) as { plan: unknown }).plan, shares: 250 });
+  assert.equal("shares" in (threadPatchToSpec({ ...draft, shares: "  " }) as object), false, "left empty it is left out, which clears it on the server");
+  assert.equal(validatePlanEdit(draft, 50000).ok, true);
+  assert.equal("shares" in (threadDraftToSpec({ ...defaultThreadDraft(), shares: "250" }) as { plan: object }), false, "the create body has no entry size");
+  for (const bad of ["0", "12.5", "abc"]) {
+    const result = validatePlanEdit({ ...draft, shares: bad }, 50000);
+    assert.equal(result.ok, false, bad);
+    if (!result.ok) assert.equal(result.problems.shares, "Shares: a whole number of 1 or more");
+  }
+  assert.equal(threadFieldOfPath("shares"), "shares");
+});

@@ -33,8 +33,9 @@ import pandas as pd
 from ai_trading_common.errors import ProviderError
 
 from ai_trading.core import evaluate as engine
+from ai_trading.core import indicators
 from ai_trading.core.calendar import session as trading_session
-from ai_trading.data.metrics import AVG_VOLUME_DAYS, INTRADAY_LOOKBACK_DAYS, metric_row
+from ai_trading.data.metrics import AVG_VOLUME_DAYS, INTRADAY_LOOKBACK_DAYS, RVOL_DAYS, metric_row
 from ai_trading.data.universe import MIN_AVG_VOLUME, MIN_DAILY_BARS, MIN_PRICE
 from ai_trading.replay.cache import BlobKey, BlobStore, decode_daily, encode_daily
 from ai_trading.replay.data import DAILY_BARS, EMBARGO, History, prior_sessions
@@ -220,6 +221,17 @@ def _num(value: object, digits: int = 4) -> float | None:
     return None if (math.isnan(number) or math.isinf(number)) else round(number, digits)
 
 
+def prev_session_metrics(daily: pd.DataFrame) -> dict[str, float | None]:
+    """The previous session's own RVOL and change % (D-018): `daily`'s last bar against the sessions before it, the
+    10-session daily RVOL and the close-to-close change that `metric_row` reads on a list built before the open. They
+    are read from the same cut daily frame, so a list built after the open (where `metric_row` carries today's partial
+    day) still shows what the day before did. None where the frame is too short for the figure."""
+    closes = daily["close"]
+    change = _num((closes.iloc[-1] / closes.iloc[-2] - 1) * 100, 3) if len(closes) >= 2 else None
+    rvol = _num(indicators.rvol_daily(daily, RVOL_DAYS).iloc[-1], 3) if len(daily) else None
+    return {"prev_rvol": rvol, "prev_change_pct": change}
+
+
 def _price_at_cut(
     frames: Frames, spec: dict[str, Any], match: Match, as_of: pd.Timestamp
 ) -> tuple[float, pd.Timestamp] | None:
@@ -350,7 +362,15 @@ def build_list(
         prior_close = float(inputs.daily["close"].iloc[-1])
         change = None if row.pop("daily_filter") else _num((row["list_price"] / prior_close - 1) * 100, 2)
         metrics = {**metrics, "list_price": row["list_price"], "list_change_pct": change}
-        candidates.append({"rank": rank, **row, "prior_close": _num(prior_close), "metrics": metrics})
+        candidates.append(
+            {
+                "rank": rank,
+                **row,
+                "prior_close": _num(prior_close),
+                **prev_session_metrics(inputs.daily),
+                "metrics": metrics,
+            }
+        )
 
     with_change = any(c["metrics"]["list_change_pct"] is not None for c in candidates)
     return BuiltList(
@@ -368,6 +388,40 @@ def build_list(
         filters=filter_rows,
         matches_total=len(order) + extra_total,
     )
+
+
+# -- the list at the clock --------------------------------------------------------------------------------------
+
+
+def live_quote(
+    daily: pd.DataFrame, minutes: pd.DataFrame | None, day: date, clock: pd.Timestamp
+) -> dict[str, Any] | None:
+    """A listed name as of the day clock: the last closed 1-minute bar of `day` (extended hours included), its move
+    from the prior close, and the metric block, with EVERY input cut at `clock` by `cut_frames` (the same one cut as
+    the list, so a bar that has not closed by the clock is never read). Unlike the list there is no 15-minute embargo:
+    the practice clock is the replayed present and the chart, the marks and the Portfolio already show bars through
+    it. `today` is False while no regular-session bar has closed (the metric block is then the previous session's,
+    never passed off as today's). None when the name has too little history. The list's own `metrics` and
+    `list_price` are never touched: they stay the snapshot of the list time."""
+    found = trading_session("stock", day)
+    assert found is not None
+    cut = cut_frames(SymbolBars(daily, minutes), clock)
+    if len(cut.daily) < 2:
+        return None
+    # No minute bars through the cut: `today` stays empty rather than reading an index-less frame.
+    today = cut.minutes[cut.minutes.index >= found.extended_open] if cut.minutes is not None else None
+    price = None if today is None or today.empty else float(today["close"].iloc[-1])
+    prior = float(cut.daily["close"].iloc[-1])
+    regular = bool(
+        today is not None and ((today.index >= found.regular_open) & (today.index < found.regular_close)).any()
+    )
+    return {
+        "at": clock,
+        "price": _num(price),
+        "change_pct": None if price is None else _num((price / prior - 1) * 100, 2),
+        "today": regular,
+        "metrics": metric_row(cut.daily, cut.minutes),
+    }
 
 
 # -- earnings flag --------------------------------------------------------------------------------------------

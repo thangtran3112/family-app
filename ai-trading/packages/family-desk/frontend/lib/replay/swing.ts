@@ -228,7 +228,7 @@ export type SwingCardAction = { kind: "start" | "continue" | "review" | "none"; 
 export type SwingCardView = {
   /** "Swing · 50 names" */
   title: string;
-  /** "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · 2 holds open" */
+  /** "50 names · Week 2 of 4 · 2 holds open": what the row's other cells do not say (the mode badge, the Balance cell and the Progress cell carry the rest). */
   line: string;
   /** "Week 1 review ready" once a week's last day has ended and the next day has not opened. */
   notice: string | null;
@@ -241,11 +241,10 @@ export function swingCardView(summary: Pick<ThreadSummary, "thread" | "swing" | 
   if (thread.mode !== "swing" || !swing) return null;
   const title = practiceText("swingCardNames", { n: thread.swing?.universe.length ?? 0 });
   const finished = swing.next === "finished";
-  const place = finished
-    ? [practiceText("swingFinished", { days: swing.days })]
-    : [practiceText("swingCardWeek", { week: swing.week_no, weeks: swing.weeks }), practiceText("planDay", { day: swing.day_no, of: swing.days })];
-  // Week, day, names and holds only: the balance and the equity sit in their own cells (D-112).
-  const line = [title, ...place, ...(finished ? [] : [holdsOpenText(swing.holds_open)])].join(" · ");
+  // Names, week and holds only (D-112): the mode is the row's badge, the balance and the equity are the Balance cell, and the day
+  // is the Progress cell. A finished thread has no week or holds left, so its line is the names alone, never a dangling separator.
+  const names = practiceText("swingLineNames", { n: thread.swing?.universe.length ?? 0 });
+  const line = finished ? names : [names, practiceText("swingCardWeek", { week: swing.week_no, weeks: swing.weeks }), holdsOpenText(swing.holds_open)].join(" · ");
   const reviewWeek = swing.week_no - 1;
   if (finished) return { title, line, notice: null, action: { kind: "none", label: null, weekNo: null } };
   if (swing.next === "week_review" && reviewWeek >= 1) {

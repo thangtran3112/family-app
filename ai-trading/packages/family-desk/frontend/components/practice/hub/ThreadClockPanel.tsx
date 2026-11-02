@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { JumpMenu } from "@/components/practice/replay/JumpMenu";
 import { SpeedChips } from "@/components/practice/replay/SpeedChips";
@@ -9,7 +10,12 @@ import { Button } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { formatEtClock } from "@/lib/desk/format";
-import { PRACTICE_COPY } from "@/lib/desk/freshness";
+import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
+import { whenReady } from "@/lib/desk/patience";
+import { endDay } from "@/lib/desk/replay";
+import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
+import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
+import { problemMessage } from "@/lib/replay/setup";
 import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { clockControls, clockProgress, clockStateText, pauseText, skippedText, type SkipDay } from "@/lib/replay/threadClock";
 import { formatBalance, formatDayResult } from "@/lib/replay/threadView";
@@ -18,15 +24,24 @@ import styles from "./landing.module.css";
 import o from "./overview.module.css";
 
 /**
- * The day thread's clock and its controls, on the Summary and nowhere else (ADR-0018): Play or Pause, Step, speed, Jump and Skip day for
- * the whole thread. The time is the server's. It keeps running when this page is closed or she signs out; this panel only asks
+ * The day thread's clock and its controls, on the Summary and nowhere else (ADR-0018): Play or Pause, Step, speed, Jump, Skip day and End day for
+ * the whole thread. Both ways of finishing the day are here (the Day list has none): Skip day runs to the close and opens the next day; End day
+ * stops at the clock, exits what is open at that price and opens the day's review. The time is the server's. It keeps running when this page is closed or she signs out; this panel only asks
  * for changes and shows the answer (polled every two seconds). The simulated account beside it is priced at that clock.
  */
 export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSkipped: (result: SkipDay) => void }) {
   const { clock, shown } = api;
+  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [confirmingEnd, setConfirmingEnd] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
+  const endRef = useRef<HTMLButtonElement>(null);
+  // The End day confirm names the open trades it exits: the day list is read only while the question is open.
+  const openDayId = clock?.day_list_id ?? null;
+  const portfolio = useDayPortfolio(openDayId, api.revision, confirmingEnd && openDayId !== null);
 
   if (clock === null) {
     return (
@@ -40,8 +55,10 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
   const running = clock.state === "running";
   const pause = pauseText(clock.pause);
   const account = clock.account;
-  const busy = api.busy;
+  const exits = portfolio.data === null ? null : endDayExitText(portfolioRows(portfolio.data), clock.clock);
+  const busy = api.busy || ending;
   const speed = clock.speed;
+  const dayListId = clock.day_list_id;
 
   async function skip() {
     const result = await api.skipDay();
@@ -49,6 +66,22 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
     if (result !== null) {
       setNote(skippedText(result));
       onSkipped(result);
+    }
+  }
+
+  // Ending is safe to ask twice (the server answers an ended day the same), so a gateway cut waits and asks again. On success the review is the next screen.
+  async function end() {
+    if (dayListId === null) return;
+    setEnding(true);
+    setEndError(null);
+    try {
+      await whenReady(() => endDay(dayListId), { onWaiting: () => setNote(PRACTICE_COPY.dayEndStillWorking) });
+      router.push(`/practice/day?id=${dayListId}`);
+    } catch (failure) {
+      setEndError(problemMessage(failure, PRACTICE_COPY.dayEndError));
+      setNote(null);
+      setEnding(false);
+      setConfirmingEnd(false);
     }
   }
 
@@ -96,7 +129,8 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
               />
             </>
           )}
-          <Button ref={skipRef} size="touch" disabled={!can.skip || busy || confirming} onClick={() => setConfirming(true)}>{PRACTICE_COPY.clockSkipDay}</Button>
+          <Button ref={skipRef} size="touch" disabled={!can.skip || busy || confirming || confirmingEnd} onClick={() => setConfirming(true)}>{PRACTICE_COPY.clockSkipDay}</Button>
+          <Button ref={endRef} size="touch" disabled={!can.skip || busy || confirming || confirmingEnd} aria-expanded={confirmingEnd} onClick={() => setConfirmingEnd(true)}>{PRACTICE_COPY.clockEndDay}</Button>
         </div>
       )}
 
@@ -114,9 +148,29 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
         />
       )}
 
+      {confirmingEnd && (
+        <InlineConfirm
+          label="Confirm ending the day"
+          prompt={
+            <>
+              <span>{practiceText("clockEndAsk", { clock: formatEtClock(shown) })}</span>
+              {exits && <span>{exits}</span>}
+            </>
+          }
+          confirmLabel={PRACTICE_COPY.dayEndYes}
+          cancelLabel={PRACTICE_COPY.clockSkipCancel}
+          layout="block"
+          busy={ending}
+          returnFocus={endRef}
+          onConfirm={() => void end()}
+          onCancel={() => setConfirmingEnd(false)}
+        />
+      )}
+
       {pause && <p className={o.placeLine} role="status" data-testid="thread-clock-pause">{pause}</p>}
       {note && <p className={o.placeLine} role="status">{note}</p>}
       {api.error && <p className={o.placeLine} role="alert">{api.error}</p>}
+      {endError && <p className={o.placeLine} role="alert">{endError}</p>}
 
       {account && can.started && (
         <div data-testid="thread-clock-account">

@@ -19,7 +19,7 @@ import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 
 /**
- * The overview's one primary step (a region named "Practice day"). A day thread: Resume, Start day or New plan needed, with
+ * The overview's one primary step (a region named "Practice day"). A day thread: Open Day n, Start day or New plan needed, with
  * Replace plan beside it. A swing thread: Continue or Start Day n, or while its week review is owed (the gate) the review first
  * and, beneath it, what unlocks after it. A closed thread has none. The last day's result sits under the button.
  */
