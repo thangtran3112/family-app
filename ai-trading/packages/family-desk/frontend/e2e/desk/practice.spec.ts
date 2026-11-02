@@ -396,16 +396,19 @@ test.describe("Practice", () => {
     for (const label of ["RSI (14)", "MACD (12, 26, 9)", "Signal", "Histogram", "VWAP", "EMA 9", "EMA 21"]) await expect(indicators).toContainText(label);
     for (const gone of ["Shares per trade", "Plan note:", "Armed strategies"]) await expect(side, `the old ${gone} block is gone`).not.toContainText(gone);
     // A practice trade: the exit mark books one ledger row, so the thread balance moves with it.
-    // The one size rule is the account's cash: a quantity the balance cannot cover (here far past 10,000 shares) is refused with the free cash, and nothing else limits a size.
+    // The one size rule is the account's cash: a quantity the balance cannot cover (here far past 10,000 shares) is refused in the ticket before anything is sent, with its cost and the buying power, and nothing else limits a size.
     const practice = await replayRail(page, "Practice");
     await practice.getByRole("textbox", { name: "Quantity" }).fill("100000");
-    await practice.getByRole("button", { name: "Buy" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Not enough practice cash · $50,000 free" })).toBeVisible();
-    await expect(practice.getByRole("textbox", { name: "Quantity" }), "the refusal names shares, so Quantity is the invalid field").toHaveAttribute("aria-invalid", "true");
+    await expect(practice.getByText(/^Exceeds buying power · this order costs \$[\d,]+, buying power is \$50,000$/)).toBeVisible();
+    await expect(practice.getByRole("button", { name: "Buy" }), "Buy stays off while the order does not fit").toBeDisabled();
     await practice.getByRole("textbox", { name: "Quantity" }).fill("100");
+    await expect(practice.getByText(/^Exceeds buying power/)).toHaveCount(0);
     // A stop is optional even when the thread plan asks for one: Buy places the entry, with no refusal and no warning.
     await practice.getByRole("button", { name: "Buy" }).click();
     await expect(page.getByRole("alert").filter({ has: page.getByRole("button", { name: "Dismiss message" }) })).toHaveCount(0);
+    // The 100 shares spent most of the cash, so another 100 would not fit and Buy says so; a size that fits is open again.
+    await expect(practice.getByRole("button", { name: "Buy" })).toBeDisabled();
+    await practice.getByRole("textbox", { name: "Quantity" }).fill("1");
     await expect(practice.getByRole("button", { name: "Buy" })).toBeEnabled();
     await expect(practice.getByRole("button", { name: "Buy" }), "no hint ties the buttons to a stop").not.toHaveAccessibleDescription(/stop/i);
     // Set stop on the open position afterwards; it is the same optional stop, typed in the stop form.

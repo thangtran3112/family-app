@@ -75,12 +75,13 @@ export type ReplaySessionApi = {
 /** A plain note clears itself after this long; an error stays until it is dismissed (WCAG 2.2.1: nothing she must read disappears on a timer). */
 const DISMISS_MS = 4500;
 
-/** Told which ticket field the server refused: its `path` (shares, limitPrice, stopPrice) and its sentence. Returns true when the message now sits at that field. */
+/** Told why the ticket's order failed: the field the server named (`path`: shares, limitPrice, stopPrice, or "" when it named none) and the sentence. Returns true when the ticket now shows it. */
 export type Refusal = (path: string, message: string) => boolean;
-/** True when the refusal named a ticket field and the screen put the sentence there: it is then not said a second time in the message line. */
-const refusedAt = (error: unknown, refused: Refusal | undefined): boolean => {
+/** True when the ticket took the failure (at the field the server named, or on the ticket as a whole): it is then not said a second time in the message line. */
+const refusedAt = (error: unknown, refused: Refusal | undefined, fallback: string): boolean => {
+  if (refused === undefined) return false;
   const problem = error instanceof DeskApiError ? error.problems[0] : undefined;
-  return problem !== undefined && refused !== undefined && refused(problem.path, problem.message);
+  return refused(problem?.path ?? "", problemMessage(error, fallback));
 };
 
 /** The speed is the shared clock's, so a switch to another name (a new session, a new hook) keeps the one she chose. */
@@ -381,7 +382,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         } catch (error) {
           if (!alive.current) return false;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-          if (!refusedAt(error, refused)) say("error", problemMessage(error, PRACTICE_COPY.markError));
+          if (!refusedAt(error, refused, PRACTICE_COPY.orderError)) say("error", problemMessage(error, PRACTICE_COPY.orderError));
           return false;
         }
       });
@@ -416,7 +417,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         } catch (error) {
           if (!alive.current) return false;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-          if (!refusedAt(error, refused)) say("error", problemMessage(error, PRACTICE_COPY.markError));
+          if (!refusedAt(error, refused, PRACTICE_COPY.orderError)) say("error", problemMessage(error, PRACTICE_COPY.orderError));
           return false;
         }
       });
@@ -438,7 +439,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
         } catch (error) {
           if (!alive.current) return;
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-          say("error", problemMessage(error, PRACTICE_COPY.markError));
+          say("error", problemMessage(error, PRACTICE_COPY.cancelError));
         }
       });
     },
@@ -474,7 +475,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       } catch (error) {
         if (!alive.current) return;
         dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-        say("error", problemMessage(error, error instanceof DeskApiError && error.status === 409 ? PRACTICE_COPY.undoTooLate : PRACTICE_COPY.markError));
+        say("error", problemMessage(error, error instanceof DeskApiError && error.status === 409 ? PRACTICE_COPY.undoTooLate : PRACTICE_COPY.orderError));
       }
     });
   }, [id, exec, say, refreshSwing]);
@@ -492,7 +493,7 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
       } catch (error) {
         if (alive.current) {
           dispatch({ type: "settled", atEnd: playerRef.current.status === "at_end" });
-          say("error", problemMessage(error, PRACTICE_COPY.markError));
+          say("error", problemMessage(error, PRACTICE_COPY.endError));
         }
         return null;
       }

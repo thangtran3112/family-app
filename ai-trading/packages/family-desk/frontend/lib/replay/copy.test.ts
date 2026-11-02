@@ -97,7 +97,7 @@ test("the swing copy never says position, order, filled, broker or execute, in a
 });
 
 test("a message line keeps its sentence and drops the Try again tail it has no button for", () => {
-  assert.equal(withoutRetryHint(PRACTICE_COPY.markError), "Couldn't place that mark");
+  assert.equal(withoutRetryHint(PRACTICE_COPY.orderError), "Couldn't place that order");
   assert.equal(withoutRetryHint(PRACTICE_COPY.advanceError), "Couldn't load the next minute");
   assert.equal(withoutRetryHint("Not enough practice cash · $450 free"), "Not enough practice cash · $450 free");
 });
