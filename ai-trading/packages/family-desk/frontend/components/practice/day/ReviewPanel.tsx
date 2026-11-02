@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { EmptyBlock } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
@@ -49,15 +48,12 @@ export function ReviewPanel({ review, journal, footnote }: { review: DayReview; 
   const selection = selectionText(review);
   const finished = dayFinishedLine(review);
   const balance = journal === null ? null : dayBalanceText(journal);
-  // The review is what the page is about once the day ended: bring it into view (D-091).
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
-    ref.current?.scrollIntoView?.({ block: "start" });
-  }, []);
+  // No scroll-to-self on mount (D-091 had one; D-189 removed it). The candidates table is gone once the day ended, so the review is already in view,
+  // and `scrollIntoView` only scrolled the main region by its whole range (24 px at 1180), which hid the tab strip under the amber band.
   // A day with no list and no trade has nothing to tabulate: one block says so, not four empty messages (D-091).
   const empty = review.rows.length === 0 && (journal === null || journal.trades === 0);
   return (
-    <section ref={ref} className={styles.section} aria-label="How the list moved">
+    <section className={styles.section} aria-label="How the list moved">
       <h2 className={styles.sectionTitle}>{PRACTICE_COPY.reviewTitle}</h2>
       {finished && <p className={styles.line}>{`${finished} · ${formatEtDay(review.day)}`}</p>}
       {empty ? (

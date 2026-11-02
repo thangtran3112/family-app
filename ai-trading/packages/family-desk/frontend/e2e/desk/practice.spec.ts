@@ -1024,6 +1024,28 @@ test.describe("Practice day list · fix wave 5S", () => {
     expect(api.paths().filter((path) => /[?&]peek=/.test(path)), "no peek request on an ended day").toEqual([]);
   });
 
+  test("End day opens the review at the top, from a Summary that was scrolled down, at both widths (D-184, D-189)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    await openDayList(page, context);
+    await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
+    await page.waitForURL(SESSION_URL);
+    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await backToDayList(page);
+    await page.getByRole("tab", { name: "Summary" }).click();
+    const trigger = page.getByRole("button", { name: PRACTICE_COPY.clockEndDay, exact: true });
+    await expect(trigger).toBeVisible();
+    const main = page.locator("#main-content");
+    await main.evaluate((node) => node.scrollTo({ top: 200, behavior: "instant" }));
+    await trigger.click();
+    await page.getByRole("group", { name: "Confirm ending the day" }).getByRole("button", { name: PRACTICE_COPY.dayEndYes }).click();
+    await page.waitForURL(/\/practice\/day\?id=\d+/);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.reviewTitle })).toBeVisible();
+    // At 1180 the review is 24 px taller than the region: the scroll-to-self it once ran on mount moved the region by that much, ~50 ms after it appeared.
+    await page.waitForTimeout(500);
+    expect(await main.evaluate((node) => node.scrollTop), "the new screen starts at the top").toBe(0);
+    await expect(page.getByRole("tablist").first(), "the tab strip is whole under the amber band").toBeInViewport({ ratio: 1 });
+  });
+
   test("a day with no matching name says one plain sentence and points to the Summary to skip it and offers Change plan; ending it there leaves one empty block (D-091, D-094)", async ({ page, context }) => {
     test.setTimeout(180_000);
     await openDayList(page, context);

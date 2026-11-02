@@ -141,9 +141,6 @@ export function planArmedText(plan: Pick<PracticePlan, "spec" | "filters">): str
   return practiceText("planArmed", { names: names.join(" · ") });
 }
 
-/** What a `/practice/day` URL says before any load (D-117): no id is not chosen, an id that is not a number is not found, a number has no problem yet (the server answers 404 for an unknown one). */
-export const dayRouteProblem = (raw: string | null): "none" | "missing" | null => (raw === null ? "none" : /^\d+$/.test(raw) ? null : "missing");
-
 /** The label of a day thread's one action (D-078): an open day opens, and opening the next day starts it. It never says "Resume":
  *  the button only goes to the day, and resuming is the thread clock's Play on the Summary (a second "resume" read as a clock control).
  *  `today` is the thread's open day; the number is the thread's own (D-047). Null when nothing can be pressed (preparing, or no plan). */

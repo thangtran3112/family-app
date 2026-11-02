@@ -598,7 +598,6 @@ export const PRACTICE_COPY = {
   threadPickHintOrder: "Pick a thread to open its Order tab.",
   threadPickHintThread: "Pick a thread to open its Summary.",
   threadPickHintReplay: "Pick a thread, then open a name from its day.",
-  threadPickHintWeek: "Pick a swing thread to open its weekly reviews.",
   threadPickNone: "No practice thread yet · start one on Practice to get a pretend balance",
   threadNoToday: "No practice day open · the next list opens when you resume",
   threadTodayLine: "{pnl} realized so far · {trades}",

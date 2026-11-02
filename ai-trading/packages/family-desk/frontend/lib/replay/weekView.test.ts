@@ -9,6 +9,7 @@ import {
   filterQualityLine,
   focusUntradedLines,
   heatStrip,
+  lastStartedWeek,
   signedPts,
   sourceQualityLine,
   startWeekAction,
@@ -177,6 +178,20 @@ test("the thread's week rows: figures for a closed week, dashes for the open one
   assert.equal(weekReviewable(weekRows[0]!, 0), true);
   assert.equal(weekReviewable(weekRows[1]!, 5), false, "no finished day of week 2 yet");
   assert.equal(weekReviewable(weekRows[1]!, 6), true);
+});
+
+// D-192: the thread's own week number moves on when a week ends, before a day of the next one has ended.
+test("the week 'No week selected' offers is the last one that has started, never the next one (D-192)", () => {
+  const three = [
+    { ...weekRows[0]!, week_no: 1, first_day_no: 1, status: "closed" as const },
+    { ...weekRows[0]!, week_no: 2, first_day_no: 6, status: "closed" as const },
+    { ...weekRows[1]!, week_no: 3, first_day_no: 11, status: "open" as const },
+  ];
+  assert.equal(lastStartedWeek(three, 10), 2, "Days 1 to 10 ended: Week 3 is not started, Week 2 has the review");
+  assert.equal(lastStartedWeek(three, 11), 3, "a day of Week 3 ended");
+  assert.equal(lastStartedWeek(three, 7), 2);
+  assert.equal(lastStartedWeek([{ ...three[0]!, status: "open" as const }], 0), null, "no day has ended");
+  assert.equal(lastStartedWeek([], 3), null);
 });
 
 test("every string the week helpers build avoids the Practice banned words", () => {

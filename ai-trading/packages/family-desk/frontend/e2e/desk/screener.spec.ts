@@ -133,20 +133,22 @@ test("quick filters narrow the rows in place and say so; Clear brings them back 
   await expectCleanScreen(page);
 });
 
-test("selecting a row loads its preview; a symbol without stored bars gets a friendly empty chart", async ({ page }) => {
+test("selecting a row loads its preview; a symbol without stored bars gets a friendly empty state", async ({ page }) => {
   const api = watchApi(page);
   await openDesk(page, "/screener?filter=1");
   await openRailSection(page, "Preview");
   // the first row is selected by default; BOLT has no stored bars
   await expect(page.getByRole("row", { name: /^BOLT/ })).toHaveAttribute("aria-selected", "true");
-  const bolt = page.getByRole("region", { name: "BOLT 15m market chart" });
-  await expect(bolt.getByRole("status")).toHaveText("No closed bars available for this symbol and timeframe.");
+  // D-185: a symbol with no bars draws a plain empty state in the preview, not an empty chart region
+  await expect(page.getByText("No price bars for BOLT yet")).toBeVisible();
+  await expect(page.getByRole("region", { name: "BOLT 15m market chart" })).toHaveCount(0);
   await expect(page.getByText("Couldn't load this chart")).toHaveCount(0);
   expect(api.paths().some((path) => path.startsWith("GET /api/desk/bars/BOLT?"))).toBe(true);
   // another row moves the selection and the preview to its symbol
   await page.getByRole("table", { name: "Screener matches" }).getByRole("cell", { name: "LKQ", exact: true }).click();
   await expect(page.getByRole("row", { name: /^LKQ/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("region", { name: "LKQ 15m market chart" })).toBeVisible();
+  await expect(page.getByText("No price bars for LKQ yet")).toBeVisible();
+  await expect(page.getByRole("region", { name: "LKQ 15m market chart" })).toHaveCount(0);
   expect(api.paths().some((path) => path.startsWith("GET /api/desk/bars/LKQ?"))).toBe(true);
   await expectCleanScreen(page);
 });

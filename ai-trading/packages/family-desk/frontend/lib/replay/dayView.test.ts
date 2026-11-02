@@ -44,7 +44,6 @@ import {
   stopCrossedText,
   dayActionLabel,
   blockOpenByDefault,
-  dayRouteProblem,
   practiceWindow,
   tradeTotalRow,
   planCard,
@@ -731,13 +730,6 @@ test("a long block's days start collapsed, a short block's open (D-097)", () => 
   assert.equal(blockOpenByDefault(10), true);
   assert.equal(blockOpenByDefault(20), false);
   assert.equal(blockOpenByDefault(30), false);
-});
-
-// D-117: a bad id said "No practice day selected", the same as no id at all.
-test("a day route with an id that is not a number is not found, and one with no id is not chosen (D-117)", () => {
-  assert.equal(dayRouteProblem(null), "none");
-  assert.equal(dayRouteProblem("abc"), "missing");
-  assert.equal(dayRouteProblem("12"), null, "a good id has no problem");
 });
 
 // D-144: the Thread plan said Window 09:30 to 11:30, the list was built at 8:30 and Re-list said the window then starts at 10:00.

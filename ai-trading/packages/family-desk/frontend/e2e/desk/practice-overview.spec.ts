@@ -404,6 +404,21 @@ test.describe("Practice week review · fix wave 5S", () => {
     await prepareDesk(context);
   });
 
+  test("a swing thread opened on the week route with no week offers the last week that has started, not the next one (D-183, D-192)", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const threadId = await gatedSwingThread(context); // Days 1 to 5 ended: the thread now reads "Week 2", but only Week 1 has a review
+    for (const path of [`/practice/week?thread=${threadId}`, `/practice/week?thread=${threadId}&week=0`]) {
+      await openDesk(page, path);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("No week selected");
+      await expect(page.getByRole("link", { name: "Open Week 2" }), path).toHaveCount(0);
+      const offered = page.getByRole("link", { name: "Open Week 1" });
+      await expect(offered, path).toHaveAttribute("href", `/practice/week?thread=${threadId}&week=1`);
+    }
+    await page.getByRole("link", { name: "Open Week 1" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Week 1");
+    await expect(page.getByText("has not started yet")).toHaveCount(0);
+  });
+
   test("the way on and a way back sit in the header, a tile's number never wraps, and the chart key names every mark (D-086, D-087, D-088)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
@@ -8,7 +7,8 @@ import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Button } from "@/components/ui/Button";
-import { EmptyBlock, ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
+import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { createReplaySession, loadReplayFeed, loadReplaySession, patchReplaySession } from "@/lib/desk/replay";
 import { formatEtDay } from "@/lib/desk/format";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
@@ -17,6 +17,7 @@ import { adherenceHint, journalDatesHidden, noTradesText, signalRows, summaryTil
 import { sessionResumeHref } from "@/lib/replay/dayView";
 import { isSwingSession } from "@/lib/replay/playView";
 import type { ReplaySession } from "@/lib/replay/schemas";
+import { routeId } from "@/lib/replay/routeId";
 import { problemMessage } from "@/lib/replay/setup";
 import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { AdherenceChecklist } from "./AdherenceChecklist";
@@ -29,14 +30,14 @@ import styles from "./journal.module.css";
 
 /** `/practice/journal?id=`: the scored session (02o §a4). Reads the URL, so the page wraps it in Suspense. */
 export function JournalScreen() {
-  const raw = useSearchParams().get("id");
-  const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
+  const { id } = routeId(useSearchParams().get("id"));
   const session = useDeskQuery(`replay-session:${id}`, (signal) => loadReplaySession(id ?? 0, { signal }), { enabled: id !== null });
 
+  // The route only opens this screen when `?id=` is there, so an id with no number is one she gave that names nothing: not found (D-193).
   if (id === null) {
     return (
       <div className={styles.center}>
-        <EmptyBlock title="No practice session selected"><Link href="/practice" className={styles.link}>Open Practice</Link></EmptyBlock>
+        <PracticeNotice title={PRACTICE_COPY.sessionNotFound} />
       </div>
     );
   }

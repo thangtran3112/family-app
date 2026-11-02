@@ -282,11 +282,35 @@ test.describe("Practice landing", () => {
     await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
   });
 
-  test("the thread page says so for a thread that does not exist", async ({ page }) => {
-    await openDesk(page, "/practice/thread?id=999999");
-    await expect(page.getByText(PRACTICE_COPY.threadPageNotFound)).toBeVisible();
-    await openDesk(page, "/practice/thread");
-    await expect(page.getByText(PRACTICE_COPY.threadPageNotFound)).toBeVisible();
+  test("a thread that is not chosen and one that is not found say different things on every route, and a picker's hint names where its rows go (D-164, D-190, D-191, D-193)", async ({ page, context }) => {
+    const id = await createThreadByApi(context);
+    // Not found: an id the server does not know, and an id that is no number (she gave one; it cannot name a thread).
+    for (const [path, param] of [["/practice/thread", "id"], ["/practice/order", "thread"], ["/practice/journal", "thread"], ["/practice/week", "thread"]] as const) {
+      for (const bad of ["999999", "abc", "0"]) {
+        await openDesk(page, `${path}?${param}=${bad}`);
+        await expect(page.getByText(PRACTICE_COPY.threadPageNotFound), `${path} ${bad}`).toBeVisible();
+        await expect(page.getByText(PRACTICE_COPY.threadPickTitle), `${path} ${bad} is not "not selected"`).toHaveCount(0);
+      }
+    }
+    for (const [path, text] of [["/practice/replay?id=abc", PRACTICE_COPY.sessionNotFound], ["/practice/journal?id=abc", PRACTICE_COPY.sessionNotFound], ["/practice/day?id=abc", PRACTICE_COPY.dayNotFound]] as const) {
+      await openDesk(page, path);
+      await expect(page.getByText(text), path).toBeVisible();
+    }
+    // Not chosen: the picker, one hint per route that says what a row opens, every row going there. The Order picker's rows carry
+    // `/practice/order?thread=`, which the screen guard knows is the Order tab's own address and not an order control (D-190).
+    for (const [path, hint, rows] of [
+      ["/practice/thread", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
+      ["/practice/order", PRACTICE_COPY.threadPickHintOrder, `/practice/order?thread=${id}`],
+      ["/practice/week", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
+      ["/practice/replay", PRACTICE_COPY.threadPickHintReplay, `/practice/thread?id=${id}`],
+      ["/practice/journal", PRACTICE_COPY.threadPickHint, `/practice/journal?thread=${id}`],
+    ] as const) {
+      await openDesk(page, path);
+      await expect(page.getByText(PRACTICE_COPY.threadPickTitle), path).toBeVisible();
+      await expect(page.getByText(hint, { exact: true }), path).toBeVisible();
+      await expect(page.getByLabel("Your threads").getByRole("link").first(), path).toHaveAttribute("href", rows);
+      await expectCleanScreen(page);
+    }
   });
 });
 
