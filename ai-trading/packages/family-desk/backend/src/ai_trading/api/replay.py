@@ -72,6 +72,7 @@ from ai_trading.api.schemas.swing import (
 from ai_trading.api.schemas.threads import (
     ClockIn,
     SkipDayOut,
+    ThreadCapacityOut,
     ThreadClockOut,
     ThreadFillsOut,
     ThreadLedgerOut,
@@ -696,8 +697,9 @@ def create_thread(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-    risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of threads of a mode may be active,
-    each with its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
+    risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day
+    threads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each
+    thread has its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
     she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
     check out (every rejection is a plain problem), and starts preparing its bars in the background."""
     swing = isinstance(raw, dict) and raw.get("mode") == "swing"
@@ -745,6 +747,13 @@ def list_threads(
 ) -> list[dict[str, Any]]:
     """Her threads, the active ones first, each with its plan, stats and today (the hub's resume list)."""
     return threads_mod.list_threads(db, user.id)
+
+
+@router.get("/threads/capacity", response_model=ThreadCapacityOut)
+def thread_capacity(user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)) -> dict[str, int]:
+    """The day-trade slots in use across all users and the most there can be (10). Declared before
+    `/threads/{thread_id}`, which would otherwise read "capacity" as an id."""
+    return threads_mod.capacity(db)
 
 
 @router.get("/threads/{thread_id}", response_model=ThreadOut)

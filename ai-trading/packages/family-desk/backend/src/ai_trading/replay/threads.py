@@ -25,7 +25,7 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1, PracticeThreadV1
@@ -43,6 +43,11 @@ from ai_trading.replay.ledger import entry_out, utc_z
 from ai_trading.replay.session import ReplayProblem, Services
 
 SIMULATED_LABEL = "Simulated money · practice only, never a real account"
+# Owner rule (2026-11-02): at most this many ACTIVE day threads across all users. Closing a thread frees its slot; swing
+# threads are not counted; threads already over the cap are left alone and only new creates are refused. A constant,
+# not a setting: it changes with an owner decision, not at run time.
+MAX_ACTIVE_DAY_THREADS = 10
+DAY_SLOTS_FULL = "All {max} day-trade slots are in use · close a day thread to start another"
 SWING_CLOSED = "Swing threads are not open yet · start a day thread"
 SWING_SHARES = "A swing thread sizes each hold from its cash · the share count is for day threads"
 NO_THREAD = "Start a practice thread first · it holds your simulated balance and risk plan"
@@ -140,11 +145,31 @@ def create_thread(db: Session, user_id: int, spec: PracticeThreadCreateV1, now: 
     if dumped["mode"] != "day":
         raise ReplayProblem(SWING_CLOSED, path="mode")
     check_new_thread(dumped)
+    # One lock for the count and the insert, held to the end of the transaction: two creates at nine active threads
+    # cannot both read nine. The second waits for the first to commit, then counts ten and is refused.
+    db.execute(text("select pg_advisory_xact_lock(hashtext('day-thread-cap'))"))
+    if day_slots_used(db) >= MAX_ACTIVE_DAY_THREADS:
+        raise ReplayProblem(DAY_SLOTS_FULL.format(max=MAX_ACTIVE_DAY_THREADS), path="mode", status=409)
     return add_thread(db, user_id, dumped, now)
 
 
+def day_slots_used(db: Session) -> int:
+    """Active day threads across all users: the slots in use."""
+    return db.execute(
+        select(func.count())
+        .select_from(PracticeThread)
+        .where(PracticeThread.mode == "day", PracticeThread.status == "active")
+    ).scalar_one()
+
+
+def capacity(db: Session) -> dict[str, int]:
+    """`{day_active, day_max}`: the day-trade slots in use and the most there can be (every user shares them)."""
+    return {"day_active": day_slots_used(db), "day_max": MAX_ACTIVE_DAY_THREADS}
+
+
 def check_new_thread(dumped: dict[str, Any]) -> None:
-    """The create rule on top of the contract: the plan fits the balance. Any number of threads of a mode may run."""
+    """The create rule on top of the contract: the plan fits the balance. Any number of swing threads may run; day
+    threads share `MAX_ACTIVE_DAY_THREADS` slots (checked, under a lock, by `create_thread`)."""
     _check_plan(dumped["plan"], dumped["startingBalance"])
 
 
@@ -601,6 +626,7 @@ __all__ = (
     "active_threads",
     "add_thread",
     "brief",
+    "capacity",
     "check_new_thread",
     "close_thread",
     "create_thread",

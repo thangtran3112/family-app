@@ -166,6 +166,14 @@ class ClockAccountOut(BaseModel):
     as_of: datetime
 
 
+class ThreadCapacityOut(BaseModel):
+    """The day-trade slots, shared by every user: at most `day_max` active day threads at once. Closing a day thread
+    frees a slot; swing threads do not use one."""
+
+    day_active: int
+    day_max: int
+
+
 class ThreadClockOut(BaseModel):
     """The day-trade thread's clock (ADR-0018): real time, shifted. `clock` is the simulated time at `server_now` (a
     running clock was settled before this was built); a client may extrapolate it with `speed` between polls but never

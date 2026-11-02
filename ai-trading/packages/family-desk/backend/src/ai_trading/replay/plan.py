@@ -86,6 +86,10 @@ PEEK_DAILY_BARS = 120
 # A day session's entry size unless the thread sets one (D-042); each entry may still differ (`PracticeMarkV1.shares`).
 DAY_SESSION_SHARES = 100
 FEW_NAMES = 20
+# Owner rule (2026-11-02): a thread has fewer than 50 stocks, so a day list holds at most 49 names. The contract's own
+# `maxList` bound stays at 50 (a stored plan that says 50 must still load): this is enforced where a plan is created and
+# where a list is built or re-scanned, and again where a name is opened.
+MAX_LIST = 49
 UNIVERSE_LABEL = (
     "Practice universe · {size} symbols the Desk has scanned · the live screener that morning may have scanned others"
 )
@@ -258,6 +262,8 @@ def create_plan(
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     first = date.fromisoformat(dumped["firstDay"])
     check_range(first, dumped["sessions"], svc.now())
+    if dumped["screen"]["maxList"] > MAX_LIST:
+        raise ReplayProblem(f"A day list holds at most {MAX_LIST} names", path="screen.maxList")
     resolved = _resolve_filters(db, user_id, dumped["screen"]["filters"])
     for row, spec, _ in resolved:
         need = screen.earliest_list_at(spec)
@@ -575,7 +581,7 @@ def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, stor
         minutes_of=screen.minutes_loader(svc.history, store, day),
         day=day,
         list_at=list_at,
-        max_list=spec["screen"]["maxList"],
+        max_list=min(spec["screen"]["maxList"], MAX_LIST),
     )
     states = earnings_states(svc.sources, [c["symbol"] for c in built.candidates], day, now)
     for candidate in built.candidates:
@@ -585,7 +591,7 @@ def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, stor
         "screen": {
             "filters": [{"id": f.id, "version_id": f.version_id, "name": f.name} for f in filters],
             "listAt": spec["screen"]["listAt"],
-            "maxList": spec["screen"]["maxList"],
+            "maxList": min(spec["screen"]["maxList"], MAX_LIST),
         },
         "list_at": list_at.to_pydatetime(),
         "data_through": built.data_through.to_pydatetime(),
@@ -1264,7 +1270,7 @@ def _run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> Repla
         {item["id"]: item["version_id"] for item in row.screen["filters"]},
     )
     progress = _Progress(db, svc, row.id, row.rescan_job, len({s for item in filters for s in item.symbols}))
-    day, max_list, prior = row.day, row.screen["maxList"], {c["symbol"]: c for c in row.candidates}
+    day, max_list, prior = row.day, min(row.screen["maxList"], MAX_LIST), {c["symbol"]: c for c in row.candidates}
     built = build_list(
         filters=filters,
         daily_of=progress.counting(screen.asof_loader(svc.history, store, day)),
@@ -1303,6 +1309,7 @@ def _run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> Repla
         for c in row.candidates
         if c["symbol"] in holding and c["symbol"] not in matched
     ]
+    built.candidates = _fit_list(built.candidates, holding, len(held))
     last = _latest_scan(db, row.id)
     universe = jsonable(
         {
@@ -1340,6 +1347,22 @@ def _run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> Repla
     row.updated_at = now
     db.commit()
     return scan
+
+
+def _fit_list(candidates: list[dict[str, Any]], holding: set[str], held: int) -> list[dict[str, Any]]:
+    """The re-scan's matches with room left for the names she holds that it no longer matches: a day list never exceeds
+    `MAX_LIST` names, so the lowest-ranked matches she does not hold make way, and the rest are numbered again."""
+    extra = len(candidates) + held - MAX_LIST
+    if extra <= 0:
+        return candidates
+    kept = []
+    for candidate in reversed(candidates):
+        if extra > 0 and candidate["symbol"] not in holding:
+            extra -= 1
+            continue
+        kept.append(candidate)
+    kept.reverse()
+    return [{**candidate, "rank": rank} for rank, candidate in enumerate(kept, start=1)]
 
 
 def _scan_out(scan: ReplayDayScan) -> dict[str, Any]:
@@ -1409,6 +1432,10 @@ def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc:
         raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
     if symbol not in {c["symbol"] for c in row.candidates}:
         raise ReplayProblem(f"{symbol} is not on today's list", path="symbol")
+    opened = {s.symbol for s in _sessions_of(db, row.id)}
+    # defence in depth: a list never holds more than MAX_LIST names, so a day never opens more
+    if symbol not in opened and len(opened) >= MAX_LIST:
+        raise ReplayProblem(f"A day holds at most {MAX_LIST} names · this one is full", path="symbol", status=409)
     plan = db.get(PracticePlan, row.plan_id)
     assert plan is not None
     thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
