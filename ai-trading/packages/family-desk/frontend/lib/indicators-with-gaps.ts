@@ -52,7 +52,7 @@ export function calcMACDWithGaps(values: NullableValues) {
   return { dif, signal, histogram };
 }
 
-export type NullableVwapBar = { t: string; h: number | null; l: number | null; c: number | null; v: number | null };
+export type NullableVwapBar = { t: string; h: number | null; l: number | null; c: number | null; v: number | null; ext?: boolean };
 
 /**
  * VWAP over bars that may have gaps. A gap bar reads as unknown and contributes nothing; it does not
@@ -61,12 +61,12 @@ export type NullableVwapBar = { t: string; h: number | null; l: number | null; c
 export function calcVWAPWithGaps(bars: NullableVwapBar[]): NullableValues {
   const output = new Array<number | null>(bars.length).fill(null);
   const known: number[] = [];
-  const complete: Array<{ t: string; h: number; l: number; c: number; v: number }> = [];
+  const complete: Array<{ t: string; h: number; l: number; c: number; v: number; ext?: boolean }> = [];
   bars.forEach((bar, index) => {
     const { h, l, c, v } = bar;
     if (h === null || l === null || c === null || v === null || ![h, l, c, v].every(Number.isFinite)) return;
     known.push(index);
-    complete.push({ t: bar.t, h, l, c, v });
+    complete.push({ t: bar.t, h, l, c, v, ext: bar.ext });
   });
   calcVWAP(complete).forEach((value, position) => {
     output[known[position]!] = value !== null && Number.isFinite(value) ? value : null;

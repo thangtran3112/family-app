@@ -154,12 +154,15 @@ test.describe("Practice", () => {
     // D-043: the replay has its own status line, not the live-quotes one.
     await expect(page.getByLabel("Status")).toContainText("Prices: Alpaca SIP · replay");
     await expect(page.getByLabel("Status")).not.toContainText("Alerts start when live quotes are connected");
+    // Owner, 2026-11-01: the tape sits under the indicators in the left rail at both bands, whether or not play ever opened a drawer.
+    await expect(page.getByRole("complementary", { name: "Practice side panel" }).getByTestId("tape-panel").getByRole("table", { name: "Time and sales" })).toBeVisible();
     // D-020: at the 1180 band each tab opens its own drawer; one never closes another.
     if (test.info().project.name === "desktop-1180") {
       const tabs = page.getByRole("tablist", { name: "Replay context" });
-      await expect(tabs.getByRole("tab", { name: "Tape" })).toHaveAttribute("aria-selected", "true"); // opened by play
+      await expect(tabs.getByRole("tab")).toHaveText(["Practice", "Signals"]);
+      await tabs.getByRole("tab", { name: "Signals" }).click();
       await tabs.getByRole("tab", { name: "Practice" }).click();
-      await expect(tabs.getByRole("tab", { name: "Tape" })).toHaveAttribute("aria-selected", "true");
+      await expect(tabs.getByRole("tab", { name: "Signals" })).toHaveAttribute("aria-selected", "true");
       await expect(tabs.getByRole("tab", { name: "Practice" })).toHaveAttribute("aria-selected", "true");
     }
 
@@ -881,41 +884,32 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
   });
 
-  test("the portfolio reflects a new held position, in the replay and on the Portfolio tab, never on the day list", async ({ page, context }) => {
+  test("the portfolio reflects a new held position on the Portfolio tab only, never in the chart view or on the day list", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     await openFirstDay(page);
     const dayUrl = page.url();
-    const portfolioOf = async () =>
-      test.info().project.name === "desktop-1180"
-        ? (async () => {
-            const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
-            if (!(await drawer.isVisible())) await page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-            return drawer;
-          })()
-        : page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
+    const portfolioRegion = page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
     await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: /TSLA/ }).getByText("TSLA", { exact: true }).click();
     await page.waitForURL(SESSION_URL);
     await stepBar(page);
-    const flat = await portfolioOf();
-    await expect(flat.locator('[data-symbol="TSLA"]')).toContainText("Flat");
+    // Owner, 2026-11-01: the chart view shows no portfolio, before or after a trade, in the left rail or in a 1180 drawer.
     await placeOrder(page, "Buy");
-    await expect(flat.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
-    await expect(flat.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
-    await expect(flat.getByTestId("portfolio-count")).toHaveText("1 open position");
-    const held = ((await flat.locator('[data-symbol="TSLA"]').textContent()) ?? "").match(/Long \d+ @ \$[\d,.]+/)![0];
+    await expect(page.getByRole("tab", { name: "Marks" })).toBeVisible();
+    await expect(portfolioRegion).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Practice side panel" })).not.toContainText(PRACTICE_COPY.dayPortfolio);
+    await expect(page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
     // Back to the day list: it shows the list of names only, no portfolio section and no Portfolio tab in the right rail.
     await backToDayList(page);
     await page.waitForURL(dayUrl);
-    await expect(page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
+    await expect(portfolioRegion).toHaveCount(0);
     await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
-    // The Portfolio subtab holds the same row and a day total.
+    // The Portfolio tab holds the row and a day total.
     await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: "Portfolio", exact: true }).click();
     await page.waitForURL(/\/practice\/thread\?id=\d+&tab=portfolio/);
-    const onTab = page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-    await expect(onTab.locator('[data-symbol="TSLA"]')).toContainText(held);
-    await expect(onTab.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
-    await expect(onTab.getByTestId("portfolio-count")).toHaveText("1 open position");
+    await expect(portfolioRegion.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$[\d,.]+/);
+    await expect(portfolioRegion.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.dayPortfolioTotal);
+    await expect(portfolioRegion.getByTestId("portfolio-count")).toHaveText("1 open position");
   });
 
   test("no star or names cap anywhere on the day page", async ({ page, context }) => {

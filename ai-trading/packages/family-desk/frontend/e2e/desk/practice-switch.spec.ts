@@ -24,13 +24,21 @@ async function marks(page: Page) {
   return page.getByRole("tabpanel");
 }
 
-/** The day's portfolio in the replay: the left rail at 1440, the right drawer's "Portfolio" tab at 1180. */
+/** The day's portfolio is the Portfolio tab's, never the chart view's (owner, 2026-11-01): open the tab from a chart and read it there. */
 async function portfolioPanel(page: Page) {
-  if (test.info().project.name !== "desktop-1180") return page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
-  const drawer = page.getByRole("dialog", { name: PRACTICE_COPY.dayPortfolio });
-  if (!(await drawer.isVisible())) await page.getByRole("tablist", { name: "Replay context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio }).click();
-  await expect(drawer).toBeVisible();
-  return drawer;
+  const region = page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true });
+  await expect(region, "a chart shows no portfolio").toHaveCount(0);
+  await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: "Portfolio", exact: true }).click();
+  await page.waitForURL(/\/practice\/thread\?id=\d+&tab=portfolio/);
+  await expect(region).toBeVisible();
+  return region;
+}
+
+/** From the Portfolio tab back onto a name's chart, through its row (the tab's way into a chart). */
+async function openFromPortfolio(page: Page, symbol: string) {
+  await page.getByRole("region", { name: PRACTICE_COPY.dayPortfolio, exact: true }).getByRole("button", { name: `Switch to ${symbol}` }).click();
+  await page.waitForURL(SESSION_URL);
+  await expect(page.getByRole("heading", { name: symbol, level: 1 })).toBeVisible();
 }
 
 /** The Desk "recorded" these mornings' universes (`universe_days`); the e2e server writes the rows the premarket pass would. */
@@ -85,10 +93,10 @@ test.describe("Practice: switching names", () => {
     await placeOrder(page, "Buy");
     await expect(await marks(page)).toContainText("Practice buy");
 
-    // The portfolio shows it: TSLA is on now and Long.
+    // The Portfolio tab shows it (the chart itself shows none): TSLA is Long. Its row leads back onto the chart.
     let portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(/Long \d+ @ \$/);
-    await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayOnNow);
+    await openFromPortfolio(page, "TSLA");
 
     // Exit TSLA here; the next section opens LRCX at the clock TSLA reached. Holding several names at once has its own test below.
     await placeOrder(page, "Close position");
@@ -115,18 +123,17 @@ test.describe("Practice: switching names", () => {
     const tslaRow = portfolio.getByRole("button", { name: "Switch to TSLA" });
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText(/Close LRCX first/);
+    await openFromPortfolio(page, "LRCX");
     await placeOrder(page, "Close position");
+    portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="LRCX"]')).toContainText("Flat");
     await expect(tslaRow).not.toHaveAttribute("aria-disabled", "true");
 
     // TSLA stayed at 9:33 while the clock moved on: its row says it is behind. Switching to it lifts it to the day clock (the
     // server adds the away span), so it can be marked at once.
-    portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText(PRACTICE_COPY.dayBehind);
     await expect(portfolio.locator("li")).toHaveCount(2);
-    await portfolio.getByRole("button", { name: "Switch to TSLA" }).click();
-    await page.waitForURL(SESSION_URL);
-    await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
+    await openFromPortfolio(page, "TSLA");
     await expect(playhead(page)).toHaveText(clock);
     await expect(page.getByTestId("behind-clock")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Buy", exact: true }).first()).toBeEnabled();
@@ -280,7 +287,7 @@ test.describe("Practice: switching names", () => {
     await expect(playhead(page)).toContainText("9:35");
 
     // The Portfolio holds both names, each with its side, and its footer says how many are open and the combined total.
-    let portfolio = await portfolioPanel(page);
+    const portfolio = await portfolioPanel(page);
     const tsla = portfolio.locator('[data-symbol="TSLA"]');
     const lrcx = portfolio.locator('[data-symbol="LRCX"]');
     await expect(tsla).toContainText(/Long \d+ @ \$/);
@@ -325,18 +332,16 @@ test.describe("Practice: switching names", () => {
     await expect(todayOpen).toContainText("2 open");
     expect(amounts(await todayOpen.textContent())[0]).toBeCloseTo(open!, 2);
     await expect(page.getByRole("region", { name: "Practice day" }).getByText(PRACTICE_COPY.threadSimulated)).toBeVisible();
-    await page.goBack();
-    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
-    portfolio = await portfolioPanel(page);
+    await page.goBack(); // the Portfolio tab again
+    await expect(portfolio).toBeVisible();
 
-    // Exit TSLA without leaving LRCX's chart: the row goes flat, books its trade, and one trade is left open.
+    // Exit TSLA from its row: it goes flat, books its trade, and one trade is left open. LRCX's chart opens from its row, still held.
     await portfolio.locator('[data-symbol="TSLA"]').getByRole("button", { name: "Exit TSLA" }).click();
-    portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("1 trade");
     await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
     await expect(portfolio.getByTestId("portfolio-count")).toHaveText("1 open position");
-    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
+    await openFromPortfolio(page, "LRCX");
 
     // The Summary asks before it exits what is still open, and names it.
     await page.getByRole("tab", { name: "Summary" }).click();
@@ -381,8 +386,8 @@ test.describe("Practice: switching names", () => {
     await expect(toast).toBeVisible();
     await expect(toast.getByRole("button", { name: "Exit TSLA" })).toBeVisible();
 
-    // TSLA opened after LRCX, but a crossed stop comes first.
-    let portfolio = await portfolioPanel(page);
+    // On the Portfolio tab, TSLA opened after LRCX, but a crossed stop comes first.
+    const portfolio = await portfolioPanel(page);
     const rows = portfolio.locator("li[data-symbol]");
     await expect(rows).toHaveCount(2);
     await expect(rows.first()).toHaveAttribute("data-symbol", "TSLA");
@@ -390,13 +395,12 @@ test.describe("Practice: switching names", () => {
     await expect(rows.last()).toHaveAttribute("data-symbol", "LRCX");
     await expect(rows.last()).not.toContainText("Stop crossed");
 
-    // Exit from the row: she stays on LRCX, TSLA goes flat, and the pause is answered.
+    // Exit from the row: TSLA goes flat, and LRCX's chart opens with no pause left to answer.
     await rows.first().getByRole("button", { name: "Exit TSLA" }).click();
-    portfolio = await portfolioPanel(page);
     await expect(portfolio.locator('[data-symbol="TSLA"]')).toContainText("Flat");
     await expect(portfolio.locator('[data-symbol="TSLA"]')).not.toContainText("Stop crossed");
     await expect(portfolio.getByTestId("portfolio-total")).toContainText("1 open");
-    await expect(page.getByRole("heading", { name: "LRCX", level: 1 })).toBeVisible();
+    await openFromPortfolio(page, "LRCX");
     await expect(toast).toHaveCount(0);
     await expectCleanScreen(page);
   });

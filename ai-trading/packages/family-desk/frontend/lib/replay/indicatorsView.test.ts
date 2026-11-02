@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { Bars } from "../api/schemas.ts";
 import { indicatorGroups, rsiState } from "./indicatorsView.ts";
@@ -52,4 +53,40 @@ test("RSI is a state only at the 70 and 30 lines", () => {
   assert.equal(rsiState(30).state, "Oversold");
   assert.equal(rsiState(30.1).state, "Neutral");
   assert.equal(rsiState(null).state, "Warming up");
+});
+
+// The left rail on REAL TSLA bars (Alpaca SIP, the shared golden fixture `contracts/fixtures/indicator-golden-v1`). The daily
+// numbers are TA-Lib's at the last bar (RSI 55.3117, MACD 6.3644 / 5.2864 / 1.0780, EMA 9 371.6967, EMA 21 365.1723).
+// The minute numbers are the backend's `core/indicators.py` on the same 150 closes (RSI 61.936, MACD 0.1508 / -0.1831 /
+// 0.3338, EMA 9 370.6293, EMA 21 370.2604) and the independent session-VWAP loop (373.1022): one number on the chart, in
+// the rail and in the API.
+const golden = JSON.parse(readFileSync(new URL("../../../contracts/fixtures/indicator-golden-v1/golden.json", import.meta.url), "utf8")) as {
+  daily: { rows: [string, number, number, number][] };
+  minutes: { rows: [string, number, number, number, number, string][] };
+};
+const valuesOf = (groups: ReturnType<typeof indicatorGroups>) => Object.fromEntries(groups.flatMap((group) => group.rows).map((item) => [item.id, [item.value, item.state]]));
+
+test("the rail on 300 real TSLA daily bars reads TA-Lib's numbers", () => {
+  const bars: Bars["bars"] = golden.daily.rows.map(([t, h, l, c]) => ({ t, o: c, h, l, c, v: 1_000_000, ext: false }));
+  assert.deepEqual(valuesOf(indicatorGroups(bars, "1d")), {
+    rsi: ["55.3", "Neutral"],
+    macd: ["+6.36", "Bullish"],
+    "macd-signal": ["+5.29", ""],
+    "macd-histogram": ["+1.08", ""],
+    ema9: ["371.70", "Price above"],
+    ema21: ["365.17", "Price above"],
+  });
+});
+
+test("the rail on 150 real TSLA minute bars reads the session VWAP of the regular session only, and the backend's numbers", () => {
+  const bars: Bars["bars"] = golden.minutes.rows.map(([t, h, l, c, v, phase]) => ({ t, o: c, h, l, c, v, ext: phase !== "regular" }));
+  assert.deepEqual(valuesOf(indicatorGroups(bars, "1m")), {
+    rsi: ["61.9", "Neutral"],
+    macd: ["+0.15", "Bullish"],
+    "macd-signal": ["−0.18", ""],
+    "macd-histogram": ["+0.33", ""],
+    vwap: ["373.10", "Price below"],
+    ema9: ["370.63", "Price above"],
+    ema21: ["370.26", "Price above"],
+  });
 });
