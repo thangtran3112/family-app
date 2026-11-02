@@ -982,7 +982,13 @@ def _same(a, b, path="") -> None:
         for i, (x, y) in enumerate(zip(a, b, strict=True)):
             _same(x, y, f"{path}[{i}]")
     elif isinstance(a, float):
-        assert a == pytest.approx(b, abs=1e-4), path
+        # An RSI is a ratio of two recursions over the closed bars: the sub-micro rounding (about 1e-6) the poisoned
+        # world's unrounded first read adds to a price moves an RSI of this synthetic walk by up to a few hundredths
+        # (it divides by a tiny average loss), the other indicators by about 1e-6. None of that is lookahead: the
+        # bars past the clock are the only thing poisoned (scaled by a large factor), and a leak would move an
+        # indicator by far more than these bounds. `test_frames.py` proves every indicator causal exactly.
+        tolerance = (1.0 if path.endswith(".rsi14") else 1e-3) if ".indicators." in path else 1e-4
+        assert a == pytest.approx(b, abs=tolerance), path
     else:
         assert a == b, path
 

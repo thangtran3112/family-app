@@ -3,14 +3,14 @@ shared per-symbol metric row. `Freshness` and `MarketSession` are the same liter
 computes, so the API can never return a value the core does not produce."""
 
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from ai_trading_common.quality import Quality
 from pydantic import BaseModel, FiniteFloat, SerializerFunctionWrapHandler, model_serializer
 
 from ai_trading.core.freshness import Freshness, MarketSession
 
-__all__ = ["Freshness", "MarketSession", "Metrics", "Problem", "ProblemsOut", "Stamp", "SwingOptional"]
+__all__ = ["Freshness", "MarketOut", "MarketSession", "Metrics", "Problem", "ProblemsOut", "Stamp", "SwingOptional"]
 
 
 class SwingOptional(BaseModel):
@@ -27,6 +27,17 @@ class SwingOptional(BaseModel):
             if data.get(name) is None:
                 data.pop(name, None)
         return data
+
+
+class MarketOut(BaseModel):
+    """The exchange's state at the thread time (a day thread's payloads): `phase`, when the day's tape ends, when the
+    last bar of the name closed (null where the payload names no single name), and when the next trading day's data
+    starts (null on the plan's last day). After `tape_end` the day has no bars: nothing is filled across the gap."""
+
+    phase: Literal["premarket", "regular", "after_hours", "closed"]
+    tape_end: datetime
+    last_bar_at: datetime | None
+    next_open_at: datetime | None
 
 
 class Stamp(BaseModel):

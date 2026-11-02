@@ -520,7 +520,6 @@ def test_sessions_list_has_the_resume_and_recent_fields(replay: TestClient) -> N
         "day": "2026-09-25",
         "attempt": 1,
         "status": "active",
-        "hide_date": "no",
         "revealed_through": iso(300),
         "window_end": iso(CLOSE),
         "trades": 1,

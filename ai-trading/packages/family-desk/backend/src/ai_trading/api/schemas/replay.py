@@ -13,7 +13,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer, model_validator
 
-from ai_trading.api.schemas.common import Stamp, SwingOptional
+from ai_trading.api.schemas.common import MarketOut, Stamp, SwingOptional
 from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
 from ai_trading.contracts.practice_block import PracticeBlockV1
 from ai_trading.contracts.replay_session import ReplaySessionV1
@@ -351,7 +351,6 @@ class ReplaySessionSummaryOut(BaseModel):
     day: date
     attempt: int
     status: SessionStatus
-    hide_date: Literal["yes", "no"]
     revealed_through: datetime
     window_end: datetime
     trades: int
@@ -454,6 +453,29 @@ class LastPrintOut(BaseModel):
     age_s: int  # seconds from this print to the playhead; a mark priced off an old print carries a warning
 
 
+class IndicatorRowOut(BaseModel):
+    """The indicators of one bar (`t` is its open), computed on the server from the same cut as the bars, the price and
+    the forming candle. A value that has not warmed up is null, never filled."""
+
+    t: datetime
+    ema9: FiniteFloat | None
+    ema21: FiniteFloat | None
+    vwap: FiniteFloat | None  # the session VWAP as of the last minute inside the bar (regular session only)
+    rsi14: FiniteFloat | None
+    macd: FiniteFloat | None
+    macd_signal: FiniteFloat | None
+    macd_hist: FiniteFloat | None
+
+
+class IndicatorsOut(BaseModel):
+    """`rows` are the indicators of the bars this payload carries (an advance: the new bars; a feed: every returned bar)
+    and then of the forming candle, whose close is the price. `as_of_bar` is the open of the last bar included."""
+
+    interval: Interval
+    as_of_bar: datetime | None
+    rows: list[IndicatorRowOut]
+
+
 class AdvanceOut(SwingOptional):
     """What the playhead revealed in `(previous, revealed_through]`: display-interval bars that closed inside
     it, the forming bar, the prints (size-filtered, capped), the would-fire signals whose bar closed inside it,
@@ -462,11 +484,20 @@ class AdvanceOut(SwingOptional):
     swing_only: ClassVar[tuple[str, ...]] = ("paused", "strip", "daily_forming", "fills", "thread_clock")
 
     revealed_through: datetime
-    day_clock: datetime | None  # the day list's shared clock; null for a standalone session
+    # The thread's one instant T (a day-thread session only; null for a standalone or swing session): the thread clock
+    # after it was settled for this request, NOT capped at the tape end and never extrapolated by the server. Every
+    # payload of the thread carries the same T for the same moment; the UI labels its numbers with it.
+    thread_time: datetime | None = None
+    # How far this payload's data runs: `min(thread_time, tape_end)` for an open day-thread session; equal to
+    # `revealed_through` for every other session.
+    data_through: datetime
+    market: MarketOut | None = None  # a day-thread session only: the phase at `thread_time` and the day's tape end
+    day_clock: datetime | None  # the day list's clock capped at this name's tape end; null for a standalone session
     behind_clock: bool  # this name's playhead is behind the day clock (the feed of a name she left)
     at_end: bool
     bars: list[ReplayBarOut]
     forming: FormingBarOut | None
+    indicators: IndicatorsOut | None = None  # EMA 9 and 21, VWAP, RSI 14 and MACD of the bars above and the forming one
     prints: PrintsOut
     signals: list[ReplaySignalOut]
     levels: ReplayLevelsOut
@@ -864,14 +895,13 @@ class DayJournalOut(BaseModel):
 class ReviewRowOut(BaseModel):
     symbol: str
     list_price: FiniteFloat
-    window_end_price: FiniteFloat | None
-    move_pct: FiniteFloat | None
+    move_pct: FiniteFloat | None  # from the list price to the yardstick (the regular close: `window_end`)
     close_price: FiniteFloat | None
     close_move_pct: FiniteFloat | None
     high_pct: FiniteFloat | None
     low_pct: FiniteFloat | None
     range_pct: FiniteFloat | None
-    rank: int | None  # 1 = the biggest gain from the list price to the window end; a loss ranks below every gain
+    rank: int | None  # 1 = the biggest gain from the list price to the regular close; a loss ranks below every gain
     picked: StarKind | None
 
 
@@ -891,12 +921,12 @@ class SelectionOut(BaseModel):
 
 
 class ReviewOut(BaseModel):
-    """Every candidate's move from its list price to the window end and the close, ranked by the signed move to the
-    window end, biggest gain first. Only present once the day ended. `day` is the finished day's date: the screen
-    hid it during the day when `dates_hidden`, and shows it here with a line saying so (D-029)."""
+    """Every candidate's move from its list price to the regular close, ranked by the signed move, biggest gain
+    first. `window_end` is the yardstick the moves were measured to (the regular close; a day ended earlier keeps its
+    own). Only present once the day ended. `day` is the finished day's date, always shown
+    (a plan's `hideDates` is accepted and ignored)."""
 
     day: date
-    dates_hidden: bool
     window_end: datetime
     of: int  # candidates with a move
     rows: list[ReviewRowOut]
@@ -942,6 +972,8 @@ class DayListOut(BaseModel):
     candidates: list[CandidateOut]
     watch: list[StarOut]
     clock: datetime | None
+    thread_time: datetime | None = None  # the thread's one instant T (the clock, after it was settled); null once ended
+    market: MarketOut | None = None  # the phase at `thread_time`; `last_bar_at` is null here (a name's frame names it)
     sessions: list[DaySessionOut]
     held_elsewhere: list[HeldElsewhereOut]
     day_pnl: DayPnlOut

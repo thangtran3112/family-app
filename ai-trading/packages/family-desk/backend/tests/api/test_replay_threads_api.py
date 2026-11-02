@@ -520,3 +520,26 @@ def test_a_thread_is_deleted_with_its_days_and_ledger_once_no_day_is_open(world,
     assert client.delete(f"{BASE}/threads/{closed}", headers=auth_headers()).status_code == 204
     assert client.delete(f"{BASE}/threads/{keep}", headers=auth_headers()).status_code == 204
     assert client.get(f"{BASE}/threads", headers=auth_headers()).json() == []
+
+
+# -- the day-trade slots (owner rule, 2026-11-02): at most 10 active day threads across all users --------------------
+
+
+def test_the_capacity_route_counts_the_slots_and_the_eleventh_create_is_a_409_on_mode(world) -> None:
+    client, _, _ = world
+    assert client.get(f"{BASE}/threads/capacity", headers=auth_headers()).json() == {"day_active": 0, "day_max": 10}
+    for taken in range(1, 11):
+        assert _create(client).status_code == 200
+        assert client.get(f"{BASE}/threads/capacity", headers=auth_headers()).json()["day_active"] == taken
+    refused = _create(client)
+    assert refused.status_code == 409
+    assert _problems(refused) == [
+        {"path": "mode", "message": "All 10 day-trade slots are in use · close a day thread to start another"}
+    ]
+    body = {"schemaVersion": 1, "mode": "swing", "plan": PLAN, "swing": SWING}
+    swing = client.post(f"{BASE}/threads", json=body, headers=auth_headers())
+    assert swing.status_code != 409 or "day-trade slots" not in swing.text  # swing is uncapped: its own rules apply
+    first = client.get(f"{BASE}/threads", headers=auth_headers()).json()[0]["thread"]["id"]
+    assert client.post(f"{BASE}/threads/{first}/close", headers=auth_headers()).status_code == 200
+    assert client.get(f"{BASE}/threads/capacity", headers=auth_headers()).json()["day_active"] == 9
+    assert _create(client).status_code == 200  # the freed slot

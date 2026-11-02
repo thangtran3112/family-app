@@ -458,7 +458,7 @@ def test_a_swing_day_takes_several_names_and_ends_with_its_summary(world, db_ses
     assert first != second  # a swing day allows several names on its shared clock
     started = client.get(f"{BASE}/sessions/{first}", headers=auth_headers())
     session = ReplaySessionOut.model_validate(started.json())
-    assert session.tape_feed == "off" and session.spec.hideDate == "yes" and session.thread is not None
+    assert session.tape_feed == "off" and session.spec.hideDate == "no" and session.thread is not None
     assert session.thread.mode == "swing" and session.thread.equity_usd == 50_000
     assert session.open_trade is None and session.journal.adherence.hint == "Scored weekly"
 

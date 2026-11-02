@@ -152,10 +152,10 @@ def test_the_day_list_is_spoiler_free_stars_and_ends_into_the_review(daily, db_s
     ended = client.post(f"{BASE}/day-lists/{list_id}/end", headers=auth_headers())
     assert ended.status_code == 200
     review = ended.json()["review"]
-    assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == 3.77
+    assert review["rows"][0]["symbol"] == "GAPPER" and review["rows"][0]["move_pct"] == -5.66  # to the regular close
     assert review["selection"]["picks"][0]["kind"] == "traded"
-    assert review["selection"]["median_move_pct"] == 3.77 and review["selection"]["picks_avg_move_pct"] == 3.77
-    assert review["day"] == "2026-09-28" and review["dates_hidden"] is True  # the finished day shows its date (D-029)
+    assert review["selection"]["median_move_pct"] == -5.66 and review["selection"]["picks_avg_move_pct"] == -5.66
+    assert review["day"] == "2026-09-28" and "dates_hidden" not in review  # a date is always shown (hideDates ignored)
     journal = ended.json()["journal"]
     assert journal["trades"] == 1 and ended.json()["status"] == "ended"
     (line,) = journal["lines"]  # a scratch: entered and exited at 110.00 (D-032)
@@ -307,7 +307,10 @@ def test_switching_names_over_the_routes_with_no_names_cap(daily, db_session) ->
     behind = client.get(f"{BASE}/sessions/{gapper['id']}", headers=auth_headers()).json()
     assert behind["behind_clock"] is True and behind["revealed_through"] == at("10:00")
     feed = client.get(f"{BASE}/sessions/{gapper['id']}/feed", headers=auth_headers()).json()
-    assert feed["behind_clock"] is True and feed["revealed_through"] == at("10:00")
+    # The feed of an open day-thread name is read at the thread's time (10:30), not at the stored playhead (10:00, which
+    # the session read above still reports and which stays the write gate: the name is behind the clock).
+    assert feed["behind_clock"] is True
+    assert feed["revealed_through"] == at("10:30") and feed["thread_time"] == at("10:30")
     refused = client.post(
         f"{BASE}/sessions/{gapper['id']}/marks", json={"schemaVersion": 1, "kind": "long_entry"}, headers=auth_headers()
     )
@@ -508,3 +511,36 @@ def test_the_poll_of_a_stranded_prep_starts_it_again_once(daily, db_session, mon
     assert started == [plan.id]
     client.get(f"{BASE}/daily?threadId={thread_id}", headers=auth_headers())
     assert started == [plan.id]  # the claim moved updated_at: the next poll sees a live prep
+
+
+def test_opening_a_day_and_switching_the_chart_interval_start_a_background_warm(daily, db_session, monkeypatch) -> None:
+    """A7: the day's names are prepared after the response (never in it): when a day opens, and for a new interval when
+    a day session's chart switches to it. The warm runs on the existing detached-task pool."""
+    client, services, _ = daily
+    started: list[tuple] = []
+    monkeypatch.setattr(replay_api, "_detach", lambda task, *args: started.append((task.__name__, *args[2:])))
+    opened = _start_plan(daily, db_session)
+    plan_mod.run_prep(db_session, services, db_session.execute(select(PracticePlan.id)).scalar_one())
+    day = client.post(f"{BASE}/daily/next", json={}, headers=auth_headers()).json()["day_list_id"]
+    assert ("_warm_in_background", day, None) in started, started
+    assert opened["day_list_id"] is None or ("_warm_in_background", opened["day_list_id"], None) in started
+    session_id = client.post(
+        f"{BASE}/day-lists/{day}/sessions", json={"symbol": "GAPPER"}, headers=auth_headers()
+    ).json()["id"]
+    started.clear()
+    client.get(f"{BASE}/sessions/{session_id}/feed", headers=auth_headers())  # no interval asked: nothing to warm
+    assert started == []
+    client.get(f"{BASE}/sessions/{session_id}/feed?interval=1m", headers=auth_headers())
+    assert started == [("_warm_in_background", day, "1m")], started
+
+
+def test_no_response_schema_carries_a_hide_flag_and_the_request_contracts_still_accept_one() -> None:
+    """A8: `hide_date` and `dates_hidden` are gone from the responses (a date is always shown); `hideDates` and
+    `hideDate` stay in the stored specs and the request contracts, accepted and ignored."""
+    schemas = app.openapi()["components"]["schemas"]
+    assert "hide_date" not in schemas["ReplaySessionSummaryOut"]["properties"]
+    assert "dates_hidden" not in schemas["ReviewOut"]["properties"]
+    from ai_trading.contracts.practice_block import PracticeBlockV1
+    from ai_trading.contracts.replay_session import ReplaySessionV1
+
+    assert "hideDates" in PracticeBlockV1.model_fields and "hideDate" in ReplaySessionV1.model_fields
