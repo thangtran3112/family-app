@@ -590,7 +590,7 @@ def earnings_chips(sources: Any, symbols: Sequence[str], day: date, now: Any) ->
     """`{symbol: {"in_sessions": n, "timing": "before open" | "after close"}}` for the symbols with an explicit report
     date AND an explicit timing within the next `EARNINGS_SESSIONS` sessions (0 is `day` itself). The calendar is
     published weeks ahead, so this is known on the morning; a gap-derived guess is never shown (02p a3 rule 9). Budgeted
-    like `plan.earnings_flags`: a provider failure or a slow chain leaves a symbol without a chip."""
+    like `plan.earnings_states`: a provider failure or a slow chain leaves a symbol without a chip."""
     if sources is None:
         return {}
     ahead = {d: n for n, d in enumerate(plan_mod.plan_days(day, EARNINGS_SESSIONS + 1))}

@@ -409,6 +409,55 @@ def test_reported_before_the_open_flags_pre_and_prior_post_but_not_same_day_post
     assert screen.reported_before_open([(DAY, "")], DAY) is False  # no time of day: never guessed from the gap
 
 
+def test_earnings_states_tell_a_checked_none_from_a_name_that_was_not_checked() -> None:
+    from types import SimpleNamespace
+
+    from ai_trading_common.errors import NoData
+
+    from ai_trading.api.schemas.replay import CandidateOut
+    from ai_trading.replay.plan import earnings_states
+
+    history = {
+        "REPORTED": [(DAY, "pre-market")],
+        "QUIET": [(date(2026, 6, 1), "pre-market")],  # a history was read, no report near the day
+        "UNTIMED": [(DAY, "")],  # a history was read; an undated time is never guessed
+    }
+
+    class Provider:
+        def earnings_results(self, symbol, now):
+            if symbol not in history:
+                raise NoData(symbol)
+            return [SimpleNamespace(report_date=day, report_time=timing) for day, timing in history[symbol]]
+
+    sources = SimpleNamespace(earnings=SimpleNamespace(providers=[Provider()]))
+    states = earnings_states(
+        sources, ["REPORTED", "QUIET", "UNTIMED", "NOHISTORY"], DAY, pd.Timestamp("2026-10-01", tz="UTC")
+    )
+    assert states == {
+        "REPORTED": "reported",
+        "QUIET": "none",
+        "UNTIMED": "none",
+    }  # NOHISTORY is absent: unknown, not none
+    assert earnings_states(None, ["REPORTED"], DAY, pd.Timestamp("2026-10-01", tz="UTC")) == {}
+
+    # a list stored before the state existed has the positive flag only: reported stays, the rest is unknown
+    base = {
+        "rank": 1,
+        "symbol": "X",
+        "filters": [],
+        "rank_value": None,
+        "matched_since": "2026-09-25T12:00:00Z",
+        "operands": {},
+        "list_price": 1.0,
+        "price_at": "2026-09-25T12:00:00Z",
+        "prior_close": None,
+        "metrics": {},
+    }
+    assert CandidateOut.model_validate({**base, "reported_before_open": True}).earnings_state == "reported"
+    assert CandidateOut.model_validate({**base, "reported_before_open": False}).earnings_state is None
+    assert CandidateOut.model_validate({**base, "earnings_state": "none"}).earnings_state == "none"
+
+
 def test_reported_before_the_open_ignores_ancient_events_outside_the_calendar() -> None:
     # Providers return full histories: a first-ever report dated before the XNYS calendar's first session
     # (2015-01-02) must not crash the whole day-open with DateOutOfBounds.

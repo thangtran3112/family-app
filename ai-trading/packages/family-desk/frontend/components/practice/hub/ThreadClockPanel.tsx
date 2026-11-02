@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
-import { formatEtClock } from "@/lib/desk/format";
+import { formatEtClock, formatEtTime } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { whenReady } from "@/lib/desk/patience";
 import { endDay } from "@/lib/desk/replay";
@@ -17,7 +17,7 @@ import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
 import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
-import { clockControls, clockProgress, clockStateText, pauseText, skippedText, type SkipDay } from "@/lib/replay/threadClock";
+import { clockControls, clockProgress, clockStateText, focusProgress, skippedText, type SkipDay } from "@/lib/replay/threadClock";
 import { formatBalance, formatDayResult } from "@/lib/replay/threadView";
 import type { ThreadClockApi } from "@/lib/replay/useThreadClock";
 import styles from "./landing.module.css";
@@ -27,7 +27,8 @@ import o from "./overview.module.css";
  * The day thread's clock and its controls, on the Summary and nowhere else (ADR-0018): Play or Pause, Step, speed, Jump, Skip day and End day for
  * the whole thread. Both ways of finishing the day are here (the Day list has none): Skip day runs to the close and opens the next day; End day
  * stops at the clock, exits what is open at that price and opens the day's review. The time is the server's. It keeps running when this page is closed or she signs out; this panel only asks
- * for changes and shows the answer (polled every two seconds). The simulated account beside it is priced at that clock.
+ * for changes and shows the answer (polled every two seconds). Only Pause, the speed and Skip day change how time moves: the market's close rolls
+ * the day over by itself, and the plan's practice window is a mark on the track, not a stop. The simulated account beside it is priced at that clock.
  */
 export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSkipped: (result: SkipDay) => void }) {
   const { clock, shown } = api;
@@ -53,7 +54,7 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
   }
   const can = clockControls(clock);
   const running = clock.state === "running";
-  const pause = pauseText(clock.pause);
+  const focus = focusProgress(clock);
   const account = clock.account;
   const exits = portfolio.data === null ? null : endDayExitText(portfolioRows(portfolio.data), clock.clock);
   const busy = api.busy || ending;
@@ -102,7 +103,9 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
           </p>
           <div className={o.clockTrack} role="progressbar" aria-label="Day progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clockProgress(clock, shown) * 100)}>
             <div className={o.clockFill} style={{ width: `${clockProgress(clock, shown) * 100}%` }} />
+            {focus !== null && <span className={o.clockFocus} style={{ left: `${focus * 100}%` }} title={clock.focus_end === null ? undefined : practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })} data-testid="thread-clock-focus" />}
           </div>
+          {clock.focus_end !== null && <p className={styles.hint}>{practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })}</p>}
         </>
       )}
 
@@ -167,7 +170,7 @@ export function ThreadClockPanel({ api, onSkipped }: { api: ThreadClockApi; onSk
         />
       )}
 
-      {pause && <p className={o.placeLine} role="status" data-testid="thread-clock-pause">{pause}</p>}
+      {api.rolled && <p className={o.placeLine} role="status" data-testid="thread-clock-rolled">{api.rolled}</p>}
       {note && <p className={o.placeLine} role="status">{note}</p>}
       {api.error && <p className={o.placeLine} role="alert">{api.error}</p>}
       {endError && <p className={o.placeLine} role="alert">{endError}</p>}

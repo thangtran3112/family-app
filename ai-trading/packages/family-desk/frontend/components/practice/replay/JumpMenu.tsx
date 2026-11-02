@@ -16,7 +16,7 @@ export type JumpMenuProps = {
   onJumpToTime: (hhmm: string) => void;
   onNextSignal: () => void;
   onJumpEnd: () => void;
-  /** A swing session (02p d2) adds "+1 hour" and names the window end "the close". */
+  /** A swing session (02p d2) adds "+1 hour". */
   swing?: boolean;
 };
 
@@ -24,7 +24,7 @@ export type JumpMenuProps = {
 const focusFirst = (panel: HTMLElement) => panel.querySelector<HTMLElement>("button")?.focus();
 
 /**
- * Jump forward: +5 min, +15 min, (+1 hour for a swing session), to a time, to the next signal, to the window end. Never backward (02o decision 1).
+ * Jump forward: +5 min, +15 min, (+1 hour for a swing session), to a time, to the next signal, to the close. Never backward (02o decision 1).
  * A disclosure panel (`ui/Popover`, role "dialog") of plain buttons and one small form: a `menu` may not hold a form. Focus enters the
  * panel on the first button, Tab walks it, Escape or a choice closes it and focus returns to the Jump button.
  */
@@ -77,7 +77,7 @@ export function JumpMenu({ revealedThrough, windowEnd, disabled, onJumpBy, onJum
           <button type="button" className={styles.menuItem} onClick={() => choose(onNextSignal)}>To the next signal</button>
           <p className={styles.menuNote}>{PRACTICE_COPY.jumpSignalNote}</p>
           <button type="button" className={styles.menuItem} onClick={() => choose(onJumpEnd)}>
-            {swing ? `To the close · ${formatEtTimeZone(windowEnd)}` : `To the window end · ${formatEtTimeZone(windowEnd)}`}
+            {`To the close · ${formatEtTimeZone(windowEnd)}`}
           </button>
         </div>
       </Popover>

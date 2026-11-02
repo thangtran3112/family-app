@@ -21,6 +21,7 @@ export type ThreadClockBarProps = {
   error: string | null;
   windowStart: string;
   windowEnd: string;
+  focusEnd?: string | null;
   /** The thread's one time (`threadClock`): the day's shared clock, never one name's older playhead. */
   clock: string;
   marks: readonly ReplayMark[];
@@ -78,7 +79,7 @@ export function ThreadClockBar(props: ThreadClockBarProps) {
           <button type="button" className={styles.linkButton} onClick={props.onToggle}>Try again</button>
         </p>
       )}
-      <ReplayTimeline windowStart={windowStart} windowEnd={windowEnd} revealedThrough={clock} marks={marks} signals={signals} />
+      <ReplayTimeline windowStart={windowStart} windowEnd={windowEnd} focusEnd={props.focusEnd ?? null} revealedThrough={clock} marks={marks} signals={signals} />
     </section>
   );
 }

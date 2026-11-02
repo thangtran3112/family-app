@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.core.calendar import et
 from ai_trading.db.models import PracticeThread, ReplayDayList
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
@@ -51,9 +52,17 @@ def _open_day(db: Session, thread: PracticeThread, *, lock: bool) -> ReplayDayLi
 
 
 def _window(db: Session, day: ReplayDayList) -> tuple[pd.Timestamp, pd.Timestamp] | None:
-    """The day's practice window: every name of the day shares it. None before the first name is opened."""
+    """The day's run, from where she started it to the exchange close; every name of the day shares it. None before the
+    first name is opened. Her plan's `window.to` is not in it: that is the focus mark (`_focus_end`), never a stop."""
     sessions = session_mod._sessions_of_day(db, day.id)
-    return None if not sessions else (_ts(sessions[0].window_start), _ts(sessions[0].window_end))
+    return None if not sessions else (_ts(sessions[0].window_start), session_mod.window_end_of(sessions[0]))
+
+
+def _focus_end(db: Session, day: ReplayDayList, close: pd.Timestamp) -> pd.Timestamp | None:
+    """Where her plan's practice window ends: a mark for the timeline, display only. None when it is the close."""
+    sessions = session_mod._sessions_of_day(db, day.id)
+    mark = None if not sessions else et(sessions[0].day, sessions[0].spec["window"]["to"])
+    return None if mark is None or mark >= close else mark
 
 
 def _started(day: ReplayDayList | None) -> bool:
@@ -91,8 +100,8 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "clock": None,
         "window_start": None,
         "window_end": None,
+        "focus_end": None,
         "server_now": svc.wall(),
-        "pause": None,
         "account": None,
         "label": threads_mod.SIMULATED_LABEL,
     }
@@ -100,9 +109,7 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         return out
     window = _window(db, day) if _started(day) else None
     clock = _ts(day.revealed_through) if _started(day) else None
-    state = "listed"
-    if clock is not None and window is not None:
-        state = "at_close" if clock >= window[1] else "running" if day.clock_running else "paused"
+    state = "listed" if clock is None or window is None else "running" if day.clock_running else "paused"
     return {
         **out,
         "state": state,
@@ -113,7 +120,7 @@ def view(db: Session, svc: Services, thread: PracticeThread, day: ReplayDayList 
         "clock": clock,
         "window_start": None if window is None else window[0],
         "window_end": None if window is None else window[1],
-        "pause": day.clock_pause,
+        "focus_end": None if window is None else _focus_end(db, day, window[1]),
         "account": _account(db, svc, thread, day, clock if clock is not None else _ts(day.data_through)),
     }
 
@@ -157,8 +164,8 @@ def control(
     step: str | None,
 ) -> dict[str, Any]:
     """Play, pause, set the speed, step or jump the thread's clock, then answer it. The clock is settled first, so a
-    speed change or a pause never re-prices time that already passed. `to` and `step` are forward only and stop at a
-    crossed stop or the close (like a Play does); `running: true` at the close is a 409 (end the day or skip it)."""
+    speed change or a pause never re-prices time that already passed. `to` and `step` are forward only and stop at the
+    close, where the day rolls over (`roll`); no stop crossing and no window of hers stops them."""
     thread = _day_thread(db, user_id, thread_id)
     day = _open_day(db, thread, lock=True)
     if not _started(day):
@@ -179,22 +186,54 @@ def control(
     if running:
         window = _window(db, day)
         assert window is not None
-        if _ts(day.revealed_through) >= window[1]:
-            raise ReplayProblem(
-                "The clock is at the close · end the day or skip to the next", path="running", status=409
-            )
-        day.clock_running, day.clock_anchor_at, day.clock_pause = True, now, None
+        if _ts(day.revealed_through) < window[1]:  # at the close there is nothing left to run: `roll` takes the day on
+            day.clock_running, day.clock_anchor_at = True, now
     elif running is False:
-        day.clock_running, day.clock_anchor_at, day.clock_pause = False, None, None
+        day.clock_running, day.clock_anchor_at = False, None
     day.updated_at = now
     db.flush()
     return view(db, svc, thread, day)
 
 
+def closed(db: Session, day: ReplayDayList | None) -> bool:
+    """The clock of a started day is at the exchange close."""
+    window = _window(db, day) if day is not None and _started(day) else None
+    return window is not None and _ts(day.revealed_through) >= window[1]
+
+
+def roll(db: Session, user_id: int, thread_id: int, svc: Services) -> plan_mod.Opened | None:
+    """The market closed: end the day (every open position books at the close) and open the next one, with nothing for
+    her to press. The clock is settled first, so a day that ran into the close while nobody looked rolls on the next
+    look. None while the clock is short of the close (the usual answer; a paused clock costs one read, no lock). The
+    next list may not be ready (its data is being prepared): the caller then polls the hub, as after a Skip day."""
+    thread = _day_thread(db, user_id, thread_id)
+    day = _open_day(db, thread, lock=False)
+    if day is None:
+        return None
+    session_mod.settle_day(db, svc, day.id)
+    db.refresh(day)
+    if not closed(db, day):
+        return None
+    day = _open_day(db, thread, lock=True)  # the day again, locked: a parallel poll may have rolled it already
+    if day is None or not closed(db, day):
+        return None
+    plan_mod.end_day(db, user_id, day.id, svc)
+    return plan_mod.open_next(db, user_id, svc, thread.id)
+
+
+def roll_of_session(db: Session, user_id: int, session_id: int, svc: Services) -> plan_mod.Opened | None:
+    """`roll` for the thread a day-thread session belongs to (a chart that follows the clock is what finds the close
+    first when nobody has the Summary open). None for a standalone or swing session."""
+    row = db.get(session_mod.ReplaySession, session_id)
+    if row is None or row.owner_user_id != user_id or row.day_list_id is None or row.thread_id is None:
+        return None
+    thread = db.get(PracticeThread, row.thread_id)
+    return roll(db, user_id, row.thread_id, svc) if thread is not None and thread.mode == "day" else None
+
+
 def skip_day(db: Session, user_id: int, thread_id: int, svc: Services) -> tuple[ReplayDayList, plan_mod.Opened]:
-    """Skip to the next day: run the clock to the window end (a stop crossed on the way does not pause a skip), end
-    the day so every open position flattens at that close, and open the next day's list. A day she never started is
-    a Pass.
+    """Skip to the next day: run the clock to the close, end the day so every open position flattens at that close, and
+    open the next day's list. The one deliberate way to move time past what she watched. A day never started is a Pass.
     The next day may not be ready yet (its data is still being prepared): the caller then polls the hub as it does after
     any open."""
     thread = _day_thread(db, user_id, thread_id)
@@ -204,6 +243,6 @@ def skip_day(db: Session, user_id: int, thread_id: int, svc: Services) -> tuple[
     window = _window(db, day) if _started(day) else None
     if window is not None:
         session_mod.settle_locked(db, svc, day)
-        session_mod.move_clock(db, svc, day, window[1], stop_pause=False)
+        session_mod.move_clock(db, svc, day, window[1])
     ended = plan_mod.end_day(db, user_id, day.id, svc)
     return ended, plan_mod.open_next(db, user_id, svc, thread.id)
