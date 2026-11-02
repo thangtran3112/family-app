@@ -16,7 +16,7 @@ import { endDay } from "@/lib/desk/replay";
 import { useDayPortfolio } from "@/components/practice/replay/Portfolio";
 import { endDayExitText, portfolioRows } from "@/lib/replay/dayView";
 import { problemMessage } from "@/lib/replay/setup";
-import { clockControls, clockProgress, clockStateText, focusProgress, skippedText, type SkipDay } from "@/lib/replay/threadClock";
+import { clockControls, clockProgress, clockStateText, skippedText, type SkipDay } from "@/lib/replay/threadClock";
 import { formatBalance } from "@/lib/replay/threadView";
 import type { ThreadClockApi } from "@/lib/replay/useThreadClock";
 import hub from "./hub.module.css";
@@ -30,7 +30,7 @@ import o from "./overview.module.css";
  * after-hours, the night and the weekend; the gap to real time never changes unless she pauses it, speeds it up or skips a day. The time is the server's: it keeps running when this page
  * is closed or she signs out, and this panel only asks for changes and shows the answer (polled every two seconds). Skip day jumps to the next
  * session's start and ends the day; End day stops at the clock, exits what is open at that price and opens the day's review. The plan's
- * practice window is a mark on the track, not a stop. The simulated account beside it is priced at that clock.
+ * simulated account beside it is priced at that clock.
  */
 export function ThreadClockPanel({
   api,
@@ -70,7 +70,6 @@ export function ThreadClockPanel({
   }
   const can = clockControls(clock);
   const running = clock.state === "running";
-  const focus = focusProgress(clock);
   const account = clock.account;
   const exits = portfolio.data === null ? null : endDayExitText(portfolioRows(portfolio.data), clock.clock);
   // A read that failed leaves the clock held at its last confirmed time: nothing is sent to a clock the page cannot see.
@@ -124,9 +123,7 @@ export function ThreadClockPanel({
           {api.stale && <p className={o.placeLine} role="status" data-testid="thread-clock-frozen">{practiceText("clockFrozen", { time: formatEtDateClock(shown) })}</p>}
           <div className={o.clockTrack} role="progressbar" aria-label="Day progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clockProgress(clock, shown) * 100)}>
             <div className={o.clockFill} style={{ width: `${clockProgress(clock, shown) * 100}%` }} />
-            {focus !== null && <span className={o.clockFocus} style={{ left: `${focus * 100}%` }} title={clock.focus_end === null ? undefined : practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })} data-testid="thread-clock-focus" />}
           </div>
-          {clock.focus_end !== null && <p className={hub.hint}>{practiceText("clockFocusMark", { time: formatEtTime(clock.focus_end) })}</p>}
           <p className={hub.hint} data-testid="thread-clock-next">
             {clock.next_start !== null ? practiceText("clockNextStart", { when: formatEtDateClock(clock.next_start, { seconds: false }) }) : PRACTICE_COPY.clockLastDay}
           </p>

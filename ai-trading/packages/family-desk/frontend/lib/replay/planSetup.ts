@@ -3,7 +3,7 @@ import type { DeskApiProblem } from "../api/client.ts";
 import { formatEtDay } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { plainMessage } from "../desk/problems.ts";
-import { defaultDraft, draftToSpec, fieldOfPath, lastWeekday, latestReplayDay, type SetupDraft, type SetupField } from "./setup.ts";
+import { defaultDraft, draftToSpec, fieldOfPath, lastWeekday, latestReplayDay, REGULAR_WINDOW, type SetupDraft, type SetupField } from "./setup.ts";
 
 // The hub's daily-list plan form (02o-b v1): the draft the form edits, its conversion to a `PracticeBlockV1`, and live
 // validation against the contract's own Zod schema (the D6 pattern). The setup half reuses the single-session draft.
@@ -71,12 +71,9 @@ export type PlanDraft = {
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-/** Two hours from the list time, never before the open, never past the close. */
+/** The day starts at the list time, never before the open. It has no end of its own: the contract's `to` is the regular close, so `from` is always before it. */
 export function windowForList(listAt: string): { from: string; to: string } {
-  const from = listAt < "09:30" ? "09:30" : listAt;
-  const [hours, minutes] = from.split(":").map(Number) as [number, number];
-  const end = Math.min(hours * 60 + minutes + 120, 16 * 60);
-  return { from, to: `${pad(Math.floor(end / 60))}:${pad(end % 60)}` };
+  return { from: listAt < "09:30" ? "09:30" : listAt, to: REGULAR_WINDOW.to };
 }
 
 /** The first weekday of the month three months back (New Year's Day rolls on): far enough back that she is unlikely to remember it. */
@@ -108,7 +105,7 @@ export function defaultPlanDraft(now: Date): PlanDraft {
 /** Picking a list time moves the window start to it (a window cannot begin before the list). */
 export function withListTime(draft: PlanDraft, listAt: string): PlanDraft {
   const window = windowForList(listAt);
-  return { ...draft, listAt, setup: { ...draft.setup, from: window.from, to: draft.setup.to > window.from ? draft.setup.to : window.to } };
+  return { ...draft, listAt, setup: { ...draft.setup, from: window.from, to: window.to } };
 }
 
 export function toggleFilter(ids: readonly number[], id: number): number[] {

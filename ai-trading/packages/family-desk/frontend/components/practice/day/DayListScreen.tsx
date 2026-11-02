@@ -41,7 +41,7 @@ import {
   listTime,
   listWarning,
   liveState,
-  practiceWindow,
+  practiceStart,
   rescanCounts,
   rescanCurrent,
   rescanLabel,
@@ -321,7 +321,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
   const warning = listWarning(list);
   const title = dayTitle(list);
   const setup = list.plan.spec.setup;
-  const practiceTime = practiceWindow(list);
+  const dayStart = practiceStart(list);
   // Day 5 of 5: there is no next day to open, so the button says what it does and goes to the plan's summary (D-096).
   // A re-scan with nothing to scan from (no list and no name, so no day clock) is a dead end: it is not offered (D-094).
   const showRescan = ended ? list.rescan !== null : list.candidates.length > 0 || list.rescan !== null;
@@ -536,7 +536,7 @@ function DayList({ list, onChanged, failures }: { list: DayList; onChanged: () =
                             : []),
                         ]
                       : []),
-                    { id: "window", label: "Practice window", value: `${practiceTime.from}–${practiceTime.to} ET` },
+                    { id: "starts", label: PRACTICE_COPY.dayStarts, value: `${formatClock(dayStart)} ET` },
                     { id: "chart", label: "Chart", value: setup.interval },
                     ...(thread.data?.thread.plan ? planRows(thread.data.thread.plan, "day", thread.data.thread.shares).map((row) => ({ id: row.id, label: row.label, value: row.value })) : []),
                     ...(ended ? [{ id: "day", label: "Day", value: formatEtDay(list.day) }] : []),

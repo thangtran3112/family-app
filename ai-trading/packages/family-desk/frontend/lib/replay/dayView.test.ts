@@ -41,7 +41,7 @@ import {
   stopCrossedText,
   dayActionLabel,
   blockOpenByDefault,
-  practiceWindow,
+  practiceStart,
   tradeTotalRow,
   planCard,
   heldOverCount,
@@ -219,7 +219,7 @@ test("the review's day block shows each trade's prices, times and P/L to the cen
 });
 
 test("the review ranks the list by the move from the list price", () => {
-  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to the end of your practice window, biggest gain first");
+  assert.equal(PRACTICE_COPY.reviewRankNote, "Ranked by move from list price to the close, biggest gain first");
 });
 
 test("the strings the day screens build contain no banned term", () => {
@@ -235,7 +235,7 @@ test("the strings the day screens build contain no banned term", () => {
     sourceNote(dayList),
     filtersNote(2),
     PRACTICE_COPY.dayNoNames,
-    riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }),
+    riskPlanText({ tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }),
     dayTitle(dayList),
     selectionText(endedDayList.review!)!,
     journalLine(endedDayList.journal!),
@@ -279,9 +279,9 @@ test("a day the Desk recorded keeps the server's note instead of the line about 
 });
 
 test("the risk plan reads as one sentence; no limits says so", () => {
-  assert.equal(riskPlanText({ stopNoteOnEntry: "yes", tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day.");
-  assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");
-  assert.equal(riskPlanText({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade a day.");
+  assert.equal(riskPlanText({ tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: trade only on a signal, max loss $600, up to 3 trades a day.");
+  assert.equal(riskPlanText({ tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");
+  assert.equal(riskPlanText({ tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade a day.");
 });
 
 test("the block ladder: earlier days ended, this one open, the next waits for it, the rest are locked", () => {
@@ -712,12 +712,12 @@ test("a long block's days start collapsed, a short block's open (D-097)", () => 
   assert.equal(blockOpenByDefault(30), false);
 });
 
-// D-144: the Thread plan said Window 09:30 to 11:30, the list was built at 8:30 and Re-list said the window then starts at 10:00.
-test("the practice window starts at the later of the plan's window and the list time, so a re-list moves it (D-144)", () => {
-  const window = { from: "09:30", to: "11:30" };
-  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T13:30:00Z", plan: { spec: { setup: { window } } } }), { from: "09:30", to: "11:30" }, "built at 9:30 ET: the plan's own start");
-  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T12:30:00Z", plan: { spec: { setup: { window } } } }), { from: "09:30", to: "11:30" }, "built at 8:30 ET, before the window");
-  assert.deepEqual(practiceWindow({ list_at: "2026-03-10T15:00:00Z", plan: { spec: { setup: { window } } } }), { from: "11:00", to: "11:30" }, "re-listed at 11:00 ET: the window starts then");
+// D-144: the Thread plan said the day started at 09:30, the list was built at 8:30 and Re-list said the day then starts at 10:00.
+test("the day starts at the later of the plan's start and the list time, so a re-list moves it (D-144)", () => {
+  const window = { from: "09:30" };
+  assert.equal(practiceStart({ list_at: "2026-03-10T13:30:00Z", plan: { spec: { setup: { window } } } }), "09:30", "built at 9:30 ET: the plan's own start");
+  assert.equal(practiceStart({ list_at: "2026-03-10T12:30:00Z", plan: { spec: { setup: { window } } } }), "09:30", "built at 8:30 ET, before the start");
+  assert.equal(practiceStart({ list_at: "2026-03-10T15:00:00Z", plan: { spec: { setup: { window } } } }), "11:00", "re-listed at 11:00 ET: the day starts then");
 });
 
 // D-142: the total of the day's trades, and one precision for the selection's moves (the table shows two decimals).

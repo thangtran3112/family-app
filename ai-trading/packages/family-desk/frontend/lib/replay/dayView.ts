@@ -95,10 +95,9 @@ export const sourceNote = (list: Pick<DayList, "data_through">): string => pract
 /** "Chosen at setup · a name that passes either one is listed", or just "Chosen at setup" for one filter. */
 export const filtersNote = (count: number): string => (count > 1 ? PRACTICE_COPY.dayFiltersNote : PRACTICE_COPY.dayFiltersNoteOne);
 
-/** The thread's risk plan in one sentence: "stop on every entry, trade only on a signal, max loss $600, up to 3 trades a day". */
-export function riskPlanText(plan: Pick<ThreadPlan, "stopNoteOnEntry" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades">): string {
+/** The thread's risk plan in one sentence: "trade only on a signal, max loss $600, up to 3 trades a day". */
+export function riskPlanText(plan: Pick<ThreadPlan, "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades">): string {
   const parts = [
-    plan.stopNoteOnEntry === "yes" ? "stop on every entry" : null,
     plan.tradeOnlyOnSignal === "yes" ? "trade only on a signal" : null,
     plan.maxLossUsd === undefined ? null : `max loss $${plan.maxLossUsd.toLocaleString("en-US")}`,
     plan.maxTrades === undefined ? null : `up to ${plan.maxTrades} ${plan.maxTrades === 1 ? "trade" : "trades"} a day`,
@@ -638,11 +637,11 @@ export const tradeTotalRow = (journal: Pick<DayJournal, "trades" | "pnl_usd"> & 
   tone: changeToneAt(journal.pnl_usd, 2),
 });
 
-/** The practice window of a day: the plan's window, but not before the list time, so a re-list moves its start (D-144). Both are ET "HH:MM". */
-export function practiceWindow(list: { list_at: string; plan: { spec: { setup: { window: { from: string; to: string } } } } }): { from: string; to: string } {
-  const { from, to } = list.plan.spec.setup.window;
+/** When the day starts: the plan's "Start at", but not before the list time, so a re-list moves it (D-144). ET "HH:MM". The day has no end of its own. */
+export function practiceStart(list: { list_at: string; plan: { spec: { setup: { window: { from: string } } } } }): string {
+  const { from } = list.plan.spec.setup.window;
   const listed = etHhMm(list.list_at);
-  return { from: listed > from ? listed : from, to };
+  return listed > from ? listed : from;
 }
 
 /** One row per closed trade: the entry and exit price with the ET time, the shares, and the P/L to the cent. */

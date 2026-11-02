@@ -187,12 +187,12 @@ test.describe("Practice: the thread clock", () => {
     await page.getByRole("tab", { name: "Summary" }).click();
     await page.waitForURL(THREAD_URL);
 
-    // The plan's window ends long before the tape does: the track carries it as a mark. The tape is the extended session (8:00 PM ET).
+    // The day has no mark on its track: no focus tick and no "practice window" line. The tape is the extended session (8:00 PM ET).
     const clockUrl = `${origin}/api/desk/replay/threads/${threadId}/clock`;
     const before = await (await context.request.get(clockUrl)).json();
-    expect(Date.parse(before.focus_end)).toBeLessThan(Date.parse(before.window_end));
     expect(new Date(before.window_end).toISOString()).toMatch(/T00:00:00\.000Z$/); // 8:00 PM ET
-    await expect(page.getByTestId("thread-clock-focus")).toBeAttached();
+    await expect(page.getByTestId("thread-clock-focus")).toHaveCount(0);
+    await expect(panel(page)).not.toContainText(/practice window/i);
     const jump = async (to: number) => {
       const response = await context.request.post(clockUrl, { data: { to: new Date(to).toISOString() } });
       expect(response.ok(), await response.text()).toBeTruthy();

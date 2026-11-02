@@ -105,13 +105,6 @@ export function clockProgress(clock: Pick<ThreadClock, "clock" | "window_start" 
   return span <= 0 ? 0 : Math.min(1, Math.max(0, (ms(shown) - ms(clock.window_start)) / span));
 }
 
-/** Where her practice window ends along the day, 0 to 1, or null without one. A mark on the track and nothing more: it stops no clock. */
-export function focusProgress(clock: Pick<ThreadClock, "window_start" | "window_end" | "focus_end">): number | null {
-  if (clock.focus_end === null || clock.window_start === null || clock.window_end === null) return null;
-  const span = ms(clock.window_end) - ms(clock.window_start);
-  return span <= 0 ? null : Math.min(1, Math.max(0, (ms(clock.focus_end) - ms(clock.window_start)) / span));
-}
-
 /** The line after the clock reached the next session on its own: the day that ended and where the next one stands. */
 export const rolledText = (from: number | null, next: { day_no: number | null }): string =>
   next.day_no !== null ? practiceText("clockRolled", { from: from ?? "", next: next.day_no }) : practiceText("clockRolledDone", { from: from ?? "" });

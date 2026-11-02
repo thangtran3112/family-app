@@ -65,7 +65,7 @@ const monthDay = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short"
  *  "(2)" on a later thread of that mode and day, so two threads never read the same (D-069). Nothing renames it yet. */
 export const threadName = (thread: Pick<PracticeThread, "name">): string => thread.name;
 
-/** "Started Oct 25": the day she started it (not a replayed day, so no date is spoiled). */
+/** "Started Oct 25": the day she started it (the day she made the thread, not a replayed day). */
 export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): string => `Started ${monthDay.format(new Date(thread.createdAt))}`;
 
 /** "Started with $50,000 · +$123 so far". A swing thread with holds open counts them apart (D-080): its balance holds closed
@@ -312,7 +312,6 @@ export function planRows(plan: PracticeThread["plan"], mode: PracticeThread["mod
   const sharesValue = mode === "swing" ? PRACTICE_COPY.threadSharesPerEntry : shares === undefined ? PRACTICE_COPY.threadSharesNotSet : formatNumber(shares, 0);
   return [
     { id: "shares", label: PRACTICE_COPY.threadShares, value: sharesValue },
-    { id: "stop", label: "Stop on every entry", value: plan.stopNoteOnEntry === "yes" ? "Yes" : "No" },
     { id: "signal", label: "Trade only on a signal", value: plan.tradeOnlyOnSignal === "yes" ? "Yes" : "No" },
     { id: "max_loss", label: `Max loss, pretend dollars ${per}`, value: plan.maxLossUsd === undefined ? "None" : formatWhole(plan.maxLossUsd) },
     { id: "max_trades", label: `Max trades ${per}`, value: plan.maxTrades === undefined ? "None" : String(plan.maxTrades) },

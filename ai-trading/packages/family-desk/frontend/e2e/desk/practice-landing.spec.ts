@@ -129,7 +129,10 @@ test.describe("Practice landing", () => {
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt }).getByRole("radio")).toHaveCount(3);
     await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planInterval })).toBeVisible();
-    for (const label of [PRACTICE_COPY.planWindowFrom, PRACTICE_COPY.planWindowTo]) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
+    await expect(dialog.getByLabel(PRACTICE_COPY.planWindowFrom, { exact: true })).toBeVisible();
+    // The day has no end of its own to pick, and no hidden-day or practice-window words anywhere in the form.
+    await expect(dialog.getByLabel(/focus until/i)).toHaveCount(0);
+    await expect(dialog).not.toContainText(/practice window|hidden day|show date/i);
     // D-076: no Arm strategies, no Risk plan.
     await expect(dialog.getByRole("group", { name: "Arm strategies" })).toHaveCount(0);
     await expect(dialog.getByLabel("Max loss ($)")).toHaveCount(0);
@@ -356,11 +359,11 @@ test.describe("New plan modal redesign", () => {
     expect(firstDay.x).toBeCloseTo(listSize.x, 0);
     // D-152: a segmented control is as wide as its column, so its edges meet the text controls' above and below it.
     const group = async (name: string) => (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
-    const to = (await dialog.getByLabel(PRACTICE_COPY.planWindowTo, { exact: true }).boundingBox())!;
-    for (const name of [PRACTICE_COPY.planDays, PRACTICE_COPY.planInterval]) {
-      expect((await group(name)).width, `${name}: as wide as the Window to box in its column`).toBeCloseTo(to.width, 0);
-      expect((await group(name)).x, `${name}: starts at the right column`).toBeCloseTo(to.x, 0);
-    }
+    const days = await group(PRACTICE_COPY.planDays);
+    const interval = await group(PRACTICE_COPY.planInterval);
+    expect(interval.width, "Days and Chart interval are one column wide").toBeCloseTo(days.width, 0);
+    expect(interval.x, "Days and Chart interval start at the same edge").toBeCloseTo(days.x, 0);
+    expect(days.x, "the right column starts after the First day box").toBeGreaterThan(firstDay.x + firstDay.width);
   });
 
   // D-152: the swing settings sit on the same two-column grid, so each segmented control is as wide as its column and starts at

@@ -314,7 +314,9 @@ test.describe("Practice", () => {
     const planRail =
       test.info().project.name === "desktop-1180" ? page.getByRole("dialog", { name: PRACTICE_COPY.threadPlanTitle }) : page.getByRole("complementary", { name: "Day context" });
     await expect(planRail).toContainText(PRACTICE_COPY.threadPlanFrom);
-    await expect(planRail).toContainText(/Stop on every entry\s*Yes/);
+    await expect(planRail, "a stop is not asked for or scored").not.toContainText(/stop on every entry/i);
+    await expect(planRail).toContainText(/Day starts\s*\d{1,2}:\d{2} (AM|PM) ET/);
+    await expect(planRail).not.toContainText(/practice window/i);
     await expect(planRail).toContainText(/Max loss, pretend dollars a day\s*\$600/);
     await expect(planRail).toContainText(/Max trades a day\s*3/);
     if (test.info().project.name === "desktop-1180") await page.keyboard.press("Escape");
@@ -435,7 +437,7 @@ test.describe("Practice", () => {
     // D-173: both review tables hold their pane at either width, so no header ("Low after open") and no value is cut; the ranking table drops Range, then Move to close.
     await expectTableFits(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }));
     await expectTableFits(trades);
-    for (const name of ["Rank", "Symbol", "List price", "Move to window end", "High after open", "Low after open"]) await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("columnheader", { name })).toBeVisible();
+    for (const name of ["Rank", "Symbol", "List price", "Move to close", "High after open", "Low after open"]) await expect(review.getByRole("table", { name: PRACTICE_COPY.reviewTitle }).getByRole("columnheader", { name })).toBeVisible();
     await expect(review).toContainText("Practice universe");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(`Day 1 of 5 · ${formatEtDay(DAY)}`); // nothing left to spoil
     await expectCleanScreen(page);

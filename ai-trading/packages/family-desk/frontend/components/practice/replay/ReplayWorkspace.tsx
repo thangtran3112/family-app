@@ -21,7 +21,6 @@ import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { currentValue } from "@/lib/chart-data";
 import { isSpeed } from "@/lib/replay/clock";
-import { etDayOf, etWallToUtcIso } from "@/lib/replay/time";
 import { formatEtDateClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { threadPageHref } from "@/lib/replay/practiceTabs";
@@ -417,7 +416,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
           error={api.player.error}
           windowStart={session.window_start}
           windowEnd={session.window_end}
-          focusEnd={etWallToUtcIso(etDayOf(session.window_start), spec.window.to)}
           clock={clock}
           marks={session.marks}
           signals={view.signals}

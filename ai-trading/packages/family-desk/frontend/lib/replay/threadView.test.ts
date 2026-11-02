@@ -130,8 +130,8 @@ test("the Summary headline says Equity when it is equity and Balance when it is 
 });
 
 test("the plan recap reads yes, no and none in plain words, and no thread copy trips the banned-term check", () => {
-  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["Not set", "Yes", "Yes", "$600", "3"]);
-  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["Not set", "No", "No", "None", "None"]);
+  assert.deepEqual(planRows(activeThread.thread.plan).map((row) => row.value), ["Not set", "Yes", "$600", "3"]);
+  assert.deepEqual(planRows({ stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" }).map((row) => row.value), ["Not set", "No", "None", "None"]);
   assert.equal(planRows(activeThread.thread.plan)[0]?.label, "Shares per trade", "D-042: the recap has a Shares row");
   assert.equal(planRows(activeThread.thread.plan, "day", 1500)[0]?.value, "1,500", "D-042: a thread that set its entry size reads the number");
   assert.equal(planRows(activeThread.thread.plan, "swing", 200)[0]?.value, "You set it on each entry", "a swing thread has no share count: each hold is sized from its cash");
@@ -195,8 +195,8 @@ test("a day thread with a position open says what is realized and the open P/L, 
 // D-083: the swing modal and journal say per week; the overview's recap said "a day".
 test("the plan recap counts per week for a swing thread (D-083)", () => {
   const swing = planRows(activeThread.thread.plan, "swing");
-  assert.deepEqual(swing.slice(3).map((row) => row.label), ["Max loss, pretend dollars a week", "Max trades a week"]);
-  assert.deepEqual(planRows(activeThread.thread.plan).slice(3).map((row) => row.label), ["Max loss, pretend dollars a day", "Max trades a day"], "the default stays per day");
+  assert.deepEqual(swing.slice(2).map((row) => row.label), ["Max loss, pretend dollars a week", "Max trades a week"]);
+  assert.deepEqual(planRows(activeThread.thread.plan).slice(2).map((row) => row.label), ["Max loss, pretend dollars a day", "Max trades a day"], "the default stays per day");
 });
 
 // D-134: "today's day is still open" was printed on every thread, also a closed one and one with no day open.

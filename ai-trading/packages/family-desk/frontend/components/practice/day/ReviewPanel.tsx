@@ -21,7 +21,6 @@ const COLUMNS: DenseColumn<ReviewRow>[] = [
   { key: "symbol", label: "Symbol", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
   { key: "picked", label: "Yours", render: (row) => pickedLabel(row) },
   { key: "list_price", label: "List price", align: "right", render: (row) => formatPrice(row.list_price) },
-  { key: "move_pct", label: "Move to window end", align: "right", render: (row) => <Move value={row.move_pct} /> },
   { key: "close_move_pct", label: "Move to close", align: "right", render: (row) => <Move value={row.close_move_pct} /> },
   { key: "high_pct", label: "High after open", align: "right", render: (row) => <Move value={row.high_pct} /> },
   { key: "low_pct", label: "Low after open", align: "right", render: (row) => <Move value={row.low_pct} /> },
@@ -41,9 +40,9 @@ const TRADE_COLUMNS: DenseColumn<TradeLineRow>[] = [
   { key: "ret", label: "Return", align: "right", render: (row) => <span className={styles[row.tone]}>{row.ret}</span> },
 ];
 
-/** The list review (02o-b v1): every candidate's move from its list price, ranked by signed move to the window end
+/** The list review (02o-b v1): every candidate's move from its list price, ranked by signed move to the close
  *  with the biggest gain first, her names marked, and her day's trades to the cent. It looks past the playhead, so it
- *  only exists once the day has ended; a plan that hid the date says the day is finished and shows it here (D-029). */
+ *  only exists once the day has ended, and it names the day it reviews. */
 export function ReviewPanel({ review, journal, footnote }: { review: DayReview; journal: DayJournal | null; footnote: string }) {
   const selection = selectionText(review);
   const balance = journal === null ? null : dayBalanceText(journal);

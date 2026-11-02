@@ -12,7 +12,6 @@ import {
   commandThreadClock,
   extrapolate,
   shownClock,
-  focusProgress,
   loadThreadClock,
   rolledText,
   skippedText,
@@ -87,10 +86,7 @@ test("progress runs 0 to 1 over the day's tape, is full after it and is 0 before
   assert.equal(clockProgress(clock(), null), 0);
 });
 
-test("her practice window is a mark on the track, and the clock reaching the next session is told once as a hand-over to the next day", () => {
-  assert.equal(focusProgress(clock({ window_start: "2026-09-28T13:30:00Z", window_end: "2026-09-28T20:00:00Z", focus_end: "2026-09-28T15:30:00Z" })), 2 / 6.5);
-  assert.equal(focusProgress(clock({ focus_end: null })), null);
-  assert.equal(focusProgress(clock({ window_start: null })), null);
+test("the clock reaching the next session is told once as a hand-over to the next day", () => {
   assert.equal(rolledText(2, { day_no: 3 }), "The clock reached the next session. Day 2 ended and every open position closed with it. Day 3 is on the Day list.");
   assert.equal(rolledText(2, { day_no: null }), "The clock reached the next session. Day 2 ended and every open position closed with it.");
 });
