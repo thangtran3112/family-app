@@ -159,6 +159,27 @@ jobs:
         env:
           CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: ai-trading/deploy/ci/check-clerk-publishable-key.sh
+      # A hosted runner has ~14 GB free on /, and the smoke build runs the whole
+      # bake group at once with load: true (layers plus a loaded copy of every
+      # image). Run 41404860998 died of ENOSPC in ahf-terminal (pip install) and
+      # mirofish-backend (uv sync, torch + nvidia-*-cu12). Delete the preinstalled
+      # toolchains this build never uses, before buildx starts. rm -rf is a no-op
+      # on a path the runner image does not ship. The df lines show the headroom.
+      - name: Reclaim runner disk before the image build
+        run: |
+          set -euo pipefail
+          echo "Disk before reclaim:"
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL
+          # The runner is a throwaway VM, so this prunes only its own builder cache.
+          docker builder prune --all --force || true
+          echo "Disk after reclaim:"
+          df -h /
       - uses: docker/setup-buildx-action@v3
       - name: Build images for smoke tests
         uses: docker/bake-action@v7
