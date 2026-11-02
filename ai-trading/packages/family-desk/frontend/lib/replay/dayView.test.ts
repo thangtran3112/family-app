@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { containsPracticeBannedTerm, PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import { DailySchema, DayListSchema, OpenNextSchema, UniverseDaysSchema } from "./daily.ts";
+import { DailySchema, DayListSchema, OpenNextSchema, UniverseDaysSchema, type Candidate } from "./daily.ts";
 import { dayList, endedDayList, plan } from "./dailyFixtures.ts";
 import {
   blockLadder,
@@ -14,6 +14,8 @@ import {
   dayCellText,
   dayCellTone,
   dayColumns,
+  liveState,
+  endDayExitText,
   dayNumberText,
   dayTitle,
   filtersNote,
@@ -29,7 +31,6 @@ import {
   peekDailyBars,
   peekOffsets,
   planArmedText,
-  endDayExitText,
   openPositionsText,
   openTodayText,
   portfolioCells,
@@ -65,6 +66,10 @@ import {
 
 test("the daily payloads parse, and the contract's required fields are required", () => {
   assert.equal(DayListSchema.parse(dayList).candidates.length, 2);
+  assert.equal(DayListSchema.parse(dayList).candidates[0]?.live ?? null, null, "a snapshot read has no live block");
+  const withLive = { ...dayList, candidates: [{ ...dayList.candidates[0]!, live: { at: "2026-03-10T14:15:00Z", price: 44.5, change_pct: 17.4, today: true, metrics: { last: 44.5, rvol_10d: null } } }] };
+  assert.equal(DayListSchema.parse(withLive).candidates[0]?.live?.price, 44.5);
+  assert.equal(DayListSchema.safeParse({ ...withLive, candidates: [{ ...withLive.candidates[0]!, live: { at: "x", price: 1, change_pct: 1, today: true, metrics: {} } }] }).success, false, "the live block's time is a timestamp");
   assert.equal(DayListSchema.parse(endedDayList).review?.rows[0]?.picked, "traded");
   assert.equal(DailySchema.parse({ plan, thread: null }).plan?.next_weekday, "Tue");
   assert.equal(DailySchema.parse({ plan: null, thread: null }).plan, null);
@@ -344,6 +349,41 @@ test("D-018: a list built after the open has no previous-session RVOL or change,
   assert.equal(dayCellText(byKey.prev_change_pct!, smci), "—");
   assert.equal(byKey.prev_rvol!.missing, true);
   assert.equal(dayCellText(byKey.rvol_10d!, smci), "2.50×");
+});
+
+// ---- the table at the day clock ---------------------------------------------------------------------------------
+
+const atClock = (live: Candidate["live"]) => ({ ...dayList, candidates: dayList.candidates.map((row, index) => ({ ...row, live: index === 0 ? live : null })) });
+const liveSmci = { at: "2026-03-10T14:15:00Z", price: 44.5, change_pct: 17.41, today: true, metrics: { last: 44.5, change_pct: 17.41, volume: 910000, rvol_10d: 3.2, gap_pct_open: 8.9, vs_vwap_pct: 1.4 } };
+
+test("the table follows the day clock only when a read carries live blocks, and says which columns move", () => {
+  assert.equal(liveState(dayList), null, "a snapshot read has no live blocks");
+  assert.deepEqual(liveState(atClock(liveSmci)), { today: true });
+  assert.deepEqual(liveState(atClock({ ...liveSmci, today: false })), { today: false });
+  assert.deepEqual(dayColumns(atClock(liveSmci)).map((column) => column.live), dayColumns(dayList).map(() => undefined), "without a state the columns are the list's own");
+  const columns = dayColumns(atClock(liveSmci), { today: true });
+  assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "RVOL now", "Change % now", "Earnings", "Volume now", "Since"]);
+  assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now", "prev_rvol", "prev_change_pct", "volume"]);
+  const byKey = Object.fromEntries(columns.map((column) => [column.key, column]));
+  const [smci, anet] = atClock(liveSmci).candidates;
+  // moving columns read the clock's values; the list-time ones keep the list's
+  assert.equal(dayCellText(byKey.price_now!, smci!), "44.50");
+  assert.equal(dayCellText(byKey.change_now!, smci!), "+17.41%");
+  assert.equal(dayCellText(byKey.prev_rvol!, smci!), "3.20×");
+  assert.equal(dayCellText(byKey.prev_change_pct!, smci!), "+17.41%");
+  assert.equal(dayCellText(byKey.list_price!, smci!), "41.12");
+  assert.equal(dayCellText(byKey.prev_close!, smci!), "37.90");
+  assert.equal(dayCellText(byKey.matched_since!, smci!), "8:30 AM");
+  // a name with no live block keeps the list's value and shows a dash for the clock's price: nothing is made up
+  assert.equal(dayCellText(byKey.price_now!, anet!), "—");
+  assert.equal(dayCellText(byKey.prev_change_pct!, anet!), "−0.30%");
+});
+
+test("before the regular session opens only the price moves: the metric columns keep the list's values and labels", () => {
+  const columns = dayColumns(atClock({ ...liveSmci, today: false }), { today: false });
+  assert.deepEqual(columns.map((column) => column.label), ["Price at list", "Price now", "vs prev close % now", "Prev close", "Prev RVOL", "Prev change %", "Earnings", "Prev volume", "Since"]);
+  assert.deepEqual(columns.filter((column) => column.live).map((column) => column.key), ["price_now", "change_now"]);
+  assert.equal(dayCellText(columns.find((column) => column.key === "prev_rvol")!, atClock(liveSmci).candidates[0]!), "1.10×");
 });
 
 test("hidden Peek bars are named by how many sessions back they are: D-12 up to D-1, the prior close (M4)", () => {

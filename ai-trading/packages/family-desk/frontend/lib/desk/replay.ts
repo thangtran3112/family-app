@@ -98,9 +98,10 @@ export const openNextDay = (plan?: unknown, options?: RequestOptions & { threadI
     jsonInit("POST", { ...(plan === undefined ? {} : { plan }), ...(options?.threadId === undefined ? {} : { threadId: options.threadId }) }, options),
   );
 
-/** One practice day. `peek` adds the pre-open chart data of one candidate (cut at the list's data time). */
-export const loadDayList = (id: number, params: { peek?: string } = {}, options?: RequestOptions) =>
-  clientOf(options)(deskPath(`/replay/day-lists/${id}`, { peek: params.peek }), DayListSchema, readInit(options));
+/** One practice day. `peek` adds the pre-open chart data of one candidate (cut at the list's data time). `live` adds each
+ *  candidate's `live` block: the name priced at the day clock, from bars closed by it. */
+export const loadDayList = (id: number, params: { peek?: string; live?: boolean } = {}, options?: RequestOptions) =>
+  clientOf(options)(deskPath(`/replay/day-lists/${id}`, { peek: params.peek, live: params.live ? "true" : undefined }), DayListSchema, readInit(options));
 
 /** Stars (at most five names from the list), notes and the 1 to 5 self-rating; a key left out is left alone. */
 export const patchDayList = (id: number, body: { watch?: string[]; notes?: string | null; rating?: number | null }, options?: RequestOptions) =>

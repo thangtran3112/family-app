@@ -208,6 +208,27 @@ export type DayColumn = {
   value: (row: Candidate) => number | string | null;
   /** The payload has no value for this column in this list: every cell is an honest dash, never a stand-in. */
   missing?: boolean;
+  /** The column moves with the day clock (it reads the candidate's `live` block); the others are fixed at the list time. */
+  live?: boolean;
+  /** The metric this column reads from the candidate, when it is one of the server's metric columns. */
+  source?: string;
+};
+
+/** The metric columns that follow the day clock once the regular session has opened (`data/metrics.py`: the partial day's `last`, change, volume,
+ *  gap, VWAP, RVOL and 52-week high). ATR % and RSI stay on closed daily bars, so they never repaint and are not here. */
+const CLOCK_METRICS = new Set(["last", "change_pct", "volume", "rvol_10d", "gap_pct_open", "vs_vwap_pct", "high_252d", "dist_to_252d_high_pct"]);
+
+/** Whether the table moves with the day clock: null before the clock starts and after the day ends (the read carries no `live` block). `today`: the
+ *  regular session has opened at the clock, so the metric columns can move too; before that only the price does (extended hours). */
+export function liveState(list: Pick<DayList, "candidates">): { today: boolean } | null {
+  const lives = list.candidates.flatMap((row) => (row.live ? [row.live] : []));
+  return lives.length === 0 ? null : { today: lives.some((live) => live.today) };
+}
+
+/** "Prev volume" and "Volume" both read "Volume now" once they follow the clock. */
+const nowLabel = (label: string): string => {
+  const bare = label.replace(/^Prev /, "");
+  return `${bare.charAt(0).toUpperCase()}${bare.slice(1)} now`;
 };
 
 const EARNINGS_FORMAT = "earnings";
@@ -219,7 +240,7 @@ const EARNINGS_FORMAT = "earnings";
  * no previous-session RVOL or change in its payload: those two columns stay and read a dash. Prev close is
  * the candidate's `prior_close` either way.
  */
-export function dayColumns(list: Pick<DayList, "columns" | "universe">): DayColumn[] {
+export function dayColumns(list: Pick<DayList, "columns" | "universe">, live: { today: boolean } | null = null): DayColumn[] {
   const prevBasis = list.universe.prev_basis;
   const have = new Map(list.columns.map((column) => [column.key, column]));
   const used = new Set<string>(["matched_since"]);
@@ -228,15 +249,23 @@ export function dayColumns(list: Pick<DayList, "columns" | "universe">): DayColu
     const column = have.get(key);
     if (!column || used.has(key)) return [];
     used.add(key);
-    return [{ key, label: column.label, format: column.format, value: metric(key) }];
+    return [{ key, label: column.label, format: column.format, value: metric(key), source: key }];
   };
   const previous = (key: string, label: string, format: string, source: string): DayColumn => {
     if (prevBasis) used.add(source);
-    return { key, label, format, value: prevBasis ? metric(source) : () => null, missing: !prevBasis };
+    return { key, label, format, value: prevBasis ? metric(source) : () => null, missing: !prevBasis, source: prevBasis ? source : undefined };
   };
   if (prevBasis) used.add("last");
 
-  const head = [...plain("list_price"), ...plain("list_change_pct")];
+  // Following the clock, the list-time move from the prior close gives way to the one at the clock; the list price stays as the reference.
+  if (live) used.add("list_change_pct"); // replaced by the move at the clock
+  const head = live
+    ? [
+        ...plain("list_price").map((column) => ({ ...column, label: "Price at list" })),
+        { key: "price_now", label: "Price now", format: "price", value: (row: Candidate) => row.live?.price ?? null, live: true },
+        { key: "change_now", label: "vs prev close % now", format: "pct_signed", value: (row: Candidate) => row.live?.change_pct ?? null, live: true },
+      ]
+    : [...plain("list_price"), ...plain("list_change_pct")];
   const prev: DayColumn[] = [
     { key: "prev_close", label: "Prev close", format: "price", value: (row) => row.prior_close },
     previous("prev_rvol", "Prev RVOL", "ratio", "rvol_10d"),
@@ -247,7 +276,14 @@ export function dayColumns(list: Pick<DayList, "columns" | "universe">): DayColu
   const earnings: DayColumn = { key: "earnings", label: "Earnings", format: EARNINGS_FORMAT, value: (row) => (row.reported_before_open ? PRACTICE_COPY.dayReported : null) };
   const since = have.get("matched_since");
   const tail: DayColumn[] = since ? [{ key: "matched_since", label: since.label, format: since.format, value: (row) => row.matched_since }] : [];
-  return [...head, ...prev, ...core, earnings, ...rest, ...tail];
+  const columns = [...head, ...prev, ...core, earnings, ...rest, ...tail];
+  if (!live?.today) return columns;
+  return columns.map((column) => {
+    const source = column.source;
+    if (source === undefined || !CLOCK_METRICS.has(source)) return column;
+    // A name with no live block (its bars are unavailable) keeps the list-time value rather than a made-up one.
+    return { ...column, label: nowLabel(column.label), live: true, value: (row: Candidate) => (row.live ? (row.live.metrics[source] ?? null) : column.value(row)) };
+  });
 }
 
 /** A cell's text: a dash for a value the payload does not hold. */
