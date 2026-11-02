@@ -21,7 +21,8 @@ on a name, (c) `History._lru` of 8 days evicting. Probed here against this code 
   * So the real trigger is (a), produced by that per-read cost: `DayListScreen` re-reads the whole live list every clock
     minute (and on each re-scan), each read decodes ~720 blobs from Postgres, and a request that is slow, contended
     (`settle_day` takes the day-list row lock on a running clock) or cut off leaves the screen with no `live` block,
-    which it draws as dashes. (b) is a per-name `None` and cannot blank a whole list.
+    which it draws as dashes. (b) is a per-name `None` and cannot blank a whole list. A2 reads the prepared series from
+    memory (`test_a_warm_live_read_decodes_no_minute_blobs`).
   Not provable from here: the owner's production database and a captured failing response are out of reach of a
   sandboxed checkout (and no ad-hoc production reads are allowed), so (a) is established from the code path and the
   measured per-read cost, not from a captured 5xx. A2/A7 remove the cost (one prepared series per name, in memory).
@@ -164,7 +165,6 @@ def test_one_price_on_the_chart_the_day_list_the_position_and_the_account_at_nig
     assert set(prices.values()) == {52.0}, prices
 
 
-@pytest.mark.xfail(strict=True, reason="A2: the day list prices an opened name off its minute bar, not its tape")
 def test_the_day_list_prices_an_opened_name_like_its_chart_inside_a_minute(
     db_session, user_id, svc, world, pinned
 ) -> None:
@@ -247,9 +247,11 @@ def test_the_day_list_prices_every_name_overnight(db_session, user_id, svc, worl
         assert pd.Timestamp(live["at"]) == NIGHT
 
 
-def test_a_live_read_decodes_names_times_sessions_blobs(db_session, user_id, svc, world, pinned) -> None:
-    """Candidate (c)/(a): count blob reads of one live day-list read: 15 minute blobs (14 lookback + the day) a name."""
+def test_a_warm_live_read_decodes_no_minute_blobs(db_session, user_id, svc, world, pinned) -> None:
+    """The "no data" cost (header): a live read decoded 15 minute blobs per name on dev. Prepared series are read from
+    memory now, so a second read of the same list decodes none and asks the provider for nothing."""
     _, row, _, _ = _night(db_session, user_id, svc, world)
+    _live(db_session, user_id, svc, row)
     store = svc.store_factory(db_session)
     reads: list[str] = []
     real = store.get
@@ -259,11 +261,9 @@ def test_a_live_read_decodes_names_times_sessions_blobs(db_session, user_id, svc
         return real(key)
 
     store.get = counting  # type: ignore[method-assign]
+    fetches = svc.history.fetches
     _live(db_session, user_id, svc, row)
-    minute_reads = reads.count("bars1m")
-    names = len(row.candidates)
-    assert minute_reads >= names * 15, (minute_reads, names)
-    print(f"\n[no-data probe] one live read: {minute_reads} bars1m blob reads for {names} names")
+    assert reads.count("bars1m") == 0 and svc.history.fetches == fetches, reads
 
 
 def test_a_read_moves_nothing(db_session, user_id, svc, world, pinned) -> None:

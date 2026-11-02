@@ -67,7 +67,7 @@ from ai_trading.replay import threads as threads_mod
 from ai_trading.replay import universe_days as universe_mod
 from ai_trading.replay.cache import BlobKey, BlobStore
 from ai_trading.replay.data import ReplayDayError, check_day
-from ai_trading.replay.model import ENTRY_KINDS, add_span
+from ai_trading.replay.model import ENTRY_KINDS, INTERVAL_MINUTES, add_span
 from ai_trading.replay.screen import ASOF_PART, EARLIEST_LIST_DAY, FilterInput, build_list, cut_frames
 from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound, jsonable
 from ai_trading.screener.evaluator import SymbolBars, check_filter
@@ -961,18 +961,31 @@ def _ended_review(plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | No
     return {**review_mod.normalized(row.review), "day": row.day, "dates_hidden": plan.spec["hideDates"] == "yes"}
 
 
-def _live_candidates(svc: Services, db: Session, row: ReplayDayList, clock: pd.Timestamp) -> list[dict[str, Any]]:
-    """The list's names, each with a `live` block: the name as of the day clock (`screen.live_quote`). The stored
-    `candidates` stay the list-time snapshot; this only adds what the clock has shown since. A name whose bars are
-    unavailable gets `live: None`, never a stand-in. ponytail: one cached-bars read and one metric row per name on every
-    read (a few dozen names at most); cache per (symbol, clock) if a list ever holds hundreds."""
+def _live_candidates(
+    svc: Services, db: Session, row: ReplayDayList, clock: pd.Timestamp, interval: str, tape: dict[str, str]
+) -> list[dict[str, Any]]:
+    """The list's names, each with a `live` block: the name as of the day clock. The stored `candidates` stay the
+    list-time snapshot; this only adds what the clock has shown since. Every name is read from its prepared series
+    (`frames`, the one decode the chart shares) and priced by `PreparedSeries.quote`: with its tape for a name in `tape`
+    (`{symbol: feed}`, the names she holds, so a held name reads the same print as her chart and her account), else off
+    the last closed minute. A name whose bars are unavailable gets `live: None`, never a stand-in."""
     store = svc.store_factory(db)
     daily_of = screen.asof_loader(svc.history, store, row.day)
-    minutes_of = screen.minutes_loader(svc.history, store, row.day)
     out = []
     for candidate in row.candidates:
-        daily = daily_of(candidate["symbol"])
-        live = None if daily is None else screen.live_quote(daily, minutes_of(candidate["symbol"]), row.day, clock)
+        symbol = candidate["symbol"]
+        try:
+            series = svc.history.series.get(svc.history.day_inputs(store, symbol, row.day), INTERVAL_MINUTES[interval])
+        except (ReplayDayError, ProviderError) as exc:
+            log.warning("live read: %s has no bars for %s: %s", symbol, row.day, exc)
+            out.append({**candidate, "live": None})
+            continue
+        if "asof" not in series.memo:
+            series.memo["asof"] = daily_of(symbol)
+        daily = series.memo["asof"]
+        prints = session_mod._tape_lookup(svc, store, symbol, tape[symbol]) if symbol in tape else None
+        quote = series.quote(clock, prints)
+        live = None if daily is None else screen.live_quote(daily, series.minutes_through(clock), row.day, clock, quote)
         out.append({**candidate, "live": jsonable(live)})
     return out
 
@@ -994,6 +1007,7 @@ def day_list_out(
     # every open trade priced at the one day clock, a name behind it included (nothing here is later than the clock)
     held = {} if clock is None else {p.row.id: p for p in session_mod.positions(db, svc, row.id, clock, books)}
     universe = row.universe
+    held_tape = {p.row.symbol: p.row.tape_feed for p in held.values()}
     scan = _latest_scan(db, row.id)
     warnings = [_few_names_reason(db, row, scan)] if len(row.candidates) < FEW_NAMES else []
     return {
@@ -1015,7 +1029,7 @@ def day_list_out(
         "columns": row.columns,
         # `live`: the names priced at the day clock (nothing past it), asked for by the day list's table. Off, or before
         # the first name is practised (no clock yet), or once the day has ended, the names are the list-time snapshot.
-        "candidates": _live_candidates(svc, db, row, clock)
+        "candidates": _live_candidates(svc, db, row, clock, plan.spec["setup"]["interval"], held_tape)
         if live and clock is not None and not ended
         else row.candidates,
         "watch": row.watch,

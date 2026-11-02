@@ -29,6 +29,7 @@ from ai_trading.replay.cache import (
     encode_bars,
     encode_daily,
 )
+from ai_trading.replay.frames import SeriesCache
 
 log = logging.getLogger(__name__)
 
@@ -131,6 +132,7 @@ class History:
         self._sources = sources
         self._now = now
         self._lru: OrderedDict[tuple[str, date], DayInputs] = OrderedDict()
+        self.series = SeriesCache()  # prepared display series over the decoded inputs (`replay/frames.py`)
         self.fetches = 0  # provider bar requests (one per contiguous run), for tests and the prep CLI
 
     # -- public ----------------------------------------------------------------------------------------------

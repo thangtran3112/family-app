@@ -45,11 +45,10 @@ from sqlalchemy.orm import Session
 
 from ai_trading.contracts.practice_thread import DEFAULT_STARTING_BALANCE
 from ai_trading.contracts.replay_session import ReplaySessionV1
-from ai_trading.core.calendar import ET, annotate
+from ai_trading.core.calendar import ET
 from ai_trading.core.calendar import session as trading_session
-from ai_trading.core.evaluate import _resample
 from ai_trading.db.models import PracticeHold, PracticeMark, PracticeThread, ReplayDayList, ReplaySession
-from ai_trading.replay import hold_rows, swing_play
+from ai_trading.replay import frames, hold_rows, swing_play
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import ledger as ledger_mod
@@ -300,13 +299,13 @@ def positions(
 ) -> list[Position]:
     """Every open trade of the day priced at the shared day clock. A name behind the clock is priced at the clock too:
     the clock never runs past what the day has revealed, so this is not lookahead. A name with no price yet is carried
-    at its entry (no P/L). ponytail: one context (a bars load) per open position; batch the loads for dozens."""
+    at its entry (no P/L). The price is `frames.PreparedSeries.quote`, the one function every surface prices with."""
     rows = {r.id: r for r in _sessions_of_day(db, day_list_id)}
     out = []
     for session_id, (_, open_) in (books if books is not None else day_books(db, day_list_id)).items():
         if open_ is None:
             continue
-        found = last_price(context(db, svc, rows[session_id]), clock)
+        found = _price_of_row(db, svc, rows[session_id], clock)
         out.append(Position(rows[session_id], open_, open_.entry_price if found is None else found[0]))
     return out
 
@@ -398,19 +397,10 @@ def _is_swing(db: Session, row: ReplaySession) -> bool:
 # -- views over the revealed history --------------------------------------------------------------------------
 
 
-def _day_minutes(ctx: Ctx, through: pd.Timestamp) -> pd.DataFrame:
-    """Closed 1-minute bars of the replay day (extended hours) at `through`, nothing later."""
-    found = trading_session("stock", ctx.row.day)
-    assert found is not None
-    bars = ctx.inputs.bars_1m
-    return bars[(bars.index >= found.extended_open) & (bars.index + MINUTE <= through)]
-
-
-def _display(ctx: Ctx, minutes: pd.DataFrame, as_of: pd.Timestamp, width: int) -> pd.DataFrame:
-    """Display-interval bars completed by `as_of`, with the engine's own aggregation (`day`, `phase` columns)."""
-    if minutes.empty:
-        return minutes.assign(day=None, phase=None)
-    return _resample(annotate(minutes, "stock"), "stock", width, as_of)
+def _series(ctx: Ctx, width: int | None = None) -> frames.PreparedSeries:
+    """The name's prepared series at `width` minutes (the session's own interval by default): one per (symbol, day,
+    interval) in the process, so a request slices it and never re-resamples."""
+    return ctx.svc.history.series.get(ctx.inputs, ctx.minutes if width is None else width)
 
 
 def _bar_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -428,72 +418,48 @@ def _bar_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     ]
 
 
-def _forming(ctx: Ctx, minutes: pd.DataFrame, through: pd.Timestamp, width: int) -> dict[str, Any] | None:
-    """The display bar now forming, built from closed minutes of the same phase bin (None on a bin boundary)."""
-    if minutes.empty:
-        return None
-    last = minutes.index[-1]
-    ann = annotate(minutes.iloc[-1:], "stock")
-    if ann.empty:
-        return None
-    found = trading_session("stock", ctx.row.day)
-    assert found is not None
-    phase = ann["phase"].iloc[0]
-    start_of = {"pre": found.extended_open, "regular": found.regular_open, "post": found.regular_close}[phase]
-    end_of = {"pre": found.regular_open, "regular": found.regular_close, "post": found.extended_close}[phase]
-    width_td = pd.Timedelta(minutes=width)
-    bin_start = start_of + ((last - start_of) // width_td) * width_td
-    bin_end = min(bin_start + width_td, end_of)
-    if bin_end <= through:
-        return None
-    part = minutes[(minutes.index >= bin_start) & (minutes.index + MINUTE <= through)]
-    if part.empty:
-        return None
-    return {
-        "t": bin_start,
-        "o": float(part["open"].iloc[0]),
-        "h": float(part["high"].max()),
-        "l": float(part["low"].min()),
-        "c": float(part["close"].iloc[-1]),
-        "v": float(part["volume"].sum()),
-    }
-
-
-def _levels(ctx: Ctx, minutes: pd.DataFrame, through: pd.Timestamp) -> dict[str, Any]:
-    found = trading_session("stock", ctx.row.day)
-    assert found is not None
-    regular = minutes[(minutes.index >= found.regular_open) & (minutes.index < found.regular_close)]
-    out: dict[str, Any] = {"prior_close": ctx.inputs.prior_close}
+def _levels_of(ctx: Ctx, series: frames.PreparedSeries, through: pd.Timestamp) -> dict[str, Any]:
+    out = series.levels(through)
     if ctx.swing:  # the raw prior close is on the old share basis after a split
         out["prior_close"] = swing_play.prior_close(ctx, ctx.symbol) or ctx.inputs.prior_close
-    if len(regular):
-        out["session_high"] = float(regular["high"].max())
-        out["session_low"] = float(regular["low"].min())
-    if through >= found.regular_open + pd.Timedelta(minutes=15):
-        opening = regular[regular.index < found.regular_open + pd.Timedelta(minutes=15)]
-        if len(opening):
-            out["opening_range_high"] = float(opening["high"].max())
-            out["opening_range_low"] = float(opening["low"].min())
     return out
 
 
+def _tape_lookup(svc: Services, store: BlobStore, symbol: str, feed: str) -> frames.LastPrint:
+    """The name's last eligible print at or before a time, from the tape (a provider outage reads as no print)."""
+
+    def last(through: pd.Timestamp) -> tuple[pd.Timestamp, float] | None:
+        try:
+            return svc.tape.last_print(store, symbol, through, feed)  # type: ignore[arg-type]
+        except ProviderError as exc:
+            log.warning("tape unavailable for the last price: %s", exc)
+            return None
+
+    return last
+
+
+def _price_of_row(
+    db: Session, svc: Services, row: ReplaySession, through: pd.Timestamp
+) -> tuple[float, pd.Timestamp] | None:
+    """`last_price` for a session row without building its context: the day thread's price at `through` (a swing
+    session still prices from its holds)."""
+    if _is_swing(db, row):
+        return last_price(context(db, svc, row), through)
+    store = svc.store_factory(db)
+    inputs = svc.history.day_inputs(store, row.symbol, row.day)
+    series = svc.history.series.get(inputs, INTERVAL_MINUTES[row.spec["interval"]])
+    found = series.quote(through, _tape_lookup(svc, store, row.symbol, row.tape_feed))
+    return None if found is None else (found.price, found.at)
+
+
 def last_price(ctx: Ctx, through: pd.Timestamp) -> tuple[float, pd.Timestamp] | None:
-    """The mark price: the last eligible print at or before `through`, else the last revealed 1-minute close, in
-    whole cents (`journal_mod.fill_price`) so what she sees is what the P/L runs on (D-033). A swing session prices
-    from the regular session only (`swing_play.last_price`)."""
+    """The mark price at `through` (`frames.PreparedSeries.quote`): the last eligible print at or before it, else the
+    last revealed 1-minute close, in whole cents (D-033) so what she sees is what the P/L runs on. A swing session
+    prices from the regular session only (`swing_play.last_price`)."""
     if ctx.swing:
         return swing_play.last_price(ctx, through)
-    try:
-        found = ctx.svc.tape.last_print(ctx.store, ctx.symbol, through, ctx.feed)  # type: ignore[arg-type]
-    except ProviderError as exc:
-        log.warning("tape unavailable for the last price: %s", exc)
-        found = None
-    if found is not None:
-        return journal_mod.fill_price(found[1]), found[0]
-    closed = _day_minutes(ctx, through)
-    if closed.empty:
-        return None
-    return journal_mod.fill_price(float(closed["close"].iloc[-1])), closed.index[-1] + MINUTE
+    found = _series(ctx).quote(through, _tape_lookup(ctx.svc, ctx.store, ctx.symbol, ctx.feed))
+    return None if found is None else (found.price, found.at)
 
 
 def _age_s(found: tuple[float, pd.Timestamp] | None, through: pd.Timestamp) -> int | None:
@@ -892,7 +858,7 @@ def _frame(
     prints: dict[str, Any],
     signals: list[Fire],
 ) -> dict[str, Any]:
-    minutes = _day_minutes(ctx, through)
+    series = _series(ctx, width)
     price = last_price(ctx, through)
     return {
         "revealed_through": through,
@@ -900,7 +866,7 @@ def _frame(
         "behind_clock": ctx.day_clock is not None and through < ctx.day_clock,
         "at_end": through >= ctx.window_end,
         "bars": bars,
-        "forming": _forming(ctx, minutes, through, width),
+        "forming": series.forming(through),
         "prints": prints,
         "signals": [
             {
@@ -916,7 +882,7 @@ def _frame(
             }
             for f in signals
         ],
-        "levels": _levels(ctx, minutes, through),
+        "levels": _levels_of(ctx, series, through),
         "last": None if price is None else {"price": price[0], "at": price[1], "age_s": _age_s(price, through)},
         "quiet_s": (
             age if ctx.feed != "off" and (age := _age_s(price, through)) is not None and age >= QUIET_PRINT_S else None
@@ -1103,14 +1069,7 @@ def advance(
         if row.status != "ended":
             fills = _fill_working_orders(db, ctx, previous, target)
 
-    minutes = _day_minutes(ctx, target)
-    if width == 1:
-        now_bars = _display(ctx, minutes, target, 1)
-        old = set(_day_minutes(ctx, previous).index)
-    else:
-        now_bars = _display(ctx, minutes, target, width)
-        old = set(_display(ctx, _day_minutes(ctx, previous), previous, width).index)
-    new_bars = now_bars[[t not in old for t in now_bars.index]] if len(now_bars) else now_bars
+    new_bars = _series(ctx, width).bars_between(previous, target)
     prints = _prints_block(
         ctx, previous, target, min_size=min_size, min_notional=min_notional, max_prints=max_prints, pace_too=True
     )
@@ -1178,9 +1137,7 @@ def feed(
     width = INTERVAL_MINUTES[name]
     through = ctx.window_end if row.status == "ended" else ctx.through
     ctx.through = through
-    bars_1m = ctx.inputs.bars_1m
-    closed = bars_1m[bars_1m.index + MINUTE <= through]
-    display = _display(ctx, closed, through, width)
+    display = _series(ctx, width).bars(through)
     display = display.tail(LOOKBACK_BARS_MAX + len(display[display.index >= ctx.window_start]))
     prints = _prints_block(
         ctx,
