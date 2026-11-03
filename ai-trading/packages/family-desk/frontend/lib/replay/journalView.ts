@@ -1,11 +1,12 @@
-import { formatEtTime, formatNumber, formatPrice, formatPct, EMPTY_VALUE, type Tone } from "../desk/format.ts";
+import { formatEtDay, formatEtTime, formatNumber, formatPrice, formatPct, EMPTY_VALUE, type Tone } from "../desk/format.ts";
 import { practiceText, PRACTICE_COPY } from "../desk/freshness.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
 import type { JournalTrade, ReplayJournal, SignalVsTrade } from "./schemas.ts";
-import { swingDayTitle } from "./swing.ts";
-import type { SwingDayList } from "./swingApi.ts";
+import type { PracticeThread, Thread } from "./threads.ts";
 
-// Journal screen view logic (02o §a4, §c5): money (mask.ts formatSignedUsd with cents) and R formatting, the summary tiles, and the honest empty states.
+// Journal screen view logic (02o §a4, §c5; ADR-0025): money (mask.ts formatSignedUsd with cents) and R formatting, the summary tiles, and the honest
+// empty states. The journal is read LIVE: a lane's journal is computed on read and is never final, and the thread's is its ledger grouped by ET date
+// (a label and a grouping key; nothing ends, resets or reviews at a date).
 
 const MINUS = "−";
 
@@ -57,7 +58,7 @@ export function tradeRows(trades: readonly JournalTrade[]): TradeRow[] {
     no: trade.no,
     side: trade.side === "long" ? "Long" : "Short",
     entry: `${formatEtTime(trade.entry_at)} · ${formatPrice(trade.entry_price)}`,
-    exit: `${formatEtTime(trade.exit_at)} · ${formatPrice(trade.exit_price)}${trade.exit_source === "auto" ? " (auto, day end)" : ""}`,
+    exit: `${formatEtTime(trade.exit_at)} · ${formatPrice(trade.exit_price)}${trade.exit_source === "auto" ? " (auto)" : ""}`,
     shares: formatNumber(trade.shares, 0),
     pnl: formatSignedUsd(trade.pnl_usd, { cents: true }),
     pnlTone: moneyTone(trade.pnl_usd),
@@ -85,16 +86,63 @@ export function signalRows(rows: readonly SignalVsTrade[]): SignalRow[] {
   }));
 }
 
-/** "No practice trades this session · 3 signals would have fired" or without the signal count when there were none. */
+/** "No practice trades on this name yet · 3 signals would have fired" or without the signal count when there were none. */
 export function noTradesText(signalCount: number): string {
-  if (signalCount === 0) return PRACTICE_COPY.noTradesJournal;
-  return practiceText("noTradesJournalSignals", { signals: `${signalCount} signal${signalCount === 1 ? "" : "s"}` });
+  if (signalCount === 0) return PRACTICE_COPY.journalNoTrades;
+  return practiceText("journalNoTradesSignals", { signals: `${signalCount} signal${signalCount === 1 ? "" : "s"}` });
 }
 
 export const tradesCountText = (count: number): string => `${count} practice trade${count === 1 ? "" : "s"}`;
 
-/** "Session over · 3 practice trades · See journal". */
-export const sessionOverText = (tradeCount: number): string => practiceText("sessionOver", { trades: tradesCountText(tradeCount) });
+// ---- the thread's journal, by ET date --------------------------------------------------------------------------------
 
-/** "Day 3 of 15 · Week 1 · Wed 2026-07-08" for a swing session's journal. */
-export const swingJournalDay = (list: Pick<SwingDayList, "day_no" | "of" | "week_no" | "day">): string => swingDayTitle(list);
+/** "Wed 2026-03-11": an ET calendar date as the journal names it. */
+export const dateLabel = formatEtDay;
+
+/** "03-11": the short form an axis label uses. */
+export const shortDate = (day: string): string => day.slice(5);
+
+export type ThreadTile = { id: string; label: string; value: string; sub: string; tone: Tone };
+
+/** "64%" from a 0..1 share, or a dash with no closed trade. */
+const winRate = (rate: number | undefined): string => (rate === undefined ? EMPTY_VALUE : `${Math.round(rate * 100)}%`);
+
+const dateOf = (daily: Thread["daily"], result: number | undefined): string => {
+  const row = result === undefined ? undefined : daily.find((entry) => entry.pnl_usd === result);
+  return row ? dateLabel(row.day) : EMPTY_VALUE;
+};
+
+/** The eight tiles of "Summary so far". Wins and losses count closed practice trades: an open position is not in them until it is closed. */
+export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTile[] {
+  const { stats } = thread.thread;
+  const closedTrades = stats.wins + stats.losses;
+  const money = (value: number | undefined): string => formatSignedUsd(value ?? null, { cents: true });
+  const worstDate = dateOf(thread.daily, stats.worstDayUsd);
+  return [
+    { id: "dates", label: "ET dates traded", value: String(stats.daysPracticed), sub: PRACTICE_COPY.journalTileDates, tone: "flat" },
+    { id: "wins", label: "Wins", value: String(stats.wins), sub: PRACTICE_COPY.threadTileTrades, tone: "flat" },
+    { id: "losses", label: "Losses", value: String(stats.losses), sub: PRACTICE_COPY.threadTileTrades, tone: "flat" },
+    { id: "win_rate", label: "Win rate", value: winRate(stats.winRate), sub: closedTrades === 0 ? PRACTICE_COPY.threadTileNoTrades : practiceText("threadTileOfTrades", { wins: stats.wins, trades: closedTrades }), tone: "flat" },
+    { id: "avg_win", label: "Avg win", value: money(stats.avgWinUsd), sub: PRACTICE_COPY.threadTilePerWin, tone: moneyTone(stats.avgWinUsd) },
+    { id: "avg_loss", label: "Avg loss", value: money(stats.avgLossUsd), sub: PRACTICE_COPY.threadTilePerLoss, tone: moneyTone(stats.avgLossUsd) },
+    { id: "best", label: "Best date", value: money(stats.bestDayUsd), sub: dateOf(thread.daily, stats.bestDayUsd), tone: moneyTone(stats.bestDayUsd) },
+    // The worst date is the lowest result, which is a gain while no date has lost: the tile then says so.
+    { id: "worst", label: "Worst date", value: money(stats.worstDayUsd), sub: stats.worstDayUsd !== undefined && stats.worstDayUsd >= 0 ? practiceText("journalTileNoLoss", { date: worstDate }) : worstDate, tone: moneyTone(stats.worstDayUsd) },
+  ];
+}
+
+/** True while the thread has realized no trade: nothing to chart yet. */
+export const hasNoTrades = (thread: Pick<Thread, "daily">): boolean => thread.daily.length === 0;
+
+/** "3 open positions", "1 open position". */
+export const openPositionsText = (count: number): string => `${count} open position${count === 1 ? "" : "s"}`;
+
+/** The plan as plain rows for the recap: label and value. The two limits are optional rules counted per ET date; the entry size is the shares a ticket opens at, or "Not set". */
+export function planRows(plan: PracticeThread["plan"], shares?: number): Array<{ id: string; label: string; value: string }> {
+  return [
+    { id: "shares", label: PRACTICE_COPY.threadShares, value: shares === undefined ? PRACTICE_COPY.threadSharesNotSet : formatNumber(shares, 0) },
+    { id: "signal", label: "Trade only on a signal", value: plan.tradeOnlyOnSignal === "yes" ? "Yes" : "No" },
+    { id: "max_loss", label: PRACTICE_COPY.journalMaxLossRow, value: plan.maxLossUsd === undefined ? "None" : `$${plan.maxLossUsd.toLocaleString("en-US")}` },
+    { id: "max_trades", label: PRACTICE_COPY.journalMaxTradesRow, value: plan.maxTrades === undefined ? "None" : String(plan.maxTrades) },
+  ];
+}

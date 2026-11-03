@@ -1,38 +1,33 @@
 import { formatEtClock, formatEtTimeZone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
-import type { DayList } from "./daily.ts";
-import { beforeOpen, listTime } from "./dayView.ts";
+import type { Screen } from "./screen.ts";
 
 // The status bar's own line on a Practice route (D-043): where the prices come from, what the screen waits for, and the
 // clock it stands at. The shell shows it in place of its live-quotes line, which does not apply to past days.
 
 export type PracticeStatusLine = { left: readonly string[]; right: readonly string[] };
 
-/**
- * The day list: "Prices: Alpaca SIP · past days | Day lists built before the open ... List built 8:30 AM ET | Would-fire signals only".
- * One list time (D-165): after a re-scan it is the scan's clock, and "built before the open" goes once the day clock is past the open.
- */
-export function dayStatusLine(list: Pick<DayList, "list_at" | "rescan" | "clock" | "list_pending">): PracticeStatusLine {
+/** The Screen: "Prices: Alpaca SIP · past days | The scan runs at the thread clock ... Scanned 9:32 AM ET | Would-fire signals only". The scan's clock is the one time; a new Screen has none until its first scan. */
+export function screenStatusLine(screen: Pick<Screen, "rescan">): PracticeStatusLine {
   return {
-    left: [PRACTICE_COPY.statusPricesPast, ...(beforeOpen(list.clock) ? [PRACTICE_COPY.statusDayLists] : [])],
-    right: [practiceText(list.list_pending ? "statusListComesOut" : "statusListBuilt", { listAt: formatEtTimeZone(listTime(list)) }), PRACTICE_COPY.statusSignals],
+    left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusScanAtClock],
+    right: [screen.rescan === null ? PRACTICE_COPY.screenStatusNotScanned : practiceText("statusScanned", { time: formatEtTimeZone(screen.rescan.as_of) }), PRACTICE_COPY.statusSignals],
   };
 }
 
-/** The thread journal: "... Journal updates when a day ends ... Balance as of day 8". */
-export function journalStatusLine(daily: ReadonlyArray<{ n: number }>): PracticeStatusLine {
+/** The thread journal: "... Journal is read live, by ET date ... Balance as of 2026-10-23". */
+export function journalStatusLine(daily: ReadonlyArray<{ day: string }>): PracticeStatusLine {
   const last = daily.at(-1);
   return {
-    left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusJournalUpdates],
-    right: [last ? practiceText("statusBalanceAsOf", { day: last.n }) : PRACTICE_COPY.statusBalanceStart, PRACTICE_COPY.statusSignals],
+    left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusJournalLive],
+    right: [last ? practiceText("statusBalanceAsOf", { day: last.day }) : PRACTICE_COPY.statusBalanceStart, PRACTICE_COPY.statusSignals],
   };
 }
 
-/** The replay workspace: "Prices: Alpaca SIP · replay | Consolidated tape ... Replay clock 10:07:00 AM ET | Would-fire signals only". The feed is the session's own; a swing session with the tape off prices from one-minute closes. */
-export function replayStatusLine(feed: "sip" | "iex" | "off", playhead: string): PracticeStatusLine {
-  const feedNote = { sip: PRACTICE_COPY.feedSip, iex: PRACTICE_COPY.feedIex, off: PRACTICE_COPY.swingTapeOff }[feed];
+/** The replay workspace: "Prices: Alpaca SIP · replay | Consolidated tape ... Replay clock 10:07:00 AM ET | Would-fire signals only". The feed is the lane's own. */
+export function replayStatusLine(feed: "sip" | "iex", playhead: string): PracticeStatusLine {
   return {
-    left: [feed === "iex" ? PRACTICE_COPY.statusPricesReplayIex : PRACTICE_COPY.statusPricesReplay, feedNote],
+    left: [feed === "iex" ? PRACTICE_COPY.statusPricesReplayIex : PRACTICE_COPY.statusPricesReplay, feed === "iex" ? PRACTICE_COPY.feedIex : PRACTICE_COPY.feedSip],
     right: [practiceText("statusReplayClock", { time: formatEtClock(playhead) }), PRACTICE_COPY.statusSignals],
   };
 }

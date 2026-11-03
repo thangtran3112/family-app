@@ -25,8 +25,8 @@ const item = {
   ref: "F-014",
   kind: "bug",
   severity: "P2",
-  title: "Day list marks Day 4 done before the replay ends",
-  route: "/practice/day?id=5",
+  title: "Screen marks a name starred before the replay ends",
+  route: "/practice/screen?thread=5",
   area: "practice",
   reported_by: "W",
   updated_at: "2026-10-29T20:40:00Z",
@@ -36,13 +36,13 @@ const item = {
 const list = { items: [item], counts: { open: 0, in_progress: 0, fixed: 1, wont_fix: 0, duplicate: 0 } };
 const detail = {
   ...item,
-  body: "On Practice · Day list, the Day 4 row turns green too early.",
+  body: "On Practice · Screen, the star turns green too early.",
   expected: "It should stay In progress.",
-  screen: "Practice · Day list",
+  screen: "Practice · Screen",
   app_version: "desk-2026.10.25",
-  context: { day_list_id: 5 },
+  context: { thread_id: 5 },
   captured_at: "2026-10-25T13:14:00Z",
-  links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/practice/day?id=5" }],
+  links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/practice/screen?thread=5" }],
   attachments: [{ id: 3, filename: "day-list.png", size_bytes: 421888, content_type: "image/png" }],
   events: [
     { at: "2026-10-25T13:14:00Z", actor: "user", from_status: null, to_status: "open", note: null },
@@ -80,12 +80,12 @@ test("filing a report POSTs the body and answers with the new report", async () 
   const body = {
     kind: "bug" as const,
     severity: "P2" as const,
-    title: "Day list marks Day 4 done",
+    title: "Screen marks a name starred",
     body: "It turns green too early.",
-    screen: "Practice · Day list",
-    route: "/practice/day?id=5",
+    screen: "Practice · Screen",
+    route: "/practice/screen?thread=5",
     app_version: "desk-2026.10.26",
-    context: { day_list_id: 5 },
+    context: { thread_id: 5 },
     captured_at: "2026-10-26T14:12:00.000Z",
     links: [],
     attachment_ids: [3],
@@ -108,7 +108,7 @@ test("a field problem from the API arrives as plain sentences", async () => {
 test("the schemas accept the API's shapes, an empty log, and a staged upload, and refuse a changed status word", () => {
   assert.equal(FeedbackListSchema.parse(list).items.length, 1);
   assert.deepEqual(FeedbackListSchema.parse({ items: [], counts: { open: 0, in_progress: 0, fixed: 0, wont_fix: 0, duplicate: 0 } }).items, []);
-  assert.equal(FeedbackDetailSchema.parse(detail).context.day_list_id, 5);
+  assert.equal(FeedbackDetailSchema.parse(detail).context.thread_id, 5);
   assert.deepEqual(FeedbackUploadSchema.parse({ id: 4, filename: "a.png", size_bytes: 10, content_type: "image/png", report_id: null }).report_id, null);
   assert.throws(() => FeedbackListSchema.parse({ ...list, items: [{ ...item, status: "closed" }] }));
   assert.throws(() => FeedbackDetailSchema.parse({ ...detail, events: [{ ...detail.events[0], actor: "stranger" }] }));

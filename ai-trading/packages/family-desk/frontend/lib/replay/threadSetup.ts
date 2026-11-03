@@ -9,7 +9,8 @@ import type { ThreadPlan } from "./threads.ts";
 
 // The hub's "New thread" form and the journal's "Edit plan" form (02r): the draft the form edits, its conversion to a
 // `PracticeThreadCreateV1` or `PracticeThreadPatchV1`, and live validation against the contract's own Zod schema (the D6
-// pattern). The risk plan lives on the thread (D-007); the daily-list form no longer asks for it.
+// pattern). The risk plan lives on the thread (D-007) and its rules are optional: counted per ET date of the thread's clock. The setup
+// (start instant, filters, interval) is the other half of the form (`planSetup.ts`) and rides beside this body as `setup`.
 
 export const MIN_STARTING_BALANCE = 1000;
 export const MAX_STARTING_BALANCE = 10_000_000;
@@ -17,18 +18,16 @@ export const MAX_STARTING_BALANCE = 10_000_000;
 export type ThreadDraft = {
   /** Whole dollars as typed; the contract's default is 50,000. */
   startingBalance: string;
-  mode: "day" | "swing";
   tradeOnlyOnSignal: boolean;
   maxLossUsd: string;
   maxTrades: string;
   planNote: string;
-  /** The entry size tickets open at, as typed (D-042): empty means not set. Only the Edit plan form of a day thread reads it. */
+  /** The entry size tickets open at, as typed (D-042): empty means not set. Only the Edit plan form reads it. */
   shares: string;
 };
 
 export const defaultThreadDraft = (): ThreadDraft => ({
   startingBalance: String(DEFAULT_STARTING_BALANCE),
-  mode: "day",
   tradeOnlyOnSignal: false,
   maxLossUsd: "",
   maxTrades: "",
@@ -58,7 +57,8 @@ export function threadPlanToSpec(draft: Pick<ThreadDraft, "tradeOnlyOnSignal" | 
 
 export const threadDraftToSpec = (draft: ThreadDraft): unknown => ({
   schemaVersion: 1,
-  mode: draft.mode,
+  // The contract still carries the mode and the backend still requires it; a thread is freestyle and nothing reads it (ADR-0025).
+  mode: "day",
   startingBalance: numberOrNaN(draft.startingBalance),
   plan: threadPlanToSpec(draft),
 });
@@ -66,7 +66,6 @@ export const threadDraftToSpec = (draft: ThreadDraft): unknown => ({
 /** A thread's plan as a draft, for the "Edit plan" form. */
 export const planToDraft = (plan: ThreadPlan, startingBalance: number, shares?: number): ThreadDraft => ({
   startingBalance: String(startingBalance),
-  mode: "day",
   tradeOnlyOnSignal: plan.tradeOnlyOnSignal === "yes",
   maxLossUsd: plan.maxLossUsd === undefined ? "" : String(plan.maxLossUsd),
   maxTrades: plan.maxTrades === undefined ? "" : String(plan.maxTrades),
@@ -81,12 +80,13 @@ export const threadPatchToSpec = (draft: ThreadDraft): unknown => ({
   ...(draft.shares.trim() === "" ? {} : { shares: numberOrNaN(draft.shares) }),
 });
 
+/** `mode` only carries the server's "all thread slots are taken" sentence (a 409 on that field). */
 export type ThreadField = "startingBalance" | "mode" | "tradeOnlyOnSignal" | "maxLossUsd" | "maxTrades" | "planNote" | "shares" | "form";
 export type ThreadProblems = Partial<Record<ThreadField, string>>;
 
 const FIELD_MESSAGE: Record<ThreadField, string> = {
   startingBalance: `Starting balance: whole dollars from ${MIN_STARTING_BALANCE.toLocaleString("en-US")} to ${MAX_STARTING_BALANCE.toLocaleString("en-US")}`,
-  mode: "Pick day trading",
+  mode: "Every thread slot is in use · close a thread to start another",
   tradeOnlyOnSignal: "Pick yes or no",
   maxLossUsd: "Max loss: whole dollars from 1 to 100,000",
   maxTrades: "Max trades: a whole number from 1 to 50",
@@ -119,7 +119,7 @@ export function threadProblems(problems: readonly DeskApiProblem[]): ThreadProbl
 
 type Validation<T> = { ok: true; spec: T } | { ok: false; problems: ThreadProblems };
 
-/** The server's rule on top of the contract: a day's max loss cannot be more than the whole starting balance. */
+/** The server's rule on top of the contract: the max loss cannot be more than the whole starting balance. */
 function maxLossProblem(maxLoss: number | undefined, balance: number): string | null {
   return maxLoss !== undefined && Number.isFinite(balance) && maxLoss > balance
     ? `Max loss can't be more than your simulated starting balance (${formatWhole(balance)})`

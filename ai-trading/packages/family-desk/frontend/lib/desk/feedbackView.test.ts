@@ -157,7 +157,7 @@ test("only web addresses become links", () => {
   assert.equal(safeHref("https://trading.tobytran.dev/practice"), "https://trading.tobytran.dev/practice");
   assert.equal(safeHref("javascript:alert(1)"), null);
   assert.equal(safeHref("//evil.example/x"), null);
-  assert.equal(linkHost("https://trading.tobytran.dev/practice/day?id=5"), "trading.tobytran.dev");
+  assert.equal(linkHost("https://trading.tobytran.dev/practice/screen?thread=5"), "trading.tobytran.dev");
   assert.equal(linkHost("not a url"), "not a url");
 });
 
@@ -208,7 +208,7 @@ const upload = (status: UploadItem["status"], extra: Partial<UploadItem> = {}): 
   failure: status === "failed" ? "Upload failed · the connection dropped, try again" : null,
   ...extra,
 });
-const draft = (extra: Partial<FormDraft> = {}): FormDraft => ({ ...emptyFields(), title: "Day list marks Day 4 done", body: "It turns green too early.", uploads: [], ...extra });
+const draft = (extra: Partial<FormDraft> = {}): FormDraft => ({ ...emptyFields(), title: "Screen marks a name starred", body: "It turns green too early.", uploads: [], ...extra });
 
 test("Send says why it is off, in the order the board shows: required text, links, uploading, failed", () => {
   assert.equal(sendReason(draft({ title: "", body: "" })), "Reason: a title and a description are required.");
@@ -226,20 +226,20 @@ test("Send says why it is off, in the order the board shows: required text, link
 });
 
 test("a blank link row never blocks Send and is never sent", () => {
-  const links = [{ label: "", url: "" }, { label: "Chart screenshot", url: " https://trading.tobytran.dev/practice/day?id=5 " }, { label: "", url: "" }];
+  const links = [{ label: "", url: "" }, { label: "Chart screenshot", url: " https://trading.tobytran.dev/practice/screen?thread=5 " }, { label: "", url: "" }];
   assert.equal(sendReason(draft({ links })), null);
-  assert.deepEqual(filledLinks(links), [{ label: "Chart screenshot", url: " https://trading.tobytran.dev/practice/day?id=5 " }]);
+  assert.deepEqual(filledLinks(links), [{ label: "Chart screenshot", url: " https://trading.tobytran.dev/practice/screen?thread=5 " }]);
   assert.equal(sendReason(draft({ links: [{ label: "only a label", url: "" }] })), "Reason: link 1 needs a web address that starts with http:// or https://.");
 });
 
-const captured = { screen: "Practice · Day list", route: "/practice/day?id=5", appVersion: "desk-2026.10.26", capturedAt: "2026-10-26T14:12:00.000Z", context: { day_list_id: 5 } };
+const captured = { screen: "Practice · Screen", route: "/practice/screen?thread=5", appVersion: "desk-2026.10.26", capturedAt: "2026-10-26T14:12:00.000Z", context: { thread_id: 5 } };
 
 test("the body of a bug carries severity, expectation, links and the finished screenshots only", () => {
   const body = toCreateBody(
     draft({
       kind: "bug",
       severity: "P1",
-      title: "  Day list marks Day 4 done  ",
+      title: "  Screen marks a name starred  ",
       expected: " It should stay In progress ",
       links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/x" }, { label: "", url: "https://trading.tobytran.dev/y" }, { label: "", url: "" }],
       uploads: [upload("done", { attachmentId: 3 }), upload("uploading"), upload("failed"), upload("done", { attachmentId: 9 })],
@@ -249,13 +249,13 @@ test("the body of a bug carries severity, expectation, links and the finished sc
   assert.deepEqual(body, {
     kind: "bug",
     severity: "P1",
-    title: "Day list marks Day 4 done",
+    title: "Screen marks a name starred",
     body: "It turns green too early.",
     expected: "It should stay In progress",
-    screen: "Practice · Day list",
-    route: "/practice/day?id=5",
+    screen: "Practice · Screen",
+    route: "/practice/screen?thread=5",
     app_version: "desk-2026.10.26",
-    context: { day_list_id: 5 },
+    context: { thread_id: 5 },
     captured_at: "2026-10-26T14:12:00.000Z",
     links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/x" }, { url: "https://trading.tobytran.dev/y" }],
     attachment_ids: [3, 9],

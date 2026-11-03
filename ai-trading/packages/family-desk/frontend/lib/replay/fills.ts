@@ -2,12 +2,10 @@ import { z } from "zod";
 import type { components } from "../api/openapi.js";
 import { clientOf, deskPath, readInit, type RequestOptions } from "../desk/api.ts";
 import { EMPTY_VALUE, formatEtClock, formatEtDay, formatNumber, formatPrice } from "../desk/format.ts";
-import { practiceText } from "../desk/freshness.ts";
-import type { Thread } from "./threads.ts";
 
-// The Fills panel of a day thread's Trades screen: every Buy and Sell the server booked (`GET /replay/threads/{id}/fills`, ADR-0018).
+// The Fills panel of a thread's Trades screen: every Buy and Sell the server booked (`GET /replay/threads/{id}/fills`, ADR-0018).
 // The server keeps the book; the screen only lists it. Checked against the generated OpenAPI with `satisfies` like threads.ts. A fill's
-// day is "Day 3 · Wed 2026-03-11" (read off the thread's own days), its time is the ET clock. Every figure is SIMULATED.
+// date is its ET calendar date ("Wed 2026-03-11"; a label, nothing more), its time is the ET clock. Every figure is SIMULATED.
 
 const finite = z.number().finite();
 
@@ -37,7 +35,6 @@ export const ThreadFillsSchema = z.object({
 export type Fill = z.infer<typeof FillSchema>;
 export type ThreadFills = z.infer<typeof ThreadFillsSchema>;
 
-/** A day thread only: a swing thread keeps its positions as holds and answers 404. */
 export const loadThreadFills = (threadId: number, options?: RequestOptions) =>
   clientOf(options)(deskPath(`/replay/threads/${threadId}/fills`), ThreadFillsSchema, readInit(options));
 
@@ -48,23 +45,16 @@ export function fillEffect({ closes, opens }: Pick<Fill, "closes" | "opens">): s
   return opens > 0 ? "Opened or added" : EMPTY_VALUE;
 }
 
-/** ISO date to "Day 3 · Wed 2026-03-11" for each day the thread has opened (its ended days and the open one). */
-export function dayLabels(thread: Pick<Thread, "daily" | "today">): Map<string, string> {
-  const days = thread.daily.map(({ day, n, weekday }) => ({ day, n, weekday }));
-  if (thread.today !== null) days.push({ day: thread.today.day, n: thread.today.day_no, weekday: thread.today.weekday });
-  return new Map(days.map(({ day, n, weekday }) => [day, practiceText("swingDayShort", { day: n, weekday: formatEtDay(day) })]));
-}
+export type FillRow = { key: string; date: string; time: string; symbol: string; action: string; shares: string; price: string; effect: string };
 
-export type FillRow = { key: string; day: string; time: string; symbol: string; action: string; shares: string; price: string; effect: string };
-
-export const fillRows = (fills: readonly Fill[], labels: ReadonlyMap<string, string>): FillRow[] =>
+export const fillRows = (fills: readonly Fill[]): FillRow[] =>
   fills.map((fill) => ({
     key: String(fill.id),
-    day: labels.get(fill.day) ?? EMPTY_VALUE,
+    date: formatEtDay(fill.day),
     time: formatEtClock(fill.at), // to the second, like the thread clock the fill was stamped by
     symbol: fill.symbol,
     action: fill.action === "buy" ? "Buy" : "Sell",
     shares: formatNumber(fill.shares, 0),
     price: formatPrice(fill.price),
-    effect: `${fillEffect(fill)}${fill.source === "auto" ? " (auto, day end)" : ""}`,
+    effect: `${fillEffect(fill)}${fill.source === "auto" ? " (auto)" : ""}`,
   }));

@@ -1,19 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { daysResponse, delta, feed, markResult, session, sessionSummary } from "./fixtures.ts";
+import { delta, feed, markResult, session } from "./fixtures.ts";
 import {
   MarkResultSchema,
   MarkUndoSchema,
-  ReplayDaysSchema,
+  OrderSchema,
   ReplayDeltaSchema,
   ReplayFeedSchema,
   ReplaySessionSchema,
-  ReplaySessionsSchema,
 } from "./schemas.ts";
 import { StampSchema } from "../api/schemas.ts";
 
 test("the plan's payloads parse", () => {
-  assert.equal(ReplayDaysSchema.parse(daysResponse).days.length, 3);
   assert.equal(ReplaySessionSchema.parse(session).spec.symbol, "NVDA");
   assert.equal(ReplayDeltaSchema.parse(delta).prints.rows[0]?.[2], 200);
   assert.equal(ReplayFeedSchema.parse(feed).interval, "5m");
@@ -34,9 +32,12 @@ test("the contract's required fields are required: the feed's interval and windo
   assert.equal(MarkUndoSchema.parse({ removed_mark_id: 3, open_trade: null, journal: markResult.journal, thread: null }).open_trade, null);
 });
 
-test("the session list is a bare array", () => {
-  assert.equal(ReplaySessionsSchema.parse([sessionSummary]).length, 1);
-  assert.equal(ReplaySessionsSchema.safeParse({ sessions: [sessionSummary] }).success, false);
+test("an order is good till cancelled unless it says Day, and a Day order carries its lapse time (ADR-0025)", () => {
+  const order = { id: 4, side: "sell", type: "stop", shares: 100, limit_price: null, stop_price: 185, status: "working", placed_at: "2026-10-23T14:05:00Z", triggered_at: null, closed_at: null, fill_price: null, mark_id: null, reason: null };
+  assert.deepEqual([OrderSchema.parse(order).tif, OrderSchema.parse(order).expires_at, OrderSchema.parse(order).reduce_only], ["gtc", null, false]);
+  const day = OrderSchema.parse({ ...order, tif: "day", expires_at: "2026-10-24T00:00:00Z", reduce_only: true });
+  assert.deepEqual([day.tif, day.expires_at, day.reduce_only], ["day", "2026-10-24T00:00:00Z", true]);
+  assert.equal(OrderSchema.safeParse({ ...order, tif: "week" }).success, false);
 });
 
 test("every Practice response may carry stamp.freshness replay, and the shared Stamp accepts it too", () => {
@@ -50,5 +51,4 @@ test("malformed payloads are rejected", () => {
   assert.equal(ReplaySessionSchema.safeParse({ ...session, status: "paused" }).success, false);
   assert.equal(ReplaySessionSchema.safeParse({ ...session, spec: { ...session.spec, shares: 0 } }).success, false);
   assert.equal(ReplaySessionSchema.safeParse({ ...session, stamp: { ...session.stamp, freshness: "live" } }).success, false);
-  assert.equal(ReplayDaysSchema.safeParse({ ...daysResponse, days: [{ ...daysResponse.days[0], day: "April 7" }] }).success, false);
 });

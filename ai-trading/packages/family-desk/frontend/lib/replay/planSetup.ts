@@ -1,83 +1,39 @@
-import { PracticeBlockV1Schema } from "@ai-trading/contracts/practice-block-v1";
+import { PracticeSetupV2Schema } from "@ai-trading/contracts/practice-setup-v2";
 import type { DeskApiProblem } from "../api/client.ts";
-import { formatEtDay } from "../desk/format.ts";
-import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
+import { PRACTICE_COPY } from "../desk/freshness.ts";
 import { plainMessage } from "../desk/problems.ts";
-import { defaultDraft, draftToSpec, fieldOfPath, lastWeekday, latestReplayDay, REGULAR_WINDOW, type SetupDraft, type SetupField } from "./setup.ts";
+import type { ReplayInterval } from "./schemas.ts";
+import { dayProblem, EARLIEST_DAY, latestReplayDay } from "./setup.ts";
+import { etWallToUtcIso } from "./time.ts";
 
-// The hub's daily-list plan form (02o-b v1): the draft the form edits, its conversion to a `PracticeBlockV1`, and live
-// validation against the contract's own Zod schema (the D6 pattern). The setup half reuses the single-session draft.
+// The New thread form's setup half (ADR-0025): the draft the form edits, its conversion to a `PracticeSetupV2`, and live validation
+// against the contract's own Zod schema (the D6 pattern). A freestyle thread has one start instant, a Screen (her saved filters, scanned
+// at the thread's clock) and the chart setup a lane opens with: no fixed course length, no list time, no window, no first date to count from.
 
-export const EARLIEST_LIST_DAY = "2017-01-03";
+export const EARLIEST_START_DAY = EARLIEST_DAY;
 export const MAX_FILTERS = 3;
-export const SESSION_CHOICES = [5, 10, 20, 30] as const;
-
-/** The list times she is offered: the premarket gap list, the first 15 minutes, the first hour. */
-export const LIST_TIMES = [
-  { value: "08:30", label: "8:30 Premarket" },
-  { value: "10:00", label: "10:00 After the first 15 minutes" },
-  { value: "10:45", label: "10:45 After the first hour" },
-] as const;
-
-/** What the filter list carries about a filter's cadence: enough to know when its first bar of the list day exists. */
-export type FilterTiming = { run_on: string; session: "regular" | "extended" };
-
-const CADENCE_MINUTES: Record<string, number> = { bar_close_1m: 1, bar_close_5m: 5, bar_close_15m: 15, bar_close_1h: 60 };
-/** The live SIP embargo the list's data lags by (backend `LIST_DATA_LAG`). */
-const LIST_LAG_MINUTES = 15;
-const EARLIEST_LIST_AT = "04:30";
-
-/** The earliest list time ("HH:MM" ET) at which the filter reads a bar of the list day itself; the server answers 422
- *  below it. A mirror of `earliest_list_at` in `replay/screen.py`: the two tables are tested against the same values. */
-export function earliestListAt(filter: FilterTiming): string {
-  if (filter.run_on === "premarket_0830") return "08:30";
-  const cadence = CADENCE_MINUTES[filter.run_on];
-  if (cadence === undefined) return EARLIEST_LIST_AT; // daily_close and weekly read the sessions before the day
-  const minutes = (filter.session === "regular" ? 9 * 60 + 30 : 4 * 60) + cadence + LIST_LAG_MINUTES;
-  return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
-}
-
-export type FilterTimings = ReadonlyMap<number, FilterTiming>;
-
-/** The latest of the chosen filters' earliest list times, and the filters that set it. */
-export function listTimeNeed(filterIds: readonly number[], timings: FilterTimings): { time: string; ids: number[] } {
-  let time = EARLIEST_LIST_AT;
-  let ids: number[] = [];
-  for (const id of filterIds) {
-    const timing = timings.get(id);
-    if (timing === undefined) continue;
-    const need = earliestListAt(timing);
-    if (need > time) [time, ids] = [need, [id]];
-    else if (need === time && need > EARLIEST_LIST_AT) ids.push(id);
-  }
-  return { time, ids };
-}
-
-/** True when `time` is earlier than the chosen filters need: that list time is off and the server would answer 422. A time
- *  at or after the need holds, so nothing is said about it (D-017: the "needs a list time" line used to show whenever a
- *  cadence filter was picked, even with a good time selected). */
-export const listTimeHeld = (time: string, need: { time: string; ids: readonly number[] }): boolean => need.ids.length > 0 && time < need.time;
+/** The regular open: where a thread starts unless she picks another time. */
+export const DEFAULT_START_TIME = "09:30";
+/** The extended session's bounds (ET): a start outside them is in no session at all. */
+const SESSION_OPEN = "04:00";
+const SESSION_CLOSE = "20:00";
+export const MIN_LIST = 20;
+export const MAX_LIST = 49;
 
 export type PlanDraft = {
-  firstDay: string;
-  sessions: string;
-  /** The most names she may star and practise in a day. */
+  /** An ET trading day, "YYYY-MM-DD". */
+  startDay: string;
+  /** ET wall time, "HH:MM". */
+  startTime: string;
+  /** The saved filters that build the Screen (one to three). */
   filterIds: number[];
-  listAt: string;
+  /** The Screen holds at most this many names (20 to 49). */
   maxList: string;
-  /** Window, session and interval; the symbol, day, shares and risk plan are not the daily plan's (D-007), and nothing is armed (D-153). */
-  setup: SetupDraft;
+  interval: ReplayInterval;
 };
 
-const pad = (value: number) => String(value).padStart(2, "0");
-
-/** The day starts at the list time, never before the open. It has no end of its own: the contract's `to` is the regular close, so `from` is always before it. */
-export function windowForList(listAt: string): { from: string; to: string } {
-  return { from: listAt < "09:30" ? "09:30" : listAt, to: REGULAR_WINDOW.to };
-}
-
 /** The first weekday of the month three months back (New Year's Day rolls on): far enough back that she is unlikely to remember it. */
-export function defaultFirstDay(now: Date): string {
+export function defaultStartDay(now: Date): string {
   const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3, 1, 12));
   while (date.getUTCDay() === 0 || date.getUTCDay() === 6 || (date.getUTCMonth() === 0 && date.getUTCDate() === 1)) {
     date.setUTCDate(date.getUTCDate() + 1);
@@ -85,27 +41,13 @@ export function defaultFirstDay(now: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** The first day the form shows: the day she picked, else the server's default once the Desk has recorded 20 finished days of
- *  its universe (`GET /replay/universe-days`), else the draft's own (the first weekday three months back). */
-export const effectiveFirstDay = (draftDay: string, picked: boolean, recorded: string | null): string =>
+/** The start date the form shows: the day she picked, else the server's default once the Desk has recorded 20 finished days of its
+ *  universe (`GET /replay/universe-days`), else the draft's own (the first weekday three months back). */
+export const effectiveStartDay = (draftDay: string, picked: boolean, recorded: string | null): string =>
   picked || recorded === null ? draftDay : recorded;
 
 export function defaultPlanDraft(now: Date): PlanDraft {
-  const listAt = LIST_TIMES[0].value;
-  return {
-    firstDay: defaultFirstDay(now),
-    sessions: "20",
-    filterIds: [],
-    listAt,
-    maxList: "30",
-    setup: { ...defaultDraft(), ...windowForList(listAt) },
-  };
-}
-
-/** Picking a list time moves the window start to it (a window cannot begin before the list). */
-export function withListTime(draft: PlanDraft, listAt: string): PlanDraft {
-  const window = windowForList(listAt);
-  return { ...draft, listAt, setup: { ...draft.setup, from: window.from, to: window.to } };
+  return { startDay: defaultStartDay(now), startTime: DEFAULT_START_TIME, filterIds: [], maxList: "30", interval: "5m" };
 }
 
 export function toggleFilter(ids: readonly number[], id: number): number[] {
@@ -113,64 +55,43 @@ export function toggleFilter(ids: readonly number[], id: number): number[] {
   return ids.length >= MAX_FILTERS ? [...ids] : [...ids, id];
 }
 
-/** The first offered list time at or after `need` (the last one when none is late enough). */
-export function listTimeFrom(need: string): string {
-  return (LIST_TIMES.find((item) => item.value >= need) ?? LIST_TIMES[LIST_TIMES.length - 1]).value;
-}
-
-/** Picks or drops a filter. Nothing is armed (D-076: a new plan starts with none), and a list time too early for a cadence
- *  filter moves to the first offered time that works (10:00 for a 15-minute filter). */
-export function withFilterToggled(draft: PlanDraft, id: number, timings: FilterTimings): PlanDraft {
-  const filterIds = toggleFilter(draft.filterIds, id);
-  if (filterIds.length === draft.filterIds.length && filterIds.every((item, index) => item === draft.filterIds[index])) return draft;
-  const next = { ...draft, filterIds };
-  const need = listTimeNeed(filterIds, timings).time;
-  return next.listAt < need ? withListTime(next, listTimeFrom(need)) : next;
-}
-
 const numberOrNaN = (text: string): number => (text.trim() === "" ? Number.NaN : Number(text));
 
-/** The draft as the contract's JSON. Nothing is null or boolean. The block carries no shares and no risk plan: the thread has the plan (D-007). */
-export function planDraftToSpec(draft: PlanDraft): unknown {
-  const setup = draftToSpec(draft.setup) as Record<string, unknown>;
+/** The start instant the contract takes: an ISO time with an explicit offset, whole seconds ("2026-03-10T13:30:00Z"). "" for a day or time that is not one. */
+export function startAtOf(day: string, time: string): string {
+  const iso = etWallToUtcIso(day, time);
+  return iso === null ? "" : iso.replace(/\.\d{3}Z$/, "Z");
+}
+
+/** The draft as the contract's JSON (`PracticeSetupV2`). Nothing is null or boolean; nothing is armed on a new thread (D-153), and the contract wants the field. */
+export function planDraftToSetup(draft: PlanDraft): unknown {
   return {
-    schemaVersion: 1,
-    firstDay: draft.firstDay,
-    sessions: numberOrNaN(draft.sessions),
-    hideDates: "no", // the contract still wants the field; a date is always shown (ADR-0022), so the server ignores it
-    screen: { filters: draft.filterIds.map((id) => ({ id })), listAt: draft.listAt, maxList: numberOrNaN(draft.maxList) },
-    setup: { window: setup.window, session: setup.session, interval: setup.interval, armed: [] }, // nothing is armed on a new plan (D-153); the contract wants the field
+    schemaVersion: 2,
+    startAt: startAtOf(draft.startDay, draft.startTime),
+    screen: { filters: draft.filterIds.map((id) => ({ id })), maxList: numberOrNaN(draft.maxList) },
+    setup: { interval: draft.interval, session: "regular", armed: [] },
   };
 }
 
-export type PlanField = SetupField | "firstDay" | "sessions" | "filters" | "listAt" | "maxList";
+export type PlanField = "startAt" | "filters" | "maxList" | "interval" | "form";
 export type PlanProblems = Partial<Record<PlanField, string>>;
 
 const FIELD_MESSAGE: Record<PlanField, string> = {
-  symbol: "",
-  day: "",
-  window: "Pick a window that starts at or after the list time and ends after it starts",
-  interval: "Pick 1m, 5m or 15m",
-  armed: "Arm up to 5 strategies",
-  form: "Check the plan and try again",
-  firstDay: "Pick a weekday from Jan 3, 2017",
-  sessions: "Days: a whole number from 5 to 30",
+  startAt: "Pick a trading day and a time between 4:00 AM and 8:00 PM ET",
   filters: "Pick one to three filters",
-  listAt: "List time: between 4:30 AM and 3:30 PM",
-  maxList: "List size: a whole number from 20 to 50",
+  maxList: `Screen size: a whole number from ${MIN_LIST} to ${MAX_LIST}`,
+  interval: "Pick 1m, 5m or 15m",
+  form: "Check the thread and try again",
 };
 
-/** Maps a contract or server path (`screen.listAt`, `setup.window.from`, `firstDay`) to the form field that shows it. */
+/** Maps a contract or server path (`startAt`, `screen.filters`, `setup.startAt`) to the form field that shows it. */
 export function planFieldOfPath(path: string): PlanField {
-  const [first, second] = path.split(".");
-  switch (first) {
-    case "firstDay": case "sessions": return first;
-    case "screen": return second === "filters" ? "filters" : second === "listAt" ? "listAt" : second === "maxList" ? "maxList" : "form";
-    case "setup": return fieldOfPath(path.split(".").slice(1).join("."));
-    case "window": return "window";
-    case "armed": case "interval": return fieldOfPath(path);
-    default: return "form";
-  }
+  const parts = path.split(".");
+  if (parts.includes("startAt")) return "startAt";
+  if (parts.includes("filters")) return "filters";
+  if (parts.includes("maxList")) return "maxList";
+  if (parts.includes("interval")) return "interval";
+  return "form";
 }
 
 export function planProblems(problems: readonly DeskApiProblem[]): PlanProblems {
@@ -182,26 +103,17 @@ export function planProblems(problems: readonly DeskApiProblem[]): PlanProblems 
   return result;
 }
 
-export type PlanValidation = { ok: true; spec: ReturnType<typeof PracticeBlockV1Schema.parse> } | { ok: false; problems: PlanProblems };
+export type PlanValidation = { ok: true; spec: ReturnType<typeof PracticeSetupV2Schema.parse> } | { ok: false; problems: PlanProblems };
 
-const isWeekend = (day: string) => {
-  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
-  return weekday === 0 || weekday === 6;
-};
-
-/** Live validation: the contract's Zod schema plus a local read of the first day. With `now`, a run of sessions that ends after the
- *  last finished day is a problem too. Holidays and one-off closures are the server's call. */
+/** Live validation: the contract's Zod schema plus a local read of the start date and time. With `now`, a day that has not finished is a
+ *  problem too. Holidays, one-off closures and the data horizon are the server's call. */
 export function validatePlanDraft(draft: PlanDraft, now?: Date): PlanValidation {
   const problems: PlanProblems = {};
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.firstDay) || Number.isNaN(Date.parse(`${draft.firstDay}T12:00:00Z`)) || draft.firstDay < EARLIEST_LIST_DAY || isWeekend(draft.firstDay)) {
-    problems.firstDay = FIELD_MESSAGE.firstDay;
-  } else if (now !== undefined) {
-    const sessions = numberOrNaN(draft.sessions);
-    if (Number.isInteger(sessions) && sessions >= 5 && sessions <= 30 && lastWeekday(draft.firstDay, sessions) > latestReplayDay(now)) {
-      problems.firstDay = practiceText("swingRangeTooLate", { sessions, day: formatEtDay(draft.firstDay) });
-    }
-  }
-  const parsed = PracticeBlockV1Schema.safeParse(planDraftToSpec(draft));
+  const day = now === undefined ? null : dayProblem(draft.startDay, now);
+  if (day !== null) problems.startAt = day;
+  else if (draft.startDay === "" || startAtOf(draft.startDay, draft.startTime) === "") problems.startAt = FIELD_MESSAGE.startAt;
+  else if (draft.startTime < SESSION_OPEN || draft.startTime > SESSION_CLOSE) problems.startAt = FIELD_MESSAGE.startAt;
+  const parsed = PracticeSetupV2Schema.safeParse(planDraftToSetup(draft));
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       const field = planFieldOfPath(issue.path.join("."));
@@ -216,13 +128,13 @@ export function validatePlanDraft(draft: PlanDraft, now?: Date): PlanValidation 
 export function livePlanProblems(draft: PlanDraft, now: Date): PlanProblems {
   const result = validatePlanDraft(draft, now);
   if (result.ok) return {};
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the two fields only the submit shows are left out
   const { filters: _filters, form: _form, ...rest } = result.problems;
   return rest;
 }
 
-/** The one button of the modal: "Start 20-day practice", or "Start 20-day swing practice" for a swing thread. */
-export function startLabel(sessions: string, swing: boolean): string {
-  const days = Number(sessions);
-  const ready = sessions.trim() !== "" && Number.isInteger(days) && days > 0;
-  return practiceText(swing ? (ready ? "newPlanStartSwing" : "newPlanStartSwingBare") : ready ? "newPlanStart" : "newPlanStartBare", { days: sessions.trim() });
-}
+/** The newest start date the date box takes: the last finished session. */
+export const latestStartDay = latestReplayDay;
+
+/** The one button of the modal. */
+export const startLabel = (): string => PRACTICE_COPY.newPlanStartThread;

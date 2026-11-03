@@ -1,4 +1,4 @@
-/* The New plan modal is a ui/Dialog; what is left here is its form. */
+/* The New thread modal is a ui/Dialog; what is left here is its form. */
 .submit { min-width: 200px; gap: var(--space-2); }
 .submit[aria-disabled="true"] { border-color: var(--color-hairline); color: var(--color-muted); cursor: default; opacity: 0.6; }
 .submit[aria-disabled="true"]:hover { background: transparent; }
@@ -16,9 +16,5 @@
 .span { grid-column: 1 / -1; }
 .fieldError { margin: 0; color: var(--color-down); font-size: var(--text-label); line-height: var(--line-label); }
 
-/* The top row: the pretend balance and the mode. The balance box carries its own "$"; SIMULATED sits on the label line, not inside the input. */
+/* The top row: the pretend balance. The balance box carries its own "$"; SIMULATED sits on the label line, not inside the input. */
 .topRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3) var(--space-4); }
-
-/* Names left out of a swing universe: one row each, with its own Remove. */
-.leftOut { display: flex; margin: 0; flex-direction: column; gap: var(--space-1); padding: 0; list-style: none; }
-.leftOutRow { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }

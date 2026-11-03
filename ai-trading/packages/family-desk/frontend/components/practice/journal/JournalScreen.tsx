@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
@@ -9,17 +9,13 @@ import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Button } from "@/components/ui/Button";
 import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { ErrorBlock, LoadingBlock } from "@/components/ui/StateBlocks";
-import { createReplaySession, loadReplayFeed, loadReplaySession, patchReplaySession } from "@/lib/desk/replay";
-import { formatEtDay } from "@/lib/desk/format";
+import { loadReplayFeed, loadReplaySession, patchReplaySession } from "@/lib/desk/replay";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { adherenceHint, noTradesText, signalRows, summaryTiles, swingJournalDay, tradeRows } from "@/lib/replay/journalView";
-import { sessionResumeHref } from "@/lib/replay/dayView";
-import { isSwingSession } from "@/lib/replay/playView";
+import { adherenceHint, noTradesText, signalRows, summaryTiles, tradeRows } from "@/lib/replay/journalView";
+import { replayHref, screenHref } from "@/lib/replay/practiceTabs";
 import type { ReplaySession } from "@/lib/replay/schemas";
 import { routeId } from "@/lib/replay/routeId";
-import { problemMessage } from "@/lib/replay/setup";
-import { isSwingDayList, loadAnyDayList } from "@/lib/replay/swingApi";
 import { AdherenceChecklist } from "./AdherenceChecklist";
 import { JournalChart } from "./JournalChart";
 import { NotesAndRating } from "./NotesAndRating";
@@ -28,7 +24,11 @@ import { SummaryTiles } from "./SummaryTiles";
 import { TradesTable } from "./TradesTable";
 import styles from "./journal.module.css";
 
-/** `/practice/journal?id=`: the scored session (02o §a4). Reads the URL, so the page wraps it in Suspense. */
+/**
+ * `/practice/journal?id=`: one lane's journal (02o §a4; ADR-0025). A lane is a name's book for the life of its thread, so its journal is read live and is
+ * never final: totals follow the thread clock and nothing after it is shown. There is no ending it and no replaying it; the chart and the Screen are
+ * one click away. Reads the URL, so the page wraps it in Suspense.
+ */
 export function JournalScreen() {
   const { id } = routeId(useSearchParams().get("id"));
   const session = useDeskQuery(`replay-session:${id}`, (signal) => loadReplaySession(id ?? 0, { signal }), { enabled: id !== null });
@@ -52,58 +52,47 @@ export function JournalScreen() {
 }
 
 function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => void }) {
-  const router = useRouter();
   const { spec, journal } = session;
-  const ended = session.status === "ended";
-  const swing = isSwingSession(session);
-  const swingDay = useDeskQuery(`journal-swing-day:${session.day_list_id}`, (signal) => loadAnyDayList(session.day_list_id ?? 0, {}, { signal }), {
-    enabled: swing && session.day_list_id !== null,
-  });
+  // A lane is live. Only a legacy standalone row is `ended`: it is read-only and has no chart to open.
+  const live = session.status === "active";
+  const threadId = session.thread?.id ?? session.thread_id;
   const feed = useDeskQuery(`replay-feed:${session.id}:${session.status}`, (signal) => loadReplayFeed(session.id, { interval: spec.interval }, { signal }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [again, setAgain] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null });
+  const [message, setMessage] = useState<string | null>(null);
 
-  useReportPracticeChrome({ day: spec.day, playhead: ended ? session.window_end : session.revealed_through });
+  // The journal reads live and belongs to no single day: the band says "past days", with no replay time of its own.
+  useReportPracticeChrome({ day: null, playhead: null, scope: "days" });
 
   const save = (patch: { notes?: string | null; rating?: number | null }) => {
     setSaving(true);
     setSaved(false);
+    setMessage(null);
     patchReplaySession(session.id, patch)
       .then(() => {
         setSaved(true);
         onSaved();
       })
-      .catch(() => setAgain((current) => ({ ...current, message: PRACTICE_COPY.notesError })))
+      .catch(() => setMessage(PRACTICE_COPY.notesError))
       .finally(() => setSaving(false));
   };
 
-  // Same setup, new attempt: the server numbers it.
-  const replayAgain = () => {
-    setAgain({ busy: true, message: null });
-    createReplaySession(spec)
-      .then((next) => router.push(`/practice/replay?id=${next.id}`))
-      .catch((error: unknown) => setAgain({ busy: false, message: problemMessage(error, PRACTICE_COPY.startError) }));
-  };
-
-  const swingList = swingDay.data !== null && isSwingDayList(swingDay.data) ? swingDay.data : null;
-  const dayLabel = swingList !== null ? swingJournalDay(swingList) : formatEtDay(spec.day);
   const tiles = summaryTiles(journal);
   const signalCount = feed.data?.signals.length ?? 0;
 
   return (
     <div className={styles.screen}>
-      {session.thread && <PracticeTabs threadId={session.thread.id} active="journal" mode={session.thread.mode} />}
+      {session.thread && <PracticeTabs threadId={session.thread.id} active="journal" />}
       <header className={styles.header}>
-        <h1 className={styles.title}>{spec.symbol} · {dayLabel} · attempt {session.attempt} · Practice journal</h1>
+        <h1 className={styles.title}>{spec.symbol} · Practice journal</h1>
         <div className={styles.actions}>
-          {!ended && <Button client href={sessionResumeHref(session)} variant="primary">Resume</Button>}
+          {live && <Button client href={replayHref(session.id)} variant="primary">{PRACTICE_COPY.journalOpenChart}</Button>}
         </div>
       </header>
       {session.thread && <ThreadStrip thread={session.thread} />}
       <div className={styles.center}>
-        {!ended && <p className={styles.banner} role="status">{PRACTICE_COPY.sessionOpen} · totals are live and the rest of the day stays hidden</p>}
-        {ended && journal.totals.trades === 0 && <p className={styles.muted} role="status">{noTradesText(signalCount)}</p>}
+        {live && <p className={styles.banner} role="status">{PRACTICE_COPY.journalLaneLive}</p>}
+        {journal.totals.trades === 0 && <p className={styles.muted} role="status">{noTradesText(signalCount)}</p>}
         <SummaryTiles tiles={tiles} hint={adherenceHint(journal)} />
         <section className={styles.section} aria-label="Chart">
           <h2 className={styles.sectionTitle}>Chart</h2>
@@ -121,10 +110,7 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
         </section>
         <section className={styles.section} aria-label="Signals versus your trades">
           <h2 className={styles.sectionTitle}>Signals versus your trades</h2>
-          <SignalsVsTradesTable
-            rows={signalRows(journal.signals_vs_trades)}
-            empty={ended ? "No signals fired in this window" : "Signals and what came after them appear when you end the session"}
-          />
+          <SignalsVsTradesTable rows={signalRows(journal.signals_vs_trades)} empty={PRACTICE_COPY.journalNoSignals} />
         </section>
       </div>
       <RightRail
@@ -138,14 +124,13 @@ function Journal({ session, onSaved }: { session: ReplaySession; onSaved: () => 
                 <AdherenceChecklist adherence={journal.adherence} />
                 <NotesAndRating notes={session.notes} rating={session.rating} saving={saving} saved={saved} onSave={save} />
                 <div className={styles.actions}>
-                  {session.day_list_id === null ? (
-                    <Button variant="primary" disabled={again.busy} onClick={replayAgain}>Replay this day again</Button>
+                  {threadId === null ? (
+                    <Button client href="/practice" variant="primary">{PRACTICE_COPY.openPractice}</Button>
                   ) : (
-                    <Button client href={`/practice/day?id=${session.day_list_id}`} variant="primary">{PRACTICE_COPY.backToList}</Button>
+                    <Button client href={screenHref(threadId)} variant="primary">{PRACTICE_COPY.journalOpenScreen}</Button>
                   )}
-                  <Button client href="/practice">New session</Button>
                 </div>
-                {again.message && <p className={styles.muted} role="alert">{again.message}</p>}
+                {message && <p className={styles.muted} role="alert">{message}</p>}
               </div>
             ),
           },

@@ -15,7 +15,7 @@ export type NotesAndRatingProps = {
   saving: boolean;
   saved: boolean;
   onSave: (patch: { notes?: string | null; rating?: number | null }) => void;
-  /** Label of the notes box; "Session notes" in the session journal. */
+  /** Label of the notes box; "Notes" in a lane journal. */
   notesLabel?: string;
 };
 
@@ -25,8 +25,8 @@ const normalise = (text: string): string | null => {
   return trimmed === "" ? null : trimmed;
 };
 
-/** Self-rating (1 to 5, a radio group; "Clear rating" takes it back) and the session notes. */
-export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabel = "Session notes" }: NotesAndRatingProps) {
+/** Self-rating (1 to 5, a radio group; "Clear rating" takes it back) and the lane notes. */
+export function NotesAndRating({ notes, rating, saving, saved, onSave, notesLabel = PRACTICE_COPY.journalNotes }: NotesAndRatingProps) {
   const id = useId();
   const [draft, setDraft] = useState(notes ?? "");
   const [synced, setSynced] = useState(notes);

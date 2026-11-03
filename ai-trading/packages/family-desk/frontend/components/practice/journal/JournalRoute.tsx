@@ -6,7 +6,7 @@ import { JournalScreen } from "@/components/practice/journal/JournalScreen";
 import { ThreadJournalScreen } from "@/components/practice/journal/thread/ThreadJournalScreen";
 
 /**
- * `/practice/journal`: `?thread=` opens a practice thread's journal (02r), `?id=` the scored replay session. A journal exists only inside
+ * `/practice/journal`: `?thread=` opens a practice thread's journal (02r), `?id=` one lane's journal (read live; ADR-0025). A journal exists only inside
  * a thread, so the bare address (no global thread picker, no top-bar tab) sends her to Practice, where she opens a thread.
  */
 export function JournalRoute() {

@@ -22,23 +22,29 @@ test("a buy below the last print is a limit, above it a stop; a sell mirrors it;
 
 test("the draft keeps the ticket's quantity and sets only the one price its type takes", () => {
   const ticket = { ...initialTicket(25), type: "stop_limit" as const, limitPrice: "1", stopPrice: "2" };
-  assert.deepEqual(chartOrderDraft(ticket, "buy", 184, 184.5), { side: "buy", type: "limit", shares: "25", limitPrice: "184.00", stopPrice: "" });
-  assert.deepEqual(chartOrderDraft(ticket, "buy", 185, 184.5), { side: "buy", type: "stop", shares: "25", limitPrice: "", stopPrice: "185.00" });
-  assert.deepEqual(chartOrderDraft(ticket, "sell", 184.5, 184.5), { side: "sell", type: "market", shares: "25", limitPrice: "", stopPrice: "" });
+  assert.deepEqual(chartOrderDraft(ticket, "buy", 184, 184.5), { side: "buy", type: "limit", shares: "25", limitPrice: "184.00", stopPrice: "", tif: "gtc" });
+  assert.deepEqual(chartOrderDraft(ticket, "buy", 185, 184.5), { side: "buy", type: "stop", shares: "25", limitPrice: "", stopPrice: "185.00", tif: "gtc" });
+  assert.deepEqual(chartOrderDraft(ticket, "sell", 184.5, 184.5), { side: "sell", type: "market", shares: "25", limitPrice: "", stopPrice: "", tif: "gtc" });
 });
 
 test("a chart draft builds through the ordinary ticket: a limit and a stop become orders, market an entry mark; no cash rule is bypassed here", () => {
   const ticket = initialTicket(10);
   const limit = buildTicket(chartOrderDraft(ticket, "buy", 184, 184.5));
   assert.ok(limit.ok && limit.action.kind === "order");
-  assert.deepEqual(limit.action.kind === "order" && limit.action.order, { side: "buy", orderType: "limit", shares: 10, limitPrice: 184 });
+  assert.deepEqual(limit.action.kind === "order" && limit.action.order, { side: "buy", orderType: "limit", shares: 10, limitPrice: 184, timeInForce: "gtc" });
   const stop = buildTicket(chartOrderDraft(ticket, "sell", 184, 184.5));
   assert.ok(stop.ok && stop.action.kind === "order");
-  assert.deepEqual(stop.action.kind === "order" && stop.action.order, { side: "sell", orderType: "stop", shares: 10, stopPrice: 184 });
+  assert.deepEqual(stop.action.kind === "order" && stop.action.order, { side: "sell", orderType: "stop", shares: 10, stopPrice: 184, timeInForce: "gtc" });
   const market = buildTicket(chartOrderDraft(ticket, "buy", 184.5, 184.5));
   assert.ok(market.ok && market.action.kind === "mark");
   const bad = buildTicket(chartOrderDraft({ ...ticket, shares: "abc" }, "buy", 184, 184.5));
   assert.equal(bad.ok, false, "a bad quantity is the ticket's own refusal");
+});
+
+test("a chart order carries the ticket's time in force, so a Day ticket makes a Day order", () => {
+  const day = { ...initialTicket(10), tif: "day" as const };
+  const limit = buildTicket(chartOrderDraft(day, "buy", 184, 184.5));
+  assert.deepEqual(limit.ok && limit.action.kind === "order" && limit.action.order.timeInForce, "day");
 });
 
 test("the button names the order it places", () => {

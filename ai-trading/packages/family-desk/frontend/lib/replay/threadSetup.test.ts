@@ -15,10 +15,10 @@ import {
   validateThreadDraft,
 } from "./threadSetup.ts";
 
-test("the New thread form starts at 50,000 with no stop rule, day trading, and no optional limit", () => {
+test("the New thread form starts at 50,000 with no stop rule and no optional limit; the contract's mode field goes as the backend still wants it", () => {
   const draft = defaultThreadDraft();
   assert.equal(draft.startingBalance, "50000");
-  assert.equal(draft.mode, "day");
+  assert.equal("mode" in draft, false, "a thread has no mode of its own");
   assert.deepEqual(threadDraftToSpec(draft), {
     schemaVersion: 1,
     mode: "day",
@@ -49,9 +49,6 @@ test("each field has its own plain message", () => {
   }
   const blank = validateThreadDraft({ ...defaultThreadDraft(), startingBalance: "" });
   assert.equal(blank.ok, false);
-  const swing = validateThreadDraft({ ...defaultThreadDraft(), mode: "swing" });
-  assert.equal(swing.ok, false, "a swing create needs its swing block (02p); the draft has none yet");
-  if (!swing.ok) assert.equal(swing.problems.form, "swing is present exactly when mode is swing");
 });
 
 test("a max loss above the starting balance is refused in the server's words", () => {
@@ -76,13 +73,13 @@ test("server problems map to the form's fields, and a 409 stays a plain sentence
   assert.equal(threadFieldOfPath("plan"), "form");
   assert.equal(threadFieldOfPath("mode"), "mode");
   const problems = threadProblems([
-    { path: "mode", message: "Swing threads are closed · start a day thread" },
+    { path: "mode", message: "All 10 thread slots are in use · close a thread to start another" },
     { path: "plan.maxLossUsd", message: "" },
   ]);
-  assert.equal(problems.mode, "Swing threads are closed · start a day thread");
+  assert.equal(problems.mode, "All 10 thread slots are in use · close a thread to start another");
   assert.equal(problems.maxLossUsd, "Max loss: whole dollars from 1 to 100,000");
-  const error = new DeskApiError("http", 409, { detail: "A day thread is already active" });
-  assert.equal(error.detail, "A day thread is already active");
+  const error = new DeskApiError("http", 409, { detail: "A thread is already active" });
+  assert.equal(error.detail, "A thread is already active");
 });
 
 test("the form's own sentences pass the banned-term check", () => {

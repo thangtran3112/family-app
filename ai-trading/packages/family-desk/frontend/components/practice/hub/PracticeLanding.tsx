@@ -7,29 +7,30 @@ import { EmptyBlock, ErrorBlock } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadThreadCapacity, loadThreads } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
+import { threadPageHref } from "@/lib/replay/practiceTabs";
 import { NewPlanModal } from "./NewPlanModal";
 import { ThreadTable } from "./ThreadTable";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 
-/** Practice landing (02r2, Paper mock LEW-0): the header with New plan (always available: any number of threads
- *  can run), and one table of her practice threads. The thread and plan setup live in the New plan modal;
+/** Practice landing (02r2, Paper mock LEW-0): the header with New thread (up to the shared thread slots), and one table of her
+ *  practice threads, each a card of its clock, balance, open positions and last activity. The thread's setup lives in the New thread modal;
  *  nothing else is on this page. */
 export function PracticeLanding() {
-  // Bumped when a thread or the plan changes (a day opened, the data prepared), so the table refetches.
+  // Bumped when a thread changes (one was deleted), so the table refetches.
   const router = useRouter();
   const [revision, setRevision] = useState(0);
   const changed = useCallback(() => setRevision((n) => n + 1), []);
-  // The New plan modal: a plan is never edited, a new plan is a new thread.
+  // The New thread modal: a thread's setup is never edited, a new setup is a new thread.
   const [modal, setModal] = useState(false);
-  // True while any row's action is opening a day: every row's action waits, so a second click cannot race the first.
+  // True while a thread is being deleted: every row waits, so a second click cannot race the first.
   const [busy, setBusy] = useState(false);
-  // "Deleted Day thread · Oct 15": the row is gone by then, so the page says it (D-079). The region exists from the start so it is announced.
+  // "Deleted Freestyle · Oct 15": the row is gone by then, so the page says it (D-079). The region exists from the start so it is announced.
   const [deleted, setDeleted] = useState<string | null>(null);
   const threads = useDeskQuery("replay-threads", (signal) => loadThreads({ signal }), { revision });
   // The server lists every active thread first (newest first), then the closed ones.
   const rows = threads.data ?? [];
-  // The day-trade slots are shared by every user (ADR-0022): at most day_max active day threads at once. Read again whenever a thread changed.
+  // The thread slots are shared by every user (ADR-0025): at most day_max active threads at once (the key names stay until the contract migration). Read again whenever a thread changed.
   const capacity = useDeskQuery("thread-capacity", (signal) => loadThreadCapacity({ signal }), { revision });
 
   return (
@@ -37,12 +38,12 @@ export function PracticeLanding() {
       <header className={`${hub.header} ${styles.headerSplit}`}>
         <div className={styles.titleBlock}>
           <h1 className={hub.title}>Practice</h1>
-          <p className={hub.hint}>{PRACTICE_COPY.threadsHint}</p>
+          <p className={hub.hint}>{PRACTICE_COPY.threadsHintFreestyle}</p>
         </div>
         <div className={styles.headerActions}>
           {capacity.data !== null && (
             <span className={hub.hint} role="status" data-testid="day-slots" data-full={capacity.data.day_active >= capacity.data.day_max ? "true" : undefined}>
-              {practiceText("daySlots", { active: capacity.data.day_active, max: capacity.data.day_max })}
+              {practiceText("threadSlots", { active: capacity.data.day_active, max: capacity.data.day_max })}
             </span>
           )}
           {/* The button stays when every slot is taken: the form opens and its footer gives the reason Start is off. */}
@@ -51,7 +52,7 @@ export function PracticeLanding() {
               setModal(true);
             }}
           >
-            {PRACTICE_COPY.planNew}
+            {PRACTICE_COPY.newThreadTitle}
           </Button>
         </div>
       </header>
@@ -73,7 +74,7 @@ export function PracticeLanding() {
             }}
           />
         ) : (
-          <ThreadTable rows={rows} revision={revision} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} onNewPlan={() => setModal(true)} />
+          <ThreadTable rows={rows} loading={threads.loading} busy={busy} onBusy={setBusy} onChanged={changed} onDeleted={setDeleted} />
         )}
       </div>
       {modal && (
@@ -82,7 +83,7 @@ export function PracticeLanding() {
             setModal(false);
             changed();
           }}
-          onSaved={(id) => router.push(`/practice/thread?id=${id}`)}
+          onSaved={(id) => router.push(threadPageHref(id))}
         />
       )}
     </div>

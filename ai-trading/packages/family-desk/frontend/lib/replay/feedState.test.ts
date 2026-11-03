@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyAdvance, applyFeedSwing, chartBars, dailyBlock, dismissPause, isQuietTape, mergeBars, paceOf, syncTarget, TAPE_CAP, viewClock, viewFromFeed, withHoldMarker } from "./feedState.ts";
+import { applyAdvance, chartBars, isQuietTape, mergeBars, paceOf, syncTarget, TAPE_CAP, viewClock, viewFromFeed } from "./feedState.ts";
 import { delta, feed, overnightDelta, overnightFeed } from "./fixtures.ts";
 import { ReplayDeltaSchema, ReplayFeedSchema } from "./schemas.ts";
-import { amdHold, closedHold, nvdaHold, pausedCross, stripRows, swingDelta, swingDeltaQuiet, swingFeed } from "./swingFixtures.ts";
 
 const base = () => viewFromFeed(ReplayFeedSchema.parse({ ...feed, bars: [], prints: { ...feed.prints, rows: [] }, signals: [] }), "5m");
 const next = (overrides: Record<string, unknown>) => ReplayDeltaSchema.parse({ ...delta, ...overrides });
@@ -144,102 +143,49 @@ test("a quiet tape is 30 market seconds without a print", () => {
   assert.equal(isQuietTape({ tape: [], revealedThrough: "2026-04-07T13:31:00Z", windowStart: "2026-04-07T13:30:00Z" }), true);
 });
 
-// ---- swing (02p): the day strip, the Daily block and the stop pause ---------------------------------------------
+// ---- a lane across days (ADR-0025) -------------------------------------------------------------------------------
 
-const swingBase = () => viewFromFeed(swingFeed, "15m");
+const dayBar = (day: string, hhmm: string, close: number) => ({ t: `${day}T${hhmm}:00Z`, o: close, h: close + 1, l: close - 1, c: close, v: 100, ext: false });
 
-test("a day session's view has no swing data", () => {
-  const view = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
-  assert.deepEqual([view.strip, view.daily, view.dailyForming, view.paused], [null, null, null, null]);
-  const advanced = applyAdvance(view, ReplayDeltaSchema.parse(delta));
-  assert.deepEqual([advanced.strip, advanced.dailyForming, advanced.paused], [null, null, null]);
-  assert.equal(dailyBlock(advanced), null);
+test("a Jump over a weekend folds bars of several data days into one ascending series, and the forming candle follows T", () => {
+  // Friday's close, held by the lane; then a poll that carries Monday's and Tuesday's bars after a Jump (since = Friday's playhead).
+  const friday = applyAdvance(base(), next({ revealed_through: "2026-04-10T19:55:00Z", bars: [dayBar("2026-04-10", "19:50", 10), dayBar("2026-04-10", "19:55", 11)], forming: null, thread_time: "2026-04-10T19:56:00Z" }));
+  const jumped = applyAdvance(friday, next({
+    revealed_through: "2026-04-14T14:35:00Z",
+    thread_time: "2026-04-14T14:36:30Z",
+    bars: [dayBar("2026-04-13", "13:30", 12), dayBar("2026-04-13", "19:55", 13), dayBar("2026-04-14", "13:30", 14), dayBar("2026-04-14", "14:30", 15)],
+    forming: { t: "2026-04-14T14:35:00Z", o: 15, h: 16, l: 15, c: 15.5, v: 50 },
+  }));
+  assert.deepEqual(jumped.bars.map((item) => item.t.slice(5, 16)), ["04-10T19:50", "04-10T19:55", "04-13T13:30", "04-13T19:55", "04-14T13:30", "04-14T14:30"]);
+  assert.equal(jumped.bars[0], friday.bars[0], "Friday's bars stay the same objects: a Jump rebuilds nothing it already had");
+  assert.equal(chartBars(jumped).at(-1)?.t, "2026-04-14T14:35:00Z", "the forming candle is Tuesday's, at T");
+  assert.equal(viewClock(jumped), "2026-04-14T14:36:30Z");
+  // The next poll starts where this window ended, not at the Friday it held before the Jump.
+  assert.deepEqual(syncTarget(jumped), { sync: true, since: "2026-04-14T14:35:00Z" });
+  // An answer that reaches back across a day boundary (another window took the Monday bars first) still sorts into place.
+  const reached = mergeBars(jumped.bars, [dayBar("2026-04-13", "15:00", 99)]);
+  assert.deepEqual(reached.map((item) => item.t.slice(5, 16)), ["04-10T19:50", "04-10T19:55", "04-13T13:30", "04-13T15:00", "04-13T19:55", "04-14T13:30", "04-14T14:30"]);
 });
 
-test("a feed answer brings the strip and the Daily block", () => {
-  const view = swingBase();
-  assert.equal(view.strip?.length, 4);
-  assert.equal(view.daily?.bars.length, 3);
-  assert.equal(view.dailyForming?.c, 191.4);
-  assert.equal(view.paused, null);
+test("a day thread's position travels with the view: the open trade is the lane's, whatever data day the bars are from", () => {
+  const held = applyAdvance(base(), next({ revealed_through: "2026-04-09T14:00:00Z", thread_time: "2026-04-09T14:00:00Z" }));
+  assert.equal(held.openTrade?.shares, 100);
+  const later = applyAdvance(held, next({ revealed_through: "2026-04-14T14:00:00Z", thread_time: "2026-04-14T14:00:00Z", open_trade: { ...delta.open_trade, last_price: 191.2, unrealized_usd: 378 } }));
+  assert.equal(later.openTrade?.last_price, 191.2, "the first read after a Jump prices the position at the new T");
+  assert.equal(later.openTrade?.entry_price, held.openTrade?.entry_price);
 });
 
-test("an advance that found a crossed stop keeps the pause for the toast, and the next advance clears it", () => {
-  const paused = applyAdvance(swingBase(), swingDelta);
-  assert.deepEqual(paused.paused, pausedCross);
-  assert.equal(paused.revealedThrough, "2026-07-14T15:42:00Z");
-  const next = applyAdvance(paused, swingDeltaQuiet);
-  assert.equal(next.paused, null);
-  assert.equal(next.revealedThrough, "2026-07-14T15:43:00Z");
-});
-
-test("the strip and the forming candle are the latest answer; an answer without them leaves what the view had", () => {
-  const moved = applyAdvance(swingBase(), { ...swingDelta, paused: null, strip: [stripRows[2]!], daily_forming: { t: "2026-07-14", o: 190.3, h: 192, l: 189.8, c: 192, v: 7_000_000 } });
-  assert.deepEqual(moved.strip?.map((row) => row.symbol), ["COIN"]);
-  assert.equal(moved.dailyForming?.c, 192);
-  const kept = applyAdvance(moved, ReplayDeltaSchema.parse({ ...delta, revealed_through: "2026-07-14T15:50:00Z" }));
-  assert.deepEqual(kept.strip?.map((row) => row.symbol), ["COIN"]);
-  assert.equal(kept.dailyForming?.c, 192);
-});
-
-test("a late answer changes nothing, the pause included", () => {
-  const paused = applyAdvance(swingBase(), swingDelta);
-  assert.equal(applyAdvance(paused, { ...swingDeltaQuiet, revealed_through: "2026-07-14T15:30:00Z" }), paused);
-});
-
-test("dismissing the pause clears only the pause", () => {
-  const paused = applyAdvance(swingBase(), swingDelta);
-  const cleared = dismissPause(paused);
-  assert.equal(cleared.paused, null);
-  assert.equal(cleared.strip, paused.strip);
-  assert.equal(cleared.revealedThrough, paused.revealedThrough);
-  assert.equal(dismissPause(cleared), cleared, "nothing to clear, same view");
-});
-
-test("the Daily chart's data carries the newest forming candle over the feed's", () => {
-  const moved = applyAdvance(swingBase(), { ...swingDelta, daily_forming: { t: "2026-07-14", o: 190.3, h: 193, l: 189.8, c: 193, v: 8_000_000 } });
-  const block = dailyBlock(moved)!;
-  assert.equal(block.forming?.c, 193);
-  assert.equal(block.bars.length, 3);
-  assert.equal(block.holds.length, 1);
-  assert.equal(moved.daily?.forming?.c, 191.4, "the stored block is not rewritten");
-});
-
-test("a fresh feed answer replaces the strip and the Daily block but not the playhead, and an older one is ignored", () => {
-  const view = applyAdvance(swingBase(), swingDelta);
-  const refreshed = applyFeedSwing(view, ReplayFeedSchema.parse({ ...swingFeed, revealed_through: "2026-07-14T15:43:00Z", strip: [stripRows[2]], daily: { ...swingFeed.daily, holds: [] } }));
-  assert.deepEqual(refreshed.strip?.map((row) => row.symbol), ["COIN"]);
-  assert.deepEqual(refreshed.daily?.holds, []);
-  assert.equal(refreshed.revealedThrough, view.revealedThrough, "only an advance moves the playhead");
-  assert.deepEqual(refreshed.paused, view.paused);
-  assert.equal(applyFeedSwing(view, swingFeed), view, "an older answer changes nothing");
-});
-
-test("a mark moves this name's hold marker on the Daily chart", () => {
-  const view = swingBase();
-  const entered = withHoldMarker(view, { ...amdHold, stop_price: 168 }, "2026-07-14");
-  assert.deepEqual(entered.daily?.holds, [{ entry_t: "2026-07-10", side: "short", entry_price: 162, stop_price: 168 }], "a carried hold keeps its entry date");
-  const first = withHoldMarker({ ...view, daily: { ...view.daily!, holds: [] } }, amdHold, "2026-07-14");
-  assert.equal(first.daily?.holds[0]?.entry_t, "2026-07-14", "a hold entered today starts today");
-  const moved = withHoldMarker(view, { ...nvdaHold, stop_price: 181 }, "2026-07-14");
-  assert.equal(moved.daily?.holds[0]?.stop_price, 181);
-  assert.deepEqual(withHoldMarker(view, closedHold, "2026-07-14").daily?.holds, []);
-  assert.deepEqual(withHoldMarker(view, null, "2026-07-14").daily?.holds, []);
-  const day = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
-  assert.equal(withHoldMarker(day, nvdaHold, "2026-07-14"), day, "a day session has no Daily block");
-});
-
-test("the view carries the day clock and whether this name is behind it, from a feed and from an advance", () => {
+test("the view carries the thread clock and whether this name is behind it, from a feed and from an advance", () => {
   const behind = viewFromFeed(ReplayFeedSchema.parse({ ...feed, day_clock: "2026-04-07T14:30:00Z", behind_clock: true }), "5m");
-  assert.deepEqual([behind.dayClock, behind.behindClock], ["2026-04-07T14:30:00Z", true]);
+  assert.deepEqual([behind.threadClock, behind.behindClock], ["2026-04-07T14:30:00Z", true]);
   const caught = applyAdvance(behind, ReplayDeltaSchema.parse({ ...delta, revealed_through: "2026-04-07T14:30:00Z", day_clock: "2026-04-07T14:30:00Z", behind_clock: false }));
-  assert.deepEqual([caught.dayClock, caught.behindClock], ["2026-04-07T14:30:00Z", false]);
-  assert.equal(viewFromFeed(ReplayFeedSchema.parse(feed), "5m").dayClock, null);
+  assert.deepEqual([caught.threadClock, caught.behindClock], ["2026-04-07T14:30:00Z", false]);
+  assert.equal(viewFromFeed(ReplayFeedSchema.parse(feed), "5m").threadClock, null);
 });
 
 test("the view carries the payload's own thread time, data end and market, from a feed and from an advance (ADR-0022)", () => {
   const plain = viewFromFeed(ReplayFeedSchema.parse(feed), "5m");
-  assert.deepEqual([plain.threadTime, plain.dataThrough, plain.market], [null, "2026-04-07T14:07:12Z", null], "a standalone session has no thread time; its data runs to its playhead");
+  assert.deepEqual([plain.threadTime, plain.dataThrough, plain.market], [null, "2026-04-07T14:07:12Z", null], "a legacy standalone session has no thread time; its data runs to its playhead");
   const overnight = viewFromFeed(ReplayFeedSchema.parse(overnightFeed), "5m");
   assert.deepEqual([overnight.threadTime, overnight.dataThrough, overnight.market?.phase], ["2026-04-08T05:22:24Z", "2026-04-08T00:00:00Z", "closed"]);
   const later = applyAdvance(overnight, ReplayDeltaSchema.parse({ ...overnightDelta, thread_time: "2026-04-08T05:22:26Z" }));
@@ -247,13 +193,13 @@ test("the view carries the payload's own thread time, data end and market, from 
   assert.equal(later.dataThrough, "2026-04-08T00:00:00Z");
 });
 
-test("one time source: the thread time of the payload, else the playhead or the day clock a name was left behind", () => {
+test("one time source: the thread time of the payload, else the playhead or the thread clock a name was left behind", () => {
   const overnight = viewFromFeed(ReplayFeedSchema.parse(overnightFeed), "5m");
   assert.equal(viewClock(overnight), "2026-04-08T05:22:24Z", "past the tape T still ticks; the name's capped playhead never stands in for it");
-  const behind = { threadTime: null, revealedThrough: "2026-04-07T14:00:00Z", dayClock: "2026-04-07T14:30:00Z" };
-  assert.equal(viewClock(behind), "2026-04-07T14:30:00Z", "a swing name left behind shows the thread's time");
-  assert.equal(viewClock({ ...behind, dayClock: "2026-04-07T13:00:00Z" }), "2026-04-07T14:00:00Z", "the playhead is never pulled back by a stale clock");
-  assert.equal(viewClock({ ...behind, dayClock: null }), "2026-04-07T14:00:00Z", "a standalone session has only its own playhead");
+  const behind = { threadTime: null, revealedThrough: "2026-04-07T14:00:00Z", threadClock: "2026-04-07T14:30:00Z" };
+  assert.equal(viewClock(behind), "2026-04-07T14:30:00Z", "a name left behind shows the thread's time");
+  assert.equal(viewClock({ ...behind, threadClock: "2026-04-07T13:00:00Z" }), "2026-04-07T14:00:00Z", "the playhead is never pulled back by a stale clock");
+  assert.equal(viewClock({ ...behind, threadClock: null }), "2026-04-07T14:00:00Z", "a legacy standalone session has only its own playhead");
 });
 
 test("indicator rows merge by bar open: a later answer replaces the forming bar's row and new bars append (one payload, one cut)", () => {

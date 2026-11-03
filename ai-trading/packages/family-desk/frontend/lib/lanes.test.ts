@@ -30,7 +30,7 @@ import {
 // The global-modes seam (ADR-0014, design-modes-cutover §3.3): four tables in lanes.ts decide which routes, tabs, shell
 // sections and left-rail tabs each mode shows. These invariants keep the tables honest as rows move between modes.
 
-/** Every `app/**​/page.tsx` as a route path: `app/practice/day/page.tsx` is `/practice/day`. */
+/** Every `app/**​/page.tsx` as a route path: `app/practice/screen/page.tsx` is `/practice/screen`. */
 function appPages(): string[] {
   const app = new URL("../app/", import.meta.url);
   return (readdirSync(app, { recursive: true }) as string[])
@@ -45,7 +45,7 @@ test("three modes, Technical first, each with a full-word label", () => {
 
 test("completeness: every app page has its own row in the route table, so a new page cannot fall back silently", () => {
   const pages = appPages();
-  assert.ok(pages.length >= 30, `the walk found the pages (${pages.length})`);
+  assert.ok(pages.length >= 28, `the walk found the pages (${pages.length})`);
   for (const path of pages) assert.equal(isRegisteredPath(path), true, `${path} has no row in ROUTE_LANES`);
   assert.equal(isRegisteredPath("/unknown-page"), false);
 });
@@ -69,7 +69,6 @@ test("each route lists its modes; the first one is where a link from another mod
     ["/practice", ["backtest"]],
     ["/practice/replay", ["backtest"]],
     ["/practice/journal", ["backtest"]],
-    ["/practice/week", ["backtest"]],
     ["/backtests", ["backtest"]],
     ["/paper", ["backtest"]],
     ["/settings", ["technical", "fundamental", "backtest"]],
@@ -122,11 +121,10 @@ test("the primary nav per mode: Practice leaves Technical for Backtest; Fundamen
   assert.equal(PRIMARY_NAV.technical.find((item) => item.label === "Strategies")?.href, "/strategies/library");
 });
 
-test("only the longest matching tab is active: Practice on the thread journal and the week review", () => {
+test("only the longest matching tab is active: Practice on the thread journal and the replay", () => {
   const active = (lane: "technical" | "fundamental" | "backtest", path: string) => activeNavItem(PRIMARY_NAV[lane], path)?.label;
   assert.equal(active("backtest", "/practice/journal"), "Practice");
   assert.equal(active("backtest", "/practice/replay"), "Practice");
-  assert.equal(active("backtest", "/practice/week"), "Practice");
   assert.equal(active("backtest", "/practice"), "Practice");
   assert.equal(active("technical", "/strategies/new"), "Strategies");
   assert.equal(active("technical", "/today"), "Today");
@@ -195,7 +193,7 @@ test("Settings, More and the Feedback log swap the watchlists for the Settings &
   for (const path of ["/settings", "/more", "/feedback", "/feedback/new", "/feedback/", "/settings/"]) assert.equal(hasMoreLeftRail(path), true, path);
   for (const path of ["/", "/alerts", "/practice", "/feedbacks", "/feedback/other", "/holdings"]) assert.equal(hasMoreLeftRail(path), false, path);
   // The Practice panel and the More sections never both claim one route.
-  for (const path of ["/practice/replay", "/practice/day", "/practice/journal", "/settings", "/more", "/feedback", "/feedback/new"]) {
+  for (const path of ["/practice/replay", "/practice/screen", "/practice/journal", "/settings", "/more", "/feedback", "/feedback/new"]) {
     assert.equal(hasPracticeLeftRail(path) && hasMoreLeftRail(path), false, path);
   }
 });
@@ -211,7 +209,7 @@ test("the More rail lists the Settings sections and Feedback, and selects the on
 });
 
 test("every Practice route owns the left slot, so the global watchlists never show there; no other route does", () => {
-  for (const path of ["/practice", "/practice/", "/practice/thread", "/practice/week", "/practice/replay", "/practice/day", "/practice/journal", "/practice/day/"]) {
+  for (const path of ["/practice", "/practice/", "/practice/thread", "/practice/replay", "/practice/screen", "/practice/journal", "/practice/screen/"]) {
     assert.equal(hasPracticeLeftRail(path), true, path);
   }
   for (const path of ["/", "/watchlists", "/screener", "/practices", "/paper", "/backtests", "/settings"]) assert.equal(hasPracticeLeftRail(path), false, path);
