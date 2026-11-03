@@ -9,10 +9,9 @@ import type {
   ISeriesApi,
   ISeriesMarkersPluginApi,
   Time,
-  UTCTimestamp,
   WhitespaceData,
 } from "lightweight-charts";
-import { formatPrice } from "@/lib/desk/format";
+import { formatChartAsOf, formatPrice } from "@/lib/desk/format";
 import { qualityPhrase } from "@/lib/desk/freshness";
 import { nearestLevel, roundToCents } from "@/lib/replay/chartOrder";
 import type { ChartType } from "@/lib/replay/chartPrefs";
@@ -199,12 +198,6 @@ export function formatChartTime(time: Time): string {
   }
   const date = new Date(typeof time === "number" ? time * 1000 : time);
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
-}
-
-function formatAsOf(value: string | null): string {
-  if (value === null) return "as of unavailable";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `as of ${value}`;
-  return `as of ${formatChartTime(Math.floor(Date.parse(value) / 1000) as UTCTimestamp)}`;
 }
 
 /** One precision per column (2 dp, 4 under $1), not whatever digits the value happens to carry (V-Technicals-05). */
@@ -756,6 +749,7 @@ export function MarketChart({
   }, [focus?.at, ready]);
 
   const lastBar = bars.at(-1);
+  const stamp = formatChartAsOf(asOf);
   const bare = chrome === "bare";
   return (
     <section
@@ -765,7 +759,7 @@ export function MarketChart({
     >
       {!bare && <header className={styles.chartHeader}>
         <h2>{interval.toUpperCase()} chart · {symbol}</h2>
-        <p><span>{qualityPhrase(quality)}</span><span>{formatAsOf(asOf)}</span></p>
+        <p><span>{qualityPhrase(quality)}</span>{stamp !== "" && <span>{stamp}</span>}</p>
       </header>}
       {!bare && (overlays.length > 0 || panes.length > 0) && <div className={styles.chartLegend}>
         {overlays.map((overlay) => <span key={overlay.id}><i style={{ backgroundColor: overlay.color }} />{overlay.label}</span>)}

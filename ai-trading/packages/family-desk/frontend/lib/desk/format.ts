@@ -94,6 +94,24 @@ export function formatEtWeekdayTime(iso: string | null): string {
   return p.weekday ? `${p.weekday} ${formatEtTimeZone(iso)}` : EMPTY_VALUE;
 }
 
+/** "7:00 PM" for an alert from today (New York), "Sun 7:00 PM" once it is older: the day names it only when it is not today (D-208). */
+export function formatAlertStamp(iso: string | null, now: Date): string {
+  if (!iso) return EMPTY_VALUE;
+  const time = formatEtTime(iso);
+  if (time === EMPTY_VALUE || formatEtDay(iso) === formatEtDay(now.toISOString())) return time;
+  // ponytail: a weekday alone repeats after six days; add the date when the feed keeps alerts that old.
+  return `${partsOf(iso, { weekday: "short" }).weekday} ${time}`;
+}
+
+/** A chart header's as-of: "as of Oct 23, 03:45 PM" (New York time; the date is named so an old bar cannot read as today's), "as of 2026-10-23"
+ * for a plain date, and "" with no stamp, so the header prints no as-of part at all (D-209). */
+export function formatChartAsOf(value: string | null): string {
+  if (!value) return "";
+  if (DATE_ONLY.test(value)) return `as of ${value}`;
+  const p = partsOf(value, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return p.hour ? `as of ${p.month} ${p.day}, ${p.hour}:${p.minute} ${p.dayPeriod}` : "";
+}
+
 /** "As of last close · Fri 2026-10-23 · 4:00 PM ET" (02l §c1). */
 export function formatLastCloseLine(iso: string | null, source?: string | null): string {
   if (!iso) return "No update yet";
