@@ -78,6 +78,29 @@ func TestGetBarsSourceThroughTheArchive(t *testing.T) {
 	}
 }
 
+// Live quotes never reach the archive: with it on, GetQuotes leaves the store empty, while a
+// RAW daily read right after fills it (so the empty store is not just an unplugged archive).
+func TestQuotesAreNeverArchived(t *testing.T) {
+	store := archive.NewMemStore()
+	h := newHarness(t, func(o *Options) {
+		o.Archive = archive.New(store, slog.New(slog.DiscardHandler), func() time.Time { return fixedNow })
+	})
+	if status, body := h.post("GetQuotes", &pb.GetQuotesRequest{Symbols: []string{"AAPL", "MSFT"}}, readAuth()); status != 200 {
+		t.Fatalf("GetQuotes status %d: %s", status, body)
+	}
+	for _, tf := range []string{"1d", "1m"} {
+		if lo, hi, _ := store.Bounds(t.Context(), tf); lo != "" || hi != "" {
+			t.Fatalf("GetQuotes archived %s sessions %s..%s", tf, lo, hi)
+		}
+	}
+	if status, body := rawDaily(h); status != 200 {
+		t.Fatalf("GetBars status %d: %s", status, body)
+	}
+	if lo, _, _ := store.Bounds(t.Context(), "1d"); lo == "" {
+		t.Fatal("a finished RAW daily read archived nothing: the archive is not wired")
+	}
+}
+
 func ensure(h *harness, req *pb.EnsureHistoryRequest) (int, *pb.EnsureHistoryResponse, []byte) {
 	status, body := h.post("EnsureHistory", req, readAuth())
 	var resp pb.EnsureHistoryResponse

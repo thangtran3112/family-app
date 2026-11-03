@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Popover } from "@/components/ui/Popover";
 import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
-import { formatEtTime } from "@/lib/desk/format";
+import { formatAlertStamp } from "@/lib/desk/format";
 import { SYMBOL_HREF } from "@/lib/lanes";
 import { loadAlertInbox, markAlertRead, markAllAlertsRead } from "@/lib/desk/status";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -45,6 +45,7 @@ export function AlertsBell() {
   }
 
   function body() {
+    const now = new Date();
     return (
       <QueryBoundary query={alerts} loading="Loading alerts…" subject="alert list" isEmpty={(rows) => rows.length === 0} empty={<EmptyBlock title="No alerts yet" />}>
         {(rows) => (
@@ -60,7 +61,7 @@ export function AlertsBell() {
                 </span>
                 {alert.symbol && <span className={styles.alertMeta}>{alert.symbol}</span>}
               </span>
-              <span className={styles.alertTime}>{formatEtTime(alert.created_at)}</span>
+              <span className={styles.alertTime}>{formatAlertStamp(alert.created_at, now)}</span>
             </button>
           </li>
         ))}

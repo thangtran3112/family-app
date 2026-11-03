@@ -77,3 +77,22 @@ func TestStoreContract(t *testing.T) {
 		}
 	})
 }
+
+// The profile turns the archive on but the database is not there (cluster down, wrong host): the
+// pool opens lazily, the schema step fails and says so, and GetBars still answers from the
+// provider. This is the real Postgres store, not the fake in TestStoreFailureNeverFailsTheRequest.
+func TestUnreachableDatabaseBootsAndPassesThrough(t *testing.T) {
+	pg, err := OpenPostgres(t.Context(), "postgres://market_archive:x@127.0.0.1:1/none?connect_timeout=2") // port 1: refused
+	if err != nil {
+		t.Fatalf("open must not need the database: %v", err)
+	}
+	defer pg.Close()
+	if err := pg.Migrate(t.Context()); err == nil {
+		t.Fatal("Migrate reported success with no database")
+	}
+	r := newRig(t, pg, load(t, "daily_range_spy.json"), later)
+	got := r.daily(t, winStart, winEnd)
+	if a, p := sources(got.Bars); a != 0 || p != 9 {
+		t.Fatalf("archive=%d provider=%d, want 0/9: bars pass through from the provider", a, p)
+	}
+}

@@ -45,6 +45,7 @@ from ai_trading.replay.model import INTERVAL_MINUTES
 from ai_trading.replay.session import ReplayProblem, Services
 
 SPEEDS = (1, 2, 5, 10)
+TIME_FORWARD_ONLY = "Time only moves forward · that time has passed"
 
 
 def _ts(value: datetime | pd.Timestamp) -> pd.Timestamp:
@@ -184,6 +185,8 @@ def _target(db: Session, day: ReplayDayList, *, to: datetime | None, step: str |
     if to is not None:
         if pd.Timestamp(to).tzinfo is None:
             raise ReplayProblem("Send the time with its UTC offset", path="to")
+        if _ts(to) < clock:  # `to == clock` is a no-op, not a rewind
+            raise ReplayProblem(TIME_FORWARD_ONLY, path="to")
         return _ts(to)
     sessions = session_mod._sessions_of_day(db, day.id)
     if step == "bar":
@@ -210,8 +213,9 @@ def control(
     """Play, pause or set the speed of the thread's clock, step it, or jump it to a time (`to`), then answer it. The
     clock is settled first, so a speed change or a pause never re-prices time that already passed. The clock runs from
     the day's start with no name opened: the Summary is where time is controlled. `to` and `step` are forward only (a
-    `to` in the past leaves the clock where it is) and `to` stops at the end of the plan; no close, window or stop of
-    hers stops them or a run. A jump past the next open hands the day over, and past several, day by day (`roll`)."""
+    `to` in the past is a 422 on `to`; `to` equal to the clock changes nothing) and `to` stops at the end of the plan;
+    no close, window or stop of hers stops them or a run. A jump past the next open hands the day over, and past
+    several, day by day (`roll`)."""
     thread = _day_thread(db, user_id, thread_id)
     day = _open_day(db, thread, lock=True)
     if day is None:
@@ -228,12 +232,14 @@ def control(
         )
     session_mod.settle_locked(db, svc, day)
     now = svc.wall()
+    # Resolved before anything is written, so a refused `to` (past, no offset) leaves the speed and Play state alone.
+    target = _target(db, day, to=to, step=step) if to is not None or step is not None else None
     if speed is not None:
         day.clock_speed = speed
         if day.clock_running:
             day.clock_anchor_at = now
-    if to is not None or step is not None:
-        session_mod.move_clock(db, svc, day, _target(db, day, to=to, step=step))
+    if target is not None:
+        session_mod.move_clock(db, svc, day, target)
     if running:
         day.clock_running, day.clock_anchor_at = True, now
     elif running is False:

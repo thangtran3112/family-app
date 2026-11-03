@@ -101,10 +101,8 @@ export const PRIMARY_NAV: Record<Lane, readonly NavItem[]> = {
     { label: "Futures", href: "/futures/read", match: "/futures/read" },
   ],
   // Backtests joins when "Run backtest" stops being a fixture.
-  backtest: [
-    { label: "Practice", href: "/practice" },
-    { label: "Trades", href: "/practice/journal" },
-  ],
+  // No Trades tab: a journal opens only inside a thread (its own tab strip), never from the top bar.
+  backtest: [{ label: "Practice", href: "/practice" }],
 };
 
 /** Shell sections per mode. A shell part asks `shows(lane, "marketPill")`; it never compares mode strings itself. */
@@ -148,7 +146,7 @@ export function isNavActive(href: string, pathname: string, match: string = href
   return path === match || path.startsWith(`${match}/`);
 }
 
-/** The one tab to mark current: the longest matching one, so /practice/journal lights Trades and not Practice too. */
+/** The one tab to mark current: the longest matching one, so /strategies/new lights Strategies and not a shorter prefix tab too. */
 export function activeNavItem(items: readonly NavItem[], pathname: string): NavItem | undefined {
   let best: NavItem | undefined;
   for (const item of items) {

@@ -723,6 +723,12 @@ def end_day(
 # -- practice threads (02r) -------------------------------------------------------------------------------------
 
 
+def _swing_closed() -> None:
+    """ADR-0025 step 1: no new swing thread, whatever the body holds (409, before the body is read). The swing code
+    below stays until the swing removal step; a swing test that needs a thread patches this to a no-op."""
+    raise _problem(threads_mod.SWING_CLOSED, "mode", 409)
+
+
 @router.post(
     "/threads",
     response_model=ThreadOut,
@@ -741,12 +747,12 @@ def create_thread(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-    risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day
-    threads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each
-    thread has its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
-    she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
-    check out (every rejection is a plain problem), and starts preparing its bars in the background."""
+    risk plan, and the mode (`day`; `swing` is closed: a 409 on `mode`, ADR-0025). Day threads share ten slots across
+    all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each thread has its own plan and
+    balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when she already has it)."""
     swing = isinstance(raw, dict) and raw.get("mode") == "swing"
+    if swing:
+        _swing_closed()
     spec = _validated(PracticeThreadCreateV1, raw, "swing" if swing else "plan")
     if not swing:
         row = _call(threads_mod.create_thread, db, user.id, spec, services.now())
@@ -914,10 +920,10 @@ def control_thread_clock(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     """Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:
-    `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (a time already
-    past leaves the clock where it is) and no later than `jump_limit` (422 on `to` beyond it). 409 without an open
-    day. Time then runs on the server until she pauses it, through the close and the night; the day hands over at the
-    next trading day's open, and a jump across several opens hands over day by day."""
+    `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (422 on a `to`
+    already past; a `to` equal to the clock changes nothing) and no later than `jump_limit` (422 on `to` beyond it).
+    409 without an open day. Time then runs on the server until she pauses it, through the close and the night; the
+    day hands over at the next trading day's open, and a jump across several opens hands over day by day."""
     _call(
         clock_mod.control,
         db,

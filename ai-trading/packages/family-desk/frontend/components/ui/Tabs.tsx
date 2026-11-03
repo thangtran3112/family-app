@@ -1,16 +1,21 @@
 "use client";
 
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { rovingStop, rovingTarget, tabDomIds } from "@/lib/desk/primitivesView";
 import styles from "./Tabs.module.css";
 
-export type TabItem<T extends string> = { id: T; label: ReactNode };
+export type TabItem<T extends string> = {
+  id: T;
+  label: ReactNode;
+  /** Why the tab cannot open right now. The tab stays on screen and in the tab order (arrows focus it, nothing selects it), is `aria-disabled`, and carries the reason as its `title` and its description. */
+  disabledReason?: string;
+};
 
 /**
  * Tabs switch what is shown below them: a `tablist` with one roving stop. The arrows move to the next tab and select it (they wrap),
  * Home and End jump, Tab leaves the list once. The selected tab is a 2 px amber underline. Give `idBase` and wrap the content in a
  * `TabPanel` with the same base so the tab names its panel (`aria-controls`) and the panel its tab. Use `Segmented` to pick a value
- * and `ChipToggleGroup` for filters that combine.
+ * and `ChipToggleGroup` for filters that combine. A tab with a `disabledReason` is described, not hidden or silent.
  */
 export function Tabs<T extends string>({
   tabs,
@@ -39,6 +44,7 @@ export function Tabs<T extends string>({
   /** Layout only (grid-area, margin, padding); never colour, size or type. */
   className?: string;
 }) {
+  const base = useId();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const selected = tabs.findIndex((tab) => tab.id === value);
   const stop = rovingStop(selected, tabs.map(() => true));
@@ -49,7 +55,7 @@ export function Tabs<T extends string>({
     if (tab === undefined) return;
     event.preventDefault();
     refs.current[next as number]?.focus();
-    onChange(tab.id);
+    if (tab.disabledReason === undefined) onChange(tab.id);
   }
 
   return (
@@ -57,22 +63,29 @@ export function Tabs<T extends string>({
       {tabs.map((tab, index) => {
         const ids = tabDomIds(idBase, tab.id);
         const active = index === selected;
+        const reasonId = `${base}-${index}-reason`;
         return (
+          <Fragment key={tab.id}>
           <button
-            key={tab.id}
             ref={(element) => { refs.current[index] = element; }}
             id={ids.tab}
             type="button"
             role="tab"
             aria-selected={active}
             aria-controls={active && panelMounted ? ids.panel : undefined}
+            aria-disabled={tab.disabledReason === undefined ? undefined : true}
+            aria-describedby={tab.disabledReason === undefined ? undefined : reasonId}
+            title={tab.disabledReason}
             tabIndex={index === stop ? 0 : -1}
             className={styles.tab}
-            onClick={() => onChange(tab.id)}
+            onClick={() => { if (tab.disabledReason === undefined) onChange(tab.id); }}
             onKeyDown={(event) => onKeyDown(event, index)}
           >
             {tab.label}
           </button>
+          {/* Beside the button, not inside it: a description inside would become part of the tab's name. */}
+          {tab.disabledReason !== undefined && <span id={reasonId} className="sr-only">{tab.disabledReason}</span>}
+          </Fragment>
         );
       })}
     </div>

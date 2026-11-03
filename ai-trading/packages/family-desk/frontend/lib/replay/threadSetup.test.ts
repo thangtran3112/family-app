@@ -76,10 +76,10 @@ test("server problems map to the form's fields, and a 409 stays a plain sentence
   assert.equal(threadFieldOfPath("plan"), "form");
   assert.equal(threadFieldOfPath("mode"), "mode");
   const problems = threadProblems([
-    { path: "mode", message: "Swing threads are not open yet · start a day thread" },
+    { path: "mode", message: "Swing threads are closed · start a day thread" },
     { path: "plan.maxLossUsd", message: "" },
   ]);
-  assert.equal(problems.mode, "Swing threads are not open yet · start a day thread");
+  assert.equal(problems.mode, "Swing threads are closed · start a day thread");
   assert.equal(problems.maxLossUsd, "Max loss: whole dollars from 1 to 100,000");
   const error = new DeskApiError("http", 409, { detail: "A day thread is already active" });
   assert.equal(error.detail, "A day thread is already active");

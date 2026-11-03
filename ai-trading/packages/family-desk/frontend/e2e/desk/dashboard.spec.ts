@@ -145,6 +145,24 @@ test.describe("technical-alerts seed", () => {
     await expectCleanScreen(page);
   });
 
+  test("an alert from an earlier day names its day, in the bell and in the feed (D-208)", async ({ page }) => {
+    // The seed clock is Thu 2026-10-15 (ET). This fire is Tue 2026-10-13, 7:24 PM ET: not today's, so its stamp names the day.
+    await page.route((url) => url.pathname === "/api/desk/alerts", async (route) => {
+      const response = await route.fetch();
+      const alerts = (await response.json()) as Array<{ created_at: string }>;
+      alerts[0]!.created_at = "2026-10-13T23:24:00Z";
+      await route.fulfill({ response, json: alerts });
+    });
+    await openDesk(page, "/");
+    await page.getByRole("button", { name: "Alerts, 3 unread" }).click();
+    const panel = page.getByRole("dialog", { name: "Recent alerts" });
+    await expect(panel.getByText("Tue 7:24 PM", { exact: true })).toBeVisible();
+    await expect(panel.getByText(/^\d{1,2}:\d{2} [AP]M$/)).toHaveCount(3); // today's alerts keep the bare time
+    await page.keyboard.press("Escape");
+    const feed = await alertsFeed(page);
+    await expect(feed.getByText("Tue 7:24 PM", { exact: true })).toBeVisible();
+  });
+
   test("a feed paused for 90 minutes pauses the alerts banner", async ({ page, context }) => {
     await setScenario(context, { now: MIDDAY, feedAgeMinutes: 90 });
     await openDesk(page, "/", MIDDAY);

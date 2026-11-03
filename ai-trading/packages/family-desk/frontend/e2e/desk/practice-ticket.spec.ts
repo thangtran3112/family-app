@@ -202,7 +202,9 @@ test.describe("Practice order ticket", () => {
     await page.keyboard.press("Escape");
     await expect(popup).toHaveCount(0);
     await expect(orders(practice).getByText("Working")).toHaveCount(0); // a pick is not an order
-    // The chart stays where it was: a second click opens a second popup, and a press outside the chart closes it.
+    // The chart stays where it was: a second click opens a second popup, and a press outside the chart closes it. The chart library takes two clicks within
+    // 500 ms for a double click and fires neither when they are apart, so the second waits the window out (the page used to take that long to settle, D-206).
+    await page.waitForTimeout(600);
     await page.mouse.click(box.x + box.width * 0.6, box.y + 20);
     await expect(popup).toBeVisible();
     await page.getByRole("heading", { name: "TSLA", level: 1 }).click();

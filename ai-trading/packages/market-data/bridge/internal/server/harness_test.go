@@ -123,20 +123,33 @@ type harness struct {
 	alpacaCalls atomic.Int64
 	// Hot is the Redis-tier stand-in when the harness wraps its providers in the cache.
 	Hot *cache.MemStore
+	// skew moves every clock the harness hands out (server, router, vendor client, cache, MemStore)
+	// forward from fixedNow: Advance is how a test lets a cache entry expire.
+	skew atomic.Int64
 }
+
+// Advance moves the harness clock forward by d.
+func (h *harness) Advance(d time.Duration) { h.skew.Add(int64(d)) }
 
 func newHarness(t *testing.T, mods ...func(*Options)) *harness {
 	t.Helper()
-	return buildHarness(t, false, mods...)
+	return buildHarness(t, false, nil, mods...)
 }
 
 // newCachedHarness is newHarness with every provider wrapped by the hot-tier cache over a MemStore.
 func newCachedHarness(t *testing.T, mods ...func(*Options)) *harness {
 	t.Helper()
-	return buildHarness(t, true, mods...)
+	return buildHarness(t, true, nil, mods...)
 }
 
-func buildHarness(t *testing.T, hot bool, mods ...func(*Options)) *harness {
+// newCachedHarnessOn is newCachedHarness over a caller-supplied store (a real RedisStore), so a test
+// can kill the store under the running server. Hot stays nil: it is the MemStore stand-in only.
+func newCachedHarnessOn(t *testing.T, store cache.Store, mods ...func(*Options)) *harness {
+	t.Helper()
+	return buildHarness(t, true, store, mods...)
+}
+
+func buildHarness(t *testing.T, hot bool, store cache.Store, mods ...func(*Options)) *harness {
 	t.Helper()
 	h := &harness{t: t, IBKR: &fakeIBKR{}, Logs: &lockedBuf{}}
 	vendor := fakeAlpacaHandler(&h.alpacaDown, &h.amu)
@@ -145,7 +158,7 @@ func buildHarness(t *testing.T, hot bool, mods ...func(*Options)) *harness {
 		vendor(w, r)
 	}))
 	t.Cleanup(fake.Close)
-	clock := func() time.Time { return fixedNow }
+	clock := func() time.Time { return fixedNow.Add(time.Duration(h.skew.Load())) }
 	al := alpaca.New("key", "secret", alpaca.WithBaseURL(fake.URL), alpaca.WithClock(clock), alpaca.WithMinInterval(0))
 	o := &Options{Token: readToken, AdminToken: adminToken, Build: "test-build", Now: clock,
 		Log: slog.New(slog.NewJSONHandler(h.Logs, nil)), Heartbeat: 20 * time.Millisecond}
@@ -154,8 +167,11 @@ func buildHarness(t *testing.T, hot bool, mods ...func(*Options)) *harness {
 	}
 	providers := []router.Provider{h.IBKR, al}
 	if hot {
-		h.Hot = cache.NewMemStore(clock)
-		c := cache.New(h.Hot, cache.Options{Now: clock, ArchiveOn: o.Archive != nil, Log: slog.New(slog.DiscardHandler)})
+		if store == nil {
+			h.Hot = cache.NewMemStore(clock)
+			store = h.Hot
+		}
+		c := cache.New(store, cache.Options{Now: clock, ArchiveOn: o.Archive != nil, Log: slog.New(slog.DiscardHandler)})
 		for i, p := range providers {
 			providers[i] = c.Wrap(p)
 		}

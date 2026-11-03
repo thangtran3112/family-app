@@ -144,12 +144,10 @@ test.describe("Practice: one thread time", () => {
     const counted = await (await context.request.get(`${origin}/api/desk/replay/threads/capacity`)).json();
     expect(counted).toEqual({ day_active: 10, day_max: 10 });
 
-    // The form: Day is off with the reason, Swing is not (it uses no slot), and Start waits with the sentence.
+    // The form: Start waits with the day-slots sentence (there is no Day/Swing choice any more, ADR-0025).
     await page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toHaveAttribute("aria-disabled", "true");
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).not.toHaveAttribute("aria-disabled", "true");
     await expect(dialog.locator("#new-plan-note")).toHaveText(practiceText("daySlotsFull", { max: 10 }));
     await expect(dialog.getByRole("button", { name: /^Start (\d+-day )?(swing )?practice$/ })).toHaveAttribute("aria-disabled", "true");
   });

@@ -589,8 +589,7 @@ test.describe("Practice", () => {
     await expect(closedRow.getByRole("button", { name: /Day \d+$/ })).toHaveCount(0);
     await expect(closedRow.getByRole("link", { name: PRACTICE_COPY.landingJournal, exact: true })).toBeVisible(); // a closed thread's one action
     const again = await clickNewPlan(page);
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0); // no Day/Swing choice (ADR-0025)
     await expectCleanScreen(page);
   });
 
@@ -609,11 +608,10 @@ test.describe("Practice", () => {
     await expect(page.getByRole("img", { name: /^Balance at the end of each day/ })).toHaveCount(0);
     await expectCleanScreen(page);
 
-    // D-037: the bare journal route says no thread is picked and links to hers.
+    // The bare journal route is gone (a journal opens only inside a thread): it sends her to Practice, with no thread picker.
     await openDesk(page, "/practice/journal");
-    await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toBeVisible();
-    await page.getByRole("link", { name: /thread/i }).first().click();
-    await page.waitForURL(/\/practice\/journal\?thread=\d+/);
+    await page.waitForURL(/\/practice$/);
+    await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toHaveCount(0);
 
     await openDesk(page, "/practice/journal?thread=99999");
     await expect(page.getByRole("alert").filter({ hasText: "Couldn't load this thread" })).toBeVisible();
@@ -642,12 +640,10 @@ test.describe("Practice", () => {
     const listed = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { startingBalance: number; stats: { balance: number } } }>;
     expect([listed[0]!.thread.startingBalance, listed[0]!.thread.stats.balance]).toEqual([25000, 25000]);
 
-    // The server allows several active threads per mode, so the modal keeps both segments on and Day can start another thread.
+    // The server allows several active threads, so the modal can start another thread (and has no Day/Swing choice, ADR-0025).
     await openDesk(page, "/practice");
     const again = await clickNewPlan(page);
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0);
     await expect(again).not.toContainText("is already active");
     await expect(again.getByRole("button", { name: START_BUTTON })).toBeVisible();
     await expectCleanScreen(page);
@@ -1113,7 +1109,7 @@ test.describe("Practice day list · fix wave 5S", () => {
     await expect(page.getByRole("tablist", { name: "Day context" }).getByRole("tab", { name: PRACTICE_COPY.dayPortfolio })).toHaveCount(0);
   });
 
-  test("a day that is not chosen and one that is not found say different things, and a journal with no thread says one thing (D-116, D-117)", async ({ page }) => {
+  test("a day that is not chosen and one that is not found say different things (D-116, D-117)", async ({ page }) => {
     await openDesk(page, "/practice/day");
     await expect(page.getByText(PRACTICE_COPY.dayNoPlan)).toBeVisible();
     for (const bad of ["abc", "999999"]) {
@@ -1122,10 +1118,6 @@ test.describe("Practice day list · fix wave 5S", () => {
       await expect(page.getByText(PRACTICE_COPY.dayNoPlan), bad).toHaveCount(0);
       await expect(page.getByRole("link", { name: "Open Practice" })).toBeVisible();
     }
-    await openDesk(page, "/practice/journal");
-    await expect(page.getByText(PRACTICE_COPY.threadPickNone)).toBeVisible();
-    await expect(page.getByText(PRACTICE_COPY.threadPickTitle), "one statement, not two stacked").toHaveCount(0);
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.openPractice }), "and the way forward is one primary link").toBeVisible();
   });
 
   test("while the day list loads the page shows its own shape and says it is busy (D-116)", async ({ page, context }) => {

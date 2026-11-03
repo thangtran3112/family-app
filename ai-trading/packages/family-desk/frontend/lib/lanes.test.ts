@@ -115,14 +115,16 @@ test("the primary nav per mode: Practice leaves Technical for Backtest; Fundamen
   assert.deepEqual(PRIMARY_NAV.technical.map((item) => item.label), ["Today", "Screener", "Watchlists", "Alerts", "Strategies"]);
   assert.deepEqual(PRIMARY_NAV.fundamental.map((item) => item.label), ["Today", "Holdings", "Covered calls", "Stocks", "Futures"]);
   assert.deepEqual(PRIMARY_NAV.fundamental.map((item) => item.href), ["/", "/holdings", "/covered-calls", "/stocks", "/futures/read"]);
-  assert.deepEqual(PRIMARY_NAV.backtest.map((item) => [item.label, item.href]), [["Practice", "/practice"], ["Trades", "/practice/journal"]]);
+  assert.deepEqual(PRIMARY_NAV.backtest.map((item) => [item.label, item.href]), [["Practice", "/practice"]]);
+  // A journal opens only inside a thread, so no mode carries a top-level Trades tab.
+  for (const lane of LANES) assert.ok(!PRIMARY_NAV[lane].some((item) => item.label === "Trades" || item.href.startsWith("/practice/journal")), lane);
   assert.deepEqual(AVATAR_MENU.map((item) => item.label), ["Settings", "More", "Feedback"]);
   assert.equal(PRIMARY_NAV.technical.find((item) => item.label === "Strategies")?.href, "/strategies/library");
 });
 
-test("only the longest matching tab is active: Trades alone on the journal, Practice on the week review", () => {
+test("only the longest matching tab is active: Practice on the thread journal and the week review", () => {
   const active = (lane: "technical" | "fundamental" | "backtest", path: string) => activeNavItem(PRIMARY_NAV[lane], path)?.label;
-  assert.equal(active("backtest", "/practice/journal"), "Trades");
+  assert.equal(active("backtest", "/practice/journal"), "Practice");
   assert.equal(active("backtest", "/practice/replay"), "Practice");
   assert.equal(active("backtest", "/practice/week"), "Practice");
   assert.equal(active("backtest", "/practice"), "Practice");

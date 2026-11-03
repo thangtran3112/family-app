@@ -118,7 +118,12 @@ services:
       # profile; a comment-only placeholder (cache off) when that profile does not exist.
       - ${AI_TRADING_SECRETS_DIR:-/etc/family-app/ai-trading}/market-data-bridge-cache.env
     # `mdcache` is the bridge's private route to its Redis hot tier; api and scheduler do not join it.
-    networks: [marketdata, mdcache]
+    # `database` is the shared Postgres cluster, for the H1 history archive (database
+    # ai_trading_market_archive_db, role market_archive). The archive is off unless the profile
+    # sets ARCHIVE_ENABLED=1 and ARCHIVE_DATABASE_URL (README, "Market-data H1 archive"); joining
+    # the network does nothing by itself, and a missing key or an unreachable cluster never stops
+    # the bridge from booting (pgxpool connects lazily; bars then pass through from Alpaca).
+    networks: [marketdata, mdcache, database]
     mem_limit: 128m
     pids_limit: 128
     read_only: true

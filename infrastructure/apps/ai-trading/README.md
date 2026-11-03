@@ -195,6 +195,15 @@ itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`), the Family Desk's
   MiroFish off); adopting an existing host's compose project detects any
   already-running app (including MiroFish) and seeds the preference file
   from what is actually running, never from the defaults.
+- **"lifecycle lock is held by another operation":** `install.sh` waits up to
+  `AI_TRADING_LOCK_WAIT_SECONDS` (default 60, the same bound `deploy.sh` uses)
+  for `$STATE_DIR/.control.lock`, then fails with that message, the pid of the
+  process holding it (via `fuser`/`lsof`, else "holder unknown"), and the exact
+  command to retry. It almost always means an earlier deploy or install was
+  interrupted (for example an SSH drop mid image pull) but its process is still
+  running on the host. The lock is released when that process exits, so wait for
+  it, or stop that process if it is truly abandoned, then re-run the printed
+  command. Never delete the lock file: the running holder still owns it.
 - **Helper unavailable / drift recovery:** if the private control helper is
   unreachable, Caddy's own generic `no-store` 503 is returned (never the
   helper's own app-specific body), and Settings reports the same
@@ -280,7 +289,7 @@ The bridge has two storage tiers, deliberately separate:
 
 | Tier | What it holds | Switch |
 |---|---|---|
-| Postgres archive (H1, `market_archive` schema) | Durable, write-once RAW `DAY_1`/`MINUTE_1` bars of finished sessions | `ARCHIVE_ENABLED=1` in the bridge env |
+| Postgres archive (H1, `market_archive` schema) | Durable, write-once RAW `DAY_1`/`MINUTE_1` bars of finished sessions | `ARCHIVE_ENABLED=1` and `ARCHIVE_DATABASE_URL` in the profile `ai-trading/market-data-bridge` (below) |
 | Redis hot tier (`market-data-cache`) | Disposable: quotes, open-session bars, adjusted bars, `HOUR_1` | The Firestore profile `ai-trading/market-data-cache` |
 
 **Enabling the hot tier.** Create the Firestore profile `ai-trading/market-data-cache` with one name,
@@ -291,16 +300,58 @@ non-zero `cache_stats` line after a `refresh_15m` pass. Rollback: delete the pro
 `CACHE_ENABLED=0` in the bridge profile) and redeploy: the bridge returns to direct provider calls,
 and there is nothing to migrate. Enabling it in production is the owner's call.
 
-**Enabling the archive (a flag, not code; owner's call, not done by this change).** The archive is
-gated by `cfg.ArchiveEnabled` in `bridge/cmd/bridge/main.go`, which reads `ARCHIVE_ENABLED` from the
-bridge's env. That env is rendered from the Firestore profile `ai-trading/market-data-bridge`, so
-the knob is two names in that profile: `ARCHIVE_ENABLED=1` and `ARCHIVE_DATABASE_URL` (a Postgres
-URL for the archive's own database and role in the shared cluster, 02u ruling 3). Order: provision
-the database and role, run `docker exec <bridge> /bridge migrate`, then set the two names and
-redeploy. Two prerequisites are **not** in the compose file today and the archive cannot connect
-without them: the bridge is only on `marketdata` (and `mdcache`), so it needs the `database`
-network (`postgres_default`) added to its `networks:` before the archive can reach Postgres; and the
-database and role must exist (and be covered by `infrastructure/host/steps/40-backup.sh`, which
-02u ruling 3 requires, with a restore drill). When the archive is on the bridge tells the hot tier
-(`ArchiveOn`), and finished RAW `DAY_1`/`MINUTE_1` windows then get a 10-minute TTL instead of 30
-days: the archive owns that history, Redis only covers a Postgres outage.
+## Market-data H1 archive (Postgres)
+
+The write-once RAW `DAY_1`/`MINUTE_1` history (`bridge/internal/archive`, ADR-0024) lives in its own
+database in the shared cluster: `ai_trading_market_archive_db`, schema `market_archive`, role
+`market_archive` (owns the schema; `CONNECT` only at database level; `PUBLIC` `CONNECT` is revoked when
+it is provisioned, and a restore re-creates the database with the default again).
+Everything below is code in this repository; no console edit and no second Postgres service.
+
+**What is already wired by the repository**
+
+| Piece | Where |
+|---|---|
+| Bridge on the cluster network | `docker-compose.yml`: `market-data-bridge` is on `[marketdata, mdcache, database]` (`database` = `postgres_default`, the same external network `api` and `scheduler` use) |
+| Database and role | `postgres/ai-trading-market-archive.conf` + `ai-trading/packages/market-data/bridge/docker/postgres/zz-20-market-archive-roles.sh` (idempotent) |
+| The on/off knob | `ARCHIVE_ENABLED` and `ARCHIVE_DATABASE_URL` in the Firestore profile `ai-trading/market-data-bridge`, already rendered into the bridge env by `deploy.sh`; no `deploy.sh` change |
+| Backup and restore | `infrastructure/backup/` dumps every non-template database, so the archive database is in each run; `restore.sh` restores it; `test-restore.sh` proves the round trip with this role script and the bridge schema; the recovery drill can require it (`RECOVERY_REQUIRED_DATABASES`, `infrastructure/backup/README.md`) |
+
+**Off by default, and nothing here can fail a deploy.** With neither name in the profile (or no
+profile) the bridge boots with the archive off and `GetBars` goes straight to the providers.
+`ARCHIVE_DATABASE_URL` alone leaves it off. Once it is on, an unreachable cluster still lets the bridge
+boot (the pool connects lazily; the schema step logs a warning) and bars pass through from the
+provider. The one fail-fast is deliberate: `ARCHIVE_ENABLED=1` without a URL stops the bridge at
+startup, so set both names in one `family_config.py` change.
+
+**Read path.** Only RAW `DAY_1` and `MINUTE_1` of *finished* sessions are stored (20:15 ET, after the
+extended session and the SIP embargo). The first read of a session fetches it from the provider and
+writes it once (`ON CONFLICT DO NOTHING`; the first vendor keeps the session, a later revision never
+shows); every later read is answered from Postgres with `source = ARCHIVE` and no vendor call. The
+session still open, adjusted bars, `HOUR_1` and a pinned provider are never stored. Quotes never
+touch the archive (`GetQuotes` does not reach it). Tests: `internal/archive` (set
+`ARCHIVE_TEST_DATABASE_URL` to run them on Postgres as well), `internal/server/archive_test.go`.
+
+**Turning it on (operator; owner's call).**
+
+1. Create the database and role (from `infrastructure/host/`, same flags as the Desk's onboarding;
+   the cluster keeps every role password in its own `.env`):
+   `./bootstrap.sh --host <host> --ssh-user <user> --ssh-key <key> --app ../apps/ai-trading/postgres/ai-trading-market-archive.conf --only postgres --fetch-secrets-to <path outside the repo>`.
+   It generates `MARKET_ARCHIVE_DB_PASSWORD` in the cluster's `.env` on first run and leaves the
+   other apps' databases, roles and passwords alone.
+2. Put the connection string in Firestore, by value from that file and never into the repository:
+   `ARCHIVE_ENABLED=1` and `ARCHIVE_DATABASE_URL=postgres://market_archive:<password>@postgres:5432/ai_trading_market_archive_db`
+   in `ai-trading/market-data-bridge`, with `common/config/family_config.py set` (the password is
+   letters and digits only, so it needs no URL escaping).
+3. Redeploy. The bridge applies `schema.sql` itself at boot; `docker exec <bridge> /bridge migrate`
+   does the same on demand. Verify: `docker logs <bridge> | jq 'select(.msg=="archive enabled")'`
+   with no `archive schema not applied` warning, and `ListProviders` reports `archive.backend =
+   "postgres"`.
+4. Fill history on demand with `EnsureHistory`; the first backup after that carries it.
+
+**Turning it off.** Set `ARCHIVE_ENABLED=0` (or unset both names) and redeploy. The data stays in
+Postgres and in the backups; the bridge goes back to direct provider calls.
+
+When the archive is on the bridge tells the hot tier (`ArchiveOn`), and finished RAW
+`DAY_1`/`MINUTE_1` windows then get a 10-minute TTL instead of 30 days: the archive owns that
+history, Redis only covers a Postgres outage.

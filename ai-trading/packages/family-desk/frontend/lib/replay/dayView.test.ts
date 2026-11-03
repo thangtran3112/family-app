@@ -29,6 +29,7 @@ import {
   moveText,
   ordinal,
   planArmedText,
+  heldRows,
   openPositionsText,
   openAtClock,
   openTodayText,
@@ -454,9 +455,15 @@ test("a crossed stop reads 'Stop crossed 10:21' in ET", () => {
   assert.equal(stopCrossedText("2026-03-10T14:21:00Z"), "Stop crossed 10:21");
 });
 
-test("the footer is the server's day P/L: realized, open, how many are open, and the clock it is marked at", () => {
+test("the footer is the server's open P/L only (what the day realized is in Trades), how many are open, and the clock it is marked at", () => {
   const footer = portfolioFooter({ realized_usd: -46, open_usd: 200, total_usd: 154, open_count: 2, as_of: "2026-03-10T14:30:00Z" });
-  assert.deepEqual(footer, { total: 154, split: "realized −$46.00 · open +$200.00", openOf: "2 open", asOf: "as of 10:30 AM ET" });
+  assert.deepEqual(footer, { total: 200, openOf: "2 open", asOf: "as of 10:30 AM ET" });
+});
+
+test("heldRows keeps the names held now and drops the flat ones, closed trade or not", () => {
+  const rows = portfolioRows({ sessions: [opened("ANET", 13, { trades: 2, realized_usd: -38 }), opened("SMCI", 12, { has_open_trade: true, position: smciLong }), opened("NVDA", 14)] });
+  assert.deepEqual(heldRows(rows).map((row) => row.symbol), ["SMCI"]);
+  assert.deepEqual(heldRows(portfolioRows({ sessions: [opened("ANET", 13, { trades: 1, realized_usd: 5 })] })), [], "the closed trade is not a holding");
 });
 
 test("the hub's Today line adds the open trades: '2 open +$200.00', nothing with none open", () => {

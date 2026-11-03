@@ -4,6 +4,8 @@ import {
   changeTone,
   changeToneAt,
   formatAgo,
+  formatAlertStamp,
+  formatChartAsOf,
   formatClock,
   formatCompact,
   formatAsOfText,
@@ -109,4 +111,19 @@ test("a list or window time named as HH:MM reads as a 12-hour clock", () => {
   assert.equal(formatClock("12:05"), "12:05 PM");
   assert.equal(formatClock("15:30"), "3:30 PM");
   assert.equal(formatClock("00:15"), "12:15 AM");
+});
+
+test("an alert names its day once it is not from today (D-208)", () => {
+  const now = new Date("2026-11-02T20:00:00Z"); // Mon 2026-11-02, 3:00 PM ET
+  assert.equal(formatAlertStamp("2026-11-02T13:05:00Z", now), "8:05 AM"); // today: the time alone
+  assert.equal(formatAlertStamp("2026-11-02T00:00:00Z", now), "Sun 7:00 PM"); // yesterday: Sun 2026-11-01, 7:00 PM ET
+  assert.equal(formatAlertStamp("2026-10-31T03:24:00Z", now), "Fri 11:24 PM"); // older: Fri 2026-10-30, 11:24 PM ET
+  assert.equal(formatAlertStamp(null, now), "—");
+});
+
+test("a chart's as-of names the date of its stamp and is empty without one (D-209)", () => {
+  assert.equal(formatChartAsOf(null), "");
+  assert.equal(formatChartAsOf("2026-10-23"), "as of 2026-10-23");
+  assert.equal(formatChartAsOf("2026-10-23T19:45:00Z"), "as of Oct 23, 03:45 PM");
+  assert.equal(formatChartAsOf("not a time"), "");
 });

@@ -7,14 +7,15 @@ import { daysHeldText, holdStopText } from "./swing.ts";
 import { formatBalance } from "./threadView.ts";
 
 // The Portfolio tab's position table, read like a broker's (Interactive Brokers: Last, Change, Position, Avg price, Value, P&L).
-// One row model for both threads: a day thread's names (the day list) and a swing thread's carried holds. Pure, so node --test covers
-// it. Every dollar figure is SIMULATED. A figure the payload does not hold is a dash, never a computed stand-in.
+// One row model for both threads: a day thread's held names (the day list) and a swing thread's carried holds. Pure, so node --test covers
+// it. Every dollar figure is SIMULATED. A figure the payload does not hold is a dash, never a computed stand-in. The table holds open
+// positions only, so its P/L is the unrealized one; a closed trade's result is in Trades, not here.
 
-/** A name's position, in the numbers each mode's payload holds. `null` is "the payload has no such number". */
+/** An open position, in the numbers each mode's payload holds. `null` is "the payload has no such number". */
 export type PositionRow = {
   key: string;
   symbol: string;
-  /** null: flat (no open position). */
+  /** null: flat (no open position). A flat row is never shown in the Portfolio; the cells still read it as "Flat". */
   side: "long" | "short" | null;
   /** Unsigned; null when flat. */
   shares: number | null;
@@ -25,8 +26,6 @@ export type PositionRow = {
   /** The average price the open position was built at; null when flat. */
   avg: number | null;
   unrealized: number | null;
-  /** Closed trades' P/L; null when nothing has been sold or closed. */
-  realized: number | null;
   /** "Day 3 of hold"; swing only. */
   held: string | null;
   /** Day only: the name the chart is on, and one behind the thread clock. */
@@ -47,8 +46,6 @@ export type PositionCells = {
   avg: Cell;
   value: Cell;
   unrealized: Cell;
-  realized: Cell;
-  total: Cell;
 };
 
 const dash: Cell = { text: EMPTY_VALUE, tone: "flat" };
@@ -62,7 +59,6 @@ export function positionCells(row: PositionRow): PositionCells {
   const signed = !held ? null : row.side === "short" ? -row.shares! : row.shares!;
   const change = row.last !== null && row.priorClose !== null && row.priorClose > 0 ? row.last - row.priorClose : null;
   const changePct = change === null ? null : (100 * change) / row.priorClose!;
-  const total = row.realized === null && row.unrealized === null ? null : (row.realized ?? 0) + (row.unrealized ?? 0);
   return {
     last: price(row.last),
     change: signedUsd(change),
@@ -71,12 +67,10 @@ export function positionCells(row: PositionRow): PositionCells {
     avg: price(row.avg),
     value: signed === null || row.last === null ? dash : plain(formatBalance(signed * row.last)),
     unrealized: signedUsd(row.unrealized),
-    realized: signedUsd(row.realized),
-    total: signedUsd(total),
   };
 }
 
-/** A day-list name. Realized shows once the name has a closed trade; the prior close comes from the list's own candidates. */
+/** A day-list name. Only its open position is read: what it realized earlier is a closed trade (Trades). The prior close comes from the list's own candidates. */
 export const dayPositionRow = (row: PortfolioRow): PositionRow => ({
   key: row.symbol,
   symbol: row.symbol,
@@ -86,14 +80,13 @@ export const dayPositionRow = (row: PortfolioRow): PositionRow => ({
   priorClose: row.priorClose,
   avg: row.position?.entry_price ?? null,
   unrealized: row.unrealized,
-  realized: row.trades > 0 ? row.realized : null,
   held: null,
   current: row.current,
   behind: row.behind,
   stop: row.stopHitAt === null ? null : stopCrossedText(row.stopHitAt),
 });
 
-/** An open swing hold, marked at its last finished close (`last_close`). It has no prior close and nothing realized yet. */
+/** An open swing hold, marked at its last finished close (`last_close`). It has no prior close. */
 export const swingPositionRow = (hold: Hold): PositionRow => ({
   key: String(hold.id),
   symbol: hold.symbol,
@@ -103,7 +96,6 @@ export const swingPositionRow = (hold: Hold): PositionRow => ({
   priorClose: null,
   avg: hold.entry_price,
   unrealized: hold.unrealized_usd,
-  realized: null,
   held: daysHeldText(hold.days_held),
   current: false,
   behind: false,

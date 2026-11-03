@@ -9,7 +9,8 @@ const BOARD_URL = /\/practice\/day\?id=\d+/;
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 
-test.describe("Swing practice", () => {
+// ADR-0025 step 1: swing is closed (POST /threads answers 409); this file goes with the swing removal step.
+test.describe.skip("Swing practice", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });
@@ -258,6 +259,8 @@ test.describe("Swing practice", () => {
     await page.getByRole("button", { name: "Step", exact: true }).click();
     const money = page.getByRole("group", { name: "Practice thread" });
     await expect(money).toContainText("Balance $50,000.00 · Equity $50,184");
+    // The money line reads the same before the first bar, so the step has landed when the clock has moved: before the first price nothing can be closed (D-068).
+    await expect(page.getByRole("contentinfo", { name: "Status" })).toContainText("Replay clock 9:45:00 AM ET");
     const practice = await replayRail(page, "Practice");
     await practice.getByRole("button", { name: "Close position" }).click();
     await expect(practice.getByText("No open practice hold")).toBeVisible();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachPinchZoom, chartTime, candlestickData, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, zoomedRange } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, changedFrom, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, syncSeries, zoomedRange, type ChartBar, type SeriesFed } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -383,4 +383,100 @@ test("an axis tag shows the value at the last bar in view, so a chart scrolled b
   assert.equal(valueAtOrBefore(ema, 0), 10);
   assert.equal(valueAtOrBefore(ema, -3), null, "nothing in view yet");
   assert.equal(valueAtOrBefore([null, null], 1), null);
+});
+
+// D-206: a followed chart is handed its bars again on every poll. The library's series are sent only what changed from the newest bar on.
+type Point = { time: number; value?: number };
+/** A stand-in for a library series: it keeps its points by time, refuses an `update` older than its newest (as the library does) and counts what it was sent. */
+function fakeSeries() {
+  const held = new Map<number, Point>();
+  return {
+    held,
+    sent: { set: 0, updated: 0 },
+    setData(points: Point[]) {
+      this.sent.set += 1;
+      held.clear();
+      for (const point of points) held.set(point.time, point);
+    },
+    update(point: Point) {
+      if (held.size > 0 && point.time < Math.max(...held.keys())) throw new Error("Cannot update oldest data");
+      this.sent.updated += 1;
+      held.set(point.time, point);
+    },
+  };
+}
+const minuteBar = (minute: number, close = 1): ChartBar => ({ t: `2026-10-16T13:${String(minute).padStart(2, "0")}:00Z`, o: 1, h: 2, l: 0.5, c: close, v: 5 });
+const points = (bars: ChartBar[], values: Array<number | null>) => lineData(bars, values) as Point[];
+const closes = (bars: readonly ChartBar[]) => bars.map((bar) => bar.c);
+const dataOf = (series: ReturnType<typeof fakeSeries>) => [...series.held.values()].sort((a, b) => a.time - b.time);
+
+test("a followed chart's refresh sends the series only the newest bar and the ones after it", () => {
+  const fed = new WeakMap<object, SeriesFed>();
+  const series = fakeSeries();
+  const first = Array.from({ length: 6 }, (_, minute) => minuteBar(minute));
+  assert.equal(syncSeries(series, fed, first, closes(first), "", points), -1, "the first draw sends everything");
+  assert.deepEqual(series.sent, { set: 1, updated: 0 });
+
+  // The forming candle (the last bar) moves: a new object for the same start, the older bars the very same objects.
+  const moved = [...first.slice(0, 5), minuteBar(5, 9)];
+  assert.equal(syncSeries(series, fed, moved, closes(moved), "", points), 5);
+  // It closes and the next one forms: the newest point again, and one more.
+  const grown = [...moved.slice(0, 5), minuteBar(5, 4), minuteBar(6, 3)];
+  assert.equal(syncSeries(series, fed, grown, closes(grown), "", points), 5);
+  // A bar appended after an unchanged newest one: one point.
+  const longer = [...grown, minuteBar(7, 2)];
+  assert.equal(syncSeries(series, fed, longer, closes(longer), "", points), 7);
+  assert.deepEqual(series.sent, { set: 1, updated: 1 + 2 + 1 }, "never the whole series again");
+  assert.deepEqual(dataOf(series), points(longer, closes(longer)), "what the series holds is what a full send would hold");
+
+  // The same bars again (a poll that brought nothing, or an option changed): nothing is sent.
+  assert.equal(syncSeries(series, fed, longer, closes(longer), "", points), longer.length);
+  assert.deepEqual(series.sent, { set: 1, updated: 4 });
+});
+
+test("a series is sent everything when a bar behind the newest changed, the bars got fewer, the key changed or the values changed behind the newest", () => {
+  const bars = Array.from({ length: 6 }, (_, minute) => minuteBar(minute));
+  const fresh = () => {
+    const fed = new WeakMap<object, SeriesFed>();
+    const series = fakeSeries();
+    syncSeries(series, fed, bars, closes(bars), "a", points);
+    return { fed, series };
+  };
+  const cases: Array<[string, ChartBar[], Array<number | null>, string]> = [
+    ["an older bar was revised", [...bars.slice(0, 2), minuteBar(2, 7), ...bars.slice(3)], closes(bars), "a"],
+    ["fewer bars", bars.slice(0, 4), closes(bars).slice(0, 4), "a"],
+    ["another key", bars, closes(bars), "b"],
+    ["a value behind the newest changed", bars, [...closes(bars).slice(0, 3), 8, 1, 1], "a"],
+  ];
+  for (const [label, next, values, key] of cases) {
+    const { fed, series } = fresh();
+    assert.equal(syncSeries(series, fed, next, values, key, points), -1, label);
+    assert.equal(series.sent.set, 2, `${label}: sent in full`);
+    assert.deepEqual(dataOf(series), points(next, values), label);
+  }
+});
+
+test("a series the library will not update falls back to sending everything", () => {
+  const fed = new WeakMap<object, SeriesFed>();
+  const series = fakeSeries();
+  const bars = Array.from({ length: 4 }, (_, minute) => minuteBar(minute));
+  syncSeries(series, fed, bars, closes(bars), "", points);
+  // A bar list that is not ascending: the tail the feed sends would be older than the series' newest point.
+  const odd = [...bars.slice(0, 3), minuteBar(1, 5), minuteBar(5)];
+  assert.equal(syncSeries(series, fed, odd, closes(odd), "", points), -1);
+  assert.deepEqual(dataOf(series), points(odd, closes(odd)));
+});
+
+test("changedFrom reads references, so a bar list rebuilt object by object is a first draw", () => {
+  const bars = Array.from({ length: 3 }, (_, minute) => minuteBar(minute));
+  const fed: SeriesFed = { bars, values: null, key: "" };
+  assert.equal(changedFrom(fed, bars.map((bar) => ({ ...bar })), null, ""), -1);
+  assert.equal(changedFrom(fed, [...bars, minuteBar(3)], null, ""), 3);
+  assert.equal(changedFrom(undefined, bars, null, ""), -1);
+});
+
+test("volume points and markers still come out of the whole bar list", () => {
+  const bars = Array.from({ length: 3 }, (_, minute) => minuteBar(minute));
+  assert.equal(volumeData(bars).length, 3);
+  assert.deepEqual(seriesMarkers(bars, []), [], "no markers: nothing to place");
 });
