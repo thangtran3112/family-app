@@ -74,3 +74,10 @@ test("a sub-field label reads as a phrase under its parent", () => {
   assert.equal(subLabel("Left side", "lookbackDays"), "Left side lookback (days)");
   assert.equal(subLabel("Left side", "rsiLength"), "Left side RSI length");
 });
+
+// D-205 tail: the condition boxes that paramLabel summarised under another name.
+test("D-205: the condition's Within %, Operator and pattern Within last bars read as their boxes do", () => {
+  assert.equal(paramLabel("pct"), "Within %");
+  assert.equal(paramLabel("op"), "Operator");
+  assert.equal(paramLabel("withinBars"), "Within last bars");
+});
