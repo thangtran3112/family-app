@@ -2,12 +2,15 @@
 
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { chartPalette } from "@/lib/desk/chartPalette";
+import { ChunkedSeries } from "@/lib/chart-chunks";
 import type {
   HistogramData,
   IChartApi,
   IPriceLine,
   ISeriesApi,
   ISeriesMarkersPluginApi,
+  SeriesMarker,
+  SeriesType,
   Time,
   WhitespaceData,
 } from "lightweight-charts";
@@ -35,6 +38,7 @@ import {
   shadingData,
   syncSeries,
   valueAtOrBefore,
+  timeKey,
   valueRuns,
   volumeData,
   wholeAxisLabel,
@@ -139,6 +143,8 @@ export type MarketChartProps = {
 /** Bars shown on the first draw of a followed chart, and the room right of the newest bar: a marker label is centred on its bar and clipped at the price axis, so it needs about half a label of room. */
 const FOLLOW_VISIBLE_BARS = 90;
 const FOLLOW_RIGHT_PAD = 10;
+/** Bars beyond each edge of the view whose runs stay shown, so a scroll finds them drawn. */
+const CULL_MARGIN_BARS = 100;
 
 // The Desk colours come from chartPalette (canvas cannot read the CSS variables). PRICE is the line and area colour: not white
 // (EMA 9), not green or red (those mean up and down).
@@ -171,19 +177,58 @@ type PaneSeriesApi =
 type Library = typeof import("lightweight-charts");
 type TickFormat = (time: Time, tickType: number) => string;
 type MainKind = "Candlestick" | "Bar" | "Line" | "Area";
-type MainSeries = ISeriesApi<MainKind, Time>;
+type MainSeries = ISeriesApi<SeriesType, Time>;
+/** A series the chart feeds in runs (`ChunkedSeries`): the price series, the volume, the session shading, each stretch of a line. */
+type Runs = ChunkedSeries<{ time: Time }>;
 type Candle = ReturnType<typeof candlestickData>[number];
 /** The crosshair's bar lookup, shaped like a series so the same tail feed keeps it up to date. */
 type Lookup = { map: Map<string, Candle>; setData(points: Candle[]): void; update(point: Candle): void };
 
 const MAIN_KIND: Record<ChartType, MainKind> = { candles: "Candlestick", hollow: "Candlestick", bars: "Bar", line: "Line", area: "Area" };
 
-function addMainSeries(library: Library, chart: IChartApi, kind: MainKind): MainSeries {
+function addMainRun(library: Library, chart: IChartApi, kind: MainKind): MainSeries {
   switch (kind) {
-    case "Bar": return chart.addSeries(library.BarSeries, { upColor: UP, downColor: DOWN, openVisible: true, thinBars: false });
-    case "Line": return chart.addSeries(library.LineSeries, { color: PRICE, lineWidth: 2, crosshairMarkerVisible: true });
-    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: chartPalette.priceFillTop, bottomColor: chartPalette.priceFillBottom, lineWidth: 2 });
-    case "Candlestick": return chart.addSeries(library.CandlestickSeries, { upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: false });
+    case "Bar": return chart.addSeries(library.BarSeries, { upColor: UP, downColor: DOWN, openVisible: true, thinBars: false }) as MainSeries;
+    case "Line": return chart.addSeries(library.LineSeries, { color: PRICE, lineWidth: 2, crosshairMarkerVisible: true }) as MainSeries;
+    case "Area": return chart.addSeries(library.AreaSeries, { lineColor: PRICE, topColor: chartPalette.priceFillTop, bottomColor: chartPalette.priceFillBottom, lineWidth: 2 }) as MainSeries;
+    case "Candlestick": return chart.addSeries(library.CandlestickSeries, { upColor: UP, downColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, borderVisible: false }) as MainSeries;
+  }
+}
+
+/** The price series: a line or an area is joined from run to run, bars and candles stand alone. */
+const addMainSeries = (library: Library, chart: IChartApi, kind: MainKind): Runs =>
+  new ChunkedSeries(chart, () => addMainRun(library, chart, kind), kind === "Line" || kind === "Area");
+
+/** Gives each series of the main pane its place in the stack, bottom first (a later series is drawn over an earlier one): the session shading, the price series, the lines, the volume. */
+function restack(groups: Array<Runs | null>): void {
+  let place = 0;
+  // Only a series that is not where it belongs is moved: a run added at the top is the one to move, and the rest then are in place.
+  for (const group of groups) {
+    for (const series of group?.all ?? []) {
+      if (series.seriesOrder() !== place) series.setSeriesOrder(place);
+      place += 1;
+    }
+  }
+}
+
+/** The markers hang on the run of the price series that holds their bar; a run with none has no plugin at all. */
+function placeMarkers(library: Library, group: Runs, plugins: Map<MainSeries, ISeriesMarkersPluginApi<Time>>, list: SeriesMarker<Time>[]) {
+  const spans = group.spans();
+  const live = new Set(spans.map(({ series }) => series));
+  for (const [series, plugin] of plugins) {
+    if (live.has(series)) continue;
+    try {
+      plugin.detach();
+    } catch {
+      // the run is gone with its plugin
+    }
+    plugins.delete(series);
+  }
+  for (const { series, from, to } of spans) {
+    const mine = list.filter((marker) => timeKey(marker.time) >= from && timeKey(marker.time) < to);
+    const plugin = plugins.get(series);
+    if (plugin) plugin.setMarkers(mine);
+    else if (mine.length > 0) plugins.set(series, library.createSeriesMarkers(series, mine));
   }
 }
 
@@ -197,13 +242,13 @@ function candleStyle(type: ChartType) {
 /** The lookup key of a bar's time, for the crosshair's OHLC (a line or area series reports only a value). */
 const timeId = (time: Time): string => (typeof time === "object" ? `${time.year}-${time.month}-${time.day}` : String(time));
 
+// The library formats the crosshair and every tick on every redraw: build each format once (D-217).
+const utcMonthDay = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+const etMonthDayClock = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
 export function formatChartTime(time: Time): string {
-  if (typeof time === "object") {
-    const date = new Date(Date.UTC(time.year, time.month - 1, time.day));
-    return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(date);
-  }
-  const date = new Date(typeof time === "number" ? time * 1000 : time);
-  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+  if (typeof time === "object") return utcMonthDay.format(new Date(Date.UTC(time.year, time.month - 1, time.day)));
+  return etMonthDayClock.format(new Date(typeof time === "number" ? time * 1000 : time));
 }
 
 /** One precision per column (2 dp, 4 under $1), not whatever digits the value happens to carry (V-Technicals-05). */
@@ -283,7 +328,7 @@ export function MarketChart({
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const library = useRef<Library | null>(null);
-  const main = useRef<MainSeries | null>(null);
+  const main = useRef<Runs | null>(null);
   const mainKind = useRef<MainKind>("Candlestick");
   // The crosshair's OHLC by bar time. It is fed like a series (`syncSeries`): from the first changed bar on, not 6,000 entries again for each new bar (D-206).
   const barAt = useRef<Lookup>({
@@ -297,15 +342,22 @@ export function MarketChart({
   });
   // What each series was last given (by series object), so a refresh sends only what changed.
   const fed = useRef(new WeakMap<object, SeriesFed>());
-  const markersFed = useRef<{ bars: ChartBar[]; markers: ChartMarkerInput[]; plugin: ISeriesMarkersPluginApi<Time> } | null>(null);
+  const markersFed = useRef<{ bars: ChartBar[]; markers: ChartMarkerInput[]; version: number } | null>(null);
   // One line per run of values of each overlay (`valueRuns`), keyed `id@first bar`: a session's stretch of VWAP is its own series (D-231).
-  const overlaySeries = useRef(new Map<string, { id: string; series: ISeriesApi<"Line", Time>; look: string }>());
+  const overlaySeries = useRef(new Map<string, { id: string; series: Runs; look: string }>());
   const paneSeries = useRef(new Map<string, PaneSeriesApi>());
   const priceLines = useRef<IPriceLine[]>([]);
+  // What the price series and its level lines were last set up from: a new bar changes neither, and each call to the library invalidates the chart (D-217).
+  const mainLook = useRef("");
+  const linesFor = useRef<{ series: MainSeries; levels: MarketChartLevel[]; levelTips: boolean } | null>(null);
   const panePriceLines = useRef(new Map<string, IPriceLine[]>());
-  const volumeSeries = useRef<ISeriesApi<"Histogram", Time> | null>(null);
-  const shadeSeries = useRef<ISeriesApi<"Histogram", Time> | null>(null);
-  const markerPlugin = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const volumeSeries = useRef<Runs | null>(null);
+  const shadeSeries = useRef<Runs | null>(null);
+  const markerPlugins = useRef(new Map<MainSeries, ISeriesMarkersPluginApi<Time>>());
+  // Which runs the stacking order was last set for (`restack`): it is set again only when a run comes or goes.
+  const stacked = useRef("");
+  // Hides the runs of the series that lie outside the view (`ChunkedSeries.cull`); set by the data effect, which knows the bars, and called whenever the view moves.
+  const cullRuns = useRef<() => void>(() => {});
   const crosshairCallback = useRef(onCrosshair);
   const fitKey = useRef<string | null>(null);
   const lastIndex = useRef(-1);
@@ -342,6 +394,7 @@ export function MarketChart({
   useEffect(() => {
     let cancelled = false;
     const overlayMap = overlaySeries.current;
+    const markerMap = markerPlugins.current;
     const paneMap = paneSeries.current;
     const paneLinesMap = panePriceLines.current;
     const lookup = barAt.current;
@@ -397,11 +450,14 @@ export function MarketChart({
           if (priceTickFormat.current) currentChart.applyOptions({ localization: { tickmarksPriceFormatter: priceTickFormat.current } });
         });
       };
+      const cullSoon = () => cullRuns.current();
       scale.subscribeVisibleLogicalRangeChange(relabelSoon);
+      scale.subscribeVisibleLogicalRangeChange(cullSoon);
       scale.subscribeSizeChange(relabelSoon);
       detachRelabel = () => {
         cancelAnimationFrame(relabel);
         scale.unsubscribeVisibleLogicalRangeChange(relabelSoon);
+        scale.unsubscribeVisibleLogicalRangeChange(cullSoon);
         scale.unsubscribeSizeChange(relabelSoon);
       };
       resizeWatch = new ResizeObserver(() => {
@@ -412,7 +468,7 @@ export function MarketChart({
       mainKind.current = "Candlestick";
       main.current = addMainSeries(module, currentChart, mainKind.current);
       const levelAt = (y: number) => {
-        const series = main.current;
+        const series = main.current?.tail;
         return series ? nearestLevel(levelsRef.current, y, (price) => series.priceToCoordinate(price)) : null;
       };
       currentChart.subscribeCrosshairMove((param) => {
@@ -427,9 +483,9 @@ export function MarketChart({
           return;
         }
         const values: Record<string, { value?: number } | undefined> = {};
-        for (const { id, series } of overlaySeries.current.values()) values[id] ??= param.seriesData.get(series) as { value?: number } | undefined;
+        for (const { id, series } of overlaySeries.current.values()) values[id] ??= series.read(param.seriesData) as { value?: number } | undefined;
         for (const [id, entry] of paneSeries.current) values[id] = param.seriesData.get(entry.series) as { value?: number } | undefined;
-        const volumeEntry = volumeSeries.current ? param.seriesData.get(volumeSeries.current) : undefined;
+        const volumeEntry = volumeSeries.current?.read(param.seriesData);
         callback(crosshairPoint(
           param.time,
           barAt.current.map.get(timeId(param.time)) as Parameters<typeof crosshairPoint>[1],
@@ -438,7 +494,7 @@ export function MarketChart({
         ));
       });
       currentChart.subscribeClick((param) => {
-        const series = main.current;
+        const series = main.current?.tail;
         if (!pickEnabled.current || !series || !param.point || (param.paneIndex ?? 0) !== 0) return;
         const price = levelAt(param.point.y)?.price ?? series.coordinateToPrice(param.point.y);
         if (price === null || !(price > 0)) return;
@@ -467,7 +523,9 @@ export function MarketChart({
       markersFed.current = null;
       volumeSeries.current = null;
       shadeSeries.current = null;
-      markerPlugin.current = null;
+      markerMap.clear();
+      stacked.current = "";
+      cullRuns.current = () => {};
       fitKey.current = null;
       lastIndex.current = -1;
       rightOffset.current = null;
@@ -475,6 +533,8 @@ export function MarketChart({
       overlayMap.clear();
       paneMap.clear();
       priceLines.current = [];
+      mainLook.current = "";
+      linesFor.current = null;
       paneLinesMap.clear();
     };
   // Chart lifecycle is mount/unmount only; data changes update series below.
@@ -491,17 +551,26 @@ export function MarketChart({
     const wantKind = MAIN_KIND[chartType];
     const keepRange = mainKind.current !== wantKind ? currentChart.timeScale().getVisibleLogicalRange() : null;
     if (mainKind.current !== wantKind) {
-      markerPlugin.current?.detach();
-      markerPlugin.current = null;
+      for (const plugin of markerPlugins.current.values()) plugin.detach();
+      markerPlugins.current.clear();
+      markersFed.current = null;
       priceLines.current = [];
-      currentChart.removeSeries(main.current);
+      mainLook.current = "";
+      linesFor.current = null;
+      const old = main.current;
+      main.current = null; // the library formats ticks while a series goes and while one comes: they see no price series then
+      old.destroy();
       mainKind.current = wantKind;
       main.current = addMainSeries(chartLibrary, currentChart, wantKind);
-      // Behind the overlays, in front of the session shading.
-      main.current.setSeriesOrder(shadeSeries.current ? 1 : 0);
     }
-    const mainSeries = main.current;
-    if (wantKind === "Candlestick") mainSeries.applyOptions(candleStyle(chartType));
+    const mainRuns = main.current;
+    // The price series' look is set when it changes, not on every bar: a series that is told its options again rebuilds the colour of each of its 6,000 points (D-217).
+    const look = `${chartType}|${lastPricePill}`;
+    if (mainLook.current !== look) {
+      if (wantKind === "Candlestick") mainRuns.applyOptions(candleStyle(chartType));
+      mainRuns.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
+      mainLook.current = look;
+    }
 
     const dayName = moneyAxis ? new Map(bars.map((bar, index) => [timeId(chartTime(bar.t)), moneyAxis.days[index] ?? ""])) : null;
     const timeLabel = dayName ? (time: Time) => dayName.get(timeId(time)) ?? "" : formatChartTime;
@@ -523,7 +592,7 @@ export function MarketChart({
     // takes one tick formatter for every price scale and the panes' scales are not this one.
     const closes = bars.map((bar) => bar.c ?? null);
     const drawnTags = () => {
-      const series = main.current;
+      const series = main.current?.tail;
       // Not `series.getPane()`: the library formats ticks while a chart-type switch is removing the old series, and a removed series throws there.
       const height = currentChart.panes()[0]?.getHeight();
       if (!series || height === undefined) return { ys: [], height: null };
@@ -538,10 +607,10 @@ export function MarketChart({
       return { ys: drawnTagYs(ys, height, centre === null ? null : series.priceToCoordinate(centre)), height };
     };
     const clearsTags = moneyAxis !== undefined || ((levelTips || guardAxis) && panes.length === 0);
-    const priceTick = moneyAxis ? moneyAxis.tick : (price: number) => main.current?.priceFormatter().format(price) ?? "";
+    const priceTick = moneyAxis ? moneyAxis.tick : (price: number) => main.current?.tail?.priceFormatter().format(price) ?? "";
     const tickmarksPriceFormatter = (prices: readonly number[]) => {
       const { ys, height } = drawnTags();
-      return prices.map((price) => clearTickLabel(priceTick(price), main.current?.priceToCoordinate(price) ?? null, ys, height));
+      return prices.map((price) => clearTickLabel(priceTick(price), main.current?.tail?.priceToCoordinate(price) ?? null, ys, height));
     };
     priceTickFormat.current = clearsTags ? tickmarksPriceFormatter : null;
     currentChart.applyOptions({
@@ -571,7 +640,13 @@ export function MarketChart({
         let line = overlaySeries.current.get(key);
         if (!line) {
           // No full-width dotted line at the last value: it sits within cents of the last-price line, where her marks land. The axis tag stays.
-          line = { id: overlay.id, series: currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2, priceLineVisible: false }), look: "" };
+          const created = new ChunkedSeries(
+            currentChart,
+            () => currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2, priceLineVisible: false }) as MainSeries,
+            true,
+            { priceLineVisible: false },
+          );
+          line = { id: overlay.id, series: created, look: "" };
           overlaySeries.current.set(key, line);
         }
         // Options are applied only when they change: each call to the library invalidates the chart, and a session's line is one of several.
@@ -585,7 +660,7 @@ export function MarketChart({
     });
     for (const [key, line] of overlaySeries.current) {
       if (!wantedLines.has(key)) {
-        currentChart.removeSeries(line.series);
+        line.series.destroy();
         overlaySeries.current.delete(key);
       }
     }
@@ -660,61 +735,97 @@ export function MarketChart({
     const tops = layoutPanes(currentChart, panes);
     setPaneTops((current) => (sameTops(current, tops) ? current : tops));
 
-    for (const line of priceLines.current) mainSeries.removePriceLine(line);
-    priceLines.current = levels.flatMap(({ label, price, color, style, plain }) => {
-      if (price === null || !Number.isFinite(price)) return [];
-      return [mainSeries.createPriceLine({
-        price,
-        title: plain || levelTips ? "" : label,
-        color: color ?? chartPalette.muted,
-        lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
-        lineWidth: 1,
-        axisLabelVisible: !plain,
-      })];
-    });
+    // The level lines are drawn again only when the levels (or the series they sit on) change, not for each new bar. They sit on the newest run of the price series.
+    const lineSeries = mainRuns.tail!;
+    const placedLines = linesFor.current;
+    if (!placedLines || placedLines.series !== lineSeries || placedLines.levels !== levels || placedLines.levelTips !== levelTips) {
+      for (const line of priceLines.current) {
+        try {
+          placedLines?.series.removePriceLine(line);
+        } catch {
+          // the run they sat on is gone, and the lines with it
+        }
+      }
+      priceLines.current = levels.flatMap(({ label, price, color, style, plain }) => {
+        if (price === null || !Number.isFinite(price)) return [];
+        return [lineSeries.createPriceLine({
+          price,
+          title: plain || levelTips ? "" : label,
+          color: color ?? chartPalette.muted,
+          lineStyle: style === "dotted" ? chartLibrary.LineStyle.Dotted : chartLibrary.LineStyle.Dashed,
+          lineWidth: 1,
+          axisLabelVisible: !plain,
+        })];
+      });
+      linesFor.current = { series: lineSeries, levels, levelTips };
+    }
 
-    mainSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
     // Before the data changes: where is the view? If it is parked at the newest bar (within a bar or two), it stays there.
     const visible = keepRange ?? currentChart.timeScale().getVisibleLogicalRange();
     // The series are fed from the first bar that changed (`syncSeries`): a new bar of a 6,000-bar chart is one `update`, not 6,000 points built and sent again.
     syncSeries(barAt.current, fed.current, bars, null, "", candlestickData);
-    if (wantKind === "Line" || wantKind === "Area") syncSeries(mainSeries as ISeriesApi<"Line", Time>, fed.current, bars, closes, "", lineData);
-    else syncSeries(mainSeries as ISeriesApi<"Candlestick", Time>, fed.current, bars, null, "", candlestickData);
+    if (wantKind === "Line" || wantKind === "Area") syncSeries(mainRuns, fed.current, bars, closes, "", lineData);
+    else syncSeries(mainRuns, fed.current, bars, null, "", candlestickData);
 
     if (volume && !volumeSeries.current) {
-      volumeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
-        priceScaleId: "",
-        priceFormat: { type: "volume" },
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
-      volumeSeries.current.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+      volumeSeries.current = new ChunkedSeries(
+        currentChart,
+        () => {
+          const added = currentChart.addSeries(chartLibrary.HistogramSeries, {
+            priceScaleId: "",
+            priceFormat: { type: "volume" },
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          added.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+          return added as MainSeries;
+        },
+        false,
+        { lastValueVisible: false, priceLineVisible: false },
+      );
     } else if (!volume && volumeSeries.current) {
-      currentChart.removeSeries(volumeSeries.current);
+      volumeSeries.current.destroy();
       volumeSeries.current = null;
     }
     if (volumeSeries.current) syncSeries(volumeSeries.current, fed.current, bars, null, "", volumeData);
 
     if (sessionShading && !shadeSeries.current) {
-      shadeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
-        priceScaleId: "extended-hours",
-        priceFormat: { type: "volume" },
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
-      shadeSeries.current.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
-      shadeSeries.current.setSeriesOrder(0); // behind the candles and lines (a later series is drawn on top: the week shading hid the equity lines)
+      shadeSeries.current = new ChunkedSeries(
+        currentChart,
+        () => {
+          const added = currentChart.addSeries(chartLibrary.HistogramSeries, {
+            priceScaleId: "extended-hours",
+            priceFormat: { type: "volume" },
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          added.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+          return added as MainSeries;
+        },
+        false,
+        { lastValueVisible: false, priceLineVisible: false },
+      );
     } else if (!sessionShading && shadeSeries.current) {
-      currentChart.removeSeries(shadeSeries.current);
+      shadeSeries.current.destroy();
       shadeSeries.current = null;
     }
     if (shadeSeries.current) syncSeries(shadeSeries.current, fed.current, bars, null, "", shadingData);
 
-    if (!markerPlugin.current) markerPlugin.current = chartLibrary.createSeriesMarkers(mainSeries, []);
+    // Bottom to top: the session shading (behind the candles and lines: a later series is drawn on top, the week shading hid the equity lines), the price series,
+    // the lines, the volume. A run is a series of its own, so the order is set again whenever one is added or removed.
+    const stack = [shadeSeries.current, mainRuns, ...[...overlaySeries.current.values()].map(({ series }) => series), volumeSeries.current];
+    const stackKey = stack.map((group) => group?.stamp ?? "-").join(",");
+    if (stacked.current !== stackKey) {
+      restack(stack);
+      stacked.current = stackKey;
+    }
+
     const placed = markersFed.current;
-    if (!placed || placed.bars !== bars || placed.markers !== markers || placed.plugin !== markerPlugin.current) {
-      markerPlugin.current.setMarkers(seriesMarkers(bars, markers));
-      markersFed.current = { bars, markers, plugin: markerPlugin.current };
+    // No markers before and none now: a new bar has nothing to place, and setting an empty list still invalidates the chart (D-217).
+    const stillNone = placed !== null && placed.version === mainRuns.version && placed.markers.length === 0 && markers.length === 0;
+    if (!stillNone && (!placed || placed.bars !== bars || placed.markers !== markers || placed.version !== mainRuns.version)) {
+      placeMarkers(chartLibrary, mainRuns, markerPlugins.current, seriesMarkers(bars, markers));
+      markersFed.current = { bars, markers, version: mainRuns.version };
     }
 
     // Fit on a new symbol or timeframe (or the first data), not on every refresh, so zoom survives a refetch.
@@ -736,18 +847,38 @@ export function MarketChart({
       currentChart.timeScale().scrollToPosition(FOLLOW_RIGHT_PAD, false);
     }
     lastIndex.current = count - 1;
+
+    // The older runs that lie outside the view are hidden, so a new bar rebuilds the drawing items of the runs in view and not of all 6,000 bars (D-217).
+    cullRuns.current = () => {
+      const groups = [main.current, volumeSeries.current, shadeSeries.current, ...[...overlaySeries.current.values()].map(({ series }) => series)];
+      const range = currentChart.timeScale().getVisibleLogicalRange();
+      if (range === null || bars.length === 0) {
+        for (const group of groups) group?.cull(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY);
+        return;
+      }
+      const keyAt = (index: number) => timeKey(chartTime(bars[Math.min(bars.length - 1, Math.max(0, index))]!.t));
+      const from = keyAt(Math.floor(range.from) - CULL_MARGIN_BARS);
+      const to = keyAt(Math.ceil(range.to) + CULL_MARGIN_BARS);
+      for (const group of groups) group?.cull(from, to);
+    };
+    cullRuns.current();
   }, [ready, symbol, interval, bars, overlays, panes, levels, levelTips, markers, sessionShading, volume, lastPricePill, follow, firstDraw, sessionStart, clockTicks, chartType, moneyAxis, guardAxis]);
 
   // Click-to-order: a dashed line with its price on the axis at the picked price, for as long as the pick is open. Declared after
   // the data effect, whose series swap (a chart-type change) it follows: the cleanup removes the line from the old series first.
   const pickPrice = renderPick !== undefined && pick !== null ? pick.price : null;
   useEffect(() => {
-    const series = main.current;
+    const series = main.current?.tail;
     const chartLibrary = library.current;
     if (pickPrice === null || !ready || !series || !chartLibrary) return;
     const line = series.createPriceLine({ price: pickPrice, title: "", color: chartPalette.text, lineStyle: chartLibrary.LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true });
     return () => {
-      if (main.current === series) series.removePriceLine(line);
+      // The line sits on the run that was newest when it was drawn; a chart-type change, or the chart going, has removed that run and the line with it.
+      try {
+        series.removePriceLine(line);
+      } catch {
+        // gone with its run
+      }
     };
   }, [pickPrice, ready, chartType]);
 
@@ -774,7 +905,7 @@ export function MarketChart({
   // Move the crosshair to the asked-for bar, scrolling it into view when it is off screen. Never touches the data.
   useEffect(() => {
     const currentChart = chart.current;
-    const candleSeries = main.current;
+    const candleSeries = main.current?.tail;
     if (!focus || !ready || !currentChart || !candleSeries) return;
     const index = bars.findIndex((bar) => bar.t === focus.time);
     const bar = bars[index];
