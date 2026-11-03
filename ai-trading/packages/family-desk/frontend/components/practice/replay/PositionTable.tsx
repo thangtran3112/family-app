@@ -35,7 +35,7 @@ function columns(): DenseColumn<PositionRow>[] {
     { key: "avg", label: "Avg cost", kind: "num", render: (row) => cellText(row, (cells) => cells.avg) },
     {
       key: "price",
-      label: "Price at T",
+      label: "Price at thread time",
       kind: "num",
       render: (row) => (
         <span className={styles.priceCell}>
@@ -58,7 +58,7 @@ function columns(): DenseColumn<PositionRow>[] {
 
 /**
  * The position table of the Portfolio tab, read like a broker's list of what she holds now (ADR-0025): Ticker (a link to its chart), Side, Shares,
- * Avg cost (what the position was built at), Price at T (the price at the thread clock, with a note when it is old), Gain/loss (never dropped),
+ * Avg cost (what the position was built at), Price at thread time (the price at the thread clock, with a note when it is old), Gain/loss (never dropped),
  * Held for (elapsed thread time, "3d 4h") and the working orders on the name. A closed trade is not a row: its result is in Trades. All
  * SIMULATED. With `actions` a held row has Exit; without, the rows only read.
  */

@@ -590,6 +590,8 @@ class ListFilterCountsOut(BaseModel):
     scanned: int
     no_data: int
     matches_total: int
+    # "HH:MM" ET: before this the filter has no bar of the day to read and lists no names
+    reads_from: str | None = None
 
 
 class UniverseMembershipOut(BaseModel):

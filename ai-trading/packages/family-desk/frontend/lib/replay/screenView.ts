@@ -1,6 +1,7 @@
 import {
   EMPTY_VALUE,
   changeToneAt,
+  formatEtDateTimeZone,
   formatEtDay,
   formatEtTime,
   formatEtTimeZone,
@@ -27,9 +28,9 @@ export function screenCountsText(screen: Pick<Screen, "universe">): string {
   return practiceText("screenCounts", { scanned: universe.scanned, size: universe.size, matched: universe.matches_total, shown: universe.shown });
 }
 
-/** The scan the names come from: "Scan 2 · run at 10:00 AM ET · data through 9:45 AM", or that none has run yet (a new Screen is empty until its first scan). */
+/** The scan the names come from: "Scan 2 · run at Mon 2026-08-03 10:00 AM ET · data through 9:45 AM", or that none has run yet (a new Screen is empty until its first scan). */
 export const rescanLabel = (scan: Pick<Rescan, "seq" | "as_of" | "data_through">): string =>
-  practiceText("screenRescanLabel", { seq: scan.seq, clock: formatEtTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
+  practiceText("screenRescanLabel", { seq: scan.seq, clock: formatEtDateTimeZone(scan.as_of), through: formatEtTime(scan.data_through) });
 
 export const scanBuiltText = (screen: Pick<Screen, "rescan">): string => (screen.rescan === null ? PRACTICE_COPY.screenNotScanned : rescanLabel(screen.rescan));
 
@@ -207,10 +208,8 @@ export function toggledStars(watch: readonly { symbol: string }[], symbol: strin
   return symbols.includes(symbol) ? symbols.filter((item) => item !== symbol) : [...symbols, symbol];
 }
 
-export function screenWarning(screen: Pick<Screen, "warnings">): string | null {
-  // The server says why a Screen is short. A Screen it had no reason for shows the empty state under the table instead.
-  return screen.warnings[0] ?? null;
-}
+/** What the server says about the scan: a filter still waiting for its first bar of the day, and why a Screen is short. */
+export const screenWarnings = (screen: Pick<Screen, "warnings">): readonly string[] => screen.warnings;
 
 // ---- the names she opened (lanes) -------------------------------------------------------------------------------------
 

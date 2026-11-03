@@ -15,7 +15,9 @@ test("local day checks use the plan's wording", () => {
   assert.equal(dayProblem("2015-12-31", SATURDAY), "Replay goes back to Jan 4, 2016");
   assert.equal(dayProblem("2016-01-04", SATURDAY), null);
   assert.equal(dayProblem("2026-10-23", SATURDAY), null);
-  assert.equal(dayProblem("2026-10-26", SATURDAY), "This session isn't finished yet · replay opens at 4:15 PM ET");
+  assert.equal(dayProblem("2026-10-26", SATURDAY), "No replay for a date after today · pick Fri 2026-10-23 or earlier");
+  assert.equal(dayProblem("2030-01-01", SATURDAY), "No replay for a date after today · pick Fri 2026-10-23 or earlier");
+  assert.equal(dayProblem("2026-10-26", new Date("2026-10-26T13:00:00Z")), "This session isn't finished yet · replay opens at 4:15 PM ET", "today, before 4:15 PM ET");
   assert.equal(dayProblem("not a day", SATURDAY), "Pick a day");
 });
 

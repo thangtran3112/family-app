@@ -2,7 +2,7 @@ import { EMPTY_VALUE, type Tone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { moneyTone } from "./journalView.ts";
 import type { ClockAccount } from "./threadClock.ts";
-import type { PracticeThread } from "./threads.ts";
+import type { PracticeThread, ThreadClockBrief } from "./threads.ts";
 
 // View logic of the practice-thread screens (02r, ADR-0025): money text, the thread's name and started-with line, the weeks of
 // the journal, the improvement panel and its too-few-days caveat, and the summary tiles. Every dollar figure is SIMULATED. A date is an ET
@@ -49,8 +49,9 @@ const monthDay = new Intl.DateTimeFormat("en-US", { timeZone: ET, month: "short"
  *  day, so two threads never read the same (D-069). A thread that started before the freestyle model keeps its old name. */
 export const threadName = (thread: Pick<PracticeThread, "name">): string => thread.name;
 
-/** "Started Oct 25": the day she started it (the day she made the thread, not a replayed day). */
-export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">): string => `Started ${monthDay.format(new Date(thread.createdAt))}`;
+/** "Started Oct 25": the ET day the thread's clock starts, the same day its name carries (D-226). A thread with no setup yet started the day she made it. */
+export const threadStartedText = (thread: Pick<PracticeThread, "createdAt">, clock: Pick<ThreadClockBrief, "start_at"> | null = null): string =>
+  `Started ${monthDay.format(new Date(clock?.start_at ?? thread.createdAt))}`;
 
 /** "Started with $50,000 · +$123 so far". A thread with a position open at the clock counts its open P/L apart, so "no change yet"
  *  beside a higher Equity never reads as a flat thread (D-170). */

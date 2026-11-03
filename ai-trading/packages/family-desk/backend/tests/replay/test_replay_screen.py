@@ -510,8 +510,8 @@ def test_a_list_at_the_earliest_time_reads_a_bar_of_the_day_and_a_quarter_hour_e
     minutes = pd.concat([minute_bars("stock", day, price=50.0) for day in days[-12:]])
     filters = [FilterInput(1, 1, "Always", spec, ["AAA"])]
 
-    def points(hhmm: str):
-        built = build_list(
+    def built_at(hhmm: str):
+        return build_list(
             filters=filters,
             daily_of=lambda _s: daily,
             minutes_of=lambda _s: minutes,
@@ -519,8 +519,39 @@ def test_a_list_at_the_earliest_time_reads_a_bar_of_the_day_and_a_quarter_hour_e
             list_at=et(DAY, hhmm),
             max_list=30,
         )
-        return built.candidates[0]["matched_since"].date()
 
-    assert points("10:00") == DAY  # matched on the day's own first bar
-    # a quarter hour earlier its data stops at 09:30: the newest point is still the previous session's last bar
-    assert points("09:45") != DAY
+    assert built_at("10:00").candidates[0]["matched_since"].date() == DAY  # matched on the day's own first bar
+    # a quarter hour earlier its data stops at 09:30: the newest point would be the previous session's last bar, so the
+    # filter waits (lists nothing, scans nothing) and says from when it reads (D-216)
+    early = built_at("09:45")
+    assert early.candidates == []
+    assert early.filters[0]["scanned"] == 0 and early.filters[0]["reads_from"] == "10:00"
+
+
+@pytest.mark.parametrize(
+    ("hhmm", "expected"),
+    [("04:30", None), ("09:29", None), ("09:30", "10:00"), ("09:59", "10:00"), ("10:00", None)],
+)
+def test_a_filter_reads_from_the_first_bar_of_the_day_and_says_when_it_waits(hhmm, expected) -> None:
+    spec = {"watch": {"runOn": "bar_close_15m", "session": "regular"}}
+    assert screen.reads_from(spec, DAY, et(DAY, hhmm)) == expected
+
+
+def _always(name: str) -> dict:
+    """A filter template whose condition is true wherever it is read: only its cadence matters to the test."""
+    spec = FilterStrategySpecV1.model_validate(load_template(f"filters/{name}.json")).model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    spec["when"] = {"op": "gte", "left": {"series": "close"}, "right": {"value": 0}}
+    return spec
+
+
+def test_a_waiting_filter_lists_nothing_and_the_others_still_list_their_names(world) -> None:
+    # bar_close_15m, regular: reads from 10:00; a daily filter reads at any list time
+    waiting = FilterInput(1, 1, "Waits", _always("abnormal-volume"), ["GAPPER"])
+    other = FilterInput(2, 2, "Any close", _always("high-volatility"), ["FLAT"])
+    built = _build(world, [waiting, other], list_at="09:30")
+    assert [c["symbol"] for c in built.candidates] == ["FLAT"]
+    assert built.candidates[0]["filters"] == ["Any close"]
+    rows = [(f["name"], f["scanned"], f["reads_from"]) for f in built.filters]
+    assert rows == [("Waits", 0, "10:00"), ("Any close", 1, None)]

@@ -118,7 +118,7 @@ function ThreadRow({
             </span>
           )}
         </span>
-        <span className={styles.sub}>{threadStartedText(thread)}</span>
+        <span className={styles.sub}>{threadStartedText(thread, summary.clock)}</span>
       </th>
       <td className={styles.num}>
         <span className={styles.balance}>

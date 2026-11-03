@@ -70,7 +70,7 @@ test("the start day and time are read locally: a weekend, a day before 2016, a s
   };
   assert.equal(at({ startDay: "2026-10-24" }), "No trading on Sat 2026-10-24 · pick a weekday");
   assert.equal(at({ startDay: "2015-12-31" }), "Replay goes back to Jan 4, 2016");
-  assert.equal(at({ startDay: "2026-10-26" }), "This session isn't finished yet · replay opens at 4:15 PM ET");
+  assert.equal(at({ startDay: "2026-10-26" }), "No replay for a date after today · pick Fri 2026-10-23 or earlier");
   assert.match(at({ startTime: "03:00" }) ?? "", /between 4:00 AM and 8:00 PM ET/);
   assert.match(at({ startTime: "21:15" }) ?? "", /between 4:00 AM and 8:00 PM ET/);
   assert.equal(at({ startDay: "2026-10-23", startTime: "04:00" }), null, "the extended open is a start");
