@@ -453,10 +453,10 @@ export const PRACTICE_COPY = {
   indicatorsFootnote: "Read from the bars shown on the chart, up to the replay time. Nothing here looks ahead. VWAP is the session's, from 1-minute bars, on every chart interval.",
   // The Daily rail has no VWAP row, so its note stops before the VWAP sentence (D-203).
   indicatorsFootnoteDaily: "Read from the bars shown on the chart, up to the replay time. Nothing here looks ahead.",
-  dayPortfolioEmpty: "Click a name in Candidates to open its chart · it joins your portfolio",
-  dayPortfolioTotal: "Day P/L",
+  dayPortfolioEmpty: "Click a name in Candidates to open its chart · it joins your portfolio once you hold it · closed trades are in Trades",
+  dayPortfolioEnded: "No position is open · closed trades are in Trades",
+  dayPortfolioTotal: "Open P/L",
   dayPortfolioTable: "Positions",
-  dayPortfolioSplit: "realized {realized} · open {open}",
   dayOpenHint: "Click a name to open its chart and practice it · the clock runs on the Summary, with or without a name open",
   dayOpenRelistHint: "Click a name to open its chart and practice it · the clock runs on the Summary · re-list first if you want a later list time",
   // A name's button is "Open" whether or not she has opened it before: it goes to that name's chart at the day clock. Resume belongs to the thread's day, never to a single name.

@@ -97,13 +97,14 @@ test.describe("Practice thread overview", () => {
     await expect(page).toHaveURL(`${overviewUrl(threadId)}&tab=portfolio`);
     const holds = page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption });
     await expect(rows(holds)).toHaveCount(2);
-    // Each hold is a broker-style row: signed shares (S04 is a long, so unsigned), the entry price as Avg price, the mark as Last, a value and a total P/L.
-    // A swing hold has no prior close and nothing realized, so its Change and Realized columns are dropped, not filled with dashes.
+    // Each hold is a broker-style row: signed shares (S04 is a long, so unsigned), the entry price as Avg price, the mark as Last, a value and an unrealized P/L.
+    // A swing hold has no prior close, so its Change columns are dropped, not filled with dashes; no Portfolio table has a Realized or Total column.
     const holdsRegion = page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle });
     expect((await positionCells(holdsRegion, "S04"))["Position"]).toMatch(/^\d[\d,]*$/);
-    expect(await positionCells(holdsRegion, "S01")).toMatchObject({ Position: "100", "Avg price": expect.stringMatching(/^[\d,]+\.\d{2}$/), Last: expect.stringMatching(/^[\d,]+\.\d{2}$/), "Total P/L": expect.stringMatching(/^[+−]?\$[\d,]+\.\d{2}$/) });
+    expect(await positionCells(holdsRegion, "S01")).toMatchObject({ Position: "100", "Avg price": expect.stringMatching(/^[\d,]+\.\d{2}$/), Last: expect.stringMatching(/^[\d,]+\.\d{2}$/), "Unrealized P/L": expect.stringMatching(/^[+−]?\$[\d,]+\.\d{2}$/) });
     await expect(holds.getByRole("columnheader", { name: "Change", exact: true })).toHaveCount(0);
     await expect(holds.getByRole("columnheader", { name: "Realized P/L", exact: true })).toHaveCount(0);
+    await expect(holds.getByRole("columnheader", { name: "Total P/L", exact: true })).toHaveCount(0);
     await expect(holdsRegion.getByText(PRACTICE_COPY.threadSimulated, { exact: true })).toBeVisible(); // the holds are pretend money
     await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle })).toContainText("2 open");
     await expect(page.getByRole("link", { name: PRACTICE_COPY.overviewHoldsLink })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);

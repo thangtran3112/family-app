@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { portfolioRows } from "./dayView.ts";
+import { heldRows, portfolioRows } from "./dayView.ts";
 import { dayPositionRow, positionCells, swingPositionRow } from "./positionTable.ts";
 import type { Hold } from "./schemas.ts";
 
@@ -9,7 +9,7 @@ const session = (symbol: string, changes = {}) => ({
   id: 1, symbol, status: "active" as const, revealed_through: "2026-03-10T14:00:00Z", behind_clock: false, has_open_trade: false, trades: 0, realized_usd: 0, position: null, ...changes,
 });
 const rowsOf = (sessions: ReturnType<typeof session>[], closes: Record<string, number | null> = {}) =>
-  portfolioRows({ sessions, candidates: Object.entries(closes).map(([symbol, prior_close]) => ({ symbol, prior_close })) as never }).map(dayPositionRow);
+  heldRows(portfolioRows({ sessions, candidates: Object.entries(closes).map(([symbol, prior_close]) => ({ symbol, prior_close })) as never })).map(dayPositionRow);
 
 test("a held long reads last, day change vs the prior close, signed position, average price, value and P/L", () => {
   const [long] = rowsOf([session("SMCI", { has_open_trade: true, position: trade })], { SMCI: 810 });
@@ -21,29 +21,30 @@ test("a held long reads last, day change vs the prior close, signed position, av
   assert.deepEqual(cells.avg, { text: "812.40", tone: null });
   assert.deepEqual(cells.value, { text: "$81,454.00", tone: null });
   assert.deepEqual(cells.unrealized, { text: "+$214.00", tone: "up" });
-  assert.deepEqual(cells.realized, { text: "—", tone: "flat" }, "nothing closed yet: a dash, not $0.00");
-  assert.deepEqual(cells.total, { text: "+$214.00", tone: "up" });
+  assert.deepEqual(Object.keys(cells), ["last", "change", "changePct", "position", "avg", "value", "unrealized"], "no realized or total column: the table holds open positions only");
 });
 
 test("a short is a negative position and a negative value; its P/L is its own, not the stock's", () => {
   const [short] = rowsOf([session("NVDA", { has_open_trade: true, position: { ...trade, side: "short", shares: 50, entry_price: 200, last_price: 190, unrealized_usd: 500 } })], { NVDA: 195 });
   const cells = positionCells(short!);
   assert.deepEqual([cells.position.text, cells.value.text], ["−50", "−$9,500.00"]);
-  assert.deepEqual([cells.change, cells.total], [{ text: "−$5.00", tone: "down" }, { text: "+$500.00", tone: "up" }], "the stock fell (red) while the short gained (green)");
+  assert.deepEqual([cells.change, cells.unrealized], [{ text: "−$5.00", tone: "down" }, { text: "+$500.00", tone: "up" }], "the stock fell (red) while the short gained (green)");
 });
 
-test("a held name with a closed trade totals realized plus unrealized", () => {
+test("a held name that also has a closed trade shows only its open P/L: the closed result is in Trades", () => {
   const [row] = rowsOf([session("SMCI", { has_open_trade: true, position: trade, trades: 1, realized_usd: -38 })]);
-  const cells = positionCells(row!);
-  assert.deepEqual([cells.realized.text, cells.unrealized.text, cells.total.text], ["−$38.00", "+$214.00", "+$176.00"]);
+  assert.equal(positionCells(row!).unrealized.text, "+$214.00", "not +$176.00: the −$38.00 closed trade is not added in");
 });
 
-test("a flat name keeps its realized result and dashes everything it has no number for", () => {
-  const [closed, untouched] = rowsOf([session("ANET", { trades: 2, realized_usd: -38 }), session("AMD")], { ANET: 90 });
-  const cells = positionCells(closed!);
-  assert.deepEqual([cells.position.text, cells.last.text, cells.change.text, cells.avg.text, cells.value.text, cells.unrealized.text], ["Flat", "—", "—", "—", "—", "—"]);
-  assert.deepEqual([cells.realized.text, cells.total.text], ["−$38.00", "−$38.00"]);
-  assert.deepEqual(positionCells(untouched!).total, { text: "—", tone: "flat" }, "no trade at all: a dash, not $0.00");
+test("the Portfolio holds only what is held now: exited and untouched names are not rows", () => {
+  const rows = rowsOf([
+    session("GDX", { id: 1, has_open_trade: true, position: { ...trade, side: "short", shares: 40 } }),
+    session("MUU", { id: 2, trades: 1, realized_usd: 120 }), // opened, closed at a gain
+    session("COHR", { id: 3, trades: 2, realized_usd: -38 }), // opened, closed at a loss
+    session("AXTI", { id: 4 }), // opened, never traded
+  ]);
+  assert.deepEqual(rows.map((row) => [row.symbol, positionCells(row).position.text]), [["GDX", "−40"]], "a short is negative shares; the three exited names are not listed");
+  assert.deepEqual(rowsOf([session("MUU", { trades: 1, realized_usd: 120 })]), [], "nothing held: an empty table, not a row of dashes");
 });
 
 test("no prior close means no change: dashes, never a change from the entry price", () => {
@@ -64,17 +65,17 @@ const hold = (changes: Partial<Hold> = {}): Hold => ({
   earnings: null, split_note: null, ...changes,
 });
 
-test("an open swing hold reads at its last close, with no change and nothing realized", () => {
+test("an open swing hold reads at its last close, with no change", () => {
   const row = swingPositionRow(hold());
   const cells = positionCells(row);
   assert.deepEqual([cells.last.text, cells.avg.text, cells.position.text, cells.value.text], ["187.40", "184.20", "300", "$56,220.00"]);
-  assert.deepEqual([cells.change.text, cells.changePct.text, cells.realized.text], ["—", "—", "—"]);
-  assert.deepEqual(cells.total, { text: "+$960.00", tone: "up" });
+  assert.deepEqual([cells.change.text, cells.changePct.text], ["—", "—"]);
+  assert.deepEqual(cells.unrealized, { text: "+$960.00", tone: "up" });
   assert.deepEqual([row.held, row.stop], ["Day 2 of hold", null]);
   assert.equal(swingPositionRow(hold({ stop_hit: "yes" })).stop, "Stop 182.50 crossed");
 });
 
 test("a swing hold with no price yet has no last, value or P/L", () => {
   const cells = positionCells(swingPositionRow(hold({ last_close: null, unrealized_usd: null })));
-  assert.deepEqual([cells.last.text, cells.value.text, cells.unrealized.text, cells.total.text], ["—", "—", "—", "—"]);
+  assert.deepEqual([cells.last.text, cells.value.text, cells.unrealized.text], ["—", "—", "—"]);
 });

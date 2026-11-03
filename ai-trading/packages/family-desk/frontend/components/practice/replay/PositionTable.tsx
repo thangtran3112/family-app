@@ -19,11 +19,10 @@ function cellText(row: PositionRow, pick: (cells: PositionCells) => Cell, { stro
   return classes === "" ? text : <span className={classes}>{text}</span>;
 }
 
-/** The columns that leave the table when they are a dash in every row: a swing hold has no prior close to change from and nothing realized. */
+/** The columns that leave the table when they are a dash in every row: a swing hold has no prior close to change from. */
 const LEAVES_WHEN_EMPTY: Record<string, (cells: PositionCells) => Cell> = {
   change: (cells) => cells.change,
   changePct: (cells) => cells.changePct,
-  realized: (cells) => cells.realized,
 };
 
 function columns(actions: PositionActions | undefined): DenseColumn<PositionRow>[] {
@@ -57,9 +56,7 @@ function columns(actions: PositionActions | undefined): DenseColumn<PositionRow>
     { key: "position", label: "Position", kind: "num", render: (row) => cellText(row, (cells) => cells.position) },
     { key: "avg", label: "Avg price", kind: "num", render: (row) => cellText(row, (cells) => cells.avg) },
     { key: "value", label: "Value", kind: "num", priority: 3, render: (row) => cellText(row, (cells) => cells.value) },
-    { key: "unrealized", label: "Unrealized P/L", kind: "num", priority: 5, render: (row) => cellText(row, (cells) => cells.unrealized) },
-    { key: "realized", label: "Realized P/L", kind: "num", priority: 4, render: (row) => cellText(row, (cells) => cells.realized) },
-    { key: "total", label: "Total P/L", kind: "num", render: (row) => cellText(row, (cells) => cells.total, { strong: true }) },
+    { key: "unrealized", label: "Unrealized P/L", kind: "num", render: (row) => cellText(row, (cells) => cells.unrealized, { strong: true }) },
     { key: "held", label: "Held", priority: 6, hideWhenEmpty: true, render: (row) => row.held ?? "" },
     {
       key: "status",
@@ -78,9 +75,10 @@ function columns(actions: PositionActions | undefined): DenseColumn<PositionRow>
 }
 
 /**
- * The position table of the Portfolio tab, one per mode, read like a broker's list: Ticker, Last, Change, Change %, Position (signed shares),
- * Avg price (what the position was built at), Value (position at the mark), Unrealized, Realized and Total P/L. All SIMULATED. A figure the payload
- * does not hold is a dash; a column that is a dash in every row (a swing hold has no prior close and nothing realized) leaves the table. With
+ * The position table of the Portfolio tab, one per mode, read like a broker's list of what she holds now: Ticker, Last, Change, Change %, Position
+ * (signed shares: long positive, short negative), Avg price (what the position was built at), Value (position at the mark) and Unrealized P/L (never
+ * dropped). A closed trade is not a row and has no column: its result is in Trades. All SIMULATED. A figure the payload does not hold is a dash;
+ * a column that is a dash in every row (a swing hold has no prior close) leaves the table. With
  * `actions` a ticker opens that name's chart and a held row has Exit; without, the rows only read (a swing thread, an ended day).
  */
 export function PositionTable({ caption, rows, empty, actions }: { caption: string; rows: readonly PositionRow[]; empty?: string; actions?: PositionActions }) {
