@@ -97,6 +97,35 @@ test.describe("Practice: Jump, Next open and the horizon (ADR-0025)", () => {
     await expectNoDayLanguage(page);
   });
 
+  test("the Jumped-to line names only the time the clock stands at: Next open ends it, and the page never carries two times for one clock (D-233)", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    const threadId = await createThreadByApi(context);
+    await openDesk(page, `/practice/thread?id=${threadId}`);
+    const jump = jumpForm(page);
+    const panel = page.getByTestId("thread-clock");
+
+    await jumpFromSummary(page, DAY, "11:15");
+    await expect(readout(page)).toHaveText(/^Fri 2026-09-25 · 11:15:\d{2} AM ET$/, { timeout: 15_000 });
+    await expect(jump.getByRole("status"), "the line equals the clock it describes").toHaveText("Jumped to Fri 2026-09-25 · 11:15 AM ET.");
+
+    // Next open moves the clock on: the line about the Jump goes with the time it named, and no 11:15 is left beside the new clock.
+    await nextOpenFromSummary(page);
+    await expect(readout(page)).toHaveText(/^Mon 2026-09-28 · 9:30:\d{2} AM ET$/, { timeout: 15_000 });
+    await expect(jump.getByRole("status")).toHaveCount(0);
+    await expect(panel).not.toContainText("Jumped to");
+    await expect(panel).not.toContainText("11:15");
+
+    // A Jump after that names the new clock again, and a move that is not a Jump takes it away again.
+    await jumpFromSummary(page, "2026-09-28", "14:00");
+    await expect(readout(page)).toHaveText(/^Mon 2026-09-28 · 2:00:\d{2} PM ET$/, { timeout: 15_000 });
+    await expect(jump.getByRole("status")).toHaveText("Jumped to Mon 2026-09-28 · 2:00 PM ET.");
+    await nextOpenFromSummary(page);
+    await expect(readout(page)).toHaveText(/^Tue 2026-09-29 · 9:30:\d{2} AM ET$/, { timeout: 15_000 });
+    await expect(jump.getByRole("status")).toHaveCount(0);
+    await expectNoDayLanguage(page);
+    await expectCleanScreen(page);
+  });
+
   test("the clock stops by itself only at the horizon, where the data ends: it says so, Play and Next open wait, and a Jump past it is refused", async ({ page, context }) => {
     test.setTimeout(240_000);
     const threadId = await createThreadByApi(context);
