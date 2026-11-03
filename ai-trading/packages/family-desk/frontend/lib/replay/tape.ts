@@ -48,10 +48,15 @@ export type TapeDisplayRow = { key: string; t: string; price: string; size: stri
 export function tapeRows(view: { tape: ReplayView["tape"]; tapeMeta: Pick<NonNullable<ReplayView["tapeMeta"]>, "bigPrintUsd"> | null }, limit = 120): TapeDisplayRow[] {
   const big = view.tapeMeta?.bigPrintUsd ?? null;
   const rows: TapeDisplayRow[] = [];
+  // A row's key is its time and how many newer prints share that time, never its place in the array: the capped tape slides on every poll that brings prints, and a place-based key
+  // would give all 120 rows a new key (a remount of the whole table) each time (D-212).
+  const sameTime = new Map<string, number>();
   for (let index = view.tape.length - 1; index >= 0 && rows.length < limit; index -= 1) {
     const row = view.tape[index]!;
+    const newer = sameTime.get(row.t) ?? 0;
+    sameTime.set(row.t, newer + 1);
     const isBig = isBigPrint(row, big);
-    rows.push({ key: `${row.t}:${index}`, t: row.t, price: formatPrice(row.price), size: formatNumber(row.size, 0), tone: tickTone(row.tick), big: isBig, bigText: isBig ? formatNotional(row.price * row.size) : "" });
+    rows.push({ key: `${row.t}:${newer}`, t: row.t, price: formatPrice(row.price), size: formatNumber(row.size, 0), tone: tickTone(row.tick), big: isBig, bigText: isBig ? formatNotional(row.price * row.size) : "" });
   }
   return rows;
 }

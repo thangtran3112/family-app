@@ -31,8 +31,8 @@ test("tape rows read newest first, with the limit applied to the newest rows", (
   ];
   const view = { tape, tapeMeta: { feed: "sip" as const, count: 3, volume: 2600, shown: 3, bigPrintUsd: 200_000, pace: null } };
   assert.deepEqual(tapeRows(view), [
-    { key: "2026-04-07T14:07:11.900Z:2", t: "2026-04-07T14:07:11.900Z", price: "188.04", size: "1,000", tone: "down", big: false, bigText: "" },
-    { key: "2026-04-07T14:07:11.000Z:1", t: "2026-04-07T14:07:11.000Z", price: "188.05", size: "1,500", tone: "up", big: true, bigText: "$282K" },
+    { key: "2026-04-07T14:07:11.900Z:0", t: "2026-04-07T14:07:11.900Z", price: "188.04", size: "1,000", tone: "down", big: false, bigText: "" },
+    { key: "2026-04-07T14:07:11.000Z:0", t: "2026-04-07T14:07:11.000Z", price: "188.05", size: "1,500", tone: "up", big: true, bigText: "$282K" },
     { key: "2026-04-07T14:07:10.000Z:0", t: "2026-04-07T14:07:10.000Z", price: "188.00", size: "100", tone: "same", big: false, bigText: "" },
   ]);
   assert.deepEqual(tapeRows({ tape, tapeMeta: null }, 2).map((row) => row.price), ["188.04", "188.05"]);
@@ -40,7 +40,18 @@ test("tape rows read newest first, with the limit applied to the newest rows", (
   const long: TapeRow[] = Array.from({ length: 130 }, () => ({ t: "2026-04-07T14:07:00.000Z", price: 100, size: 1, tick: 0 as const }));
   const capped = tapeRows({ tape: long, tapeMeta: null });
   assert.equal(capped.length, 120, "the default limit keeps a fast tape cheap to paint");
-  assert.equal(capped.at(-1)?.key, "2026-04-07T14:07:00.000Z:10", "the oldest drawn row is index 10 of 130");
+  assert.equal(capped.at(-1)?.key, "2026-04-07T14:07:00.000Z:119", "prints that share a time are told apart by how many are newer");
+  assert.equal(new Set(capped.map((row) => row.key)).size, 120, "every key is unique");
+});
+
+test("a print keeps its key when later prints arrive and the capped tape slides (D-212)", () => {
+  const print = (index: number): TapeRow => ({ t: new Date(Date.UTC(2026, 3, 7, 14, 7, 0, index)).toISOString(), price: 100 + index, size: 100, tick: 1 });
+  const before = Array.from({ length: 500 }, (_, index) => print(index));
+  const after = Array.from({ length: 500 }, (_, index) => print(index + 3)); // the next poll: three prints more, the three oldest gone
+  const keyed = (tape: TapeRow[]) => new Map(tapeRows({ tape, tapeMeta: null }).map((row) => [row.key, row.price]));
+  const first = keyed(before);
+  const second = keyed(after);
+  assert.equal([...second].filter(([key, price]) => first.get(key) === price).length, 117, "all but the three new prints are the same rows as before, so React updates them in place");
 });
 
 test("feed labels and the fast-tape note are the exact Practice copy", () => {

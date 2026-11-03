@@ -15,10 +15,11 @@ export function isEmptyCell(value: unknown): boolean {
   return value === null || value === undefined || value === false || value === "" || value === EMPTY_VALUE;
 }
 
-/** Drops each `hideWhenEmpty` column whose cell is empty in every row. With no rows it keeps all columns: the empty state speaks instead. */
-export function dropEmptyColumns<R, C extends { hideWhenEmpty?: boolean; render: (row: R) => unknown }>(columns: readonly C[], rows: readonly R[]): C[] {
-  if (rows.length === 0) return [...columns];
-  return columns.filter((column) => !column.hideWhenEmpty || rows.some((row) => !isEmptyCell(column.render(row))));
+/** Drops each `hideWhenEmpty` column whose cell is empty in every row. With no rows it keeps all columns: the empty state speaks instead. Nothing dropped: `columns` itself, so a table whose rows change but whose columns do not keeps one list (and is not measured again). */
+export function dropEmptyColumns<R, C extends { hideWhenEmpty?: boolean; render: (row: R) => unknown }>(columns: readonly C[], rows: readonly R[]): readonly C[] {
+  if (rows.length === 0) return columns;
+  const kept = columns.filter((column) => !column.hideWhenEmpty || rows.some((row) => !isEmptyCell(column.render(row))));
+  return kept.length === columns.length ? columns : kept;
 }
 
 /** The tooltip of a truncating cell: the text it clips, from `truncate` itself when that is a function, else from a string or number `render`. */
