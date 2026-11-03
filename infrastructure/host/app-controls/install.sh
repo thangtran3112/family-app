@@ -56,6 +56,9 @@ STATE_DIR="${AI_TRADING_STATE_DIR:-/var/lib/family-app/ai-trading}"
 RUN_DIR="${AI_TRADING_RUN_DIR:-/run/family-app}"
 PROJECT="ai-trading"
 SRC_DIR=""
+ORIG_ARGS=("$@")
+# Same bounded wait (default 60 s) deploy.sh uses for the lifecycle lock.
+LOCK_WAIT_SECONDS="${AI_TRADING_LOCK_WAIT_SECONDS:-60}"
 
 die() {
   echo "install: $*" >&2
@@ -72,6 +75,7 @@ while [[ $# -gt 0 ]]; do
     *) die "unknown argument: $1" ;;
   esac
 done
+[[ "$LOCK_WAIT_SECONDS" =~ ^[0-9]+$ ]] || die "AI_TRADING_LOCK_WAIT_SECONDS must be a whole number of seconds (got '$LOCK_WAIT_SECONDS')"
 [[ -n "$SRC_DIR" ]] || die "--src-dir is required"
 [[ -d "$SRC_DIR" ]] || die "--src-dir $SRC_DIR does not exist"
 
@@ -238,9 +242,55 @@ if [[ -f "$APP_DIR/docker-compose.yml" ]]; then
   )" || die "failed to query currently running services for adoption"
 fi
 install -d -m 0700 "$STATE_DIR" || die "cannot create or validate $STATE_DIR"
-python3 "$CONTROL_SRC/state.py" init \
-  --running-services-json "$running_services_json" \
-  --state "$STATE_DIR/control.json" --lock "$STATE_DIR/.control.lock" --owner-uid 0 \
-  || die "failed to initialize control state"
+# The CLI takes the lifecycle lock non-blocking and fails at once with "lifecycle
+# lock is held elsewhere" -- usually an abandoned deploy that is still running
+# on this host. Retry only that one failure, only for LOCK_WAIT_SECONDS (an
+# init that never got the lock changed nothing, so a retry is safe), then say
+# what holds it. Any other failure, and the success path, are unchanged.
+LOCK_FILE="$STATE_DIR/.control.lock"
+init_err="$PYCACHE_SCRATCH/init.err"
+lock_deadline=$((SECONDS + LOCK_WAIT_SECONDS))
+while :; do
+  init_rc=0
+  python3 "$CONTROL_SRC/state.py" init \
+    --running-services-json "$running_services_json" \
+    --state "$STATE_DIR/control.json" --lock "$LOCK_FILE" --owner-uid 0 \
+    2>"$init_err" || init_rc=$?
+  if [[ "$init_rc" != 0 ]] && grep -q 'lifecycle lock is held elsewhere' "$init_err" && (( SECONDS < lock_deadline )); then
+    sleep 1
+    continue
+  fi
+  break
+done
+cat "$init_err" >&2
+if [[ "$init_rc" != 0 ]]; then
+  if grep -q 'lifecycle lock is held elsewhere' "$init_err"; then
+    # Who has the lock file open: fuser, then lsof, else unknown. flock dies with
+    # its process, so the holder is whoever still has the file open.
+    holder_pids=""
+    if command -v fuser >/dev/null 2>&1; then
+      holder_pids="$(fuser "$LOCK_FILE" 2>/dev/null | tr -s ' \n' ' ' | sed 's/^ //; s/ $//' || true)"
+    elif command -v lsof >/dev/null 2>&1; then
+      holder_pids="$(lsof -t "$LOCK_FILE" 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
+    fi
+    {
+      echo "install: the lifecycle lock $LOCK_FILE is held by another operation, and it did not free up within ${LOCK_WAIT_SECONDS}s."
+      if [[ -n "$holder_pids" ]]; then
+        for pid in $holder_pids; do
+          pid_info="$(ps -o etime=,comm= -p "$pid" 2>/dev/null | tr -s ' ' || true)"
+          echo "install: holder: pid $pid${pid_info:+ (running time and command:$pid_info)}"
+        done
+      else
+        echo "install: holder unknown (neither fuser nor lsof could name a process with the lock file open)."
+      fi
+      echo "install: this is usually a deploy or install that was interrupted but is still running on this host. The lock is released when that process exits; wait for it to finish, or stop that process if it is really abandoned."
+      echo "install: do not delete the lock file -- the running holder still owns it and removing it would break the lock."
+      printf 'install: then retry: sudo bash %q' "$0"
+      printf ' %q' "${ORIG_ARGS[@]}"
+      echo
+    } >&2
+  fi
+  die "failed to initialize control state"
+fi
 
 echo "install: bootstrap complete (ai-trading-gateway identity, directories, and persisted state are ready)"
