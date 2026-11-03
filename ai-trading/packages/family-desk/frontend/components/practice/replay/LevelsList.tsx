@@ -5,7 +5,7 @@ import styles from "./panels.module.css";
 // The Levels tab (02o §a3): key levels, highest first as given.
 
 export function LevelsList({ rows }: { rows: LevelRow[] }) {
-  if (rows.length === 0) return <p className={styles.muted}>Levels appear as the day unfolds</p>;
+  if (rows.length === 0) return <p className={styles.muted}>Levels appear as the market trades</p>;
   return (
     <ul className={`${styles.list} ${styles.levels}`}>
       {rows.map((row) => (

@@ -1,16 +1,15 @@
 "use client";
 
-import type { ThreadTile } from "@/lib/replay/threadView";
+import type { ThreadTile } from "@/lib/replay/journalView";
 import styles from "./threadJournal.module.css";
 
 /**
- * The "Summary so far" tiles: label, big value, muted sub line. Each tile reads as "Label: value" to a screen reader. The
- * grid wraps to fewer columns as the centre narrows; `fourAcross` pins four a row, for a set that is a multiple of four
- * (the week's 12 read as three even rows, D-126).
+ * The "Summary so far" tiles: label, big value, muted sub line. Each tile reads as "Label: value" to a screen reader. The grid wraps to
+ * fewer columns as the centre narrows.
  */
-export function ThreadTiles({ tiles, fourAcross = false }: { tiles: ThreadTile[]; fourAcross?: boolean }) {
+export function ThreadTiles({ tiles }: { tiles: ThreadTile[] }) {
   return (
-    <ul role="list" className={`${styles.tiles} ${fourAcross ? styles.tilesFour : ""}`}>
+    <ul role="list" className={styles.tiles}>
       {tiles.map((tile) => (
         <li key={tile.id} role="listitem" className={styles.tile}>
           <span className={styles.tileLabel}>{tile.label}</span>

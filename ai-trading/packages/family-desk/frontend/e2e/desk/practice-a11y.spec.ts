@@ -1,52 +1,34 @@
-import type { Page } from "@playwright/test";
-import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
-import { expect, openDesk, prepareDesk, test } from "./helpers";
-import { createStubSession } from "./hub-helpers";
-import { placeOrder, replayRail } from "./swing-helpers";
+import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
+import { stepBar } from "./clock-helpers";
+import { expect, prepareDesk, test } from "./helpers";
+import { placeOrder, replayRail } from "./hub-helpers";
+import { openTicket } from "./lane-helpers";
 
-// Keyboard and screen-reader behaviour of the Practice workspace (the five-reviewer pass): the Jump panel and the stop form hand focus
-// back, the bottom panel is one tablist whose tabs name their panel, and the Marks and levels toggle keeps one name. The stub day is TSLA
-// on Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars.
-
-async function openStub(page: Page, context: Parameters<typeof createStubSession>[0]) {
-  const id = await createStubSession(context);
-  await openDesk(page, `/practice/replay?id=${id}`);
-  await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-  await expect(page.getByText(practiceText("ready", { time: "9:30 AM" }))).toBeVisible();
-  for (let step = 0; step < 2; step += 1) await page.getByRole("button", { name: "Step", exact: true }).click();
-  await expect(page.getByTestId("thread-clock-time")).not.toContainText("9:30:00");
-}
+// Keyboard and screen-reader behaviour of the Practice workspace (the five-reviewer pass): a lane has no transport of its own, the stop form hands focus
+// back, the bottom panel is one tablist whose tabs name their panel, and the Marks and levels toggle keeps one name. A lane is one name of a freestyle
+// thread (ADR-0025); the thread's clock is moved from the Summary or the clock route. The stub day is TSLA on Fri 2026-09-25 from 09:30 ET, at one-minute bars.
 
 test.describe("Practice workspace: keyboard and names", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });
 
-  test("the Jump panel opens on its first button, holds a form without menu roles, and gives focus back on Escape and on a choice", async ({ page, context }) => {
-    await openStub(page, context);
-    const jump = page.getByTestId("thread-clock").getByRole("button", { name: /^Jump/ });
-    const clock = page.getByTestId("thread-clock-time");
-    await jump.focus();
-    await page.keyboard.press("Enter");
-    const panel = page.getByRole("dialog", { name: "Jump forward" });
-    await expect(panel.getByRole("button", { name: "+5 min" })).toBeFocused();
-    await expect(panel.getByRole("menuitem"), "a form may not sit inside a menu").toHaveCount(0);
-    await expect(panel.getByLabel("To a time (ET)")).toBeVisible();
-    await expect(panel.getByRole("button", { name: "To the next signal" }), "no key hint on the item: Practice has no shortcuts").toHaveAccessibleName("To the next signal");
-    await page.keyboard.press("Escape");
-    await expect(panel).toHaveCount(0);
-    await expect(jump).toBeFocused();
-
-    const before = await clock.textContent();
-    await jump.click();
-    await panel.getByRole("button", { name: "+5 min" }).click();
-    await expect(panel).toHaveCount(0);
-    await expect(jump).toBeFocused();
-    await expect(clock).not.toHaveText(before ?? "");
+  test("a lane is a read-only readout of the thread's time: no Play, Pause, Step or Jump on the chart, and links to the Summary clock and the Screen", async ({ page, context }) => {
+    const { threadId } = await openTicket(page, context);
+    const readout = page.getByTestId("thread-time-readout");
+    await expect(readout).toContainText(PRACTICE_COPY.threadTime);
+    await expect(readout.getByRole("link", { name: /on the Summary$/ })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
+    await expect(readout.getByRole("link", { name: PRACTICE_COPY.tabScreen })).toHaveAttribute("href", `/practice/screen?thread=${threadId}`);
+    for (const name of [/^Play/, /^Pause/, /^Step/, /^Jump/, /^Skip/, /^End/]) await expect(page.getByRole("button", { name }), `no ${name} on a lane`).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Jump forward" })).toHaveCount(0);
+    // The clock still reaches the chart: the thread's clock route moves it and the readout follows.
+    const before = await page.getByTestId("thread-clock-time").textContent();
+    await stepBar(page);
+    await expect(page.getByTestId("thread-clock-time")).not.toHaveText(before ?? "");
   });
 
   test("the stop form starts empty, says what is wrong at its field and stays open, and Escape hands focus back to Set stop", async ({ page, context }) => {
-    await openStub(page, context);
+    await openTicket(page, context);
     const practice = await replayRail(page, "Practice");
     await practice.getByLabel("Quantity").fill("5");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
@@ -75,7 +57,7 @@ test.describe("Practice workspace: keyboard and names", () => {
   });
 
   test("the bottom panel is one tablist whose tabs name their panel, arrows move between them, and the toggle keeps one name", async ({ page, context }) => {
-    await openStub(page, context);
+    await openTicket(page, context);
     const tabs = page.getByRole("tablist", { name: "Bottom panel" });
     const toggle = page.getByRole("button", { name: "Marks and levels panel" });
     const open = (await toggle.getAttribute("aria-expanded")) === "true";
@@ -100,7 +82,7 @@ test.describe("Practice workspace: keyboard and names", () => {
   });
 
   test("a failed order says why on the ticket, at once, and the message is announced from a region that was already on the page", async ({ page, context }) => {
-    await openStub(page, context);
+    await openTicket(page, context);
     await expect(page.locator('div[role="status"][aria-live="polite"]:not(:has(*))'), "the polite region is on the page, empty, before any message").toHaveCount(1);
     await expect(page.locator('div[role="status"][aria-live="polite"]:not(:has(*)) + div[role="alert"]:not(:has(*))'), "the assertive region (the polite one's sibling) is on the page, empty, before any message").toHaveCount(1);
     await page.route("**/api/desk/replay/sessions/*/{marks,orders}", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));

@@ -12,22 +12,20 @@ export type ChartToolbarProps = {
   onInterval: (interval: ReplayInterval) => void;
   /** At the 1180 band the practice buttons live here so they work with the drawer closed. */
   quick?: ReactNode;
-  /** A swing session (02p) swaps the 1m 5m 15m chips for its Daily and intraday toggle. */
-  chartToggle?: ReactNode;
   /** The view controls after the interval chips: Chart settings and Full screen (same slot inline and full screen, so focus stays put). */
   view?: ReactNode;
 };
 
 /**
  * What belongs to ONE name's chart, under that chart: the candle interval, Buy and Sell, Chart settings and Full screen. It
- * holds nothing of the thread's time (Play, Step, speed, Jump, the clock): those are `ThreadClockBar`, above every name.
+ * holds nothing of the thread's time (Play, speed, Jump, Next open, the clock): those are on the thread's Summary, and time moves only there.
  */
-export function ChartToolbar({ symbol, interval, onInterval, quick, chartToggle, view }: ChartToolbarProps) {
+export function ChartToolbar({ symbol, interval, onInterval, quick, view }: ChartToolbarProps) {
   return (
     <div className={styles.chartToolbar} role="group" aria-label={`${symbol} chart`} data-testid="chart-toolbar">
       <div className={styles.toolbarRow}>
         <span className={styles.chartLabel} aria-hidden="true">{symbol} chart</span>
-        {chartToggle ?? <ChipToggleGroup label="Chart interval" size="md" options={INTERVAL_CHIPS} pressed={[interval]} onToggle={onInterval} />}
+        <ChipToggleGroup label="Chart interval" size="md" options={INTERVAL_CHIPS} pressed={[interval]} onToggle={onInterval} />
         {quick}
         {view}
       </div>

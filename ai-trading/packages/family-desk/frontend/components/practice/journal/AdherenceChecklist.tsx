@@ -1,19 +1,20 @@
 "use client";
 
+import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import styles from "./journal.module.css";
 
 export type AdherenceChecklistProps = {
-  /** A session's or a week's adherence: any check list of this shape. */
+  /** A lane's adherence: any check list of this shape. */
   adherence: {
     score_pct: number | null;
     checks: ReadonlyArray<{ id: string; label: string; applicable: boolean; passed: boolean; detail: string }>;
   };
-  /** Shown when no check applies; the session journal's wording by default. */
+  /** Shown when no check applies; the lane journal's wording by default. */
   empty?: string;
 };
 
-/** The plan's checks that apply to this session, with the score on top. Checks that do not apply are left out. */
-export function AdherenceChecklist({ adherence, empty = "No plan rule applies to this session" }: AdherenceChecklistProps) {
+/** The plan's checks that apply to this lane, with the score on top. Checks that do not apply are left out. */
+export function AdherenceChecklist({ adherence, empty = PRACTICE_COPY.journalNoPlanRule }: AdherenceChecklistProps) {
   const checks = adherence.checks.filter((check) => check.applicable);
   const score = adherence.score_pct;
 

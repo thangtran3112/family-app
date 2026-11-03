@@ -6,22 +6,21 @@ import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import type { ThreadDraft, ThreadProblems } from "@/lib/replay/threadSetup";
 import styles from "./thread.module.css";
 
-/** The risk plan of a practice thread (02r, D-007): trade only on a signal, max loss, max trades and a
- *  note. The journal's Edit plan form uses it (the New plan modal no longer asks for a risk plan, D-076); the parent owns the
- *  draft. `idPrefix` keeps the ids unique when two forms are on screen. `perWeek` (a swing thread, 02p) labels max loss and
- *  max trades as weekly and leaves out Shares, which is a day thread's entry size (D-042). */
+/** The optional risk rules of a practice thread (02r, D-007, ADR-0025): trade only on a signal, max loss, max trades and a note, each counted
+ *  for an ET date of the thread's clock. The New thread modal and the journal's Edit plan form use it; the parent owns the draft. `idPrefix`
+ *  keeps the ids unique when two forms are on screen. `shares` shows the entry size tickets open at (D-042), which only an existing thread can set. */
 export function ThreadPlanFields({
   draft,
   onDraft,
   problems,
   idPrefix,
-  perWeek = false,
+  shares = true,
 }: {
   draft: ThreadDraft;
   onDraft: (draft: ThreadDraft) => void;
   problems: ThreadProblems;
   idPrefix: string;
-  perWeek?: boolean;
+  shares?: boolean;
 }) {
   const id = (name: string) => `${idPrefix}-${name}`;
   return (
@@ -29,20 +28,19 @@ export function ThreadPlanFields({
       <div className={styles.row}>
         <YesNo id={id("signal")} label={PRACTICE_COPY.threadSignalOnly} value={draft.tradeOnlyOnSignal} error={problems.tradeOnlyOnSignal} onChange={(tradeOnlyOnSignal) => onDraft({ ...draft, tradeOnlyOnSignal })} />
       </div>
-      {!perWeek && (
+      {shares && (
         <Field id={id("shares")} label={PRACTICE_COPY.threadShares} error={problems.shares}>
           <NumberInput fill inputMode="numeric" min={1} step={1} placeholder={PRACTICE_COPY.threadSharesPlaceholder} value={draft.shares} onChange={(event) => onDraft({ ...draft, shares: event.target.value })} />
         </Field>
       )}
       <div className={styles.row}>
-        <Field id={id("max-loss")} label={perWeek ? PRACTICE_COPY.swingMaxLossWeek : PRACTICE_COPY.threadMaxLoss} error={problems.maxLossUsd}>
+        <Field id={id("max-loss")} label={PRACTICE_COPY.threadMaxLoss} error={problems.maxLossUsd}>
           <NumberInput fill inputMode="numeric" min={1} max={100000} step={1} placeholder="Optional" value={draft.maxLossUsd} onChange={(event) => onDraft({ ...draft, maxLossUsd: event.target.value })} />
         </Field>
-        <Field id={id("max-trades")} label={perWeek ? PRACTICE_COPY.swingMaxTradesWeek : PRACTICE_COPY.threadMaxTrades} error={problems.maxTrades}>
+        <Field id={id("max-trades")} label={PRACTICE_COPY.threadMaxTrades} error={problems.maxTrades}>
           <NumberInput fill inputMode="numeric" min={1} max={50} step={1} placeholder="Optional" value={draft.maxTrades} onChange={(event) => onDraft({ ...draft, maxTrades: event.target.value })} />
         </Field>
       </div>
-      {perWeek && <p className={styles.hint}>{PRACTICE_COPY.swingPerWeekNote}</p>}
       <Field id={id("note")} label={`${PRACTICE_COPY.threadPlanNote} · 500 characters`} error={problems.planNote} className={styles.wide}>
         <Textarea rows={3} maxLength={500} value={draft.planNote} onChange={(event) => onDraft({ ...draft, planNote: event.target.value })} />
       </Field>

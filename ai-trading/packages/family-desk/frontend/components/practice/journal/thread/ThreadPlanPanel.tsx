@@ -9,17 +9,15 @@ import { DeskApiError } from "@/lib/api/client";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { closeThread, patchThread } from "@/lib/desk/replay";
 import { problemMessage } from "@/lib/replay/setup";
-import { HUB_SWING_COPY } from "@/lib/replay/hubSwing";
-import { planRows } from "@/lib/replay/threadView";
+import { planRows } from "@/lib/replay/journalView";
 import { planToDraft, threadProblems, validatePlanEdit, type ThreadDraft, type ThreadProblems } from "@/lib/replay/threadSetup";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 import { FactList } from "@/components/ui/FactList";
 
-/** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. */
+/** The thread's risk plan (02r): read-only rows with the plan note, and an Edit plan form while the thread is active. A change applies from the next lane. */
 export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
-  const { id, plan, shares, startingBalance, status, mode } = thread.thread;
-  const swing = mode === "swing";
+  const { id, plan, shares, startingBalance, status } = thread.thread;
   const closed = status === "closed";
   const [draft, setDraft] = useState<ThreadDraft | null>(null);
   const [problems, setProblems] = useState<ThreadProblems>({});
@@ -66,7 +64,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
     <div className={styles.stack}>
       {!closed && draft === null && (
         <div className={styles.headRow}>
-          <p className={styles.planNote}>{PRACTICE_COPY.threadPlanCaption}</p>
+          <p className={styles.planNote}>{PRACTICE_COPY.journalPlanCaption}</p>
           <Button onClick={edit} disabled={busy}>{PRACTICE_COPY.threadEditPlan}</Button>
         </div>
       )}
@@ -80,8 +78,8 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
             void save();
           }}
         >
-          <ThreadPlanFields draft={draft} onDraft={setDraft} problems={problems} idPrefix="edit-plan" perWeek={swing} />
-          <p className={styles.muted}>{PRACTICE_COPY.threadPlanApplies}</p>
+          <ThreadPlanFields draft={draft} onDraft={setDraft} problems={problems} idPrefix="edit-plan" />
+          <p className={styles.muted}>{PRACTICE_COPY.journalPlanApplies}</p>
           {saveError && <p role="alert" className={styles.alert}>{saveError}</p>}
           <div className={styles.actions}>
             <Button type="submit" variant="primary" disabled={busy}>{PRACTICE_COPY.threadSavePlan}</Button>
@@ -92,7 +90,7 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
         <>
           <FactList
             divided
-            facts={planRows(plan, mode, shares).map((row) => ({
+            facts={planRows(plan, shares).map((row) => ({
               id: row.id,
               label: row.label,
               value: (
@@ -103,7 +101,6 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
               ),
             }))}
           />
-          {swing && <p className={styles.planNote}>{PRACTICE_COPY.swingPerWeekNote}</p>}
           <p className={styles.planNote}>{`${PRACTICE_COPY.threadPlanNote}: ${plan.planNote ?? PRACTICE_COPY.threadPlanNoteNone}`}</p>
         </>
       )}
@@ -112,9 +109,9 @@ export function ThreadPlanPanel({ thread, onChanged }: { thread: Thread; onChang
   );
 }
 
-/** Close thread (02r), in its own section of the rail (D-040): the caption, the reason and a confirmation before anything closes. */
+/** Close thread (02r), in its own section of the rail (D-040): the caption, the reason and a confirmation before anything closes. Closing sells nothing: open positions stay open (ADR-0025). */
 export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChanged: () => void }) {
-  const { id, status, mode } = thread.thread;
+  const { id, status } = thread.thread;
   const [confirming, setConfirming] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [closing, setClosing] = useState(false);
@@ -138,8 +135,8 @@ export function CloseThreadPanel({ thread, onChanged }: { thread: Thread; onChan
   return (
     <div className={styles.stack}>
       <Button ref={closeRef} variant="danger" onClick={() => setConfirming(true)} disabled={closing}>{PRACTICE_COPY.threadClose}</Button>
-      <p className={styles.muted}>{PRACTICE_COPY.threadCloseCaption}</p>
-      {mode === "swing" ? <p className={styles.muted}>{HUB_SWING_COPY.closeSwingNote}</p> : <p className={styles.muted}>{PRACTICE_COPY.threadCloseEndsDay}</p>}
+      <p className={styles.muted}>{PRACTICE_COPY.journalCloseCaption}</p>
+      <p className={styles.muted}>{PRACTICE_COPY.journalCloseKeeps}</p>
       <p className={styles.muted}>{PRACTICE_COPY.threadCloseReason}</p>
       {confirming && (
         <InlineConfirm

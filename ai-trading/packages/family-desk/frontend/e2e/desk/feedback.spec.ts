@@ -14,12 +14,12 @@ type Report = Record<string, unknown>;
 const report = (extra: Report = {}): Report => ({
   kind: "bug",
   severity: "P2",
-  title: "Day list marks Day 4 done too early",
-  body: "On Practice · Day list the Day 4 row turns green while the replay is still running.",
-  screen: "Practice · Day list",
-  route: "/practice/day?id=5",
+  title: "Screen marks a name starred too early",
+  body: "On Practice · Screen the star turns green while the replay is still running.",
+  screen: "Practice · Screen",
+  route: "/practice/screen?thread=5",
   app_version: "desk-2026.10.16",
-  context: { day_list_id: 5 },
+  context: { thread_id: 5 },
   captured_at: SEED_NOW,
   links: [],
   attachment_ids: [],
@@ -101,7 +101,7 @@ test.describe("the dashboard", () => {
       "Let me sort watchlists by name",
       "Alert list loses the Pattern filter",
       "Add a 20-day volume average line",
-      "Day list marks Day 4 done too early",
+      "Screen marks a name starred too early",
     ]);
     await expect(table(page).locator("tbody tr td:nth-child(1)")).toHaveText(["F-004", "F-003", "F-002", "F-001"]);
     await expect(table(page).locator("tbody tr td:nth-child(2)")).toHaveText(["Request", "Bug", "Request", "Bug"]);
@@ -109,7 +109,7 @@ test.describe("the dashboard", () => {
     const reporter = await reporterOnApi(page);
     await expect(table(page).locator("tbody tr td:nth-child(6)")).toHaveText(Array(4).fill(reporter[0]!.toUpperCase()));
     await expect(page.locator("body")).not.toContainText(reporter);
-    await expect(table(page).getByRole("row", { name: /F-001/ })).toContainText("/practice/day?id=5");
+    await expect(table(page).getByRole("row", { name: /F-001/ })).toContainText("/practice/screen?thread=5");
     await expect(table(page).getByRole("row", { name: /F-001/ })).toContainText("Practice");
     await expect(main).toContainText("Open 4 · In progress 0 · Fixed 0 · Won't fix 0 · Duplicate 0");
     await expect(main).toContainText("4 reports · Hover a row for Open and Copy id · A Fixed report always shows its fix commit or pull request.");
@@ -119,7 +119,7 @@ test.describe("the dashboard", () => {
 
   test("a row opens its report in the rail through ?id=, and a link with ?id= opens the same report", async ({ page }) => {
     await fileReports(page, [
-      report({ links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/practice/day?id=5" }, { url: "https://trading.tobytran.dev/replay" }], expected: "It should stay In progress." }),
+      report({ links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/practice/screen?thread=5" }, { url: "https://trading.tobytran.dev/replay" }], expected: "It should stay In progress." }),
       FOUR[1]!,
     ]);
     await openDesk(page, "/feedback");
@@ -128,17 +128,17 @@ test.describe("the dashboard", () => {
     await expect(page).toHaveURL(/\/feedback\?id=1$/);
     const detail = rail(page);
     await expect(detail.getByText("F-001", { exact: true })).toBeVisible();
-    await expect(detail.getByRole("heading", { name: "Day list marks Day 4 done too early" })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Screen marks a name starred too early" })).toBeVisible();
     await expect(detail).toContainText("Reported by");
     const reporter = await reporterOnApi(page);
     await expect(detail.getByText("Reported by", { exact: true }).locator("xpath=following-sibling::dd")).toHaveText(reporter[0]!.toUpperCase());
     await expect(page.locator("body")).not.toContainText(reporter);
-    await expect(detail).toContainText("/practice/day?id=5");
+    await expect(detail).toContainText("/practice/screen?thread=5");
     await expect(detail).toContainText("P2 · wrong, with a workaround");
     await expect(detail).toContainText("desk-2026.10.16");
-    await expect(detail).toContainText("On Practice · Day list the Day 4 row turns green while the replay is still running.");
+    await expect(detail).toContainText("On Practice · Screen the star turns green while the replay is still running.");
     await expect(detail).toContainText("It should stay In progress.");
-    await expect(detail.getByRole("link", { name: "Chart screenshot" })).toHaveAttribute("href", "https://trading.tobytran.dev/practice/day?id=5");
+    await expect(detail.getByRole("link", { name: "Chart screenshot" })).toHaveAttribute("href", "https://trading.tobytran.dev/practice/screen?thread=5");
     await expect(detail.getByRole("link", { name: "Chart screenshot" })).toHaveAttribute("rel", /noopener/);
     await expect(detail.getByRole("list", { name: "Status history" }).getByRole("listitem")).toHaveText([/^Open · \w{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2} ET$/]);
     await expect(table(page).getByRole("row", { name: /F-001/ })).toHaveAttribute("aria-selected", "true");
@@ -183,7 +183,7 @@ test.describe("the dashboard", () => {
     const bugs = listRequest((params) => params.get("kind") === "bug");
     await main.getByRole("radio", { name: "Bug" }).click();
     await bugs;
-    await expect(titles(page)).toHaveText(["Alert list loses the Pattern filter", "Day list marks Day 4 done too early"]);
+    await expect(titles(page)).toHaveText(["Alert list loses the Pattern filter", "Screen marks a name starred too early"]);
     const requests = listRequest((params) => params.get("kind") === "request");
     await main.getByRole("radio", { name: "Feature request" }).click();
     await requests;
@@ -194,7 +194,7 @@ test.describe("the dashboard", () => {
     const practice = listRequest((params) => params.get("area") === "practice");
     await main.getByRole("combobox", { name: "Area" }).selectOption({ label: "Area · Practice" });
     await practice;
-    await expect(titles(page)).toHaveText(["Day list marks Day 4 done too early"]);
+    await expect(titles(page)).toHaveText(["Screen marks a name starred too early"]);
     await expect(main).toContainText("1 of 4 reports");
     await main.getByRole("combobox", { name: "Area" }).selectOption({ label: "Area · All" });
 
@@ -239,7 +239,7 @@ test.describe("the dashboard", () => {
     await expect(alert).toContainText("Couldn't load this report list");
     await expectCleanScreen(page);
     await alert.getByRole("button", { name: "Try again" }).click();
-    await expect(titles(page)).toHaveText(["Day list marks Day 4 done too early"]);
+    await expect(titles(page)).toHaveText(["Screen marks a name starred too early"]);
     await expect(alert).toHaveCount(0);
   });
 
@@ -334,21 +334,21 @@ test.describe("the dashboard", () => {
 test.describe("the filing form", () => {
   test.beforeEach(async ({ context }) => prepareDesk(context, "technical"));
 
-  test("opened from the Practice day list it shows where she was, and Send says why it is off", async ({ page }) => {
+  test("opened from the Practice Screen it shows where she was, and Send says why it is off", async ({ page }) => {
     await openDesk(page, "/feedback/new?from=%2Fpractice%2Fday%3Fid%3D5");
     await expect(page).toHaveTitle("Report a problem - Family Desk");
     const send = page.getByRole("button", { name: "Send report" });
     await expect(page.getByRole("radio", { name: "Bug" })).toBeChecked();
     await expect(page.getByRole("radio", { name: "P2" })).toBeChecked();
     const where = page.getByRole("region", { name: "Where were you?" });
-    await expect(where).toContainText("Practice · Day list");
-    await expect(where).toContainText("/practice/day?id=5");
-    await expect(where).toContainText("Day list 5");
+    await expect(where).toContainText("Practice · Screen");
+    await expect(where).toContainText("/practice/screen?thread=5");
+    await expect(where).toContainText("Thread 5");
     await expect(where).toContainText(/desk-/);
-    await expect(where.getByRole("combobox", { name: "Which screen?" })).toHaveValue("Practice · Day list");
+    await expect(where.getByRole("combobox", { name: "Which screen?" })).toHaveValue("Practice · Screen");
     await expect(send).toBeDisabled();
     await expect(form(page)).toContainText("Reason: a title and a description are required.");
-    await page.getByRole("textbox", { name: /^Title/ }).fill("Day list marks Day 4 done");
+    await page.getByRole("textbox", { name: /^Title/ }).fill("Screen marks a name starred");
     await expect(form(page)).toContainText("Reason: a description is required.");
     await expect(page.getByText("25 / 120")).toBeVisible();
     await page.getByRole("textbox", { name: "What happened?" }).fill("It turns green too early.");
@@ -378,12 +378,12 @@ test.describe("the filing form", () => {
   test("filing a bug with a screenshot shows the upload, then the sent state with the new id, and the API has the report", async ({ page }) => {
     const release = await holdUploads(page);
     await openDesk(page, "/feedback/new?from=%2Fpractice%2Fday%3Fid%3D5");
-    await page.getByRole("textbox", { name: /^Title/ }).fill("Day list marks Day 4 done");
+    await page.getByRole("textbox", { name: /^Title/ }).fill("Screen marks a name starred");
     await page.getByRole("textbox", { name: "What happened?" }).fill("It turns green too early.");
     await page.getByRole("textbox", { name: "What did you expect?" }).fill("It should stay In progress.");
     await page.getByRole("radio", { name: "P1" }).check();
     await page.getByRole("textbox", { name: "Link 1 label" }).fill("Chart screenshot");
-    await page.getByRole("textbox", { name: "Link 1 address" }).fill("https://trading.tobytran.dev/practice/day?id=5");
+    await page.getByRole("textbox", { name: "Link 1 address" }).fill("https://trading.tobytran.dev/practice/screen?thread=5");
     await page.getByLabel("Choose screenshots").setInputFiles({ name: "day-list.png", mimeType: "image/png", buffer: PNG });
 
     const send = page.getByRole("button", { name: "Send report" });
@@ -402,9 +402,9 @@ test.describe("the filing form", () => {
     await expect(page.getByRole("heading", { name: "F-001" })).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "Sent · thanks, it's on the Desk's list" })).toBeVisible();
     const sent = page.getByRole("region", { name: "F-001" });
-    await expect(sent).toContainText("Practice · Day list");
-    await expect(sent).toContainText("/practice/day?id=5");
-    await expect(sent).toContainText("Day list 5");
+    await expect(sent).toContainText("Practice · Screen");
+    await expect(sent).toContainText("/practice/screen?thread=5");
+    await expect(sent).toContainText("Thread 5");
     await expect(sent).toContainText("1 link · 1 screenshot");
     await expectCleanScreen(page);
 
@@ -413,20 +413,20 @@ test.describe("the filing form", () => {
       ref: "F-001",
       kind: "bug",
       severity: "P1",
-      title: "Day list marks Day 4 done",
+      title: "Screen marks a name starred",
       expected: "It should stay In progress.",
-      screen: "Practice · Day list",
-      route: "/practice/day?id=5",
+      screen: "Practice · Screen",
+      route: "/practice/screen?thread=5",
       status: "open",
-      context: { day_list_id: 5 },
-      links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/practice/day?id=5" }],
+      context: { thread_id: 5 },
+      links: [{ label: "Chart screenshot", url: "https://trading.tobytran.dev/practice/screen?thread=5" }],
     });
     expect(saved.attachments).toHaveLength(1);
 
     await page.getByRole("link", { name: "View it" }).click();
     await expect(page).toHaveURL(/\/feedback\?id=1$/);
     if (isNarrow()) await page.getByRole("tab", { name: "Report" }).click();
-    await expect(rail(page).getByRole("heading", { name: "Day list marks Day 4 done" })).toBeVisible();
+    await expect(rail(page).getByRole("heading", { name: "Screen marks a name starred" })).toBeVisible();
     await expect(rail(page).getByRole("link", { name: "View day-list.png" })).toHaveAttribute("href", /\/api\/desk\/feedback\/attachments\/\d+$/);
     await expect(rail(page)).toContainText("1 of 6");
   });

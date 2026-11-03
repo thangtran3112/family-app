@@ -1,18 +1,34 @@
 import type { Page } from "@playwright/test";
 import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
 import { formatBalance } from "../../lib/replay/threadView.ts";
-import { universeNeedLine } from "../../lib/replay/universeView.ts";
 import { origin } from "../helpers";
-import type { Locator } from "@playwright/test";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
-import { railSection } from "./swing-helpers";
-import { ANY_CLOSE, DAY_URL, START_BUTTON, THREAD_URL, clickNewPlan, createThreadByApi, discardNewPlan, fillNewPlan, openFirstDay, openNewPlan, openRow, saveFilter, startThread, threadIdOf } from "./hub-helpers";
+import {
+  ANY_CLOSE,
+  DAY,
+  START_BUTTON,
+  THREAD_URL,
+  SCREEN_URL,
+  clickNewPlan,
+  createThreadByApi,
+  discardNewPlan,
+  expectNoDayLanguage,
+  fillNewPlan,
+  openNewPlan,
+  openRow,
+  railSection,
+  saveFilter,
+  startThread,
+  threadIdOf,
+} from "./hub-helpers";
 
-// The Practice landing, its New plan modal and the thread page (02r2, Paper mocks LEW-0 and X9Y-0).
+// The Practice landing, its New thread modal and the thread's Summary (02r2, Paper mocks LEW-0 and X9Y-0; ADR-0025). A thread is a paper account
+// with one clock: the modal asks when it starts (a date and a time, 9:30 AM ET by default), and the landing shows each thread as one card.
 
-/** The delete confirm names its thread (D-079): "Delete Day thread · Oct 15?". */
-const deleteDialog = (page: Page) => page.getByRole("dialog", { name: /^Delete (Day|Swing) thread · .+\?$/ });
-
+/** The delete confirm names its thread (D-079): "Delete Freestyle · Oct 15?". */
+const deleteDialog = (page: Page) => page.getByRole("dialog", { name: /^Delete Freestyle · .+\?$/ });
+const table = (page: Page) => page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
+const rows = (page: Page) => table(page).getByRole("row", { name: /^Freestyle · / });
 const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 test.describe("Practice landing", () => {
@@ -20,53 +36,63 @@ test.describe("Practice landing", () => {
     await prepareDesk(context);
   });
 
-  test("the landing is the header, New plan and the thread table, with no session setup, notable days or rail", async ({ page, context }) => {
+  test("with no thread the page is the header, New thread and one sentence, with no session setup, notable days or day language", async ({ page }) => {
     await openDesk(page, "/practice");
     await expect(page.getByRole("heading", { name: "Practice", level: 1 })).toBeVisible();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeVisible();
-    // No thread yet: the same empty sentence the old band used, and the table waits for a first row.
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.newThreadTitle, exact: true })).toBeVisible();
+    await expect(page.getByTestId("day-slots")).toHaveText(practiceText("threadSlots", { active: 0, max: 10 }));
     await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
-    await expect(page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel })).toHaveCount(0);
-    for (const gone of ["Start a practice session", "Notable days", PRACTICE_COPY.planTitle, PRACTICE_COPY.threadsTitle]) {
+    await expect(table(page)).toHaveCount(0);
+    for (const gone of ["Start a practice session", "Notable days", "New plan", "Plan"]) {
       await expect(page.getByRole("heading", { name: gone })).toHaveCount(0);
     }
+    await expect(page.getByRole("button", { name: "New plan", exact: true })).toHaveCount(0);
     await expect(page.locator("#start-practice, #notable-days, #daily-list")).toHaveCount(0);
-    await expect(page.getByRole("complementary", { name: "Practice sessions" })).toHaveCount(0);
+    await expect(page.locator("#main-content")).not.toContainText("risk plan"); // D-115
+    await expectNoDayLanguage(page);
     await expectCleanScreen(page);
 
-    // A thread made elsewhere shows as a row with the table's columns, SIMULATED beside its balance.
+    // The one primary button opens the modal.
+    await page.getByRole("button", { name: PRACTICE_COPY.landingStartFirst }).click();
+    await expect(page.getByRole("dialog", { name: PRACTICE_COPY.newThreadTitle })).toBeVisible();
+  });
+
+  test("a thread is one card: its name, balance, open positions, the thread's time with the clock's state, and one way on", async ({ page, context }) => {
     const id = await createThreadByApi(context, { balance: 25_000 });
     await openDesk(page, "/practice");
-    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    for (const name of [PRACTICE_COPY.landingColThread, PRACTICE_COPY.threadBalance, PRACTICE_COPY.landingColProgress, PRACTICE_COPY.threadWinRate, PRACTICE_COPY.landingColAction]) {
-      await expect(table.getByRole("columnheader", { name })).toBeVisible();
+    for (const name of [PRACTICE_COPY.landingColThread, PRACTICE_COPY.landingColBalance, PRACTICE_COPY.landingColPositions, PRACTICE_COPY.landingColClock, PRACTICE_COPY.landingColAction]) {
+      await expect(table(page).getByRole("columnheader", { name, exact: true })).toBeVisible();
     }
-    // 5R: one Progress column replaces Days and Skipped (4 practiced beside Day 6 of 20 read as a contradiction).
-    for (const gone of ["Days", PRACTICE_COPY.threadSkipped]) await expect(table.getByRole("columnheader", { name: gone, exact: true })).toHaveCount(0);
-    const row = table.getByRole("row", { name: /Day trading/ });
-    await expect(row).toContainText(PRACTICE_COPY.landingProgressNone);
-    await expect(row).toContainText(PRACTICE_COPY.landingProgressNoDays);
-    await expect(row).toContainText(/Started [A-Z][a-z]{2} \d{1,2}/); // the start date under the name (setup metadata, never a replayed day)
+    // No Progress, Days, Win rate or Last day: nothing counts days (ADR-0025).
+    for (const gone of ["Progress", "Days", "Days passed", "Last day"]) await expect(table(page).getByRole("columnheader", { name: gone, exact: true })).toHaveCount(0);
+    const row = rows(page).first();
+    await expect(row.getByRole("link", { name: /^Freestyle · / })).toBeVisible();
+    await expect(row).toContainText(/Started [A-Z][a-z]{2} \d{1,2}/); // the wall-clock day the thread was made (setup metadata, never a replayed day)
     await expect(row).toContainText(formatBalance(25_000));
     await expect(row).toContainText(PRACTICE_COPY.threadSimulated);
     await expect(row).toContainText(PRACTICE_COPY.threadActive);
-    // No plan yet: the row says a new plan is needed, and the button opens the modal for this thread.
-    await row.getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan }).click();
-    await expect(page.getByRole("dialog", { name: /^New plan for/ })).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    // One action per row: no Overview or Journal link beside it, only the thread's name, which links to its page like the row does.
-    await expect(row.getByRole("link")).toHaveCount(1);
-    await expect(row.getByRole("link", { name: "Overview" })).toHaveCount(0);
-    await expect(row.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveCount(0);
+    await expect(row.getByTestId("thread-positions")).toHaveText(PRACTICE_COPY.threadPositionsNone);
+    // The thread's time: the start instant, paused (nobody pressed Play), to the minute.
+    await expect(row.getByTestId("thread-time")).toHaveText("Fri 2026-09-25 · 9:30 AM ET");
+    await expect(row).toContainText(PRACTICE_COPY.clockStatePaused);
+    // The one way on is the Screen; the name links to the Summary. No Resume, Start Trading or Start a new plan.
+    await expect(row.getByRole("link", { name: PRACTICE_COPY.landingOpenScreen })).toHaveAttribute("href", `/practice/screen?thread=${id}`);
+    for (const gone of [/^Resume$/, /^Start Trading$/, "Start a new plan"]) await expect(row.getByRole("link", { name: gone }).or(row.getByRole("button", { name: gone }))).toHaveCount(0);
+    await expectNoDayLanguage(page);
+    await expectCleanScreen(page);
+
     await openRow(page, row);
     await expect(page).toHaveURL(new RegExp(`/practice/thread\\?id=${id}$`));
     // The journal is one click from the thread page.
     await page.getByRole("link", { name: PRACTICE_COPY.threadJournal }).click();
     await page.waitForURL(new RegExp(`/practice/journal\\?thread=${id}`));
+
+    await openDesk(page, "/practice");
+    await rows(page).first().getByRole("link", { name: PRACTICE_COPY.landingOpenScreen }).click();
+    await page.waitForURL(SCREEN_URL);
   });
 
-  test("while the threads load the table shows skeleton rows and New plan waits", async ({ page }) => {
+  test("while the threads load the table shows skeleton rows and New thread waits", async ({ page }) => {
     // Hold the threads answer back so the loading state stays on screen long enough to look at.
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -78,19 +104,19 @@ test.describe("Practice landing", () => {
     const loading = page.getByRole("table", { name: PRACTICE_COPY.threadsLoading });
     await expect(loading).toHaveAttribute("aria-busy", "true");
     await expect(loading.locator("tbody tr")).toHaveCount(2);
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.newThreadTitle, exact: true })).toBeDisabled();
     release();
     await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.newThreadTitle, exact: true })).toBeEnabled();
   });
 
-  test("the New plan modal lists filters in one vertical column, asks for no risk plan, and closes three ways", async ({ page, context }) => {
+  test("the New thread modal asks for the filters, the start and the chart, offers optional risk rules, has no Swing or block of days, and closes three ways", async ({ page, context }) => {
     for (const name of ["Any close", "Second close", "Third close", "Fourth close"]) await saveFilter(context, { ...ANY_CLOSE, name });
     let dialog = await openNewPlan(page);
-    await expect(dialog.getByRole("heading", { name: PRACTICE_COPY.newPlanTitle })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: PRACTICE_COPY.newThreadTitle })).toBeVisible();
 
-    // Balance and mode: a whole-dollar box that reads "50,000" once she leaves it, with SIMULATED beside its label (not inside the box), and the two modes.
-    const balance = dialog.getByLabel("Starting balance");
+    // Balance: a whole-dollar box that reads "50,000" once she leaves it, with SIMULATED beside its label (not inside the box).
+    const balance = dialog.getByLabel(PRACTICE_COPY.threadStartingBalance);
     await expect(balance).toHaveValue("50,000");
     await expect(balance).toHaveAttribute("inputmode", "numeric");
     await balance.fill("75000");
@@ -101,41 +127,37 @@ test.describe("Practice landing", () => {
     const badge = dialog.getByText(PRACTICE_COPY.threadSimulated, { exact: true }).first();
     await expect(badge).toBeVisible();
     expect(await badge.evaluate((node) => node.closest("input, [class*=moneyBox]") === null), "SIMULATED sits outside the money box").toBe(true);
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0); // no Day/Swing choice (ADR-0025)
 
     // Filters: one column. Every checkbox shares a left edge and sits below the one before.
     const filters = dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
-    await expect(filters.getByText(practiceText("newPlanFiltersHint", { max: 3 }))).toBeVisible();
+    await expect(filters.getByText(practiceText("newThreadFiltersHint", { max: 3 }))).toBeVisible();
     await expect(filters.getByRole("checkbox").first()).toBeVisible(); // the list loads after the dialog opens
     const boxes = await filters.getByRole("checkbox").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()).map((rect) => ({ x: Math.round(rect.x), y: rect.y })));
     expect(boxes.length).toBeGreaterThanOrEqual(4);
     expect(new Set(boxes.map((box) => box.x)).size, "one left edge").toBe(1);
     for (let i = 1; i < boxes.length; i++) expect(boxes[i]!.y).toBeGreaterThan(boxes[i - 1]!.y);
     await expect(filters).toContainText("At each daily close during regular hours");
-
     // At most three filters: the fourth waits until one is unticked.
     for (const name of ["Any close", "Second close", "Third close"]) await filters.getByRole("checkbox", { name }).check();
     await expect(filters.getByRole("checkbox", { name: "Fourth close" })).toBeDisabled();
+    await expect(filters).not.toContainText(/Preset|Yours/); // D-076, M-06
 
-    // No "Preset" pills: a filter row is its checkbox, its name and its rule (D-076, M-06).
-    await expect(filters).not.toContainText(/Preset|Yours/);
-
-    // The rest of the form is on screen: dates (with the recorded-day note), days, list time and size, interval, window.
+    // The start and the chart: a date, a time (9:30 AM ET by default), the Screen's size and the chart interval.
     await expect(dialog.getByTestId("first-day-note")).toBeVisible();
-    await expect(dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio")).toHaveText(["5", "10", "20", "30"]);
-    await expect(dialog.getByText("Names a day"), "a day opens any list name: no cap to pick").toHaveCount(0);
-    await expect(dialog.getByText(/hide dates/i), "ADR-0022: no Hide dates choice").toHaveCount(0);
-    await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt }).getByRole("radio")).toHaveCount(3);
-    await expect(dialog.getByLabel(PRACTICE_COPY.planListSize)).toHaveValue("30");
+    await expect(dialog.getByLabel(PRACTICE_COPY.newThreadStartDay)).toBeVisible();
+    await expect(dialog.getByLabel(PRACTICE_COPY.newThreadStartTime)).toHaveValue("09:30");
+    await expect(dialog.getByLabel(PRACTICE_COPY.newThreadListSize)).toHaveValue("30");
     await expect(dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planInterval })).toBeVisible();
-    await expect(dialog.getByLabel(PRACTICE_COPY.planWindowFrom, { exact: true })).toBeVisible();
-    // The day has no end of its own to pick, and no hidden-day or practice-window words anywhere in the form.
-    await expect(dialog.getByLabel(/focus until/i)).toHaveCount(0);
-    await expect(dialog).not.toContainText(/practice window|hidden day|show date/i);
-    // D-076: no Arm strategies, no Risk plan.
+    // Optional risk rules, counted for each ET date of the clock (D-076 kept the strategies and the stop note out).
+    const risk = dialog.getByRole("group", { name: PRACTICE_COPY.newThreadRisk });
+    await expect(risk.getByLabel(PRACTICE_COPY.threadMaxLoss)).toBeVisible();
+    await expect(risk.getByLabel(PRACTICE_COPY.threadMaxTrades)).toBeVisible();
     await expect(dialog.getByRole("group", { name: "Arm strategies" })).toHaveCount(0);
-    await expect(dialog.getByLabel("Max loss ($)")).toHaveCount(0);
-    await expect(dialog.getByLabel(/^Plan note/)).toHaveCount(0);
+    // No Swing, no block of days, no list time, no window, no hidden dates: a thread starts at one instant and moves forward.
+    await expect(dialog.getByRole("radio", { name: "Swing", exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("radiogroup", { name: "Days" })).toHaveCount(0);
+    for (const gone of ["List time", "Start at (ET)", "Sessions", "First day"]) await expect(dialog.getByLabel(gone, { exact: true })).toHaveCount(0);
+    await expect(dialog).not.toContainText(/swing|list time|focus until|practice window|hidden day|show date|hide dates?|block of days/i);
     await expect(dialog.getByText(PRACTICE_COPY.newPlanFooter)).toBeVisible();
     await expect(dialog.getByRole("button", { name: START_BUTTON })).not.toHaveAttribute("aria-disabled", "true");
     await expectCleanScreen(page);
@@ -152,7 +174,7 @@ test.describe("Practice landing", () => {
     await clickNewPlan(page);
     await page.mouse.click(4, 4);
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.newThreadTitle, exact: true })).toBeFocused();
   });
 
   test("Start waits for a filter and says what is wrong in the field as she types", async ({ page, context }) => {
@@ -161,129 +183,162 @@ test.describe("Practice landing", () => {
     const submit = dialog.getByRole("button", { name: START_BUTTON });
     await expect(submit).toBeDisabled();
     const status = dialog.locator("footer").getByRole("status");
-    await expect(status).toContainText(PRACTICE_COPY.planSaveFilterFirst);
+    await expect(status).toContainText(PRACTICE_COPY.newThreadFilterFirst);
     await fillNewPlan(dialog, { balance: "1000" });
     await expect(submit).not.toHaveAttribute("aria-disabled", "true");
-    await dialog.getByLabel("Starting balance").fill("500");
+    await dialog.getByLabel(PRACTICE_COPY.threadStartingBalance).fill("500");
     // The contract's rule, shown under its field and echoed by the button; nothing was created.
-    await expect(dialog.getByRole("alert").filter({ hasText: "Starting balance: whole dollars" })).toBeVisible();
-    await expect(status).toContainText("Starting balance: whole dollars");
+    await expect(dialog.getByRole("alert").filter({ hasText: /Starting balance/ })).toBeVisible();
+    await expect(status).toContainText(/Starting balance/);
     await expect(submit).toBeDisabled();
     await submit.click({ force: true });
     await expect(dialog).toBeVisible();
     expect((await (await context.request.get("/api/desk/replay/threads")).json()) as unknown[]).toHaveLength(0);
   });
 
-  test("Start practice starts the thread and its plan, lands on the thread page, and Start day opens the day", async ({ page, context }) => {
+  test("a start after the last finished day says so as she edits, clears when she fixes it and never moves the form", async ({ page, context }) => {
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
+    const date = dialog.locator('input[type="date"]');
+    await expect(date).toHaveAttribute("max", "2026-10-15"); // the last finished day on the E2E clock
+    await date.fill(DAY);
+    const interval = dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planInterval, exact: true });
+    const before = (await interval.boundingBox())!.y;
+    const start = dialog.getByRole("button", { name: START_BUTTON });
+    await expect(start).not.toHaveAttribute("aria-disabled", "true");
+
+    await date.fill("2026-10-16"); // the day after the last finished one: its data does not exist yet
+    await expect(dialog.getByRole("alert").first()).toBeVisible();
+    await expect(start).toHaveAttribute("aria-disabled", "true");
+    expect((await interval.boundingBox())!.y, "the error line was reserved: nothing moved").toBeCloseTo(before, 0);
+
+    await date.fill(DAY);
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    await expect(start).not.toHaveAttribute("aria-disabled", "true");
+    expect((await interval.boundingBox())!.y).toBeCloseTo(before, 0);
+  });
+
+  test("Start thread sends the thread with its v2 setup and lands on the Summary, where the clock waits at the start", async ({ page, context }) => {
     test.setTimeout(180_000);
-    await startThread(page, context, { balance: "25000", maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks.", stop: true });
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    for (const gone of [/arm .*strateg/i, /risk plan/i, /alert strateg/i]) await expect(dialog.getByText(gone)).toHaveCount(0);
+    await fillNewPlan(dialog, { balance: "25000", interval: "5m" });
+    const sent = page.waitForRequest((request) => request.url().endsWith("/replay/threads") && request.method() === "POST");
+    await dialog.getByRole("button", { name: START_BUTTON }).click();
+    const body = (await sent).postDataJSON() as { startingBalance: number; setup: Record<string, unknown> & { setup: { armed: unknown; interval: string }; screen: { filters: unknown[] } } };
+    expect(body.startingBalance).toBe(25_000);
+    expect(body.setup.schemaVersion, "the v2 setup contract").toBe(2);
+    expect(Date.parse(body.setup.startAt as string), "one instant, 9:30 AM ET on the day she picked").toBe(Date.parse(`${DAY}T09:30:00-04:00`));
+    expect(body.setup.setup.armed, "nothing armed").toEqual([]);
+    expect(body.setup.setup.interval).toBe("5m");
+    expect(body.setup.screen.filters).toHaveLength(1);
+    for (const gone of ["sessions", "firstDay", "plan_days", "listAt", "window", "hideDates"]) expect(JSON.stringify(body), `${gone} is retired`).not.toContain(gone);
+    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
     const id = threadIdOf(page);
-    await expect(page).toHaveURL(THREAD_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("thread");
-    const balance = page.getByRole("region", { name: "Thread balance" });
-    await expect(balance).toContainText(formatBalance(25_000));
-    await expect(balance).toContainText(PRACTICE_COPY.threadSimulated);
-    // The stats are their own card now (5R); adherence says which day it is and what it measures.
+
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Freestyle · ");
+    const place = page.getByRole("region", { name: "Thread balance" });
+    await expect(place).toContainText(formatBalance(25_000));
+    await expect(place).toContainText(PRACTICE_COPY.threadSimulated);
+    await expect(place).toContainText("At Fri 2026-09-25 · 9:30 AM ET");
+    await expect(place).toContainText(PRACTICE_COPY.threadPositionsNone);
+    // The clock: paused at the start, the full date and the time to the second, with Play, the speeds, Next open and Jump.
+    await expect(page.getByTestId("thread-clock-time")).toHaveText("Fri 2026-09-25 · 9:30:00 AM ET");
+    await expect(page.getByTestId("thread-clock-state")).toHaveText(PRACTICE_COPY.clockStatePaused);
+    // The one next step is the Screen; the stats are their own card and count trades, not days.
+    const step = page.getByRole("region", { name: PRACTICE_COPY.overviewStepTitle });
+    await expect(step.getByRole("link", { name: PRACTICE_COPY.overviewOpenScreen })).toHaveAttribute("href", `/practice/screen?thread=${id}`);
     const stats = page.getByRole("region", { name: "Thread stats" });
-    for (const label of [PRACTICE_COPY.threadDaysPracticed, PRACTICE_COPY.threadSkipped, PRACTICE_COPY.threadWinRate, PRACTICE_COPY.threadAdherence]) {
+    for (const label of [PRACTICE_COPY.overviewStatClosed, PRACTICE_COPY.threadWinRate, PRACTICE_COPY.overviewStatWins, PRACTICE_COPY.overviewStatLosses, PRACTICE_COPY.overviewStatOpen]) {
       await expect(stats.getByText(label, { exact: true })).toBeVisible();
     }
-    await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceNone);
-    await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceMeaning);
-    // The daily plan of this thread, with its armed filter; nothing is hidden (ADR-0022).
-    const plan = page.getByRole("region", { name: "Daily list plan" });
-    await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 }); // the data is prepared in the background first
-    await expect(plan).toContainText("Any close");
-    await expect(page.locator("body")).not.toContainText(/hidden day|show date|dates hidden/i);
     await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.overviewResultsTitle })).toContainText(PRACTICE_COPY.overviewResultsNone);
+    await expectNoDayLanguage(page);
     await expectCleanScreen(page);
 
-    await openFirstDay(page);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 1 of 5 · Fri 2026-09-25"); // the actual date of the day (ADR-0022)
-    await expect(page.getByTestId("day-clock-time")).toHaveText(/^[A-Z][a-z]{2} 2026-\d{2}-\d{2} · \d{1,2}:\d{2}:\d{2} (AM|PM) ET$/); // and the thread's actual date and time
-    // The day screen wears the thread's tab strip: Summary is the way back to the thread's page, the back link goes to the thread list.
+    await step.getByRole("link", { name: PRACTICE_COPY.overviewOpenScreen }).click();
+    await page.waitForURL(SCREEN_URL);
+    // The Screen wears the thread's tab strip: Summary is the way back to the thread's page, the back link goes to the thread list.
     await expect(page.getByRole("link", { name: PRACTICE_COPY.backToPractice })).toHaveAttribute("href", "/practice");
     await page.getByRole("tablist", { name: PRACTICE_COPY.tabsLabel }).getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
     await page.waitForURL(`**/practice/thread?id=${id}`);
-    await page.goBack();
-
-    // Back on the landing: the thread has a row whose action opens today's day.
-    await openDesk(page, "/practice");
-    const row = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel }).getByRole("row", { name: /Day trading/ });
-    await expect(row).toContainText(formatBalance(25_000));
-    await row.getByRole("link", { name: /^Start Trading$/ }).click();
-    await page.waitForURL(DAY_URL);
-
-    // The thread page is where she returns between days: today's day is a Start Trading link, whatever its number.
-    await openDesk(page, `/practice/thread?id=${id}`);
-    await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: /^Start Trading$/ })).toBeVisible();
   });
 
-  test("with a day thread active the modal still opens, with no Swing choice; the thread page has Delete plan and no Replace plan, and deleting returns to Practice", async ({ page, context }) => {
+  test("with a thread active the modal still opens, and the Summary has Delete thread and nothing that edits the setup; deleting returns to Practice", async ({ page, context }) => {
     test.setTimeout(180_000);
-    await startThread(page, context);
-    const id = threadIdOf(page);
+    await saveFilter(context);
+    const id = await createThreadByApi(context);
     await openDesk(page, "/practice");
     const dialog = await clickNewPlan(page);
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0); // no Day/Swing choice (ADR-0025)
-    await expect(dialog.getByText("is already active")).toHaveCount(0);
+    await expect(dialog.getByText("is already active")).toHaveCount(0); // any number of threads may run, up to the slots
     await page.keyboard.press("Escape");
 
-    // A plan is never replaced or edited (a new plan is a new thread): the thread page has Delete plan and nothing that changes the plan.
+    // A setup is never replaced or edited (a new setup is a new thread): the Summary has Delete thread and nothing that changes the setup.
     await openDesk(page, `/practice/thread?id=${id}`);
-    const step = page.getByRole("region", { name: "Practice day" });
-    await expect(step.getByRole("button", { name: "Replace plan" })).toHaveCount(0);
-    await expect(page.getByRole("dialog", { name: /^New plan for/ })).toHaveCount(0);
-    await step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true }).click();
-    const confirm = page.getByRole("dialog", { name: /^Delete / });
-    await expect(confirm).toContainText(PRACTICE_COPY.planDeleteBody);
+    const step = page.getByRole("region", { name: PRACTICE_COPY.overviewStepTitle });
+    await expect(step.getByRole("button", { name: /^Replace/ })).toHaveCount(0);
+    await step.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm, exact: true }).click();
+    const confirm = deleteDialog(page);
+    await expect(confirm).toContainText(PRACTICE_COPY.threadDeleteBodyFreestyle);
     await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteKeep }).click();
     await expect(confirm).toHaveCount(0);
-    await expect(step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true })).toBeVisible(); // Keep leaves the plan alone
-    await step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true }).click();
-    await page.getByRole("dialog", { name: /^Delete / }).getByRole("button", { name: PRACTICE_COPY.planDeleteConfirm }).click();
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm, exact: true })).toBeVisible(); // Keep leaves the thread alone
+    await step.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm, exact: true }).click();
+    await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await page.waitForURL("**/practice");
-    const gone = await context.request.get(`${origin}/api/desk/replay/threads/${id}`);
-    expect(gone.status()).toBe(404);
+    expect((await context.request.get(`${origin}/api/desk/replay/threads/${id}`)).status()).toBe(404);
   });
 
-  test("several day threads list as several rows, and Delete removes one after a confirm", async ({ page, context }) => {
+  test("several threads list as several rows, and Delete removes one after a confirm", async ({ page, context }) => {
     const first = await createThreadByApi(context, { balance: 20_000 });
     const second = await createThreadByApi(context, { balance: 30_000 });
     const closed = await createThreadByApi(context, { balance: 40_000 });
     expect((await context.request.post(`${origin}/api/desk/replay/threads/${closed}/close`)).ok()).toBeTruthy();
     await openDesk(page, "/practice");
-    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(3); // two active and one closed, active first
-    await expect(table.getByRole("row", { name: /Day trading/ }).first()).toContainText(formatBalance(30_000)); // newest active first
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true })).toBeEnabled();
-    await expect(table.getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan })).toHaveCount(2); // each active day thread reads its own plan
+    await expect(rows(page)).toHaveCount(3); // two active and one closed, active first
+    await expect(rows(page).first()).toContainText(formatBalance(30_000)); // newest active first
+    await expect(page.getByTestId("day-slots")).toHaveText(practiceText("threadSlots", { active: 2, max: 10 }));
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.newThreadTitle, exact: true })).toBeEnabled();
+    await expect(table(page).getByRole("link", { name: PRACTICE_COPY.landingOpenScreen })).toHaveCount(2); // each active thread opens its own Screen
+    await expectNoDayLanguage(page);
     await expectCleanScreen(page);
 
+    // The two threads of one day read apart by their stored names (D-069): the second carries a (2).
+    const names = await table(page).getByRole("link", { name: /^Freestyle · / }).allTextContents();
+    expect(new Set(names).size, "no two threads read alike").toBe(3);
+
     // Delete asks first; Keep leaves the thread alone, a click on the dialog never opens the thread page.
-    const row = table.getByRole("row", { name: /Day trading/ }).filter({ hasText: formatBalance(20_000) });
+    const row = rows(page).filter({ hasText: formatBalance(20_000) });
     await row.getByRole("button", { name: /^Delete/ }).click();
     const confirm = deleteDialog(page);
-    await expect(confirm).toContainText(PRACTICE_COPY.threadDeleteBody);
+    await expect(confirm).toContainText(PRACTICE_COPY.threadDeleteBodyFreestyle);
+    const warning = await confirm.locator("p").evaluateAll((nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent));
+    expect(warning, "no line of the dialog is cut off").toEqual([]);
     await confirm.click({ position: { x: 4, y: 4 } });
     await expect(page).toHaveURL(/\/practice$/);
     await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteKeep }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(3);
+    await expect(rows(page)).toHaveCount(3);
 
+    const target = (await row.getByRole("link").first().textContent())!;
     await row.getByRole("button", { name: /^Delete/ }).click();
+    await expect(deleteDialog(page)).toContainText(literal(target).replace(/\\/g, ""));
     await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(2);
-    await expect(table).not.toContainText(formatBalance(20_000));
+    await expect(page.getByRole("status").filter({ hasText: /^Deleted Freestyle · .+$/ })).toHaveText(practiceText("threadDeleted", { name: target }));
+    await expect(rows(page)).toHaveCount(2);
+    await expect(table(page)).not.toContainText(formatBalance(20_000));
     expect((await context.request.get(`${origin}/api/desk/replay/threads/${first}`)).status()).toBe(404);
     expect((await context.request.get(`${origin}/api/desk/replay/threads/${second}`)).ok()).toBeTruthy();
 
     // A closed thread deletes too, and the last row going leaves the empty sentence.
-    await table.getByRole("row", { name: /Day trading/ }).filter({ hasText: PRACTICE_COPY.threadClosedBadge }).getByRole("button", { name: /^Delete/ }).click();
+    await rows(page).filter({ hasText: PRACTICE_COPY.threadClosedBadge }).getByRole("button", { name: /^Delete/ }).click();
     await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
-    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
-    await table.getByRole("button", { name: /^Delete/ }).click();
+    await expect(rows(page)).toHaveCount(1);
+    await table(page).getByRole("button", { name: /^Delete/ }).click();
     await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
     await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
   });
@@ -291,302 +346,63 @@ test.describe("Practice landing", () => {
   test("a thread that is not chosen and one that is not found say different things on every route, and a picker's hint names where its rows go (D-164, D-191, D-193)", async ({ page, context }) => {
     const id = await createThreadByApi(context);
     // Not found: an id the server does not know, and an id that is no number (she gave one; it cannot name a thread).
-    for (const [path, param] of [["/practice/thread", "id"], ["/practice/journal", "thread"], ["/practice/week", "thread"]] as const) {
+    for (const [path, param] of [["/practice/thread", "id"], ["/practice/screen", "thread"], ["/practice/journal", "thread"]] as const) {
       for (const bad of ["999999", "abc", "0"]) {
         await openDesk(page, `${path}?${param}=${bad}`);
         await expect(page.getByText(PRACTICE_COPY.threadPageNotFound), `${path} ${bad}`).toBeVisible();
         await expect(page.getByText(PRACTICE_COPY.threadPickTitle), `${path} ${bad} is not "not selected"`).toHaveCount(0);
       }
     }
-    for (const [path, text] of [["/practice/replay?id=abc", PRACTICE_COPY.sessionNotFound], ["/practice/journal?id=abc", PRACTICE_COPY.sessionNotFound], ["/practice/day?id=abc", PRACTICE_COPY.dayNotFound]] as const) {
+    for (const path of ["/practice/replay?id=abc", "/practice/journal?id=abc"]) {
       await openDesk(page, path);
-      await expect(page.getByText(text), path).toBeVisible();
+      await expect(page.getByText(PRACTICE_COPY.sessionNotFound), path).toBeVisible();
     }
     // Not chosen: the picker, one hint per route that says what a row opens, every row going there.
-    for (const [path, hint, rows] of [
+    for (const [path, hint, rowHref] of [
       ["/practice/thread", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
-      ["/practice/week", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
+      ["/practice/screen", PRACTICE_COPY.screenPickHint, `/practice/screen?thread=${id}`],
       ["/practice/replay", PRACTICE_COPY.threadPickHintReplay, `/practice/thread?id=${id}`],
     ] as const) {
       await openDesk(page, path);
       await expect(page.getByText(PRACTICE_COPY.threadPickTitle), path).toBeVisible();
       await expect(page.getByText(hint, { exact: true }), path).toBeVisible();
-      await expect(page.getByLabel("Your threads").getByRole("link").first(), path).toHaveAttribute("href", rows);
+      await expect(page.getByLabel("Your threads").getByRole("link").first(), path).toHaveAttribute("href", rowHref);
       await expectCleanScreen(page);
     }
-  });
-});
-
-// Fix wave 5S, stream 2: the New plan modal redesign (D-075 one grid, D-076 a modal around three things). Rows M-01 to M-05.
-test.describe("New plan modal redesign", () => {
-  test.beforeEach(async ({ context }) => {
-    await prepareDesk(context);
-  });
-
-  /** The segmented groups of the dialog (a group whose children are buttons), with how far their content pokes out and the tallest button. */
-  const segmentedGroups = (dialog: Locator) =>
-    dialog.locator('[role="radiogroup"]').evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const box = node.getBoundingClientRect();
-        const buttons = [...node.querySelectorAll("button")].map((button) => button.getBoundingClientRect());
-        return {
-          name: node.getAttribute("aria-label") ?? document.getElementById(node.getAttribute("aria-labelledby") ?? "")?.textContent ?? "?",
-          overflow: node.scrollWidth - node.clientWidth,
-          poke: Math.max(0, ...buttons.map((rect) => rect.right - box.right), ...buttons.map((rect) => box.left - rect.left)),
-          tallest: Math.max(...buttons.map((rect) => rect.height)),
-        };
-      }),
-    );
-
-  // M-01 (D-075): one two-column grid, shared label baselines, aligned control widths.
-  test("every segmented group holds its buttons, the labels share a baseline per row and the text controls share a width", async ({ page, context }) => {
-    await saveFilter(context);
-    const dialog = await openNewPlan(page);
-    await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
-    const groups = await segmentedGroups(dialog);
-    expect(groups.length).toBeGreaterThanOrEqual(4); // mode, days, list time, interval
-    for (const group of groups) {
-      expect(group.overflow, `${group.name}: scrollWidth <= clientWidth`).toBeLessThanOrEqual(0);
-      expect(group.poke, `${group.name}: no button outside its box`).toBeLessThanOrEqual(0.5);
-      expect(group.tallest, `${group.name}: one line of height`).toBeLessThanOrEqual(34);
-    }
-    const label = async (text: string) => (await dialog.getByText(text, { exact: true }).first().boundingBox())!;
-    expect((await label("First day")).y, "First day and Days share a baseline").toBeCloseTo((await label("Days")).y, 0);
-    expect((await label("List size")).y, "List size and Chart interval share a baseline").toBeCloseTo((await label("Chart interval")).y, 0);
-    const firstDay = (await dialog.locator('input[type="date"]').boundingBox())!;
-    const listSize = (await dialog.getByLabel(PRACTICE_COPY.planListSize).boundingBox())!;
-    expect(firstDay.width, "the date and the list size are one column wide").toBeCloseTo(listSize.width, 0);
-    expect(firstDay.x).toBeCloseTo(listSize.x, 0);
-    // D-152: a segmented control is as wide as its column, so its edges meet the text controls' above and below it.
-    const group = async (name: string) => (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
-    const days = await group(PRACTICE_COPY.planDays);
-    const interval = await group(PRACTICE_COPY.planInterval);
-    expect(interval.width, "Days and Chart interval are one column wide").toBeCloseTo(days.width, 0);
-    expect(interval.x, "Days and Chart interval start at the same edge").toBeCloseTo(days.x, 0);
-    expect(days.x, "the right column starts after the First day box").toBeGreaterThan(firstDay.x + firstDay.width);
-  });
-
-  // D-152: the swing settings sit on the same two-column grid, so each segmented control is as wide as its column and starts at
-  // that column's edge. The grid fills row by row (First day | Sessions, Interval | Risk per hold, Tape), so the first
-  // column's edge is the First day box and the second's is the Sessions box.
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
-    const dialog = await openNewPlan(page);
-    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    const left = (await dialog.getByLabel(PRACTICE_COPY.swingFirstDay, { exact: true }).boundingBox())!;
-    const right = (await dialog.getByLabel(PRACTICE_COPY.swingSessions, { exact: true }).boundingBox())!;
-    expect(right.width, "two equal columns").toBeCloseTo(left.width, 0);
-    expect(right.x, "the Sessions box is in the second column").toBeGreaterThan(left.x + left.width);
-    const columns = [
-      { name: PRACTICE_COPY.swingInterval, column: left, side: "first" },
-      { name: PRACTICE_COPY.swingTape, column: left, side: "first" },
-    ];
-    for (const { name, column, side } of columns) {
-      const box = (await dialog.getByRole("radiogroup", { name, exact: true }).boundingBox())!;
-      expect(box.width, `${name}: one column wide`).toBeCloseTo(column.width, 0);
-      expect(box.x, `${name}: in the ${side} column`).toBeCloseTo(column.x, 0);
+    // The routes of the retired day model are not served: there is no day, no day list and no week to open.
+    for (const gone of ["/practice/day?id=1", "/practice/week?thread=1", "/practice/order?thread=1"]) {
+      const response = await page.goto(gone);
+      expect(response?.status(), `${gone} is retired`).toBe(404);
     }
   });
 
-  // D-153 (owner ruling 2026-10-31): practice does not arm strategies or ask for a risk plan, so a new plan is sent with an empty list.
-  test("a new plan asks for no strategies or risk plan and is sent with nothing armed", async ({ page, context }) => {
-    await saveFilter(context);
-    const dialog = await openNewPlan(page);
-    for (const gone of [/arm .*strateg/i, /risk plan/i, /alert strateg/i]) await expect(dialog.getByText(gone)).toHaveCount(0);
-    await fillNewPlan(dialog);
-    const sent = page.waitForRequest((request) => request.url().includes("/replay/daily/next") && request.method() === "POST");
-    await dialog.getByRole("button", { name: START_BUTTON }).click();
-    const body = (await sent).postDataJSON() as { plan: { setup: { armed: unknown } } };
-    expect(body.plan.setup.armed, "the contract's field, always empty").toEqual([]);
-    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
-  });
-
-  // M-02: the disabled list time explains itself in view, the footer is a live region, a blocked button still takes focus.
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("a held list time says why in view, and the blocked Start button is focusable with its reason in a status line", async ({ page }) => {
-    const dialog = await openNewPlan(page);
-    const filters = dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
-    const premarket = dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt, exact: true }).getByRole("radio", { name: /^8:30/ });
-    await filters.getByRole("checkbox", { name: "Abnormal volume" }).check();
-    await expect(premarket).toHaveAttribute("aria-disabled", "true");
-    await expect(premarket).not.toHaveAttribute("disabled", /.*/);
-    await expect(dialog.getByText("Abnormal volume needs a list time of 10:00 AM or later", { exact: false })).toBeVisible();
-
-    await filters.getByRole("checkbox", { name: "Abnormal volume" }).uncheck();
-    const status = dialog.locator("footer").getByRole("status");
-    await expect(status).toContainText(PRACTICE_COPY.planSaveFilterFirst);
-    const start = dialog.getByRole("button", { name: START_BUTTON });
-    await expect(start).toHaveAttribute("aria-disabled", "true");
-    await start.focus();
-    await expect(start).toBeFocused();
-
-    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    await expect(dialog.locator("footer").getByRole("status")).toContainText(PRACTICE_COPY.swingBuildFirst);
-    await expect(dialog.getByRole("button", { name: START_BUTTON })).toHaveAttribute("aria-disabled", "true");
-  });
-
-  // M-03: validation runs as she edits, the date has a max, the error has its own line and echoes by the button.
-  test("a run of days that goes past the last finished day says so as she edits, clears when she fixes it and never moves the form", async ({ page, context }) => {
-    await saveFilter(context);
-    const dialog = await openNewPlan(page);
-    await dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true }).getByRole("checkbox", { name: "Any close" }).check();
-    const date = dialog.locator('input[type="date"]');
-    await expect(date).toHaveAttribute("max", "2026-10-15"); // the last finished day on the E2E clock
-    await date.fill("2026-10-05");
-    const listTime = dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt, exact: true });
-    const before = (await listTime.boundingBox())!.y;
-    const start = dialog.getByRole("button", { name: START_BUTTON });
-    await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "5", exact: true }).click();
-    await expect(start).toHaveAccessibleName("Start 5-day practice");
-
-    await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "30", exact: true }).click();
-    await expect(start).toHaveAccessibleName("Start 30-day practice");
-    const message = /30 sessions from .* run past the last finished day/;
-    await expect(dialog.getByRole("alert").filter({ hasText: message })).toBeVisible();
-    await expect(dialog.locator("footer").getByRole("status")).toContainText(message); // echoed by the button
-    await expect(start).toHaveAttribute("aria-disabled", "true");
-    expect((await listTime.boundingBox())!.y, "the error line was reserved: nothing moved").toBeCloseTo(before, 0);
-
-    await dialog.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "5", exact: true }).click();
-    await expect(dialog.getByRole("alert").filter({ hasText: message })).toHaveCount(0);
-    await expect(start).not.toHaveAttribute("aria-disabled", "true");
-    expect((await listTime.boundingBox())!.y).toBeCloseTo(before, 0);
-  });
-
-  // M-04: the swing universe says its minimum in its header, a name left out can be removed, and the default first day is a recorded one.
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the swing universe states its minimum, lets a left-out name go, and starts on the first recorded morning", async ({ page, context }) => {
-    expect((await context.request.post(`${origin}/api/desk/__e2e/universe-days`, { data: { days: [{ day: "2026-09-18", symbols: ["TSLA"] }] } })).ok()).toBeTruthy();
-    await page.route("**/replay/threads/swing-universe", async (route) => {
-      const answer = await route.fetch();
-      const body = (await answer.json()) as { excluded: Array<{ symbol: string; reason: string }> };
-      body.excluded = [{ symbol: "NEWCO", reason: "Not enough price history for this whole range" }];
-      await route.fulfill({ response: answer, json: body });
-    });
-    const dialog = await openNewPlan(page);
-    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    await expect(dialog.getByLabel("First day")).toHaveValue("2026-09-18"); // inside the recorded window, not the guess three months back
-    const universe = dialog.getByRole("group", { name: PRACTICE_COPY.swingUniverseSection, exact: true });
-    await expect(universe).toContainText(universeNeedLine(0));
-    const asked = page.waitForRequest((request) => request.url().includes("/swing-universe") && (request.postDataJSON() as { remove: string[] }).remove.includes("NEWCO"));
-    await expect(universe.getByText("NEWCO")).toBeVisible({ timeout: 30_000 });
-    await universe.getByRole("button", { name: "Remove NEWCO" }).click();
-    await asked; // the name leaves the list she sends
-    await expect(universe.getByText("NEWCO")).toHaveCount(0);
-    await page.unrouteAll({ behavior: "wait" }); // let the last preview answer finish before the test ends
-  });
-
-  // D-103, D-104: a name in the universe table can always be removed (its button is inside the table's visible box), and a table that no
-  // setting can refresh says so instead of looking current.
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the swing universe's Remove buttons sit inside the table, and a wrong Sessions says the list is not refreshed", async ({ page }) => {
-    const dialog = await openNewPlan(page);
-    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    await dialog.getByRole("checkbox", { name: /Day movers/ }).check();
-    const remove = dialog.getByRole("table", { name: "Swing universe" }).getByRole("button", { name: /^Remove / }).first();
-    await expect(remove).toBeVisible({ timeout: 30_000 });
-    const gap = await remove.evaluate((node) => {
-      let scroller = node.parentElement;
-      while (scroller && getComputedStyle(scroller).overflowX === "visible") scroller = scroller.parentElement;
-      return scroller!.getBoundingClientRect().right - node.getBoundingClientRect().right;
-    });
-    expect(gap, "the Remove button ends inside the table's visible edge").toBeGreaterThanOrEqual(-0.5);
-
-    await dialog.getByLabel("Sessions").fill("999");
-    await expect(dialog.getByText(PRACTICE_COPY.swingListOld, { exact: false })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: START_BUTTON })).toHaveAccessibleName("Start swing practice"); // not "Start 999-day swing practice"
-    await dialog.getByLabel("Sessions").fill("20");
-    await expect(dialog.getByText(PRACTICE_COPY.swingListOld, { exact: false })).toHaveCount(0);
-    await page.unrouteAll({ behavior: "wait" }); // let the last preview answer finish before the test ends
-  });
-
-  // M-05: Escape on a form she has edited asks before it throws the form away.
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("Escape on an edited swing form asks first, Keep editing keeps it, Discard closes it", async ({ page }) => {
-    const dialog = await openNewPlan(page);
-    await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
-    await dialog.getByLabel("Sessions").fill("17");
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByText(PRACTICE_COPY.newPlanDiscardTitle)).toBeVisible();
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanDiscardKeep }).click();
-    await expect(dialog.getByLabel("Sessions")).toHaveValue("17");
-    await page.keyboard.press("Escape");
-    await dialog.getByRole("button", { name: PRACTICE_COPY.newPlanDiscard, exact: true }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-
-    // A form she has not touched still closes at once.
-    await clickNewPlan(page);
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-  });
-});
-
-// Fix wave 5S, stream 1: the landing's names and its delete confirm.
-test.describe("Practice landing · fix wave 5S", () => {
-  test.beforeEach(async ({ context }) => {
-    await prepareDesk(context);
-  });
-
-  test("two threads of one mode and day read apart by their stored names, and the delete confirm names its thread, shows its whole warning and says Deleted (D-069, D-079)", async ({ page, context }) => {
+  test("the table has a fixed layout, Balance is right-aligned on one line, and its text lines up with the page title and New thread (D-110, D-111, D-113, D-114)", async ({ page, context }) => {
     await createThreadByApi(context, { balance: 20_000 });
     await createThreadByApi(context, { balance: 30_000 });
     await openDesk(page, "/practice");
-    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    const links = table.getByRole("link", { name: /^Day thread · / });
-    await expect(links, "the day's second thread carries a (2)").toHaveCount(2);
-    const names = await links.allTextContents();
-    expect(new Set(names).size, "D-069: no two threads read alike").toBe(2);
-    const [target] = names as [string, string];
-
-    await table.getByRole("button", { name: new RegExp(`^Delete ${literal(target)}$`) }).click();
-    const confirm = page.getByRole("dialog", { name: new RegExp(`^Delete ${literal(target)}\\?$`) });
-    await expect(confirm).toBeVisible();
-    // The warning wraps inside the dialog: it sits in a nowrap table cell, where it used to clip to "This can't be undor".
-    await expect(confirm).toContainText("This can't be undone.");
-    const clipped = await confirm.locator("p").evaluateAll((nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent));
-    expect(clipped, "no line of the dialog is cut off").toEqual([]);
-    await confirm.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
-    await expect(page.getByRole("status").filter({ hasText: /^Deleted (Day|Swing) thread · .+$/ })).toHaveText(`Deleted ${target}`);
-    await expect(table.getByRole("link", { name: new RegExp(`^${literal(target)}$`) })).toHaveCount(0);
-  });
-
-  test("with no thread the page is one card with one sentence and a primary button that opens New plan, and never says risk plan (D-115)", async ({ page }) => {
-    await openDesk(page, "/practice");
-    await expect(page.getByText(PRACTICE_COPY.threadNone)).toBeVisible();
-    await expect(page.locator("#main-content")).not.toContainText("risk plan");
-    await page.getByRole("button", { name: PRACTICE_COPY.landingStartFirst }).click();
-    await expect(page.getByRole("dialog", { name: PRACTICE_COPY.newPlanTitle })).toBeVisible();
-  });
-
-  test("the table has a fixed layout, Balance is right-aligned on one line, and its text lines up with the page title and New plan (D-110, D-111, D-113, D-114)", async ({ page, context }) => {
-    await createThreadByApi(context, { balance: 20_000 });
-    await createThreadByApi(context, { balance: 30_000 });
-    await openDesk(page, "/practice");
-    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    await expect(table).toHaveCSS("table-layout", "fixed");
-    await expect(table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance })).toHaveCSS("text-align", "right");
-    const row = table.getByRole("row", { name: /Day trading/ }).first();
+    await expect(table(page)).toHaveCSS("table-layout", "fixed");
+    await expect(table(page).getByRole("columnheader", { name: PRACTICE_COPY.landingColBalance })).toHaveCSS("text-align", "right");
+    const row = rows(page).first();
     // The amount and its SIMULATED pill share one line (the column used to be narrower than the pair).
     const [amount, pill] = [await row.getByText("$30,000.00").boundingBox(), await row.getByText(PRACTICE_COPY.threadSimulated, { exact: true }).first().boundingBox()];
     expect(Math.abs(amount!.y + amount!.height / 2 - (pill!.y + pill!.height / 2)), "amount and pill on one line").toBeLessThan(8);
-    // D-111: the title and the first cell's text start at one x; the action ends where New plan ends.
+    // D-111: the title and the first cell's text start at one x; the action ends where New thread ends.
     const title = (await page.getByRole("heading", { name: "Practice", level: 1 }).boundingBox())!;
-    const name = (await row.getByRole("link").boundingBox())!;
+    const name = (await row.getByRole("link").first().boundingBox())!;
     expect(Math.abs(name.x - title.x), "one shared inset on the left").toBeLessThanOrEqual(1);
-    const newPlan = (await page.getByRole("button", { name: PRACTICE_COPY.planNew, exact: true }).boundingBox())!;
+    const newThread = (await page.getByRole("button", { name: PRACTICE_COPY.newThreadTitle, exact: true }).boundingBox())!;
     const del = (await row.getByRole("button", { name: /^Delete/ }).boundingBox())!;
-    expect(Math.abs(newPlan.x + newPlan.width - (del.x + del.width)), "and on the right").toBeLessThanOrEqual(1);
+    expect(Math.abs(newThread.x + newThread.width - (del.x + del.width)), "and on the right").toBeLessThanOrEqual(1);
     // D-114: a column stays where it is when the rows change.
-    const before = (await table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance }).boundingBox())!.x;
+    const before = (await table(page).getByRole("columnheader", { name: PRACTICE_COPY.landingColBalance }).boundingBox())!.x;
     await row.getByRole("button", { name: /^Delete/ }).click();
     await deleteDialog(page).getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm }).click();
-    await expect(table.getByRole("row", { name: /Day trading/ })).toHaveCount(1);
-    expect((await table.getByRole("columnheader", { name: PRACTICE_COPY.threadBalance }).boundingBox())!.x).toBe(before);
+    await expect(rows(page)).toHaveCount(1);
+    expect((await table(page).getByRole("columnheader", { name: PRACTICE_COPY.landingColBalance }).boundingBox())!.x).toBe(before);
   });
 });
 
-// D-133: the journal's Edit plan form is on the same field kit as the New plan modal: one control height, one radius, sentence-case labels.
+// D-133: the journal's Edit plan form is on the same field kit as the New thread modal: one control height, one radius, sentence-case labels.
 test.describe("Edit plan form", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
@@ -608,5 +424,22 @@ test.describe("Edit plan form", () => {
     });
     expect(look.controls, "one height and one radius for every control").toHaveLength(1);
     expect(look.caps, "no label is upper-cased").toEqual([]);
+  });
+});
+
+// startThread (the modal, end to end) is the helper the other specs build on; this one test keeps it honest.
+test.describe("startThread helper", () => {
+  test.beforeEach(async ({ context }) => {
+    await prepareDesk(context);
+  });
+
+  test("starts a thread through the modal with its risk rules and lands on a Summary that shows its clock", async ({ page, context }) => {
+    test.setTimeout(180_000);
+    const id = await startThread(page, context, { balance: "30000", maxLoss: "600", maxTrades: "3", note: "Trade only clean pullbacks." });
+    const thread = await (await context.request.get(`${origin}/api/desk/replay/threads/${id}`)).json();
+    expect(thread.thread.startingBalance).toBe(30_000);
+    expect(thread.thread.plan).toMatchObject({ maxLossUsd: 600, maxTrades: 3, planNote: "Trade only clean pullbacks." });
+    expect(thread.clock.running).toBe(false);
+    await expect(page.getByTestId("thread-clock-time")).toHaveText("Fri 2026-09-25 · 9:30:00 AM ET");
   });
 });

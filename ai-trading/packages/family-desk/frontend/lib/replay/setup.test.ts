@@ -1,88 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
-import {
-  defaultDraft,
-  dayProblem,
-  draftToSpec,
-  fieldOfPath,
-  fieldProblems,
-  latestReplayDay,
-  problemMessage,
-  toggleArmed,
-  validateDraft,
-  withNotableDay,
-  withSession,
-  withTypedDay,
-  type SetupDraft,
-} from "./setup.ts";
+import { INTERVALS, dayProblem, latestReplayDay, problemMessage } from "./setup.ts";
 
 // Sat 2026-10-24, 11:00 AM ET.
 const SATURDAY = new Date("2026-10-24T15:00:00Z");
-const valid = (): SetupDraft => ({ ...defaultDraft(), symbol: "nvda", day: "2026-10-23", armed: [{ source: "alert_strategy", id: 7 }] });
 
-test("a filled draft validates against the contract and becomes the contract JSON; the session has no risk plan of its own (D-008)", () => {
-  const result = validateDraft(valid(), SATURDAY);
-  assert.equal(result.ok, true);
-  assert.deepEqual(draftToSpec(valid()), {
-    schemaVersion: 1,
-    symbol: "NVDA",
-    day: "2026-10-23",
-    window: { from: "09:30", to: "16:00" },
-    session: "regular",
-    interval: "5m",
-    shares: 100,
-    armed: [{ source: "alert_strategy", id: 7 }],
-    plan: { stopRequired: "no", signalOnly: "no" },
-    hideDate: "no",
-  });
-});
-
-test("the session draft holds only session-scope fields: no shares, stop, signal, loss, trades or note (D-008)", () => {
-  assert.deepEqual(Object.keys(defaultDraft()).sort(), ["armed", "day", "from", "interval", "session", "symbol", "to"]);
-});
-
-test("an empty draft reports a message per field, never a raw Zod message", () => {
-  const result = validateDraft(defaultDraft(), SATURDAY);
-  assert.equal(result.ok, false);
-  if (result.ok) return;
-  assert.equal(result.problems.day, "Pick a day");
-  assert.match(result.problems.symbol ?? "", /stock or ETF symbol/);
-});
-
-test("bad numbers and windows land on the field that shows them", () => {
-  const cases: Array<[Partial<SetupDraft>, string, RegExp]> = [
-    [{ from: "11:00", to: "10:00" }, "window", /before/],
-    [{ from: "08:00" }, "window", /09:30-16:00/],
-    [{ symbol: "/ES" }, "symbol", /stock or ETF/],
-  ];
-  for (const [patch, field, message] of cases) {
-    const result = validateDraft({ ...valid(), ...patch }, SATURDAY);
-    assert.equal(result.ok, false, JSON.stringify(patch));
-    if (!result.ok) assert.match(result.problems[field as keyof typeof result.problems] ?? "", message, JSON.stringify(patch));
-  }
-});
-
-test("the extended session takes 04:00 to 20:00; switching resets the window", () => {
-  const extended = withSession(valid(), "extended");
-  assert.deepEqual([extended.from, extended.to], ["04:00", "20:00"]);
-  assert.equal(validateDraft(extended, SATURDAY).ok, true);
-  assert.deepEqual([withSession(extended, "regular").from, withSession(extended, "regular").to], ["09:30", "16:00"]);
-});
-
-test("no more than 5 strategies arm, and toggling twice removes one", () => {
-  let armed = [] as SetupDraft["armed"];
-  for (let id = 1; id <= 7; id += 1) armed = toggleArmed(armed, { source: "filter", id });
-  assert.equal(armed.length, 5);
-  assert.equal(toggleArmed(armed, { source: "filter", id: 3 }).length, 4);
-  assert.equal(toggleArmed([], { source: "filter", id: 1 }).length, 1);
-});
-
-test("a notable day or a typed date fills the draft, and the spec sends hideDate \"no\" (the contract's field, ignored by the server)", () => {
-  const picked = withNotableDay(defaultDraft(), { symbol: "NVDA", day: "2026-04-07" });
-  assert.deepEqual([picked.symbol, picked.day], ["NVDA", "2026-04-07"]);
-  assert.equal((draftToSpec(picked) as { hideDate: string }).hideDate, "no");
-  assert.equal(withTypedDay(picked, "2026-04-08").day, "2026-04-08");
+test("the chart intervals are 1m, 5m and 15m", () => {
+  assert.deepEqual([...INTERVALS], ["1m", "5m", "15m"]);
 });
 
 test("local day checks use the plan's wording", () => {
@@ -102,13 +27,8 @@ test("the latest day opens at 4:15 PM ET on a weekday, else it is the previous w
   assert.equal(latestReplayDay(new Date("2026-10-26T12:00:00Z")), "2026-10-23", "Monday morning");
 });
 
-test("server problems map to fields and keep the server's plain message", () => {
-  assert.equal(fieldOfPath("plan.maxLossUsd"), "form");
-  assert.equal(fieldOfPath("window.from"), "window");
-  assert.equal(fieldOfPath("armed.2.id"), "armed");
-  assert.equal(fieldOfPath("other"), "form");
-  const error = new DeskApiError("http", 422, { problems: [{ path: "day", message: "No trades for XYZ on Fri 2026-10-23" }, { path: "day", message: "second" }] });
-  assert.deepEqual(fieldProblems(error.problems), { day: "No trades for XYZ on Fri 2026-10-23" });
+test("a failed request shows the server's first plain message, else its detail, else the fallback", () => {
+  const error = new DeskApiError("http", 422, { problems: [{ path: "startAt", message: "No trades for XYZ on Fri 2026-10-23" }, { path: "startAt", message: "second" }] });
   assert.equal(problemMessage(error, "fallback"), "No trades for XYZ on Fri 2026-10-23");
   assert.equal(problemMessage(new DeskApiError("http", 409, { detail: "The playhead moved" }), "fallback"), "The playhead moved");
   assert.equal(problemMessage(new DeskApiError("http", 500), "fallback"), "fallback");

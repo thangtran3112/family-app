@@ -6,9 +6,9 @@ import { PRACTICE_COPY } from "../desk/freshness.ts";
 import type { Speed } from "./clock.ts";
 import { problemMessage } from "./setup.ts";
 import { ms } from "./time.ts";
-import { commandThreadClock, loadThreadClock, rolledText, shownClock, skipThreadDay, type ClockCommand, type SkipDay, type ThreadClock } from "./threadClock.ts";
+import { commandThreadClock, loadThreadClock, shownClock, type ClockCommand, type ThreadClock } from "./threadClock.ts";
 
-// The Summary's view of the day thread's server-side clock (ADR-0018). RECOMMENDATION, polling: the server settles the clock lazily on
+// The Summary's view of the freestyle thread's server-side clock (ADR-0018, ADR-0025). RECOMMENDATION, polling: the server settles the clock lazily on
 // every read, so a poll is one idempotent request and needs no connection, and no-lookahead rules out pricing a balance in the browser
 // (it would need prices after the clock). The page asks every POLL_MS while it is visible, and at once when it becomes visible again.
 // Between polls only the TIME LABEL moves (`extrapolate`). Nothing here starts, stops or keeps the clock: leaving the page or signing
@@ -25,8 +25,6 @@ export type ThreadClockApi = {
   shown: string | null;
   /** The last read failed: `shown` is held at the last time the server confirmed (`clock.clock`) and the controls wait for an answer. */
   stale: boolean;
-  /** Set when the clock reached the next session on its own since the last answer: the day that ended and where the next one stands. Stays until she skips a day or leaves the page: the next day is already open and running. */
-  rolled: string | null;
   /** Counts up whenever the server's clock minute or state changed, so a screen that prices things at the clock can read again. */
   revision: number;
   loading: boolean;
@@ -36,11 +34,10 @@ export type ThreadClockApi = {
   play: () => Promise<boolean>;
   pause: () => Promise<boolean>;
   setSpeed: (speed: Speed) => Promise<boolean>;
-  skipDay: () => Promise<SkipDay | null>;
   refresh: () => void;
 };
 
-/** `threadId` null: no clock (a swing thread, or no thread). */
+/** `threadId` null: no clock (no thread, or a closed one). */
 export function useThreadClock(threadId: number | null): ThreadClockApi {
   const [snapshot, setSnapshot] = useState<{ clock: ThreadClock; at: number } | null>(null);
   const [revision, setRevision] = useState(0);
@@ -49,9 +46,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
   const [now, setNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(threadId !== null);
   const [stale, setStale] = useState(false);
-  const [rolled, setRolled] = useState<string | null>(null);
   const seen = useRef<string>("");
-  const day = useRef<{ id: number; no: number | null } | null>(null);
   const alive = useRef(true);
   const failures = useRef(0);
 
@@ -62,33 +57,21 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
     setStale(false);
     failures.current = 0;
     setLoading(false);
-    // The clock's MINUTE, not its second: prices change when a bar closes, and a screen that reads the whole day again on every revision (the
+    // The clock's MINUTE, not its second: prices change when a bar closes, and a screen that reads the whole book again on every revision (the
     // Portfolio) would have each read cancelled by the next poll's, so its "as of" never moved.
     const minute = clock.clock === null ? null : Math.floor(ms(clock.clock) / 60_000);
-    const key = `${clock.day_list_id}|${clock.state}|${clock.speed}|${minute}|${clock.account?.equity_usd}|${clock.account?.buying_power_usd}`;
+    const key = `${clock.state}|${clock.speed}|${minute}|${clock.pause?.kind ?? ""}|${clock.account?.equity_usd}|${clock.account?.buying_power_usd}`;
     if (key !== seen.current) {
       seen.current = key;
       setRevision((n) => n + 1);
     }
   }, []);
 
-  // The clock reaching the next session is not a button: the server ends the day and opens the next. An answer whose open day is another one than the last
-  // answer's (and that no Skip day of this screen caused) is that hand-over, and the screen says so once.
-  const follow = useCallback(
-    (clock: ThreadClock) => {
-      const before = day.current;
-      if (before !== null && clock.day_list_id !== before.id) setRolled(rolledText(before.no, clock));
-      day.current = clock.day_list_id === null ? null : { id: clock.day_list_id, no: clock.day_no };
-      take(clock);
-    },
-    [take],
-  );
-
   const read = useCallback(
     async (signal?: AbortSignal) => {
       if (threadId === null) return;
       try {
-        follow(await loadThreadClock(threadId, { signal }));
+        take(await loadThreadClock(threadId, { signal }));
       } catch {
         if (alive.current && !signal?.aborted) {
           failures.current += 1;
@@ -98,7 +81,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
         }
       }
     },
-    [threadId, follow],
+    [threadId, take],
   );
 
   useEffect(() => {
@@ -136,7 +119,7 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       if (threadId === null) return false;
       setBusy(true);
       try {
-        follow(await commandThreadClock(threadId, body));
+        take(await commandThreadClock(threadId, body));
         return true;
       } catch (failure) {
         if (alive.current) setError(problemMessage(failure, PRACTICE_COPY.clockActionError));
@@ -145,25 +128,8 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
         if (alive.current) setBusy(false);
       }
     },
-    [threadId, follow],
+    [threadId, take],
   );
-
-  const skipDay = useCallback(async (): Promise<SkipDay | null> => {
-    if (threadId === null) return null;
-    setBusy(true);
-    try {
-      const result = await skipThreadDay(threadId);
-      day.current = result.clock.day_list_id === null ? null : { id: result.clock.day_list_id, no: result.clock.day_no };
-      setRolled(null);
-      take(result.clock);
-      return result;
-    } catch (failure) {
-      if (alive.current) setError(problemMessage(failure, PRACTICE_COPY.clockActionError));
-      return null;
-    } finally {
-      if (alive.current) setBusy(false);
-    }
-  }, [threadId, take]);
 
   // Held at the last confirmed time while a read is failing: a clock that keeps running with no answer behind it is a guess.
   const shown = snapshot === null ? null : shownClock(snapshot.clock, now - snapshot.at, stale);
@@ -173,7 +139,6 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       clock: clockNow,
       shown,
       stale,
-      rolled,
       revision,
       loading,
       error,
@@ -182,9 +147,8 @@ export function useThreadClock(threadId: number | null): ThreadClockApi {
       play: () => command({ running: true }),
       pause: () => command({ running: false }),
       setSpeed: (speed: Speed) => command({ speed }),
-      skipDay,
       refresh: () => void read(),
     }),
-    [clockNow, shown, stale, rolled, revision, loading, error, busy, command, skipDay, read],
+    [clockNow, shown, stale, revision, loading, error, busy, command, read],
   );
 }
