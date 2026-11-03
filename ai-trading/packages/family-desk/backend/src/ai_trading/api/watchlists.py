@@ -1,10 +1,13 @@
 """`/api/desk/watchlists*` (PROTO-BRIEF.md §4 L4; 02m §a3.5 for rename, order, delete, and table)."""
 
+import logging
+import threading
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
+from ai_trading_common.errors import ProviderError
 from ai_trading_common.registry import DataSources
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +25,7 @@ from ai_trading.api.schemas.watchlists import (
     WatchlistTableRow,
 )
 from ai_trading.api.stamp import feed_last_ok, make_stamp
+from ai_trading.db.engine import session_scope
 from ai_trading.db.models import (
     Bar1d,
     Strategy,
@@ -40,6 +44,8 @@ from ai_trading.mvp_stub import stub_enabled, world
 from ai_trading.mvp_stub import watchlists as stub_watchlists
 
 router = APIRouter(prefix="/api/desk/watchlists", tags=["watchlists"])
+
+log = logging.getLogger(__name__)
 
 #: The table's metric rows come from the scheduler's 15-minute scan (02m §b3).
 TABLE_INTERVAL = timedelta(minutes=15)
@@ -284,10 +290,31 @@ def reorder_watchlist_items(
     return _items_out(session, ordered)
 
 
+def _backfill_in_background(
+    app: Any, data_sources: DataSources, symbol: str, asset: Literal["stock", "future"]
+) -> None:
+    """Backfill a joined symbol's bars on its own session, after the response. A stock's 10 years of daily and hourly
+    bars take ~90 s of provider calls (D-244). A process without a session factory (a test) skips it. A provider that
+    fails costs the symbol its history, not the add: it stays `backfill: pending` (the daily pass fills its daily bars
+    again) and the bars that did land are kept."""
+    factory = getattr(app.state, "session_factory", None)
+    if factory is None:
+        return
+    try:
+        with session_scope(factory) as session:
+            try:
+                backfill_on_join(session, data_sources, symbol=symbol, asset=asset, now=datetime.now(UTC))
+            except ProviderError as exc:
+                log.warning("backfill of %s stopped: %s %s", symbol, exc, getattr(exc, "__notes__", ""))
+    except Exception:  # noqa: BLE001 -- nothing awaits this thread; the item is already stored
+        log.exception("backfill of %s failed", symbol)
+
+
 @router.post("/{watchlist_id}/items", status_code=201, response_model=WatchlistItemOut)
 def add_watchlist_item(
     watchlist_id: int,
     body: WatchlistItemCreate,
+    request: Request,
     user: AuthedUser = Depends(get_current_user),
     session: Session = Depends(get_session),
     data_sources: DataSources = Depends(get_data_sources),
@@ -321,10 +348,17 @@ def add_watchlist_item(
         if session.get(WatchlistItem, key) is not None:
             raise HTTPException(status_code=409, detail="symbol already exists in watchlist") from exc
         raise
-    # Blocks the request (acceptable at Phase 3's data volumes, per the brief); a future symbol's
-    # stub/real backfill writes nothing, but the watchlist_items row is still created either way.
-    backfill_on_join(session, data_sources, symbol=symbol, asset=body.asset_type, now=datetime.now(UTC))
+    # Commit before the backfill, which would otherwise hold the list's row lock for as long as the provider takes and
+    # fail every other request on the list with 503 at `lock_timeout` (D-244). A detached thread, not `BackgroundTasks`:
+    # see `api/replay.py::_detach` (a yield dependency closes only after the background task). A future symbol's
+    # backfill writes nothing, but the `watchlist_items` row is created either way.
     session.commit()
+    threading.Thread(
+        target=_backfill_in_background,
+        args=(request.app, data_sources, symbol, body.asset_type),
+        name="backfill_on_join",
+        daemon=True,
+    ).start()
     return WatchlistItemOut(watchlist_id=watchlist_id, symbol=item.symbol, asset_type=item.asset_type)
 
 
