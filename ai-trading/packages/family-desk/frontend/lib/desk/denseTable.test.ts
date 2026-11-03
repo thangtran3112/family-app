@@ -30,6 +30,18 @@ test("hideWhenEmpty drops a column only when every row is empty in it", () => {
   assert.deepEqual(keys([]), ["name", "tag", "always"], "no rows: the empty state decides, not the columns");
 });
 
+test("nothing dropped hands back the very same column list, so a refresh of the values does not look like new columns (D-212)", () => {
+  type Row = { name: string; tag: string | null };
+  const columns = [
+    { key: "name", label: "Name", render: (row: Row) => row.name },
+    { key: "tag", label: "Tag", hideWhenEmpty: true, render: (row: Row) => row.tag },
+  ];
+  assert.equal(dropEmptyColumns(columns, [{ name: "A", tag: "x" }]), columns);
+  assert.equal(dropEmptyColumns(columns, [{ name: "B", tag: "y" }, { name: "C", tag: null }]), columns, "the rows changed, the columns did not");
+  assert.equal(dropEmptyColumns(columns, []), columns);
+  assert.notEqual(dropEmptyColumns(columns, [{ name: "A", tag: null }]), columns, "a column that drops is a new list");
+});
+
 test("a truncating column titles its cell with the text it clips", () => {
   const row = { name: "Volume spike near support" };
   assert.equal(cellTitle({ truncate: true, render: (r: typeof row) => r.name }, row), "Volume spike near support");

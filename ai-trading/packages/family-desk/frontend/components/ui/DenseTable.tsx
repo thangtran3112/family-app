@@ -94,7 +94,8 @@ export function DenseTable<R>({
     setFit((previous) => (sameFit(previous, next) ? previous : next));
   }, []);
   // Measure before paint, so a column that does not fit is never shown: each header cell's width with the table at its natural width (one-line
-  // headers, then wrapped headers), the dropped columns shown for the measure (CSS `data-measure`). Again when the columns or the rows change.
+  // headers, then wrapped headers), the dropped columns shown for the measure (CSS `data-measure`). Again when the columns or the number of rows change, not when
+  // a poll only changes the values: `visible` keeps its identity then (`dropEmptyColumns`), so a table that refreshes every 2 s is not laid out twice more each time (D-212).
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
