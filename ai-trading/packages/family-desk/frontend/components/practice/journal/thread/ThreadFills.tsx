@@ -6,13 +6,13 @@ import { QueryBoundary } from "@/components/ui/StateBlocks";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { withPriorities } from "@/lib/desk/columns";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { dayLabels, fillRows, loadThreadFills, type FillRow } from "@/lib/replay/fills";
+import { fillRows, loadThreadFills, type FillRow } from "@/lib/replay/fills";
 import type { Thread } from "@/lib/replay/threads";
 import styles from "./threadJournal.module.css";
 
 const COLUMNS = withPriorities<DenseColumn<FillRow>>(
   [
-    { key: "day", label: "Day", render: (row) => row.day },
+    { key: "day", label: PRACTICE_COPY.fillsDate, render: (row) => row.date },
     { key: "time", label: "Time (ET)", render: (row) => row.time },
     { key: "symbol", label: "Symbol", render: (row) => row.symbol },
     { key: "action", label: "Action", render: (row) => row.action },
@@ -23,7 +23,7 @@ const COLUMNS = withPriorities<DenseColumn<FillRow>>(
   "threadFills",
 );
 
-/** Every Buy and Sell of a day thread, newest first, as the server booked them. Day threads only: a swing thread has no fills route. */
+/** Every Buy and Sell of the thread, newest first, as the server booked them. */
 export function ThreadFills({ thread }: { thread: Thread }) {
   const id = thread.thread.id;
   const query = useDeskQuery(`thread-fills:${id}`, (signal) => loadThreadFills(id, { signal }));
@@ -36,7 +36,7 @@ export function ThreadFills({ thread }: { thread: Thread }) {
       <QueryBoundary query={query} loading={PRACTICE_COPY.fillsLoading} height={96} message={PRACTICE_COPY.fillsLoadError}>
         {(data) => (
           <>
-            <DenseTable caption={PRACTICE_COPY.fillsCaption} columns={COLUMNS} rows={fillRows(data.fills, dayLabels(thread))} rowKey={(row) => row.key} empty={PRACTICE_COPY.fillsEmpty} />
+            <DenseTable caption={PRACTICE_COPY.fillsCaption} columns={COLUMNS} rows={fillRows(data.fills)} rowKey={(row) => row.key} empty={PRACTICE_COPY.fillsEmpty} />
             {data.total > data.fills.length && <p className={styles.hint}>{practiceText("fillsMore", { shown: data.fills.length, total: data.total })}</p>}
           </>
         )}

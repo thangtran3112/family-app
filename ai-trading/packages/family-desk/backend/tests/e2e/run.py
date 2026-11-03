@@ -5,7 +5,7 @@
     uv run python tests/e2e/run.py --checks                         # only the real-HTTP and alert-path checks
 
 `--browser` runs only Playwright; whatever follows `--` goes to `playwright test`. `--checks` runs only the checks
-(`http_check.py`, `technical_check.py`, `swing_flow_check.py`). Needs the static export (`pnpm build`) and
+(`http_check.py`, `technical_check.py`). Needs the static export (`pnpm build`) and
 `DESK_E2E_ADMIN_DATABASE_URL`, a loopback Postgres maintenance database."""
 
 import argparse
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             if browser_result or args.browser:
                 return browser_result
 
-        for check in ("http_check.py", "technical_check.py", "swing_flow_check.py"):
+        for check in ("http_check.py", "technical_check.py"):
             result = _run_in_database(
                 admin_engine,
                 admin,

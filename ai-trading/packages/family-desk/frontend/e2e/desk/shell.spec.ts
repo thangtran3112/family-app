@@ -27,7 +27,7 @@ test("the mode button names the mode in full and opens a three-item menu; a pick
   const expected: Array<[string, string, string]> = [
     ["Technical", "Screener, watchlists, alerts, strategies", "/?mode=technical"],
     ["Fundamental", "Holdings, covered calls, research", "/?mode=fundamental"],
-    ["Backtest", "Day and swing practice on past days, journal", "/practice"],
+    ["Backtest", "Freestyle practice on past days, journal", "/practice"],
   ];
   for (const [index, [label, summary, href]] of expected.entries()) {
     await expect(items.nth(index)).toContainText(label);

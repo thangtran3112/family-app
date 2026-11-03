@@ -1,48 +1,38 @@
-"""Daily-list practice (02o-b v1): the plan, the day lists, the stars, the day's session, and ending the day.
+"""The freestyle thread's plan, its Screen and its lanes (02o-b, rewritten by ADR-0025).
 
-Each practice day, her own filters build a candidate list for the past day she is about to replay
-(`screen.build_list`: the live screener fed from the blob cache and cut at the time she would have looked). She opens
-any names from it by clicking them, practises them one at a time, and ends the day to see how every candidate moved
-from its list price. The names she opened are her portfolio for the day: a row for each, flat or holding its one open
-trade, with the day's P/L.
+A thread has ONE plan (`create_plan`: a start instant, her filters, the chart setup) and ONE Screen (a
+`replay_day_lists` row with `thread_id` set, kept because its candidate/scan machinery is the Screen's). There is no day
+to open, list, relist, end or review, and no block of days: the Screen is her filters evaluated at the thread's time T,
+and she re-scans it whenever she wants a fresh look.
 
-- **Walk forward.** `practice_plans` is the saved setup plus a cursor. Days open in order, one list at a time; the
-  next day opens only after the current one has ended. Dates are returned and hidden by a render rule.
-- **Switching names on a shared day clock (02o-b2).** `replay_day_lists.revealed_through` is the day clock: `advance`
-  moves it, a new session starts at it, and a name behind it is caught up by its next advance and cannot be marked
-  until then. A day opens any number of list names (a saved plan's `maxSymbols` is accepted and ignored), with one open
-  trade at a time: she closes the trade on one name before she moves to another. What a name did while she was
-  elsewhere is on the chart as history and is not scored (`replay_sessions.away`).
-- **Re-scan at the playhead (02o-b2, repopulating since 2026-11-01).** `start_rescan` marks a job on the day list; the
-  API runs `run_rescan` in the background: the day's filters run again at the day clock, with the filter versions the
-  list used and every input cut 15 minutes before the clock. The job reports symbols read (`rescan_job`), the screen
-  polls it, and when it finishes the scan REPLACES the day list's names, columns, counts and data cut: one list, never a
-  second one beside it. A name she opened or starred that the scan no longer matches stays on the list (`held_over`); a
-  name the list did not hold is `new_since_list`. Each scan is also a row (`replay_day_scans`) labelled with the clock.
-- **Nothing past the cut before the day ends.** The list, the stars and Peek carry nothing after `data_through` or
-  the day clock; the review (moves from the list price) is stored on `end_day` and served only once the day ended.
-- **Prep** runs once at plan creation in the background (`run_prep`): bars for every day of the plan; a day's
-  list reads the blob cache and fetches only what is missing.
+- **Screen.** `start_rescan` marks a job on the Screen row; the API runs `run_rescan` in the background: the filters run
+  again at T, with the filter versions the Screen used and every input cut 15 minutes before T (the data day is the one
+  of T). The job reports symbols read (`rescan_job`), the screen polls it, and when it finishes the scan REPLACES the
+  Screen's names, columns, counts and data cut: one list, never a second beside it. A name she holds or starred that the
+  scan no longer matches stays (`held_over`); a name the Screen did not hold is `new_since_list`. Each scan is also a
+  row (`replay_day_scans`) labelled with T. A filter that reads bars that cannot have closed yet at T keeps its
+  scan-time message (`screen.earliest_list_at`), so look-ahead stays impossible.
+- **Lanes.** `open_lane` opens (or resumes) her book for a name: one `replay_sessions` row per (thread, symbol) for the
+  thread's life, at T. A name needs no trade closed first; a position is never cut at a day.
+- **Nothing past T.** The Screen, the stars and Peek carry nothing after `data_through` or T.
+- **No prep job.** The universe is prepared lazily by the first re-scan (its progress job) and rolling `warm`.
 """
 
 import logging
 import secrets
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
 from ai_trading_common.errors import ProviderError
-from pydantic import ValidationError
-from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from ai_trading.contracts.practice_block import PracticeBlockV1
+from ai_trading.contracts.practice_setup import PracticeSetupV2
 from ai_trading.contracts.replay_session import ReplaySessionV1
-from ai_trading.core.calendar import et, next_session
+from ai_trading.core.calendar import ET, et
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.data.universe import SEED_SYMBOLS, ensure_universe, split_plain
 from ai_trading.db.models import (
@@ -59,17 +49,13 @@ from ai_trading.db.models import (
 )
 from ai_trading.replay import days as days_mod
 from ai_trading.replay import frames as frames_mod
-from ai_trading.replay import journal as journal_mod
-from ai_trading.replay import prep as prep_mod
-from ai_trading.replay import review as review_mod
+from ai_trading.replay import positions as positions_mod
 from ai_trading.replay import screen
 from ai_trading.replay import session as session_mod
 from ai_trading.replay import threads as threads_mod
-from ai_trading.replay import universe_days as universe_mod
-from ai_trading.replay.cache import BlobKey, BlobStore
 from ai_trading.replay.data import ReplayDayError, check_day
 from ai_trading.replay.model import ENTRY_KINDS, INTERVAL_MINUTES, add_span
-from ai_trading.replay.screen import ASOF_PART, EARLIEST_LIST_DAY, FilterInput, build_list, cut_frames
+from ai_trading.replay.screen import FilterInput, build_list, cut_frames
 from ai_trading.replay.session import ReplayProblem, Services, SessionNotFound, jsonable
 from ai_trading.screener.evaluator import SymbolBars, check_filter
 from ai_trading.screener.runner import source_symbols
@@ -77,18 +63,18 @@ from ai_trading.screener.runner import source_symbols
 log = logging.getLogger(__name__)
 
 MAX_UNIVERSE = 250
-PREP_STALE = timedelta(minutes=5)  # a prep that has not reported for this long died with its process
 RESCAN_STALE = timedelta(minutes=2)  # a re-scan that has not reported for this long died with its process
 RESCAN_TICK_S = 0.4  # a running re-scan writes its progress at most this often
 RESCAN_DIED = "The re-scan stopped before it finished · run it again"
 EARNINGS_BUDGET_S = 8.0  # the earnings flag is a convenience: it never holds the list up
 PEEK_DAILY_BARS = 120
-# A day session's entry size unless the thread sets one (D-042); each entry may still differ (`PracticeMarkV1.shares`).
+# A lane's entry size unless the thread sets one (D-042); each entry may still differ (`PracticeMarkV1.shares`).
 DAY_SESSION_SHARES = 100
 FEW_NAMES = 20
-# Owner rule (2026-11-02): a thread has fewer than 50 stocks, so a day list holds at most 49 names. The contract's own
-# `maxList` bound stays at 50 (a stored plan that says 50 must still load): this is enforced where a plan is created and
-# where a list is built or re-scanned, and again where a name is opened.
+# Owner rule (2026-11-02): a thread has fewer than 50 stocks, so the Screen holds at most 49 names (and a thread
+# tracks at most 49 names with a position or an order: `session.MAX_HELD_NAMES`). The contract's own `maxList` bound
+# stays at 50 (a stored plan that says 50 must still load): this is enforced where a plan is created and where the
+# Screen is re-scanned.
 MAX_LIST = 49
 UNIVERSE_LABEL = (
     "Practice universe · {size} symbols the Desk has scanned · the live screener that morning may have scanned others"
@@ -109,52 +95,8 @@ def without_legacy_plan_fields(block: Any) -> Any:
     return {**block, "setup": {key: value for key, value in setup.items() if key not in LEGACY_SETUP_KEYS}}
 
 
-# -- the schedule --------------------------------------------------------------------------------------------
-
-
-def plan_days(first_day: date, count: int) -> list[date]:
-    """`count` trading sessions starting at `first_day` (itself a session)."""
-    out, cursor = [], first_day
-    while len(out) < count:
-        if trading_session("stock", cursor) is not None:
-            out.append(cursor)
-        cursor += timedelta(days=1)
-    return out
-
-
-def check_range(first: date, sessions: int, now: datetime, *, path: str = "firstDay") -> list[date]:
-    """The days of a plan or a swing thread, or the plain 422 that says why `first` and `sessions` cannot run."""
-    if first < EARLIEST_LIST_DAY:
-        raise ReplayProblem("Daily lists start on Jan 3, 2017 · pick a later day", path=path)
-    past_the_end = ReplayProblem(
-        f"{sessions} sessions from {first:%a %Y-%m-%d} run past the last finished day · pick an earlier start",
-        path=path,
-    )
-    if first > now.date():  # also keeps the calendar lookup below inside the years the calendar covers
-        raise past_the_end
-    if trading_session("stock", first) is None:
-        raise ReplayProblem(f"No trading on {first:%a %Y-%m-%d} · pick a weekday", path=path)
-    days = plan_days(first, sessions)
-    try:
-        check_day(days[-1], now)
-    except ReplayDayError:
-        raise past_the_end from None
-    return days
-
-
 def _weekday(day: date) -> str:
     return day.strftime("%a")
-
-
-def _is_swing(plan: PracticePlan) -> bool:
-    return plan.spec.get("mode") == "swing"
-
-
-def _swing() -> Any:
-    """The swing module, imported on first use: it imports this module."""
-    from ai_trading.replay import swing
-
-    return swing
 
 
 # -- the universe --------------------------------------------------------------------------------------------
@@ -209,12 +151,6 @@ def clock12(hhmm: str) -> str:
     return f"{hours % 12 or 12}:{minutes:02d} {'AM' if hours < 12 else 'PM'}"
 
 
-def _early_list_message(name: str, spec: dict[str, Any], need: str) -> str:
-    if spec["watch"]["runOn"] == "premarket_0830":
-        return f"Premarket filters need a list time of {clock12(need)} or later"
-    return f"{name} needs a list time of {clock12(need)} or later · before then none of its bars of the day has closed"
-
-
 def _resolve_filters(
     db: Session, user_id: int, refs: list[dict[str, int]]
 ) -> list[tuple[FilterStrategy, dict[str, Any], int]]:
@@ -252,232 +188,10 @@ def _ensure_desk_universe(db: Session, svc: Services, now: datetime) -> None:
         log.warning("universe build for a new plan: provider lists failed: %s", sorted(build.failed))
 
 
-def create_plan(
-    db: Session, user_id: int, spec: PracticeBlockV1, svc: Services, thread: PracticeThread
-) -> PracticePlan:
-    """Validate and save a plan, archive the one it replaces (ending its half-practised day), freeze the universe, and
-    mark prep as running (the caller starts `run_prep`). Server rules that need a lookup: the day range, her filters,
-    the premarket list time.
-    The plan binds to `thread`, which carries the risk plan (D-007): the block's own plan fields are never read."""
-    dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
-    first = date.fromisoformat(dumped["firstDay"])
-    check_range(first, dumped["sessions"], svc.now())
-    if dumped["screen"]["maxList"] > MAX_LIST:
-        raise ReplayProblem(f"A day list holds at most {MAX_LIST} names", path="screen.maxList")
-    resolved = _resolve_filters(db, user_id, dumped["screen"]["filters"])
-    for row, spec, _ in resolved:
-        need = screen.earliest_list_at(spec)
-        if dumped["screen"]["listAt"] < need:
-            raise ReplayProblem(_early_list_message(row.name, spec, need), path="screen.listAt")
-
-    now = svc.now()
-    old = active_plan(db, user_id, thread_id=thread.id, lock=True)
-    if old is not None:
-        # One open day at a time (D-030): a day the old plan left half practised ends with the plan. Its trades are
-        # already booked in the thread's ledger, so ending it keeps its P/L, and the new plan's Day 1 is the only day
-        # open (TODAY then agrees with the balance). A day that was only listed has booked nothing and is left alone.
-        under_way = _latest(db, old.id)
-        if under_way is not None and under_way.status == "practicing":
-            end_day(db, user_id, under_way.id, svc)
-        old.status, old.updated_at = "archived", now  # its lists stay readable; one plan is live per thread
-        db.flush()
-    _ensure_desk_universe(db, svc, now)
-    symbols, capped = practice_universe(db, user_id)
-    row = PracticePlan(
-        owner_user_id=user_id,
-        schema_version=1,
-        spec=dumped,
-        first_day=first,
-        universe={"source": "desk", "symbols": symbols, "capped": capped, "frozen_at": now.isoformat()},
-        prep={"state": "running", "done": 0, "total": len(symbols), "failed": {}, "updated_at": now.isoformat()},
-        day_cursor=None,
-        days_opened=0,
-        status="active",
-        created_at=now,
-        updated_at=now,
-        thread_id=thread.id,
-    )
-    db.add(row)
-    db.flush()
-    return row
-
-
-def _quiet(_message: str) -> None:
-    return None
-
-
-def run_prep(db: Session, svc: Services, plan_id: int) -> dict[str, Any]:
-    """Fetch the plan's bars once, symbol by symbol, committing progress after each (the block row is the cursor,
-    so a restart resumes through the write-once blob cache). Raw daily and 1-minute bars come from the landed
-    `prep.preload_bars`; the as-of daily frames are built beside them. A symbol that fails is recorded, never fatal."""
-    plan = db.get(PracticePlan, plan_id)
-    if plan is None:
-        log.warning("daily-list prep: plan %s is not visible", plan_id)
-        return {}
-    if _is_swing(plan):  # a swing thread's plan: its universe is fixed and it loads SPY too
-        return _swing().run_prep(db, svc, plan_id)
-    days = plan_days(plan.first_day, plan.spec["sessions"])
-    store = svc.store_factory(db)
-    symbols = list(plan.universe["symbols"])
-    failed: dict[str, str] = {}
-    for done, symbol in enumerate(symbols, start=1):
-        try:
-            report = prep_mod.preload_bars(
-                svc.history, store, [symbol], days, now=svc.now(), say=_quiet, lookback=screen.LIST_LOOKBACK_SESSIONS
-            )
-            if report.failed:
-                failed[symbol] = report.failed[symbol]
-            else:
-                screen.asof_frames(svc.history, store, symbol, days)
-        except Exception as exc:  # noqa: BLE001 -- one symbol must not stop a 130-symbol prep
-            db.rollback()
-            failed[symbol] = type(exc).__name__
-        plan = db.get(PracticePlan, plan_id)
-        assert plan is not None
-        plan.prep = {
-            "state": "running" if done < len(symbols) else "done",
-            "done": done,
-            "total": len(symbols),
-            "failed": failed,
-            "updated_at": svc.now().isoformat(),
-        }
-        db.commit()
-    if not symbols:
-        plan.prep = {**plan.prep, "state": "done"}
-        db.commit()
-    return plan.prep
-
-
-def _prep_stale(plan: PracticePlan, now: datetime) -> bool:
-    if plan.prep.get("state") != "running":
-        return False
-    return pd.Timestamp(now) - pd.Timestamp(plan.prep["updated_at"]) > PREP_STALE
-
-
-def _day_ready(plan: PracticePlan, store: BlobStore, day: date) -> bool:
-    """True when the as-of frames of `day` exist for the whole universe, or prep is over (it fetches the rest)."""
-    if plan.prep.get("state") == "done":
-        return True
-    wanted = BlobKey("bars1d", "", day, ASOF_PART, "sip")
-    for symbol in plan.universe["symbols"]:
-        if wanted._replace(symbol=symbol) not in store.keys("bars1d", symbol, [day]):
-            return False
-    return True
-
-
 # -- plan out ------------------------------------------------------------------------------------------------
 
 
-def _latest(db: Session, plan_id: int) -> ReplayDayList | None:
-    return db.execute(
-        select(ReplayDayList).where(ReplayDayList.plan_id == plan_id).order_by(ReplayDayList.day.desc()).limit(1)
-    ).scalar_one_or_none()
-
-
-def _day_offset(db: Session, plan: PracticePlan) -> int:
-    """The days the thread had ended before this plan began (D-047). A plan counts its own days from 1, so a plan that
-    replaced another starts again at 1; the thread's own count (the journal's `n`) is `day_no + offset`, one number
-    for each day of the thread on every screen."""
-    if plan.thread_id is None:
-        return 0
-    return db.execute(
-        select(func.count())
-        .select_from(ReplayDayList)
-        .join(PracticePlan, PracticePlan.id == ReplayDayList.plan_id)
-        .where(
-            PracticePlan.thread_id == plan.thread_id,
-            PracticePlan.id < plan.id,
-            ReplayDayList.status == "ended",
-        )
-    ).scalar_one()
-
-
-def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
-    if _is_swing(plan):
-        return _swing().plan_out(db, plan)
-    spec = without_legacy_plan_fields(plan.spec)
-    days = plan_days(plan.first_day, spec["sessions"])
-    latest = _latest(db, plan.id)
-    finished = latest is not None and latest.status == "ended" and latest.day == days[-1]
-    if latest is None:
-        upcoming: date | None = days[0]
-    elif latest.status != "ended":
-        upcoming = latest.day
-    else:
-        upcoming = None if finished else days[days.index(latest.day) + 1]
-    names = {
-        row.id: row.name
-        for row in db.execute(
-            select(FilterStrategy).where(FilterStrategy.id.in_([f["id"] for f in spec["screen"]["filters"]]))
-        ).scalars()
-    }
-    prep = plan.prep
-    return {
-        "id": plan.id,
-        "thread_id": plan.thread_id,
-        "sessions": spec["sessions"],
-        "days_opened": plan.days_opened,
-        "day_offset": _day_offset(db, plan),
-        "spec": spec,
-        "filters": [{"id": f["id"], "name": names.get(f["id"], "Removed filter")} for f in spec["screen"]["filters"]],
-        "current": None if latest is None else {"id": latest.id, "day_no": latest.day_no, "status": latest.status},
-        "next_day": upcoming,
-        "next_weekday": None if upcoming is None else _weekday(upcoming),
-        "next_day_no": None if upcoming is None else days.index(upcoming) + 1,
-        "weekdays": [_weekday(day) for day in days],
-        "finished": finished,
-        "prep": {
-            "state": prep["state"],
-            "done": prep["done"],
-            "total": prep["total"],
-            "failed": len(prep.get("failed", {})),
-        },
-    }
-
-
 # -- opening a day -------------------------------------------------------------------------------------------
-
-
-@dataclass
-class Opened:
-    plan: PracticePlan
-    day_list: ReplayDayList | None  # None while the data is still being prepared, or when every day is done
-    restart_prep: bool = False  # the prep died with its process: the caller starts it again
-
-
-@dataclass(frozen=True)
-class ClockCarry:
-    """The thread clock handed to the day that follows (the clock reached the next session, or she skipped to it): the
-    new day's clock starts exactly where the old one was, with the same speed and Play state, so the gap to real time
-    does not change."""
-
-    at: datetime
-    running: bool
-    speed: int
-
-
-def day_start(plan: PracticePlan, day: date) -> pd.Timestamp:
-    """When practice on `day` begins: the plan's "Start at" time. It is where a plan's FIRST day's clock starts (no
-    clock is handed over then). A later day opens at the exchange's open (`next_day_start`), never here."""
-    return et(day, plan.spec["setup"]["window"]["from"])
-
-
-def next_day_start(db: Session, day_list: ReplayDayList) -> pd.Timestamp:
-    """When `day_list`'s day ends and the next begins: the exchange's regular open (9:30 ET) of the plan's next trading
-    day, never the plan's "Start at" time (starting later than the open would hide the open from her: practice bias).
-    The thread clock hands over to that day when it gets there (`clock.roll`), and Skip day jumps there; the weekend, a
-    holiday and the night are ordinary time in between. The plan's last day ends at the next trading day's open too, so
-    a day always has a natural end (and so its review), though no further day of the plan follows it."""
-    plan = db.get(PracticePlan, day_list.plan_id)
-    assert plan is not None
-    days = plan_days(plan.first_day, plan.spec["sessions"])
-    index = days.index(day_list.day) + 1 if day_list.day in days else len(days)
-    return session_mod.market_open(days[index] if index < len(days) else next_session("stock", day_list.day))
-
-
-def plan_end(plan: PracticePlan) -> pd.Timestamp:
-    """When the plan's last day ends: the open that follows it. The latest instant the thread clock can be jumped to."""
-    return session_mod.market_open(next_session("stock", plan_days(plan.first_day, plan.spec["sessions"])[-1]))
 
 
 def _filter_inputs(
@@ -545,226 +259,7 @@ def _universe_note(
     return {"label": notes[0], "footnote": " · ".join(notes)}
 
 
-def _refresh_universe(db: Session, plan: PracticePlan, svc: Services, now: datetime) -> bool:
-    """Freeze today's Desk universe onto the plan (D-011). A plan saved before the universe was built or grown kept its
-    old set for every later day (17 names beside 134); each day's list now reads the current set, the way the live
-    screener does. Returns True when the set gained symbols: their bars are not prepared yet, so prep runs again."""
-    _ensure_desk_universe(db, svc, now)
-    symbols, capped = practice_universe(db, plan.owner_user_id)
-    kept = list(plan.universe["symbols"])
-    if symbols == kept and capped == bool(plan.universe.get("capped")):
-        return False
-    plan.universe = {"source": "desk", "symbols": symbols, "capped": capped, "frozen_at": now.isoformat()}
-    grew = bool(set(symbols) - set(kept))
-    if grew:
-        plan.prep = {"state": "running", "done": 0, "total": len(symbols), "failed": {}, "updated_at": now.isoformat()}
-    return grew
-
-
-def _prepared(plan: PracticePlan, store: BlobStore, day: date, grew: bool, now: datetime) -> tuple[bool, bool]:
-    """`(ready, restart_prep)` for building `day`'s list. A universe that just grew resets prep to running; when every
-    symbol's frames are already cached the list can build now and prep is over, else prep must run again."""
-    ready = _day_ready(plan, store, day)
-    if ready and grew:
-        plan.prep = {**plan.prep, "state": "done", "done": plan.prep["total"], "updated_at": now.isoformat()}
-    if ready:
-        return True, False
-    restart = grew or _prep_stale(plan, now)
-    if restart:
-        plan.prep = {**plan.prep, "updated_at": now.isoformat()}
-    return False, restart
-
-
-def _list_fields(db: Session, plan: PracticePlan, day: date, svc: Services, store: BlobStore, now: datetime) -> dict:
-    """The list of `day` from the plan as it stands now: the columns of a `ReplayDayList` that the build decides."""
-    spec = plan.spec
-    list_at = et(day, spec["screen"]["listAt"])
-    # The morning's recorded universe (when a premarket pass wrote one) is what the Desk scanned then, else today's set.
-    symbols, member = universe_mod.membership(list(plan.universe["symbols"]), universe_mod.symbols_on(db, day))
-    filters = _filter_inputs(db, plan, symbols)
-    built = build_list(
-        filters=filters,
-        daily_of=screen.asof_loader(svc.history, store, day),
-        minutes_of=screen.minutes_loader(svc.history, store, day),
-        day=day,
-        list_at=list_at,
-        max_list=min(spec["screen"]["maxList"], MAX_LIST),
-    )
-    states = earnings_states(svc.sources, [c["symbol"] for c in built.candidates], day, now)
-    for candidate in built.candidates:
-        candidate["earnings_state"] = states.get(candidate["symbol"])
-    note = _universe_note(len(symbols), filters, bool(plan.universe.get("capped")), member)
-    return {
-        "screen": {
-            "filters": [{"id": f.id, "version_id": f.version_id, "name": f.name} for f in filters],
-            "listAt": spec["screen"]["listAt"],
-            "maxList": min(spec["screen"]["maxList"], MAX_LIST),
-        },
-        "list_at": list_at.to_pydatetime(),
-        "data_through": built.data_through.to_pydatetime(),
-        "universe": jsonable(
-            {
-                "source": "desk",
-                **built.universe,
-                "matches_total": built.matches_total,
-                "shown": len(built.candidates),
-                "prev_basis": built.prev_basis,
-                "filters": built.filters,
-                "membership": {key: value for key, value in member.items() if key != "symbols"},
-                "symbols": symbols,
-                **note,
-            }
-        ),
-        "columns": built.columns,
-        "candidates": jsonable(built.candidates),
-    }
-
-
-def open_next(
-    db: Session, user_id: int, svc: Services, thread_id: int | None = None, carry: ClockCarry | None = None
-) -> Opened:
-    """The current day list while it is not over; else the next day's list, built now on today's Desk universe
-    (D-011). While the plan's data is not ready the result carries no list and the plan's prep progress says why.
-    Every day done: no list. `thread_id` names the thread (else her most recent day thread); a swing thread continues
-    its own calendar (`swing.open_next`). The new day's clock starts paused at the plan's "Start at" time on its first
-    day and at the exchange's open on every later one, unless `carry` hands over the thread clock (it reached this
-    day: it does not restart). No name has to be opened for
-    the clock to exist: it belongs to the thread, and Play is on the Summary."""
-    if thread_id is not None and threads_mod.get_thread(db, user_id, thread_id).mode == "swing":
-        return _swing().open_next(db, user_id, svc, thread_id)
-    plan = active_plan(db, user_id, thread_id=thread_id, lock=True)
-    if plan is None:
-        raise ReplayProblem("Start a daily practice plan first", path="plan", status=409)
-    plan_thread_id = plan.thread_id
-    days = plan_days(plan.first_day, plan.spec["sessions"])
-    latest = _latest(db, plan.id)
-    if latest is not None and latest.status != "ended":
-        return Opened(plan, latest)
-    index = 0 if latest is None else days.index(latest.day) + 1
-    if index >= len(days):
-        return Opened(plan, None)
-    day = days[index]
-    store = svc.store_factory(db)
-    now = svc.now()
-    ready, restart = _prepared(plan, store, day, _refresh_universe(db, plan, svc, now), now)
-    if not ready:
-        return Opened(plan, None, restart_prep=restart)
-
-    row = ReplayDayList(
-        plan_id=plan.id,
-        owner_user_id=user_id,
-        day=day,
-        day_no=index + 1,
-        **_list_fields(db, plan, day, svc, store, now),
-        watch=[],
-        revealed_through=(
-            pd.Timestamp(carry.at)
-            if carry is not None
-            else day_start(plan, day)
-            if latest is None
-            else session_mod.market_open(day)  # a later day opens at the exchange's open even when not handed the clock
-        ).to_pydatetime(),
-        status="listed",
-        clock_speed=carry.speed
-        if carry is not None
-        else 1
-        if latest is None
-        else latest.clock_speed,  # the speed she chose carries to the next day (ADR-0018)
-        clock_running=carry is not None and carry.running,
-        clock_anchor_at=svc.wall() if carry is not None and carry.running else None,
-        journal=None,
-        review=None,
-        notes=None,
-        rating=None,
-        created_at=now,
-        updated_at=now,
-        ended_at=None,
-    )
-    db.add(row)
-    plan.day_cursor, plan.days_opened, plan.updated_at = day, plan.days_opened + 1, now
-    try:
-        db.flush()
-    except IntegrityError:  # a concurrent open of the same day: use that list
-        db.rollback()
-        plan = active_plan(db, user_id, thread_id=plan_thread_id)
-        assert plan is not None
-        return Opened(plan, _latest(db, plan.id))
-    return Opened(plan, row)
-
-
-def relist(db: Session, user_id: int, day_list_id: int, list_at: str, svc: Services) -> Opened:
-    """Move the open plan's list time and rebuild this day's list in place (D-012). A plan saved at 8:30 with a filter
-    that reads the day's own 15-minute bars can never match there; this is the in-screen way out, where `End day`
-    would only close the day for good. Only a day she has not started can be relisted, and only on the live plan.
-
-    The list time is a plan field, so it moves for the plan's later days too, and the practice window starts no
-    earlier than the list (a window that opened before the list would let the list see the future). The same rules
-    as a new plan apply (422): each filter's earliest list time, and the window staying inside the session. When the
-    universe grew and its bars are not ready yet the plan is saved and the list stays as it was: relist again once
-    the plan's data is prepared (the result then carries `restart_prep`)."""
-    row = get_day_list(db, user_id, day_list_id, lock=True)
-    owner_plan = db.get(PracticePlan, row.plan_id)
-    plan = active_plan(db, user_id, thread_id=None if owner_plan is None else owner_plan.thread_id, lock=True)
-    if plan is None or plan.id != row.plan_id:
-        raise ReplayProblem("This plan was replaced · relist from the current plan's day", path="listAt", status=409)
-    if row.status != "listed":
-        raise ReplayProblem("The day is under way · its list time can no longer change", path="listAt", status=409)
-    for ref, spec, _ in _resolve_filters(db, user_id, plan.spec["screen"]["filters"]):
-        if list_at < (need := screen.earliest_list_at(spec)):
-            raise ReplayProblem(_early_list_message(ref.name, spec, need), path="listAt")
-    spec = plan.spec
-    window = spec["setup"]["window"]
-    moved = {**spec, "screen": {**spec["screen"], "listAt": list_at}}
-    # A re-list past her focus mark moves the mark out to the session's end: the mark never limits the list.
-    moved["setup"] = {
-        **spec["setup"],
-        "window": {
-            "from": (start := max(window["from"], list_at)),
-            "to": window["to"] if window["to"] > start else _session_end_hhmm(spec["setup"]),
-        },
-    }
-    try:
-        PracticeBlockV1.model_validate(without_legacy_plan_fields(moved))
-    except ValidationError as exc:
-        raise ReplayProblem(str(exc.errors()[0]["msg"]).removeprefix("Value error, "), path="listAt") from None
-    now = svc.now()
-    plan.spec, plan.updated_at = moved, now
-    store = svc.store_factory(db)
-    ready, restart = _prepared(plan, store, row.day, _refresh_universe(db, plan, svc, now), now)
-    if ready:
-        fields = _list_fields(db, plan, row.day, svc, store, now)
-        on_list = {c["symbol"] for c in fields["candidates"]}
-        for key, value in fields.items():
-            setattr(row, key, value)
-        row.watch = [w for w in row.watch if w["symbol"] in on_list]
-        row.updated_at = now
-        # A list built at a time is read at that time: the clock cannot be earlier than the list it shows (no look
-        # ahead). A re-list past the clock moves it there; it is the one place a re-list changes time, and only on a
-        # day she has not practised. A clock already past the new start stays where it is.
-        session_mod.settle_locked(db, svc, row)
-        start = day_start(plan, row.day)
-        if row.revealed_through is None or _utc(row.revealed_through) < start:
-            row.revealed_through = start.to_pydatetime()
-            if row.clock_running:
-                row.clock_anchor_at = svc.wall()
-    db.flush()
-    return Opened(plan, row, restart_prep=restart)
-
-
 # -- reading and changing a day list ---------------------------------------------------------------------------
-
-
-def list_pending(row: ReplayDayList) -> bool:
-    """The day's list was built at `list_at` and the day clock is not there yet, so it is not out: serving it would show
-    the future. A day opens at the exchange's open (9:30), which is before a 10:00 or 10:45 list time; until the clock
-    reaches it the list shows nothing (no names, no counts) and no name can be opened or starred."""
-    return row.status != "ended" and row.revealed_through is not None and _utc(row.revealed_through) < _utc(row.list_at)
-
-
-def _list_not_out(row: ReplayDayList, path: str) -> ReplayProblem:
-    return ReplayProblem(
-        f"The list comes out at {clock12(row.screen['listAt'])} · the day clock is not there yet", path=path, status=409
-    )
 
 
 def get_day_list(db: Session, user_id: int, day_list_id: int, *, lock: bool = False) -> ReplayDayList:
@@ -773,47 +268,6 @@ def get_day_list(db: Session, user_id: int, day_list_id: int, *, lock: bool = Fa
     if row is None or row.owner_user_id != user_id:  # never confirm existence to a non-owner
         raise SessionNotFound(day_list_id)
     return row
-
-
-def _sessions_of(db: Session, day_list_id: int) -> list[ReplaySession]:
-    return list(
-        db.execute(
-            select(ReplaySession).where(ReplaySession.day_list_id == day_list_id).order_by(ReplaySession.id)
-        ).scalars()
-    )
-
-
-def _session_brief(
-    s: ReplaySession,
-    row: ReplayDayList,
-    holding: set[int],
-    book: tuple[list[journal_mod.Trade], journal_mod.Trade | None] | None = None,
-    last: float | None = None,
-) -> dict[str, Any]:
-    """A name in the day's portfolio: its status, how far it is revealed, whether it is behind the shared day clock
-    (its next advance catches it up), whether it holds an open position (one average-cost position per name), and its
-    P/L: the closed trades booked so far and the open position marked at `last` (the price at the day clock) with when
-    play paused on its stop. A swing session passes no `book` (its holds are read elsewhere)."""
-    clock = (
-        None
-        if row.revealed_through is None
-        else min(_utc(row.revealed_through), session_mod.window_end_of(s, day_thread=True))
-    )
-    closed, open_ = book if book is not None else ([], None)
-    position = journal_mod.open_trade_out(open_, last)
-    if position is not None and s.stop_hit_at is not None:
-        position["stop_hit_at"] = s.stop_hit_at
-    return {
-        "id": s.id,
-        "symbol": s.symbol,
-        "status": s.status,
-        "revealed_through": s.revealed_through,
-        "behind_clock": s.status == "active" and clock is not None and _utc(s.revealed_through) < clock,
-        "has_open_trade": s.id in holding,
-        "trades": len(closed),
-        "realized_usd": journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed]),
-        "position": position,
-    }
 
 
 def _peek(db: Session, svc: Services, row: ReplayDayList, symbol: str) -> dict[str, Any]:
@@ -880,81 +334,6 @@ def _join(names: list[str], word: str = "and") -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} {word} {names[-1]}"
 
 
-def _early_filters(db: Session, row: ReplayDayList) -> list[tuple[str, str]]:
-    """The filters of the list that read bars of the day itself and had none by the list time: `(name, earliest list
-    time)`. A plan saved before the server refused such a list time (D-001) still has them."""
-    early = []
-    for item in row.screen["filters"]:
-        version = db.get(FilterStrategyVersion, item["version_id"])
-        if version is not None and row.screen["listAt"] < (need := screen.earliest_list_at(version.spec)):
-            early.append((item["name"], need))
-    return early
-
-
-def _session_end_hhmm(setup: dict[str, Any]) -> str:
-    """The latest time a plan's window can name: the regular close, or the extended session's end."""
-    return "16:00" if setup["session"] == "regular" else "20:00"
-
-
-LIST_TIMES = ("08:30", "10:00", "10:45")  # the list times the plan form offers (frontend `LIST_TIMES`)
-
-
-def _relist_offer(db: Session, plan: PracticePlan, row: ReplayDayList) -> dict[str, Any] | None:
-    """The in-screen remedy for an early list (D-012): the list time that lets every filter read the day, when the
-    practice window can still follow it. Only a day not yet started on the live plan can move."""
-    if row.status != "listed" or plan.status != "active":
-        return None
-    early = _early_filters(db, row)
-    window = plan.spec["setup"]["window"]
-    need = max((time for _, time in early), default=None)
-    if need is None and not row.candidates:
-        # D-054: an empty list at a time every filter can read is still a dead end (End day is the only other button).
-        # Later, more bars of the day have closed: offer the next list time the form offers.
-        need = next((time for time in LIST_TIMES if time > row.screen["listAt"]), None)
-    if need is None or need >= _session_end_hhmm(plan.spec["setup"]):  # her focus mark does not limit a re-list
-        return None
-    return {
-        "list_at": need,
-        "label": f"Re-list at {clock12(need)}",
-        "window_from": need if need > window["from"] else None,
-    }
-
-
-def _few_names_reason(db: Session, row: ReplayDayList, scan: ReplayDayScan | None = None) -> str:
-    """Why a list is short, from what the list stored: no symbol could be scanned, a filter that could only read
-    the previous session at this list time (a plan saved before the server refused that), no bars to read, or
-    thresholds nothing met. Said once, with the one thing she can change. A list a re-scan repopulated speaks of the
-    clock that scan ran at, not the list time."""
-    universe, count = row.universe, len(row.candidates)
-    list_at, filters = row.screen["listAt"], row.screen["filters"]
-    if scan is not None:  # the names she kept are not the scan's matches
-        count, list_at = universe["shown"], _utc(scan.as_of).tz_convert("America/New_York").strftime("%H:%M")
-    if universe["scanned"] == 0:
-        return (
-            f"No symbol could be scanned · {universe['no_data']} had no price data and {universe['below_floor']} fell "
-            "below the $5 and 500,000-share floor"
-        )
-    early = [] if scan is not None else _early_filters(db, row)
-    if early:
-        verb = "reads" if len(early) == 1 else "read"
-        return (
-            f"{_join([name for name, _ in early])} {verb} bars of the day itself, and none had closed by "
-            f"{clock12(list_at)} · only the previous session was visible. Re-list at "
-            f"{clock12(max(need for _, need in early))} or later to read the day's own bars"
-        )
-    if all(item["scanned"] == 0 for item in universe["filters"]):
-        return (
-            f"No bars to read at {clock12(list_at)} for any of the {universe['scanned']} symbols that passed the "
-            "floor · the data for this day may be missing"
-        )
-    names = _join([item["name"] for item in filters], "or")  # a name that passes either filter is listed (D-061)
-    met = f"Only {count}" if count else "None"
-    return (
-        f"{met} of the {universe['scanned']} scanned symbols met {names}"
-        " · loosen a filter in the Screener to widen the next days' lists"
-    )
-
-
 def watch_check(db: Session, row: ReplayDayList, sessions: list[ReplaySession]) -> dict[str, Any]:
     """The "traded only names on your watch" data (02o-b2): the starred names, the names she entered a trade on, and
     the entered names that were not starred. Data only: no plan field scores it, the screen renders it."""
@@ -977,197 +356,6 @@ def watch_check(db: Session, row: ReplayDayList, sessions: list[ReplaySession]) 
     return {"starred": starred, "traded": traded, "off_watch": off, "verdict": verdict, "label": label}
 
 
-def _ended_journal(
-    db: Session, plan: PracticePlan, row: ReplayDayList, sessions: list[ReplaySession]
-) -> dict[str, Any]:
-    """The finished day's result with the thread's SIMULATED balance before and after it (D-032)."""
-    thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
-    balances = None if thread is None else threads_mod.day_balances(db, thread, row.id)
-    before, after = balances if balances is not None else (None, None)
-    return {**_day_journal(sessions), "balance_before": before, "balance_after": after}
-
-
-def _ended_review(row: ReplayDayList) -> dict[str, Any] | None:
-    """The stored review ranked the current way (see `review.normalized`), with the day's date. The plan's `hideDates`
-    is no longer read: a date is always shown (a plan stored with "yes" behaves as "no")."""
-    if row.review is None:
-        return None
-    return {**review_mod.normalized(row.review), "day": row.day}
-
-
-def _live_candidates(
-    svc: Services, db: Session, row: ReplayDayList, clock: pd.Timestamp, interval: str, tape: dict[str, str]
-) -> list[dict[str, Any]]:
-    """The list's names, each with a `live` block: the name as of the day clock. The stored `candidates` stay the
-    list-time snapshot; this only adds what the clock has shown since. Every name is read from its prepared series
-    (`frames`, the one decode the chart shares) and priced by `PreparedSeries.quote`: with its tape for a name in `tape`
-    (`{symbol: feed}`, the names she holds, so a held name reads the same print as her chart and her account), else off
-    the last closed minute. A name whose bars are unavailable gets `live: None`, never a stand-in."""
-    store = svc.store_factory(db)
-    daily_of = screen.asof_loader(svc.history, store, row.day)
-    out = []
-    for candidate in row.candidates:
-        symbol = candidate["symbol"]
-        try:
-            series = svc.history.series.get(svc.history.day_inputs(store, symbol, row.day), INTERVAL_MINUTES[interval])
-        except (ReplayDayError, ProviderError) as exc:
-            log.warning("live read: %s has no bars for %s: %s", symbol, row.day, exc)
-            out.append({**candidate, "live": None})
-            continue
-        if "asof" not in series.memo:
-            series.memo["asof"] = daily_of(symbol)
-        daily = series.memo["asof"]
-        prints = session_mod._tape_lookup(svc, store, symbol, tape[symbol]) if symbol in tape else None
-        quote = series.quote(clock, prints)
-        live = (
-            None
-            if daily is None
-            else screen.live_quote(daily, series.minutes_through(clock), row.day, clock, quote, series.memo)
-        )
-        out.append({**candidate, "live": jsonable(live)})
-    return out
-
-
-def warm_day(db: Session, svc: Services, day_list_id: int, interval: str | None = None) -> int:
-    """Prepare every name of a day list at the chart interval (the plan's, or `interval`: the one she switched to), so
-    the first read of the day is a slice of memory (`frames.warm`). A swing or an ended day has nothing to prepare.
-    Returns how many names were prepared."""
-    row = db.get(ReplayDayList, day_list_id)
-    plan = None if row is None else db.get(PracticePlan, row.plan_id)
-    if row is None or plan is None or row.status == "ended" or _is_swing(plan):
-        return 0
-    store = svc.store_factory(db)
-    width = INTERVAL_MINUTES[interval or plan.spec["setup"]["interval"]]
-    symbols = [c["symbol"] for c in row.candidates]
-    done = frames_mod.warm(svc.history, store, symbols, row.day, width, screen.asof_loader(svc.history, store, row.day))
-    if row.revealed_through is not None:  # prime the live block at the clock as it stands: the first read is a hit
-        _live_candidates(svc, db, row, _utc(row.revealed_through), plan.spec["setup"]["interval"], {})
-    return done
-
-
-def day_list_out(
-    db: Session, user_id: int, day_list_id: int, svc: Services, *, peek: str | None = None, live: bool = False
-) -> dict[str, Any]:
-    row = get_day_list(db, user_id, day_list_id)
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
-    if _is_swing(plan):
-        return _swing().day_list_out(db, user_id, day_list_id, svc, peek=peek)
-    session_mod.settle_day(db, svc, row.id)  # a running thread clock has moved since it was last read (ADR-0018)
-    ended = row.status == "ended"
-    sessions = _sessions_of(db, row.id)
-    books = session_mod.day_books(db, row.id)
-    holding = {session_id for session_id, (_, open_) in books.items() if open_ is not None}
-    clock = None if row.revealed_through is None else _utc(row.revealed_through)
-    # every open trade priced at the one day clock, a name behind it included (nothing here is later than the clock)
-    held = {} if clock is None else {p.row.id: p for p in session_mod.positions(db, svc, row.id, clock, books)}
-    pending = list_pending(row)
-    universe = (
-        {**row.universe, "scanned": 0, "no_data": 0, "below_floor": 0, "matches_total": 0, "shown": 0, "filters": []}
-        if pending
-        else row.universe
-    )
-    held_tape = {p.row.symbol: p.row.tape_feed for p in held.values()}
-    scan = _latest_scan(db, row.id)
-    warnings = [_few_names_reason(db, row, scan)] if len(row.candidates) < FEW_NAMES and not pending else []
-    return {
-        "id": row.id,
-        "plan": plan_out(db, plan),
-        "day": row.day,
-        "weekday": _weekday(row.day),
-        "day_no": row.day_no,
-        "of": plan.spec["sessions"],
-        "status": row.status,
-        "list_at": row.list_at,
-        "data_through": row.data_through,
-        "screen": {
-            "filters": row.screen["filters"],
-            "list_at": row.screen["listAt"],
-            "max_list": row.screen["maxList"],
-        },
-        "universe": universe,
-        "columns": row.columns,
-        # `live`: the names priced at the day clock (nothing past it), asked for by the day list's table. Off, or before
-        # the first name is practised (no clock yet), or once the day has ended, the names are the list-time snapshot.
-        "candidates": []
-        if pending
-        else _live_candidates(svc, db, row, clock, plan.spec["setup"]["interval"], held_tape)
-        if live and clock is not None and not ended
-        else row.candidates,
-        "watch": row.watch,
-        "clock": row.revealed_through,
-        "thread_time": row.revealed_through if clock is not None and not ended else None,
-        "market": frames_mod.market_block(row.day, clock, None, next_day_start(db, row))
-        if clock is not None and not ended
-        else None,
-        # ponytail: `positions` loads one context per open position; batch the bar loads if
-        # a day ever holds dozens
-        "sessions": [
-            _session_brief(s, row, holding, books[s.id], held[s.id].price if s.id in held else None) for s in sessions
-        ],
-        "held_elsewhere": session_mod.held_elsewhere(db, user_id, row.day, row.id),
-        "day_pnl": session_mod.day_pnl(
-            books, list(held.values()), row.revealed_through if clock is not None else row.data_through
-        ),
-        "watch_check": watch_check(db, row, sessions),
-        "thread": threads_mod.brief(db, plan.thread_id, row.id),
-        "warnings": warnings,
-        "list_pending": pending,
-        "relist": None if pending else _relist_offer(db, plan, row),
-        "rescan": None if scan is None else _scan_out(scan),
-        "rescan_job": _job_out(row.rescan_job, svc.now()),
-        "peek": None if peek is None or pending else _peek(db, svc, row, peek),
-        "journal": _ended_journal(db, plan, row, sessions) if ended else None,
-        "review": _ended_review(row) if ended else None,
-        "notes": row.notes,
-        "rating": row.rating,
-        "created_at": row.created_at,
-        "ended_at": row.ended_at,
-        "stamp": {
-            "as_of": row.revealed_through if row.revealed_through is not None else row.data_through,
-            "source": "alpaca",
-            "quality": "delayed-15m",
-            "freshness": "replay",
-        },
-    }
-
-
-def patch_day_list(
-    db: Session,
-    user_id: int,
-    day_list_id: int,
-    svc: Services,
-    *,
-    watch: list[str] | None,
-    notes: str | None,
-    rating: int | None,
-    fields: set[str],
-) -> ReplayDayList:
-    """Stars, notes and the self-rating. A star is stamped with the day clock when it is placed (the list time
-    before the day starts); stars close with the day."""
-    row = get_day_list(db, user_id, day_list_id, lock=True)
-    if "watch" in fields:
-        if row.status == "ended":
-            raise ReplayProblem("The day is over · stars are closed", path="watch", status=409)
-        if list_pending(row) and watch:
-            raise _list_not_out(row, "watch")
-        symbols = list(dict.fromkeys(watch or []))
-        on_list = {c["symbol"] for c in row.candidates}
-        for index, symbol in enumerate(symbols):
-            if symbol not in on_list:
-                raise ReplayProblem(f"{symbol} is not on today's list", path=f"watch.{index}")
-        kept = {w["symbol"]: w["starred_clock"] for w in row.watch}
-        clock = (row.revealed_through or row.list_at).isoformat()
-        row.watch = [{"symbol": s, "starred_clock": kept.get(s, clock)} for s in symbols]
-    if "notes" in fields:
-        row.notes = notes
-    if "rating" in fields:
-        row.rating = rating
-    row.updated_at = svc.now()
-    db.flush()
-    return row
-
-
 # -- re-scan at the playhead ---------------------------------------------------------------------------------------
 
 
@@ -1183,55 +371,6 @@ def _latest_scan(db: Session, day_list_id: int) -> ReplayDayScan | None:
 def _rescan_stale(job: dict[str, Any], now: datetime) -> bool:
     """A running job that has not reported for `RESCAN_STALE` died with its process (a restart, a crash)."""
     return job["state"] == "running" and pd.Timestamp(now) - pd.Timestamp(job["updated_at"]) > RESCAN_STALE
-
-
-def start_rescan(db: Session, user_id: int, day_list_id: int, svc: Services) -> str | None:
-    """Mark a re-scan at the day clock as running and return its run token; the caller starts `run_rescan` with it on
-    its own session once this one has committed. None: nothing to start. A scan already in flight is joined, never
-    doubled (a job that stopped reporting is taken over, and the old worker finds its token gone), and a list that
-    already holds a scan at this clock is current. A 409 before the first name is practised (no clock yet), before
-    the list time, and after the day ends."""
-    row = get_day_list(db, user_id, day_list_id, lock=True)
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
-    if _is_swing(plan):
-        raise ReplayProblem("A swing day has no re-scan", path="rescan", status=409)
-    if row.status == "ended":
-        raise ReplayProblem("The day is over · scans are closed", path="rescan", status=409)
-    if row.revealed_through is None:
-        raise ReplayProblem(
-            "Practice a name first · a re-scan runs at the day clock, which starts with your first name",
-            path="rescan",
-            status=409,
-        )
-    clock = _utc(row.revealed_through)
-    if clock < _utc(row.list_at):
-        raise ReplayProblem(
-            f"The day clock is before your {clock12(row.screen['listAt'])} list time · nothing new to scan yet",
-            path="rescan",
-            status=409,
-        )
-    now = svc.now()
-    job = row.rescan_job
-    if job is not None and job["state"] == "running" and not _rescan_stale(job, now):
-        return None
-    last = _latest_scan(db, row.id)
-    if last is not None and _utc(last.as_of) == clock:
-        return None
-    run = secrets.token_hex(8)
-    row.rescan_job = {
-        "run": run,
-        "state": "running",
-        "as_of": clock.isoformat(),
-        "done": 0,
-        "total": 0,
-        "message": None,
-        "started_at": now.isoformat(),
-        "updated_at": now.isoformat(),
-    }
-    row.updated_at = now
-    db.flush()
-    return run
 
 
 class _Superseded(Exception):
@@ -1350,18 +489,19 @@ def _run_rescan(db: Session, svc: Services, day_list_id: int, run: str) -> Repla
             else seen.get("earnings_state") or ("reported" if seen.get("reported_before_open") else None)
         )
 
-    # From here the day list changes: under its lock, on what the day holds now (a star or a name opened while the scan
-    # read counts), and only if this scan still owns the job and the day is still running.
+    # From here the Screen changes: under its lock, on what the thread holds now (a star or a lane opened while the scan
+    # read counts), and only if this scan still owns the job and the thread is still open.
     db.commit()  # keeps the bars the read cached, and expires `row` so the locked read below is fresh
     row = db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
     if row.rescan_job is None or row.rescan_job["run"] != run:
         raise _Superseded
-    if row.status == "ended":
-        _finish_job(db, day_list_id, run, "failed", "The day ended before the re-scan finished")
+    thread = db.get(PracticeThread, row.thread_id)
+    if thread is None or thread.status == "closed":
+        _finish_job(db, day_list_id, run, "failed", "The thread closed before the re-scan finished")
         return None
     now = svc.now()
     matched = {c["symbol"] for c in built.candidates}
-    holding = {s.symbol for s in _sessions_of(db, row.id)} | {w["symbol"] for w in row.watch}
+    holding = {s.symbol for s in session_mod.lanes(db, thread.id)} | {w["symbol"] for w in row.watch}
     held = [
         {**c, "new_since_list": False, "held_over": True}
         for c in row.candidates
@@ -1451,83 +591,490 @@ def _job_out(job: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None
 # -- the day's session ------------------------------------------------------------------------------------------
 
 
+# -- ending the day ---------------------------------------------------------------------------------------------
+
+
+# -- the hub ----------------------------------------------------------------------------------------------------
+
+
+# -- the plan ---------------------------------------------------------------------------------------------------
+
+
+def _horizon(svc: Services) -> pd.Timestamp:
+    from ai_trading.replay import clock as clock_mod  # clock imports this module
+
+    return clock_mod.horizon(svc.now())
+
+
+def _check_start(start: pd.Timestamp, svc: Services) -> date:
+    """The ET trading day of `start`, when the thread may begin there (ADR-0025 R4): a finished trading session on or
+    after 2016-01-04, the instant inside that day's extended hours, and not past the horizon."""
+    first = start.tz_convert(ET).date()
+    check_day(first, svc.now())
+    found = trading_session("stock", first)
+    assert found is not None
+    if not found.extended_open <= start < found.extended_close:
+        raise ReplayProblem("Start between 4:00 AM and 8:00 PM ET on a trading day", path="startAt")
+    if start > (limit := _horizon(svc)):
+        raise ReplayProblem(
+            f"There is no data past {limit.tz_convert(ET):%a %Y-%m-%d %H:%M} ET yet · start earlier", path="startAt"
+        )
+    return first
+
+
+def create_plan(
+    db: Session, user_id: int, spec: PracticeSetupV2, svc: Services, thread: PracticeThread
+) -> PracticePlan:
+    """Validate and save the thread's plan from a `PracticeSetupV2`, archive the one it replaces, freeze the universe,
+    and give the thread its clock and Screen. Server rules that need a lookup: `startAt` (a finished trading session,
+    inside its hours, not past the horizon), her filters, the Screen's cap. The first plan sets the thread's start and
+    puts its clock there, paused; a plan that replaces another never moves time. The plan binds to `thread`, which
+    carries the risk plan (D-007)."""
+    dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
+    start = _utc(datetime.fromisoformat(dumped["startAt"]))
+    first = _check_start(start, svc) if thread.clock_at is None else start.tz_convert(ET).date()
+    if dumped["screen"]["maxList"] > MAX_LIST:
+        raise ReplayProblem(f"The Screen holds at most {MAX_LIST} names", path="screen.maxList")
+    _resolve_filters(db, user_id, dumped["screen"]["filters"])
+    now = svc.now()
+    old = active_plan(db, user_id, thread_id=thread.id, lock=True)
+    if old is not None:
+        old.status, old.updated_at = "archived", now  # its Screen is re-pointed below; one plan is live per thread
+        db.flush()
+    _ensure_desk_universe(db, svc, now)
+    symbols, capped = practice_universe(db, user_id)
+    row = PracticePlan(
+        owner_user_id=user_id,
+        schema_version=2,
+        spec=dumped,
+        first_day=first,
+        universe={"source": "desk", "symbols": symbols, "capped": capped, "frozen_at": now.isoformat()},
+        prep={
+            "state": "done",
+            "done": len(symbols),
+            "total": len(symbols),
+            "failed": {},
+            "updated_at": now.isoformat(),
+        },
+        day_cursor=None,
+        days_opened=0,
+        status="active",
+        created_at=now,
+        updated_at=now,
+        thread_id=thread.id,
+    )
+    db.add(row)
+    db.flush()
+    if thread.clock_at is None:
+        thread.start_at = thread.clock_at = start.to_pydatetime()
+        thread.clock_running, thread.clock_anchor_at, thread.clock_pause = False, None, None
+        thread.updated_at = now
+    ensure_screen(db, row, thread, svc)
+    return row
+
+
+def plan_out(db: Session, plan: PracticePlan) -> dict[str, Any]:
+    spec = without_legacy_plan_fields(plan.spec)
+    names = {
+        row.id: row.name
+        for row in db.execute(
+            select(FilterStrategy).where(FilterStrategy.id.in_([f["id"] for f in spec["screen"]["filters"]]))
+        ).scalars()
+    }
+    return {
+        "id": plan.id,
+        "thread_id": plan.thread_id,
+        "spec": spec,
+        "filters": [{"id": f["id"], "name": names.get(f["id"], "Removed filter")} for f in spec["screen"]["filters"]],
+    }
+
+
+# -- the Screen -------------------------------------------------------------------------------------------------
+
+
+def ensure_screen(db: Session, plan: PracticePlan, thread: PracticeThread, svc: Services) -> ReplayDayList:
+    """The thread's Screen row, created empty on its first plan and re-pointed (and emptied) by a replacing plan: one
+    row per thread. Its names come from the first re-scan, which is a background job with progress, so creating a thread
+    never waits on the universe's bars. The row's `day` is the data day of T, moved by every re-scan."""
+    assert thread.clock_at is not None
+    clock = _utc(thread.clock_at)
+    filters = _filter_inputs(db, plan)
+    now = svc.now()
+    note = _universe_note(len(plan.universe["symbols"]), filters, bool(plan.universe.get("capped")))
+    screen_json = {
+        "filters": [{"id": f.id, "version_id": f.version_id, "name": f.name} for f in filters],
+        "maxList": min(plan.spec["screen"]["maxList"], MAX_LIST),
+    }
+    universe = {
+        "source": "desk",
+        "size": len(plan.universe["symbols"]),
+        "symbols": list(plan.universe["symbols"]),
+        "scanned": 0,
+        "no_data": 0,
+        "below_floor": 0,
+        "matches_total": 0,
+        "shown": 0,
+        "prev_basis": False,
+        "filters": [],
+        **note,
+    }
+    row = db.execute(
+        select(ReplayDayList).where(ReplayDayList.thread_id == thread.id).with_for_update()
+    ).scalar_one_or_none()
+    if row is None:
+        row = ReplayDayList(
+            plan_id=plan.id,
+            owner_user_id=plan.owner_user_id,
+            thread_id=thread.id,
+            day=positions_mod.data_day(clock),
+            day_no=1,
+            screen=screen_json,
+            list_at=clock.to_pydatetime(),
+            data_through=clock.to_pydatetime(),
+            universe=universe,
+            columns=[],
+            candidates=[],
+            watch=[],
+            status="practicing",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+    else:
+        row.plan_id, row.screen, row.universe = plan.id, screen_json, universe
+        row.columns, row.candidates, row.watch, row.rescan_job = [], [], [], None
+        row.updated_at = now
+    db.flush()
+    return row
+
+
+def screen_row(db: Session, user_id: int, thread_id: int, svc: Services, *, lock: bool = False) -> ReplayDayList:
+    """The thread's Screen (404 for a thread that is not hers). A thread whose plan exists but whose Screen does not
+    (a thread from before the freestyle model that had no open day) gets one now; a thread with no plan is a 409."""
+    thread = threads_mod.get_thread(db, user_id, thread_id)
+    query = select(ReplayDayList).where(ReplayDayList.thread_id == thread.id)
+    row = db.execute(query.with_for_update() if lock else query).scalar_one_or_none()
+    if row is not None:
+        return row
+    plan = active_plan(db, user_id, thread_id=thread.id)
+    if plan is None or thread.clock_at is None:
+        raise ReplayProblem("Start the thread's plan first · it holds the Screen's filters", path="plan", status=409)
+    return ensure_screen(db, plan, thread, svc)
+
+
+def _few_names_reason(db: Session, row: ReplayDayList, scan: ReplayDayScan) -> str:
+    """Why the Screen is short, from what the scan stored: no symbol could be scanned, no bars to read, or thresholds
+    nothing met. Said once, with the one thing she can change."""
+    universe = row.universe
+    at = _utc(scan.as_of).tz_convert(ET).strftime("%H:%M")
+    if universe["scanned"] == 0:
+        return (
+            f"No symbol could be scanned · {universe['no_data']} had no price data and {universe['below_floor']} fell "
+            "below the $5 and 500,000-share floor"
+        )
+    if all(item["scanned"] == 0 for item in universe["filters"]):
+        return (
+            f"No bars to read at {clock12(at)} for any of the {universe['scanned']} symbols that passed the "
+            "floor · the data for this time may be missing"
+        )
+    names = _join([item["name"] for item in row.screen["filters"]], "or")  # a name that passes either is listed (D-061)
+    count = universe["shown"]
+    met = f"Only {count}" if count else "None"
+    return (
+        f"{met} of the {universe['scanned']} scanned symbols met {names}"
+        " · loosen a filter in the Screener to widen the Screen"
+    )
+
+
+def _live_candidates(
+    svc: Services,
+    db: Session,
+    row: ReplayDayList,
+    clock: pd.Timestamp,
+    interval: str,
+    tape: dict[str, str],
+) -> list[dict[str, Any]]:
+    """The Screen's names, each with a `live` block: the name as of T. The stored `candidates` stay the scan's snapshot;
+    this only adds what the clock has shown since. Every name is read from its prepared series (`frames`, the one decode
+    the chart shares) and priced by `PreparedSeries.quote`: with its tape for a name in `tape` (`{symbol: feed}`, the
+    names she holds, so a held name reads the same print as her chart and her account), else off the last closed
+    minute. A name whose bars are unavailable gets `live: None`, never a stand-in."""
+    store = svc.store_factory(db)
+    day = positions_mod.data_day(clock)
+    daily_of = screen.asof_loader(svc.history, store, day)
+    out = []
+    for candidate in row.candidates:
+        symbol = candidate["symbol"]
+        try:
+            series = svc.history.series.get(svc.history.day_inputs(store, symbol, day), INTERVAL_MINUTES[interval])
+        except (ReplayDayError, ProviderError) as exc:
+            log.warning("live read: %s has no bars for %s: %s", symbol, day, exc)
+            out.append({**candidate, "live": None})
+            continue
+        if "asof" not in series.memo:
+            series.memo["asof"] = daily_of(symbol)
+        daily = series.memo["asof"]
+        prints = session_mod._tape_lookup(svc, store, symbol, tape[symbol]) if symbol in tape else None
+        quote = series.quote(clock, prints)
+        live = (
+            None
+            if daily is None
+            else screen.live_quote(daily, series.minutes_through(clock), day, clock, quote, series.memo)
+        )
+        out.append({**candidate, "live": jsonable(live)})
+    return out
+
+
+def warm(db: Session, svc: Services, day_list_id: int, interval: str | None = None) -> int:
+    """Prepare every name of the Screen (and every lane) at the chart interval (the plan's, or `interval`: the one she
+    switched to) on the data day of T, so the first read is a slice of memory (`frames.warm`). Returns how many names
+    were prepared."""
+    row = db.get(ReplayDayList, day_list_id)
+    plan = None if row is None else db.get(PracticePlan, row.plan_id)
+    thread = None if row is None or row.thread_id is None else db.get(PracticeThread, row.thread_id)
+    if row is None or plan is None or thread is None or thread.clock_at is None or thread.status == "closed":
+        return 0
+    clock = _utc(thread.clock_at)
+    day = positions_mod.data_day(clock)
+    store = svc.store_factory(db)
+    width = INTERVAL_MINUTES[interval or plan.spec["setup"]["interval"]]
+    held = [r.symbol for r in session_mod.lanes(db, thread.id, active=True)]
+    symbols = list(dict.fromkeys([c["symbol"] for c in row.candidates] + held))
+    done = frames_mod.warm(svc.history, store, symbols, day, width, screen.asof_loader(svc.history, store, day))
+    _live_candidates(svc, db, row, clock, plan.spec["setup"]["interval"], {})  # prime the live block: a hit next read
+    return done
+
+
+def _lane_brief(
+    lane: ReplaySession,
+    clock: pd.Timestamp,
+    book: tuple[list[Any], Any] | None,
+    last: float | None,
+) -> dict[str, Any]:
+    """A name in the thread's book: its status, how far it is revealed, whether it is behind the thread's clock (its
+    next sync catches it up), whether it holds an open position (one average-cost position per name), and its P/L: the
+    closed trades booked so far and the open position marked at `last` (the price at T) with when its stop line was
+    crossed."""
+    from ai_trading.replay import journal as journal_mod
+
+    day_clock = min(clock, session_mod.market_close(positions_mod.data_day(clock), "extended"))
+    closed, open_ = book if book is not None else ([], None)
+    position = journal_mod.open_trade_out(open_, last)
+    if position is not None and lane.stop_hit_at is not None:
+        position["stop_hit_at"] = lane.stop_hit_at
+    return {
+        "id": lane.id,
+        "symbol": lane.symbol,
+        "status": lane.status,
+        "revealed_through": lane.revealed_through,
+        "behind_clock": lane.status == "active" and _utc(lane.revealed_through) < day_clock,
+        "has_open_trade": open_ is not None,
+        "trades": len(closed),
+        "realized_usd": journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed]),
+        "position": position,
+    }
+
+
+def screen_out(
+    db: Session, user_id: int, thread_id: int, svc: Services, *, peek: str | None = None, live: bool = False
+) -> dict[str, Any]:
+    """The thread's Screen at T (`GET /threads/{id}/screen`): the latest scan of her filters, her stars, the names she
+    holds (with their P/L at T), and with `peek` the pre-open chart data of one candidate. With `live` each candidate
+    also carries `live`: the name priced at T. Nothing here is later than `data_through` or T."""
+    thread = threads_mod.get_thread(db, user_id, thread_id)
+    session_mod.settle_thread(db, svc, thread.id)  # a running clock has moved since it was last read (ADR-0018)
+    db.refresh(thread)
+    row = screen_row(db, user_id, thread.id, svc)
+    plan = db.get(PracticePlan, row.plan_id)
+    assert plan is not None and thread.clock_at is not None
+    clock = _utc(thread.clock_at)
+    day = positions_mod.data_day(clock)
+    books = session_mod.book(db, thread.id)
+    held = {p.row.id: p for p in session_mod.positions(db, svc, thread.id, clock, books)}
+    lanes = session_mod.lanes(db, thread.id, active=True)
+    held_tape = {p.row.symbol: p.row.tape_feed for p in held.values()}
+    scan = _latest_scan(db, row.id)
+    return {
+        "id": row.id,
+        "thread_id": thread.id,
+        "plan": plan_out(db, plan),
+        "day": day,
+        "weekday": _weekday(day),
+        "as_of": clock,
+        "data_through": row.data_through,
+        "screen": {"filters": row.screen["filters"], "max_list": row.screen["maxList"]},
+        "universe": row.universe,
+        "columns": row.columns,
+        "candidates": _live_candidates(svc, db, row, clock, plan.spec["setup"]["interval"], held_tape)
+        if live and thread.status == "active"
+        else row.candidates,
+        "watch": row.watch,
+        "clock": clock,
+        "market": frames_mod.market_block(day, clock, None, positions_mod.next_open(clock)),
+        "lanes": [
+            _lane_brief(lane, clock, books.get(lane.id), held[lane.id].price if lane.id in held else None)
+            for lane in lanes
+        ],
+        "watch_check": watch_check(db, row, lanes),
+        "thread": threads_mod.brief(db, thread.id),
+        "warnings": [_few_names_reason(db, row, scan)] if scan is not None and len(row.candidates) < FEW_NAMES else [],
+        "rescan": None if scan is None else _scan_out(scan),
+        "rescan_job": _job_out(row.rescan_job, svc.now()),
+        "peek": None if peek is None else _peek(db, svc, row, peek),
+        "notes": row.notes,
+        "rating": row.rating,
+        "created_at": row.created_at,
+        "stamp": {"as_of": clock, "source": "alpaca", "quality": "delayed-15m", "freshness": "replay"},
+    }
+
+
+def patch_screen(
+    db: Session,
+    user_id: int,
+    thread_id: int,
+    svc: Services,
+    *,
+    watch: list[str] | None,
+    notes: str | None,
+    rating: int | None,
+    fields: set[str],
+) -> ReplayDayList:
+    """Stars, notes and the self-rating. A star is stamped with T when it is placed; a closed thread's are frozen."""
+    thread = threads_mod.get_thread(db, user_id, thread_id)
+    session_mod.settle_thread(db, svc, thread.id)
+    db.refresh(thread)
+    row = screen_row(db, user_id, thread.id, svc, lock=True)
+    if "watch" in fields:
+        if thread.status == "closed":
+            raise ReplayProblem("This thread is closed · stars are frozen", path="watch", status=409)
+        symbols = list(dict.fromkeys(watch or []))
+        on_list = {c["symbol"] for c in row.candidates}
+        for index, symbol in enumerate(symbols):
+            if symbol not in on_list:
+                raise ReplayProblem(f"{symbol} is not on the Screen", path=f"watch.{index}")
+        kept = {w["symbol"]: w["starred_clock"] for w in row.watch}
+        clock = _utc(thread.clock_at).isoformat() if thread.clock_at is not None else row.list_at.isoformat()
+        row.watch = [{"symbol": s, "starred_clock": kept.get(s, clock)} for s in symbols]
+    if "notes" in fields:
+        row.notes = notes
+    if "rating" in fields:
+        row.rating = rating
+    row.updated_at = svc.now()
+    db.flush()
+    return row
+
+
+def start_rescan(db: Session, user_id: int, thread_id: int, svc: Services) -> tuple[int, str | None]:
+    """Mark a re-scan at T as running on the thread's Screen and return `(screen id, run token)`; the caller starts
+    `run_rescan` with it on its own session once this one has committed. The token is None when there is nothing to
+    start: a scan already in flight is joined, never doubled (a job that stopped reporting is taken over, and the old
+    worker finds its token gone), and a Screen that already holds a scan at this T is current. The scan runs on the
+    data day of T. A 409 on a closed thread, and a 409 for a filter that reads bars of the day that cannot have closed
+    yet at T (`screen.earliest_list_at`): the look-ahead stays impossible."""
+    thread = threads_mod.get_thread(db, user_id, thread_id)
+    session_mod.settle_thread(db, svc, thread.id)
+    db.refresh(thread)
+    row = screen_row(db, user_id, thread.id, svc, lock=True)
+    if thread.status == "closed":
+        raise ReplayProblem("This thread is closed · scans are closed", path="rescan", status=409)
+    assert thread.clock_at is not None
+    clock = _utc(thread.clock_at)
+    day = positions_mod.data_day(clock)
+    if clock >= session_mod.market_open(day):  # the data day is today's: its own bars are only as old as T
+        for item in row.screen["filters"]:
+            version = db.get(FilterStrategyVersion, item["version_id"])
+            need = screen.earliest_list_at(version.spec) if version is not None else "00:00"
+            if clock < et(day, need):
+                raise ReplayProblem(
+                    f"{item['name']} reads bars of the day itself, and none has closed by "
+                    f"{clock.tz_convert(ET).strftime('%H:%M')} · re-scan at {clock12(need)} or later",
+                    path="rescan",
+                    status=409,
+                )
+    now = svc.now()
+    job = row.rescan_job
+    if job is not None and job["state"] == "running" and not _rescan_stale(job, now):
+        return row.id, None
+    last = _latest_scan(db, row.id)
+    if last is not None and _utc(last.as_of) == clock:
+        return row.id, None
+    run = secrets.token_hex(8)
+    row.day = day
+    row.rescan_job = {
+        "run": run,
+        "state": "running",
+        "as_of": clock.isoformat(),
+        "done": 0,
+        "total": 0,
+        "message": None,
+        "started_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    row.updated_at = now
+    db.flush()
+    return row.id, run
+
+
+# -- lanes ------------------------------------------------------------------------------------------------------
+
+
 def _session_spec(plan: PracticePlan, day: date, symbol: str, thread: PracticeThread) -> ReplaySessionV1:
-    """The day's session from the plan's setup (window, interval, armed names) and the thread's risk plan. The plan is
-    snapshotted here: editing the thread later never rescores a session already started. A plan saved before 0007
-    still carries `setup.plan` and `setup.shares`; they are never read here (0020 lifted the size into the thread)."""
+    """The lane's spec from the plan's setup (interval, session, armed names) and the thread's risk plan. The plan is
+    snapshotted here: editing the thread later never rescores a lane already opened. `day` and the window are labels
+    of the data day the lane opens on (a lane runs for the thread's life; neither is ever read as a bound)."""
     setup = plan.spec["setup"]
     return ReplaySessionV1.model_validate(
         {
             "schemaVersion": 1,
             "symbol": symbol,
             "day": day.isoformat(),
-            "window": setup["window"],
+            "window": setup.get("window", {"from": "09:30", "to": "16:00"}),
             "session": setup["session"],
             "interval": setup["interval"],
             "shares": thread.shares or DAY_SESSION_SHARES,
             "armed": setup["armed"],
             "plan": threads_mod.session_plan(thread),
-            "hideDate": "no",  # the plan's `hideDates` is accepted and ignored: a date is always shown
+            "hideDate": "no",
         }
     )
 
 
-def start_session(db: Session, user_id: int, day_list_id: int, symbol: str, svc: Services) -> ReplaySession:
-    """The day's practice session on a name from the list, built from the plan's setup: a new name opens at the shared
-    day clock, a name she has practised today resumes (the switch protocol, 02o-b2). The day holds any number of names,
-    each with one average-cost position that takes any number of fills, so a switch never needs a trade
-    closed first. A name resumed behind the clock is lifted to it, the span she was away is recorded, and she can mark
-    at once."""
-    row = get_day_list(db, user_id, day_list_id, lock=True)
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
-    if _is_swing(plan):
-        return _swing().start_session(db, user_id, day_list_id, symbol, svc)
-    session_mod.settle_locked(
-        db, svc, row
-    )  # a name opened now starts at the clock as it is now, not as it was last read
-    if row.status == "ended":
-        raise ReplayProblem("The day is over · open the next day from the practice page", path="symbol", status=409)
-    if list_pending(row):
-        raise _list_not_out(row, "symbol")
-    if symbol not in {c["symbol"] for c in row.candidates}:
-        raise ReplayProblem(f"{symbol} is not on today's list", path="symbol")
-    opened = {s.symbol for s in _sessions_of(db, row.id)}
-    # defence in depth: a list never holds more than MAX_LIST names, so a day never opens more
-    if symbol not in opened and len(opened) >= MAX_LIST:
-        raise ReplayProblem(f"A day holds at most {MAX_LIST} names · this one is full", path="symbol", status=409)
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
-    thread = db.get(PracticeThread, plan.thread_id) if plan.thread_id is not None else None
-    if thread is None:
-        raise ReplayProblem(threads_mod.NO_THREAD, path="threadId", status=409)
+def open_lane(db: Session, user_id: int, thread_id: int, symbol: str, svc: Services) -> ReplaySession:
+    """The thread's lane on a name (`POST /threads/{id}/lanes`): her open one (resume), else a new one at T. Any name of
+    the Screen or of the thread's frozen universe opens, and a position open on another name never blocks it. A lane
+    resumed behind the clock is lifted to it, the span she was away is recorded, and she can mark at once."""
+    thread = threads_mod.get_thread(db, user_id, thread_id, lock=True)
     if thread.status == "closed":
         raise ReplayProblem(threads_mod.CLOSED_THREAD, path="threadId", status=409)
-    created = session_mod.create(
+    session_mod._clock().settle(db, svc, thread)  # a name opened now starts at T as it is now, not as it was last read
+    plan = active_plan(db, user_id, thread_id=thread.id)
+    if plan is None or thread.clock_at is None:
+        raise ReplayProblem(
+            "Start the thread's plan first · it holds the setup a lane opens with", path="plan", status=409
+        )
+    screen_ = screen_row(db, user_id, thread.id, svc)
+    existing = db.execute(
+        select(ReplaySession.id).where(
+            ReplaySession.thread_id == thread.id, ReplaySession.symbol == symbol, ReplaySession.status == "active"
+        )
+    ).first()
+    if existing is None and symbol not in {c["symbol"] for c in screen_.candidates} | set(plan.universe["symbols"]):
+        raise ReplayProblem(f"{symbol} is not on the Screen or in this thread's universe", path="symbol")
+    clock = _utc(thread.clock_at)
+    created = session_mod.open_lane(
         db,
         user_id,
-        _session_spec(plan, row.day, symbol, thread),
+        _session_spec(plan, positions_mod.data_day(clock), symbol, thread),
         svc,
-        day_list=row,
-        thread_id=thread.id,
-        extended_tape=True,
+        thread,
+        day_list_id=screen_.id,
     )
-    if row.status == "listed":
-        row.status = "practicing"
-    row.updated_at = svc.now()
-    if row.revealed_through is None or _utc(created.revealed_through) > _utc(row.revealed_through):
-        row.revealed_through = created.revealed_through
-    else:
-        # A name opened earlier fell behind the shared day clock while she played another one. Returning to it lifts it
-        # to the clock, as an `advance` does, as far as its tape goes (the clock runs on through the night and the
-        # weekend; a name has no bars there): what lies between is revealed but was never in front of her (an away
-        # span), and every advance scanned all open trades' stops, so nothing is skipped by the lift.
-        lift = min(_utc(row.revealed_through), session_mod.window_end_of(created, day_thread=True))
-        if created.status == "active" and _utc(created.revealed_through) < lift:
-            created.away = add_span(list(created.away or []), _utc(created.revealed_through), lift)
-            # A working order the tape reached inside that span fills at its bar, like a watched one (ADR-0019).
-            session_mod.fill_away_orders(db, svc, created, _utc(created.revealed_through), lift)
-            created.revealed_through, created.updated_at = lift.to_pydatetime(), svc.now()
+    lift = min(clock, session_mod.market_close(positions_mod.data_day(clock), "extended"))
+    if created.status == "active" and _utc(created.revealed_through) < lift:
+        # Returning to a name that fell behind the clock lifts it, as a sync does: what lies between is revealed but was
+        # never in front of her (an away span).
+        created.away = add_span(list(created.away or []), _utc(created.revealed_through), lift)
+        created.revealed_through, created.updated_at = lift.to_pydatetime(), svc.now()
     db.flush()
     return created
 
@@ -1537,165 +1084,18 @@ def _utc(value: datetime) -> pd.Timestamp:
     return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
 
 
-# -- ending the day ---------------------------------------------------------------------------------------------
-
-
-def _day_journal(sessions: list[ReplaySession]) -> dict[str, Any]:
-    """The day's practice result from its sessions' final journals: a row per session, a line per closed trade (oldest
-    entry first), and the win, loss and scratch counts. Read back from the journals, so a day stored before the trade
-    lines existed serves them too."""
-    rows, lines = [], []
-    for s in sessions:
-        journal = s.journal or {}
-        totals = journal.get("totals", {})
-        rows.append(
-            {
-                "id": s.id,
-                "symbol": s.symbol,
-                "trades": totals.get("trades", 0),
-                "pnl_usd": totals.get("pnl_usd", 0.0),
-                "adherence_pct": (journal.get("adherence") or {}).get("score_pct"),
-            }
-        )
-        lines.extend({"symbol": s.symbol, **trade} for trade in journal.get("trades", []))
-    lines.sort(key=lambda line: line["entry_at"])
-    pnls = [line["pnl_usd"] for line in lines]
-    return {
-        "sessions": rows,
-        "trades": sum(r["trades"] for r in rows),
-        "pnl_usd": journal_mod.usd_sum([r["pnl_usd"] for r in rows]),
-        "wins": sum(1 for p in pnls if p > 0),
-        "losses": sum(1 for p in pnls if p < 0),
-        "scratches": sum(1 for p in pnls if p == 0),
-        "lines": lines,
-    }
-
-
-def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayList:
-    """Ends the day: every open practice trade exits at the price at the day clock (`source=auto`), then the day
-    unseals and the list review is stored. Idempotent."""
-    row = get_day_list(db, user_id, day_list_id, lock=True)
-    if row.status == "ended":
-        return row
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
-    if _is_swing(plan):
-        return _swing().end_day(db, user_id, day_list_id, svc)
-    session_mod.settle_locked(db, svc, row)  # the exits book at the clock as it is now
-    row.clock_running, row.clock_anchor_at = False, None  # a day that ended has no clock to run
-    sessions = _sessions_of(db, row.id)
-    for s in sessions:
-        if s.status == "active":
-            session_mod.end(db, user_id, s.id, svc, via_day=True)
-            db.refresh(s)
-    if len(sessions) > 1:  # the day rules count every name: rescore now that each one's last exit exists
-        for s in sessions:
-            session_mod.refresh_journal(db, user_id, s.id, svc)
-            db.refresh(s)
-    close = session_mod.market_close(row.day, "extended")  # the day's tape ends with the extended session
-    close = session_mod.window_end_of(sessions[0], day_thread=True) if sessions else close
-    yardstick = session_mod.market_close(row.day, "regular")  # the review measures every move to the regular close
-    store = svc.store_factory(db)
-    minutes: dict[str, pd.DataFrame | None] = {}
-    for candidate in row.candidates:
-        try:
-            minutes[candidate["symbol"]] = svc.history.minute_bars(store, candidate["symbol"], [row.day]).get(row.day)
-        except ProviderError as exc:
-            log.warning("review minutes unavailable for %s: %s", candidate["symbol"], exc)
-            minutes[candidate["symbol"]] = None
-    picks = {w["symbol"]: "starred" for w in row.watch}
-    picks.update({s.symbol: "traded" for s in sessions})
-    now = svc.now()
-    row.review = jsonable(review_mod.compute_review(row.candidates, minutes, row.day, yardstick, picks))
-    row.journal = jsonable(_day_journal(sessions))
-    row.status, row.revealed_through, row.ended_at, row.updated_at = "ended", close.to_pydatetime(), now, now
-    db.flush()
-    return row
-
-
-def end_day_by_hand(db: Session, user_id: int, day_list_id: int, svc: Services) -> ReplayDayList:
-    """`POST /day-lists/{id}/end`: a swing day only. A day-trade day has no manual end: it ends when the thread clock
-    reaches the next open (`clock.roll`), after the night, or when she skips to it (`clock.skip_day`) or jumps there
-    (`clock.control`), and both book its open positions and store its review. 409 for an open day-trade day; a day
-    that already ended answers as it is."""
-    row = get_day_list(db, user_id, day_list_id)
-    plan = db.get(PracticePlan, row.plan_id)
-    assert plan is not None
-    if row.status != "ended" and not _is_swing(plan):
-        raise ReplayProblem(
-            "A practice day ends when the clock reaches the next open · skip to it or jump the clock",
-            path="dayListId",
-            status=409,
-        )
-    return end_day(db, user_id, day_list_id, svc)
-
-
-# -- the hub ----------------------------------------------------------------------------------------------------
-
-
-def restart_stale_prep(db: Session, user_id: int, now: datetime, thread_id: int | None = None) -> PracticePlan | None:
-    """Claim the restart of a prep that died with its process. `open_next` restarts one that has not reported for
-    `PREP_STALE`, but the screen hides its Next button while prep says "running" (and a thread with no day yet has
-    nothing else to press), so a prep that died stranded the thread on "Preparing 0/130". The overview polls the hub
-    while it waits; that poll calls this, and a stale prep is claimed under the plan's row lock (its `updated_at`
-    moves, so exactly one poll wins and the others find a live prep). The caller then starts `run_prep` again; the
-    write-once blob cache makes the rerun resume where it stopped. None: nothing is stale (the usual answer)."""
-    if thread_id is not None:
-        thread = threads_mod.get_thread(db, user_id, thread_id)
-    else:
-        thread = threads_mod.active_thread(db, user_id)
-    if thread is None:
-        return None
-    swing = thread.mode == "swing"
-    plan = _swing()._thread_plan(db, thread.id) if swing else active_plan(db, user_id, thread_id=thread.id)
-    if plan is None or not _prep_stale(plan, now):
-        return None
-    db.refresh(plan, with_for_update=True)  # read the row again under its lock: another poll may have claimed it
-    if not _prep_stale(plan, now):
-        return None
-    plan.prep = {**plan.prep, "updated_at": now.isoformat()}
-    db.flush()
-    return plan
-
-
-def hub(db: Session, user_id: int, thread_id: int | None = None) -> dict[str, Any]:
-    """Her plan and thread card: thread `thread_id` (404 when it is not hers) with its own plan, else her most recently
-    started active day thread. The card is the daily plan's, so a swing thread has a card and no plan here."""
-    thread = threads_mod.get_thread(db, user_id, thread_id) if thread_id is not None else None
-    if thread is None:
-        thread = threads_mod.active_thread(db, user_id)
-    plan = (
-        None
-        if thread is not None and thread.mode == "swing"
-        else active_plan(db, user_id, thread_id=None if thread is None else thread.id)
-    )
-    return {
-        "plan": None if plan is None else plan_out(db, plan),
-        "thread": None if thread is None else threads_mod.summary(db, thread),
-    }
-
-
 __all__ = (
-    "Opened",
     "active_plan",
-    "check_range",
     "create_plan",
-    "day_list_out",
     "earnings_states",
-    "end_day",
-    "end_day_by_hand",
-    "hub",
-    "open_next",
-    "patch_day_list",
-    "plan_days",
-    "plan_end",
+    "ensure_screen",
+    "open_lane",
+    "patch_screen",
     "plan_out",
     "practice_universe",
-    "relist",
-    "restart_stale_prep",
-    "run_prep",
     "run_rescan",
+    "screen_out",
+    "screen_row",
     "start_rescan",
-    "start_session",
-    "warm_day",
+    "warm",
 )

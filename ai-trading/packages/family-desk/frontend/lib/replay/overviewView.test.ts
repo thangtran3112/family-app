@@ -1,116 +1,66 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
-import { adherenceStat, overviewDayRows, overviewWeekRows, planFinishedLine, swingGate, threadProgress } from "./overviewView.ts";
-import { swingThreadFinished, swingThreadReviewReady, swingThreadSummary, weekRows } from "./swingFixtures.ts";
-import { activeThread, closedThread, freshThread, threadDays } from "./threadFixtures.ts";
+import { clockLine, clockPill, lastActivityText, overviewDateRows, overviewStats, sinceStartText, threadCard } from "./overviewView.ts";
+import { activeThread, closedThread, freshThread, threadClockBrief, threadDays } from "./threadFixtures.ts";
 
-test("the Progress column says the day number once, with the practiced and passed counts beneath", () => {
-  // A day thread with its day open: Day 8 is the thread's own number, the counts are the stats.
-  assert.deepEqual(threadProgress(activeThread), { main: "Day 8", sub: "6 practiced · 2 passed", gate: null });
-  // Between days the last ended day reads done, not a day number the thread has not opened.
-  assert.equal(threadProgress({ ...activeThread, today: null, last_day: threadDays.at(-1)! }).main, "Day 8 done");
-  assert.equal(threadProgress(freshThread).main, "No day yet");
-  assert.equal(threadProgress(freshThread).sub, "No days yet");
-  assert.match(threadProgress(closedThread).main, /^\d+ days$/);
-  // A swing thread reads "Day 7 of 20", and a finished one "Finished".
-  const swing = threadProgress(swingThreadSummary);
-  assert.deepEqual([swing.main, swing.sub, swing.gate], ["Day 7 of 20", "5 practiced · 1 passed", null]);
-  assert.equal(threadProgress(swingThreadFinished).main, "Finished");
+test("the card reads the thread's time, its state, its open positions and its last activity: no day number, no progress", () => {
+  const card = threadCard(activeThread);
+  assert.deepEqual(card, { clock: "Tue 2026-03-10 · 9:41 AM ET", state: "Paused", running: false, positions: "2 open positions", lastActivity: "Oct 23" });
+  assert.equal(threadCard(freshThread).positions, "No open positions");
+  assert.equal(threadCard(freshThread).lastActivity, "No activity yet");
+  assert.equal(threadCard({ ...activeThread, positions_open: 1 }).positions, "1 open position");
+  for (const text of Object.values(threadCard(activeThread))) assert.doesNotMatch(String(text), /\bDay \d|practiced|passed|skipped/i);
 });
 
-test("a swing thread that owes its week review names it as a non-interactive gate, not as the progress text", () => {
-  const progress = threadProgress(swingThreadReviewReady);
-  assert.equal(progress.main, "Day 6 of 20");
-  assert.equal(progress.gate, "Week 1 review due");
-  assert.deepEqual(swingGate(swingThreadReviewReady), { weekNo: 1, step: "Week 1 review", locked: "Week 1 is done. Review it to unlock Day 6." }, "D-085: one sentence says why Day 6 waits");
-  assert.equal(swingGate(swingThreadSummary), null, "an ungated thread has no gate");
-  assert.equal(swingGate(activeThread), null, "a day thread has none either");
+test("a running clock says its speed and a clock stopped at the horizon says why", () => {
+  assert.equal(clockPill({ ...threadClockBrief, running: true, speed: 5 }), "Running at 5x");
+  assert.equal(clockPill({ ...threadClockBrief, running: false, pause: { kind: "horizon" } }), "Paused at the latest available data");
+  assert.equal(clockPill({ ...threadClockBrief, running: false, pause: null }), "Paused");
+  assert.equal(clockPill(null), "");
+  assert.equal(threadCard({ ...activeThread, clock: { ...threadClockBrief, running: true, speed: 2 } }).running, true);
 });
 
-test("adherence is never a bare number: it says which day it is, and first to last when they differ", () => {
-  assert.deepEqual(adherenceStat({ adherenceFirstPct: 71, adherenceLastPct: 83 }), { value: "71% → 83%", hint: "first to last scored day" });
-  assert.deepEqual(adherenceStat({ adherenceFirstPct: 0, adherenceLastPct: 0 }), { value: "0%", hint: "last scored day" });
-  assert.deepEqual(adherenceStat({ adherenceLastPct: 40 }), { value: "40%", hint: "last scored day" });
-  assert.deepEqual(adherenceStat({}), { value: "—", hint: "no scored day yet" });
+test("a thread with no setup has no clock: the card says so instead of a time", () => {
+  const bare = { ...activeThread, clock: null };
+  assert.equal(clockLine(bare.clock), "No start time yet");
+  assert.equal(threadCard(bare).state, "");
 });
 
-test("the days table lists the newest day first, by number, weekday and date", () => {
-  const rows = overviewDayRows(threadDays);
+test("last activity is the wall-clock day of the last trade or clock move", () => {
+  assert.equal(lastActivityText("2026-10-25T03:30:00Z"), "Oct 24", "New York's calendar day, not UTC's");
+  assert.equal(lastActivityText(null), "No activity yet");
+});
+
+test("the stats are closed trades, win rate, wins, losses and open positions; no days practiced or skipped, no adherence", () => {
+  const rows = overviewStats(activeThread.thread.stats, 2);
+  assert.deepEqual(rows.map((row) => [row.id, row.value]), [["closed", "14"], ["win_rate", "64%"], ["wins", "9"], ["losses", "5"], ["open", "2"]]);
+  assert.deepEqual(overviewStats(freshThread.thread.stats, 0).map((row) => row.value), ["0", "—", "0", "0", "0"]);
+  for (const row of rows) assert.doesNotMatch(row.label, /practiced|passed|skipped|adherence/i);
+});
+
+test("since start is the signed change from the starting balance", () => {
+  assert.equal(sinceStartText(1234.5), "Since start +$1,234.50");
+  assert.equal(sinceStartText(-80), "Since start −$80.00");
+  assert.equal(sinceStartText(0), "Since start $0.00");
+});
+
+test("the results table lists the ET dates that have a trade, the newest first, with the weekday and the date", () => {
+  const rows = overviewDateRows(threadDays);
   assert.equal(rows.length, threadDays.length);
-  assert.deepEqual(rows.map((row) => row.n), [...threadDays.map((day) => day.n)].sort((a, b) => b - a));
-  const skipped = rows.find((row) => !row.practiced)!;
-  assert.deepEqual([skipped.status, skipped.trades, skipped.result, skipped.resultTone], ["Passed", "—", "—", "flat"], "D-082: one word, the one the day page uses");
-  const practiced = rows.find((row) => row.practiced)!;
-  assert.equal(practiced.status, "Practiced");
-  assert.match(practiced.result, /^[+−]\$|^\$0\.00$/);
-  for (const row of rows) {
-    assert.match(row.title, /^Day \d+ · (Mon|Tue|Wed|Thu|Fri) 20\d\d-\d\d-\d\d$/);
-    assert.match(row.href, /^\/practice\/day\?id=\d+$/);
-  }
+  assert.deepEqual(rows.map((row) => row.key), [...threadDays.map((day) => day.day)].reverse());
+  assert.deepEqual(rows[0], { key: "2026-03-04", date: "Wed 2026-03-04", trades: "1", result: "+$112.00", resultTone: "up", balance: "$50,123.00" });
+  assert.deepEqual([rows.at(-1)!.result, rows.at(-1)!.resultTone], ["−$182.00", "down"]);
+  assert.deepEqual(overviewDateRows([]), []);
 });
 
-test("the week list covers every week: done, the review owed, the current one, and the weeks to come", () => {
-  const state = swingThreadSummary.swing!; // week 2 of 4, Day 7, not gated
-  const list = overviewWeekRows(7, state, weekRows);
-  assert.deepEqual(list.map((row) => [row.label, row.status]), [["Week 1", "done"], ["Week 2", "current"], ["Week 3", "upcoming"], ["Week 4", "upcoming"]]);
-  assert.equal(list[0]!.href, "/practice/week?thread=7&week=1");
-  assert.equal(list[0]!.realized, "+$612.00");
-  assert.equal(list[3]!.href, null, "a week with no ended day has no review to open");
-
-  // The gate: Week 1 is owed its review and Week 2 waits behind it.
-  const gated = overviewWeekRows(7, swingThreadReviewReady.swing!, weekRows.slice(0, 1));
-  assert.deepEqual(gated.map((row) => row.status), ["review", "upcoming", "upcoming", "upcoming"]);
-  assert.equal(gated[0]!.statusText, "Review due");
-  assert.equal(gated[0]!.href, "/practice/week?thread=7&week=1");
-
-  // The weeks answer failed or is loading: the list still reads from the thread's own state.
-  assert.deepEqual(overviewWeekRows(7, state, null).map((row) => row.status), ["done", "current", "upcoming", "upcoming"]);
-  assert.equal(overviewWeekRows(7, swingThreadFinished.swing!, null).every((row) => row.status === "done"), true);
-});
-
-test("the strings the overview builds contain no banned word", () => {
-  const built = [
-    ...[activeThread, freshThread, closedThread, swingThreadSummary, swingThreadReviewReady, swingThreadFinished].flatMap((summary) => {
-      const progress = threadProgress(summary);
-      return [progress.main, progress.sub, progress.gate ?? ""];
-    }),
-    ...overviewDayRows(threadDays).flatMap((row) => [row.title, row.status]),
-    ...overviewWeekRows(7, swingThreadReviewReady.swing!, weekRows).flatMap((row) => [row.label, row.statusText]),
-    swingGate(swingThreadReviewReady)!.step,
-    swingGate(swingThreadReviewReady)!.locked,
-    adherenceStat({}).hint,
+test("nothing the Summary or the card says carries a banned term, and a closed thread keeps its card", () => {
+  const texts = [
+    ...Object.values(threadCard(activeThread)),
+    ...Object.values(threadCard(closedThread)),
+    ...overviewStats(activeThread.thread.stats, 2).map((row) => row.label),
+    sinceStartText(5),
   ];
-  for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
-});
-
-// D-082: a swing day she passed with holds open can still move equity; the days table says so instead of "the balance carried over".
-test("a passed swing day says its holds rode and what equity did (D-082)", () => {
-  const equity = { startingBalance: 50000, series: [{ day_no: 1, weekday: "Mon", balance_usd: 50000, equity_usd: 50000 }, { day_no: 2, weekday: "Tue", balance_usd: 50000, equity_usd: 50601 }] } as const;
-  const days = [
-    { ...threadDays[0]!, n: 1, kind: "practiced" as const },
-    { ...threadDays[3]!, n: 2, kind: "skipped" as const, weekday: "Tue" as const },
-  ];
-  const rows = overviewDayRows(days, equity);
-  assert.equal(rows.find((row) => row.n === 2)!.status, "Passed · holds rode, equity +$601.00");
-  assert.equal(rows.find((row) => row.n === 1)!.status, "Practiced");
-  assert.equal(overviewDayRows(days).find((row) => row.n === 2)!.status, "Passed", "with no equity series (a day thread) it is the plain word");
-});
-
-// D-081: the overview's weeks table showed only REALIZED, so +$612.50 in open holds read $0.00.
-test("a week row carries the equity change beside the realized figure (D-081)", () => {
-  const list = overviewWeekRows(7, swingThreadSummary.swing!, weekRows);
-  assert.equal(list[0]!.equityChange, "+$870.00");
-  assert.equal(list[0]!.equityChangeTone, "up");
-  assert.equal(list[3]!.equityChange, "—", "a week with no ended day has none");
-});
-
-// D-096: on the last day "Next day" went silently to /practice, where the row read "Active · Day 5 done" with a status on a button.
-test("a day thread whose plan is finished reads Finished and has a summary line (D-096)", () => {
-  assert.equal(threadProgress(activeThread).main, "Day 8");
-  assert.equal(threadProgress({ ...activeThread, today: null, last_day: threadDays.at(-1)! }, true).main, "Finished");
-  assert.equal(threadProgress({ ...activeThread, today: null, last_day: threadDays.at(-1)! }, true).sub, "6 practiced · 2 passed");
-  // days, P/L and win rate, from the thread's own stats
-  assert.equal(planFinishedLine(activeThread.thread), "Plan finished · 8 days · +$123.00 · win rate 64%");
-  assert.equal(planFinishedLine(freshThread.thread), "Plan finished · 0 days · $0.00 · win rate —");
+  for (const text of texts) assert.equal(containsPracticeBannedTerm(String(text)), false, String(text));
+  assert.equal(threadCard(closedThread).positions, "2 open positions", "a closed thread still holds its positions, valued at the time it stopped");
 });

@@ -1,10 +1,10 @@
-"""The database layer of the practice holds (02p §b): `PracticeHold` rows to and from the pure `holds.Hold`, the writes
-the day lifecycle makes (enter, undo an entry, undo an exit), and the ledger credit of a closed hold.
+"""The database layer of the practice holds (02p §b): `PracticeHold` rows to and from the pure `positions.Hold`, the
+writes the day lifecycle makes (enter, undo an entry, undo an exit), and the ledger credit of a closed hold.
 
-The rules live in `holds.py`; this module only moves rows. A caller reads a row with `to_hold`, applies a pure rule, and
-writes the answer back with `apply`. The exit session and mark are not fields of `Hold`: the caller sets
-`row.exit_session_id` and `row.exit_mark_id` itself when her exit mark closes a hold (an auto exit at a close has
-neither). Lock order for every swing write (02p §f4): day list, session, thread, holds.
+The rules live in `holds.py` and `positions.py`; this module only moves rows. A caller reads a row with `to_hold`,
+applies a pure rule, and writes the answer back with `apply`. The exit session and mark are not fields of `Hold`: the
+caller sets `row.exit_session_id` and `row.exit_mark_id` itself when her exit mark closes a hold (an auto exit at a
+close has neither). Lock order for every swing write (02p §f4): day list, session, thread, holds.
 
 A name's open row is its average-cost position (ADR-0016). `scale_in` adds shares to it and re-averages the cost,
 `split_off` closes part of it as a row of its own (`part_exit`) and leaves the cost alone, and `restore` and
@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ai_trading.db.models import PracticeHold, PracticeLedger, PracticeThread
-from ai_trading.replay import holds, journal
+from ai_trading.replay import holds, journal, positions
 
 
 def _num(value: Decimal | None) -> float | None:
@@ -38,8 +38,8 @@ def _stamp(value: datetime | None) -> pd.Timestamp | None:
     return None if value is None else pd.Timestamp(value).tz_convert("UTC")
 
 
-def to_hold(row: PracticeHold) -> holds.Hold:
-    return holds.Hold(
+def to_hold(row: PracticeHold) -> positions.Hold:
+    return positions.Hold(
         id=row.id,
         symbol=row.symbol,
         side=row.side,
@@ -61,7 +61,7 @@ def to_hold(row: PracticeHold) -> holds.Hold:
     )
 
 
-def apply(row: PracticeHold, hold: holds.Hold) -> None:
+def apply(row: PracticeHold, hold: positions.Hold) -> None:
     """Copy every field a pure rule can change back to the row: the share basis (a split), the stop, the exit, and
     the last close. The entry day and time, the side and the symbol never change."""
     row.shares = hold.shares
@@ -98,14 +98,14 @@ def open_holds(db: Session, thread_id: int, *, lock: bool = False) -> list[Pract
 def unrealized_total(open_rows: Sequence[PracticeHold], price_of: Callable[[str], float]) -> float:
     """The open holds' unrealized P/L, each valued at `price_of(symbol)` (the caller picks the price: the last ended
     close for a read outside the day, the revealed price during it)."""
-    return round(sum(holds.pnl(to_hold(row), price_of(row.symbol)) for row in open_rows), 2)
+    return round(sum(positions.pnl(to_hold(row), price_of(row.symbol)) for row in open_rows), 2)
 
 
 # -- writing ------------------------------------------------------------------------------------------------
 
 
-def _taken(symbol: str) -> holds.HoldProblem:
-    return holds.HoldProblem(f"{symbol} was just opened by another request · try again")
+def _taken(symbol: str) -> positions.HoldProblem:
+    return positions.HoldProblem(f"{symbol} was just opened by another request · try again")
 
 
 def add_entry(
@@ -278,7 +278,7 @@ def credit(db: Session, row: PracticeHold, now: datetime) -> PracticeLedger | No
         return None
     hold = to_hold(row)
     assert hold.exit_price is not None and hold.exit_day is not None and hold.exit_at is not None
-    r = holds.r_multiple(hold, hold.exit_price)
+    r = positions.r_multiple(hold, hold.exit_price)
     entry = PracticeLedger(
         thread_id=row.thread_id,
         session_id=row.exit_session_id,

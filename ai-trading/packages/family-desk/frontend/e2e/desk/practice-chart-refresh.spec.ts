@@ -2,9 +2,9 @@ import type { CDPSession, Page } from "@playwright/test";
 import { origin } from "../helpers";
 import { stepBar } from "./clock-helpers";
 import { expect, openDesk, prepareDesk, test } from "./helpers";
-import { openFirstDay, saveFilter, startThread } from "./hub-helpers";
+import { openNameFromScreen } from "./lane-helpers";
 
-// D-206: the replay chart's own refresh held the page. A day thread's chart asks the server every 2 s (`advance {sync: true}`) and draws the answer;
+// D-206: the replay chart's own refresh held the page. A lane's chart asks the server every 2 s (`advance {sync: true}`) and draws the answer;
 // each answer, new bar or none, re-rendered the chart's whole source-bar data table (one row per bar, 6,000 at 1m) and handed every series the whole
 // data again: a main-thread task of 550 to 620 ms for each new bar at 1m, 190 to 210 ms for an idle poll at 5m, 73 to 88 ms at 15m, once a window.
 // A poll that brings nothing new must cost close to nothing, and a new bar must not cost more at 6,000 bars than at 60.
@@ -13,16 +13,7 @@ import { openFirstDay, saveFilter, startThread } from "./hub-helpers";
 // ones, so a loaded machine does not trip them. The market moves through the thread's clock route (what Play, Step and Pause in another window end
 // up calling); the chart follows it on its own.
 
-const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const SYMBOL = "XOM"; // a name no other spec opens on its own: the server keeps the prepared bars of every name it has served
-const EVERY_NAME = {
-  schemaVersion: 1,
-  name: "Every name",
-  watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
-  liquidity: { minPrice: 1, minAvgVolume: 1 },
-  when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
-  maxResults: 50,
-};
 /** Longest single task a new bar may cost, and the main-thread time of the polls of a still clock, in ms (the old page: 550 and 190 at best). */
 const BAR_TASK_CEILING_MS = 150;
 const IDLE_TOTAL_CEILING_MS = 100;
@@ -44,11 +35,6 @@ const showInterval = async (page: Page, interval: string) => {
   await page.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: interval, exact: true }).click();
   await expect(page.locator(chartLabel(interval))).toBeVisible();
 };
-const threadOf = async (page: Page): Promise<number> => {
-  const id = /id=(\d+)/.exec(page.url())![1];
-  const session = await (await page.context().request.get(`${origin}/api/desk/replay/sessions/${id}`)).json();
-  return session.thread_id;
-};
 const sum = (tasks: number[]) => tasks.reduce((total, ms) => total + ms, 0);
 /** Main-thread time spent in tasks so far, ms (the browser's own `TaskDuration`): it counts the work under 50 ms that a long-task observer cannot see. */
 const busy = async (cdp: CDPSession) => Math.round(((await cdp.send("Performance.getMetrics")).metrics.find((metric) => metric.name === "TaskDuration")?.value ?? 0) * 1000);
@@ -56,12 +42,7 @@ const busy = async (cdp: CDPSession) => Math.round(((await cdp.send("Performance
 test("a replay chart that polls and takes new bars does not hold the page: 1m, 5m, 15m, two windows at 10x (D-206)", async ({ page, context }, testInfo) => {
   test.setTimeout(300_000);
   await prepareDesk(context);
-  await saveFilter(context, EVERY_NAME);
-  await startThread(page, context, { filter: EVERY_NAME.name });
-  await openFirstDay(page);
-  await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: new RegExp(SYMBOL) }).getByText(SYMBOL, { exact: true }).click();
-  await page.waitForURL(SESSION_URL);
-  await expect(page.getByRole("heading", { name: SYMBOL, level: 1 })).toBeVisible();
+  const thread = await openNameFromScreen(page, context, SYMBOL);
   await expect.poll(() => sourceBars(page, "1m"), { message: "the 1m lookback is loaded", timeout: 30_000 }).toBeGreaterThan(1000);
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");
@@ -115,7 +96,6 @@ test("a replay chart that polls and takes new bars does not hold the page: 1m, 5
   await watch(second);
   await page.waitForTimeout(2500);
   await drain(second);
-  const thread = await threadOf(page);
   const before = await sourceBars(page, "1m");
   const control = (data: Record<string, unknown>) => context.request.post(`${origin}/api/desk/replay/threads/${thread}/clock`, { data });
   expect((await control({ speed: 10 })).ok()).toBeTruthy();

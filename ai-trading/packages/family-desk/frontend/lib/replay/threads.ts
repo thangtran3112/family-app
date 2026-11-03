@@ -2,120 +2,81 @@ import { z } from "zod";
 import { PracticeThreadV1Schema } from "@ai-trading/contracts/practice-thread-v1";
 import type { components } from "../api/openapi.js";
 
-// Response shapes of the practice-thread endpoints (02r): `/replay/threads`, `/replay/threads/{id}` and the thread
-// header strip every day screen and the workspace carry. `PracticeThreadV1` is the contract itself (plan and stats);
-// the rest mirrors `ai_trading/api/schemas/threads.py` and is checked against the generated OpenAPI the way
-// lib/replay/daily.ts is: a field the backend adds, drops or retypes breaks `pnpm typecheck`. Every dollar figure here
-// is SIMULATED.
+// Response shapes of the practice-thread endpoints: `/replay/threads`, `/replay/threads/{id}` and the thread header strip every
+// Practice screen carries (ADR-0025, freestyle). `PracticeThreadV1` is the contract itself (plan and stats); the rest mirrors
+// `ai_trading/api/schemas/threads.py` and is checked against the generated OpenAPI: a field the backend adds, drops or retypes
+// breaks `pnpm typecheck`. A thread has no mode, no list of days and no fixed course length: it is a paper account and one clock. The
+// contract and the brief still carry `mode` (the backend writes "day" until the contract migration); no screen reads it.
+// Every dollar figure here is SIMULATED.
 
 const finite = z.number().finite();
-const weekday = z.enum(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+const timestamp = z.iso.datetime({ offset: true });
 
 export const ThreadModeSchema = z.enum(["day", "swing"]);
 export const ThreadStatusSchema = z.enum(["active", "closed"]);
 
-/** The header strip of a day screen or the workspace: the balance and today's realized P/L (null with no day under way). */
+/** The header strip of a Screen or the workspace: the balance (the ledger's, realized only). */
 export const ThreadBriefSchema = z.object({
   id: finite.int(),
   mode: ThreadModeSchema,
   status: ThreadStatusSchema,
   balance: finite,
-  today_pnl_usd: finite.nullable(),
   label: z.string(),
-  // Swing threads only (02p); absent for a day thread. Equity counts the open holds at the last official close.
-  equity_usd: finite.nullish(),
-  free_cash_usd: finite.nullish(),
-  day_no: finite.int().nullish(),
-  days: finite.int().nullish(),
-  week_no: finite.int().nullish(),
 }) satisfies z.ZodType<components["schemas"]["ThreadBriefOut"]>;
 
-export const ThreadTodaySchema = z.object({
-  day_list_id: finite.int(),
-  day: z.iso.date(),
-  weekday,
-  day_no: finite.int(),
-  status: z.enum(["listed", "practicing"]),
-  trades: finite.int(),
-  pnl_usd: finite,
-}) satisfies z.ZodType<components["schemas"]["ThreadTodayOut"]>;
+/** A thread's clock in the list: the simulated time `T`, whether it runs and at what speed, and why it stopped (the horizon). */
+export const ThreadClockBriefSchema = z.object({
+  clock: timestamp,
+  running: z.boolean(),
+  speed: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]),
+  start_at: timestamp.nullable(),
+  pause: z.record(z.string(), z.unknown()).nullable(),
+}) satisfies z.ZodType<components["schemas"]["ThreadClockBriefOut"]>;
 
-/** One ended swing day of the equity series: day numbers and a weekday only, no dates. */
-export const SwingEquityPointSchema = z.object({
-  day_no: finite.int(),
-  weekday,
-  balance_usd: finite,
-  equity_usd: finite,
-}) satisfies z.ZodType<components["schemas"]["SwingEquityPointOut"]>;
-
-/**
- * Where a swing thread is (02p f2): the day under way (else the next to open) and its week, the open holds with free cash
- * and equity, and the equity series, which stops at the last ended day. `next` says what the thread page offers: the next
- * day, the finished week's review first, or nothing (finished). All SIMULATED.
- */
-export const SwingStateSchema = z.object({
-  day_no: finite.int(),
-  days: finite.int(),
-  days_ended: finite.int(),
-  week_no: finite.int(),
-  weeks: finite.int(),
-  holds_open: finite.int(),
-  free_cash_usd: finite,
-  equity_usd: finite,
-  equity_series: z.array(SwingEquityPointSchema),
-  next: z.enum(["day", "week_review", "finished"]),
-}) satisfies z.ZodType<components["schemas"]["SwingStateOut"]>;
-
-/** One ended practice day: `skipped` ended with no session, so the balance carried. `balance` is at the day's end. */
-export const ThreadDaySchema = z.object({
-  n: finite.int(),
-  day_list_id: finite.int(),
-  day: z.iso.date(),
-  weekday,
-  kind: z.enum(["practiced", "skipped"]),
-  trades: finite.int(),
-  pnl_usd: finite,
-  adherence_pct: finite.int().nullable(),
-  balance: finite,
-}) satisfies z.ZodType<components["schemas"]["ThreadDayOut"]>;
-
-/** A row of the hub's "Your practice threads": the contract thread, today's open day, and a SIMULATED label. A swing
- *  thread also carries its `swing` state (its setup is `thread.swing`, the contract's echo); the key is absent for a day thread. */
+/** A row of the hub's "Your practice threads": the contract thread, its clock, how many positions are open, and a SIMULATED label. */
 export const ThreadSummarySchema = z.object({
   thread: PracticeThreadV1Schema,
-  today: ThreadTodaySchema.nullable(),
-  /** The last ended day, from the balance's own series: the card's row while no day is open (D-048). */
-  last_day: ThreadDaySchema.nullable(),
-  /** UTC wall-clock moment a day list opened, a day ended or a week closed; never a replayed date. Null while the thread is fresh. */
-  last_activity_at: z.iso.datetime({ offset: true }).nullable(),
+  /** Null while the thread has no setup yet (no start instant, so no time). */
+  clock: ThreadClockBriefSchema.nullable(),
+  positions_open: finite.int(),
+  /** UTC wall-clock moment of the last trade or clock move; never a replayed date. Null while the thread is fresh. */
+  last_activity_at: timestamp.nullable(),
   label: z.string(),
-  swing: SwingStateSchema.nullish(),
 }) satisfies z.ZodType<components["schemas"]["ThreadSummaryOut"]>;
 
-/** `n` 0 is the starting balance (no day), then one point per ended day. */
+/** One ET calendar date of the thread's trades (a label and a grouping key only): the day's realized P/L and the balance after it. */
+export const ThreadDateSchema = z.object({
+  n: finite.int(),
+  day: z.iso.date(),
+  weekday: z.enum(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+  trades: finite.int(),
+  pnl_usd: finite,
+  balance: finite,
+}) satisfies z.ZodType<components["schemas"]["ThreadDateOut"]>;
+
+/** `n` 0 is the starting balance (no date), then one point per ET date with a realized trade. */
 export const CurvePointSchema = z.object({ n: finite.int(), day: z.iso.date().nullable(), balance: finite }) satisfies z.ZodType<components["schemas"]["CurvePointOut"]>;
 
 export const ThreadSchema = ThreadSummarySchema.extend({
-  daily: z.array(ThreadDaySchema),
+  /** One row per ET date with a realized trade, oldest first. */
+  daily: z.array(ThreadDateSchema),
   curve: z.array(CurvePointSchema),
 }) satisfies z.ZodType<components["schemas"]["ThreadOut"]>;
 
 export const ThreadsSchema = z.array(ThreadSummarySchema);
 
-/** The day-trade slots, shared by every user: at most `day_max` active day threads at once (ADR-0022). Swing threads use none. */
+/** The thread slots, shared by every user: at most `day_max` active threads at once (ADR-0025; the key names stay until the contract migration). */
 export const ThreadCapacitySchema = z.object({
   day_active: finite.int(),
   day_max: finite.int(),
 }) satisfies z.ZodType<components["schemas"]["ThreadCapacityOut"]>;
 
 export type ThreadBrief = z.infer<typeof ThreadBriefSchema>;
-export type ThreadToday = z.infer<typeof ThreadTodaySchema>;
+export type ThreadClockBrief = z.infer<typeof ThreadClockBriefSchema>;
 export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
 export type ThreadCapacity = z.infer<typeof ThreadCapacitySchema>;
-export type ThreadDay = z.infer<typeof ThreadDaySchema>;
+export type ThreadDate = z.infer<typeof ThreadDateSchema>;
 export type CurvePoint = z.infer<typeof CurvePointSchema>;
 export type Thread = z.infer<typeof ThreadSchema>;
-export type SwingState = z.infer<typeof SwingStateSchema>;
-export type SwingEquityPoint = z.infer<typeof SwingEquityPointSchema>;
 export type PracticeThread = ThreadSummary["thread"];
 export type ThreadPlan = PracticeThread["plan"];

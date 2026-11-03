@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containsPracticeBannedTerm, PRACTICE_COPY, practiceBandText, practiceText, replayBadgeText, withoutRetryHint } from "../desk/freshness.ts";
+import { containsPracticeBannedTerm, PRACTICE_COPY, practiceBandText, practiceText, replayBadgeText } from "../desk/freshness.ts";
 import { markLabel } from "./marks.ts";
 import { fastTapeText } from "./tape.ts";
-import { noTradesText, sessionOverText, tradesCountText } from "./journalView.ts";
+import { noTradesText, tradesCountText } from "./journalView.ts";
 
 test("every Practice copy string passes the banned-term check (the global list)", () => {
   for (const [key, text] of Object.entries(PRACTICE_COPY)) {
@@ -35,7 +35,6 @@ test("practiceText fills placeholders, and the strings the screens build contain
   const built = [
     fastTapeText({ shown: 500, count: 1043 })!,
     ...(["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note"] as const).map((kind) => markLabel({ kind, shares: 100, stop_price: 186.9 })),
-    sessionOverText(3),
     noTradesText(0),
     noTradesText(2),
     tradesCountText(1),
@@ -46,62 +45,4 @@ test("practiceText fills placeholders, and the strings the screens build contain
   assert.equal(practiceText("chartNotUpdating", { when: "8:00 PM ET" }), "Not updating · last data 8:00 PM ET");
   assert.equal(practiceText("marketClosed", { time: "8:00 PM ET" }), "Market closed · data through 8:00 PM ET");
   for (const text of built) assert.equal(containsPracticeBannedTerm(text), false, text);
-});
-
-// ---- swing practice (02p) ---------------------------------------------------------------------------------------
-
-const swingRows = Object.entries(PRACTICE_COPY).filter(([key]) => key.startsWith("swing")) as Array<[keyof typeof PRACTICE_COPY, string]>;
-
-test("the swing copy rows are all there, plain, and free of banned words", () => {
-  assert.ok(swingRows.length > 120, `${swingRows.length} swing rows`);
-  for (const [key, text] of swingRows) {
-    assert.equal(containsPracticeBannedTerm(text), false, `${key}: ${text}`);
-    assert.equal(text, text.trim(), key);
-    assert.equal(/\b(?:position|order|filled|broker|execute)/i.test(key), false, `the key ${key} names a banned word`);
-  }
-});
-
-test("a swing row with placeholders fills completely, and a row without any has no braces", () => {
-  for (const [key, text] of swingRows) {
-    const names = [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!);
-    const filled = practiceText(key, Object.fromEntries(names.map((name) => [name, "x"])));
-    assert.equal(/[{}]/.test(filled), false, `${key}: ${filled}`);
-    if (names.length === 0) assert.equal(filled, text);
-  }
-});
-
-test("the swing strings the screens quote word for word", () => {
-  assert.equal(PRACTICE_COPY.swingTapeOff, "Tape off · swing prices are one-minute closes");
-  assert.equal(PRACTICE_COPY.swingTapeOffFootnote, "Swing prices are one-minute closes · exact prints need the tape on");
-  assert.equal(PRACTICE_COPY.swingDividends, "Dividends are not credited in practice");
-  assert.equal(PRACTICE_COPY.swingScoredWeekly, "Scored weekly");
-  assert.equal(PRACTICE_COPY.swingMarketNotOpen, "Market not open yet · step to the first bar");
-  assert.equal(PRACTICE_COPY.swingPassDay, "Pass this day");
-  assert.equal(PRACTICE_COPY.swingWeekToDate, "Week to date");
-  assert.equal(PRACTICE_COPY.swingSimulated, "SIMULATED");
-  assert.equal(practiceText("swingStartDay", { n: 7 }), "Start Day 7");
-  assert.equal(practiceText("swingContinueDay", { n: 7 }), "Continue Day 7");
-  assert.equal(practiceText("swingStartWeek", { n: 3 }), "Start Week 3");
-  assert.equal(practiceText("swingEntryLabel", { day: 3, price: "184.20" }), "Day 3 · 184.20");
-  assert.equal(practiceText("swingCalendarLine", { sessions: 20, weeks: 4, noun: "weeks" }), "20 sessions · 4 weeks · ends on day 20");
-  assert.equal(practiceText("swingFinished", { days: 20 }), "Finished · Day 20 of 20");
-  assert.equal(practiceText("swingLineNames", { n: 50 }), "50 names");
-  assert.equal(practiceText("swingPrepProgress", { done: 96, total: 133, pct: 72 }), "Preparing as-of data · 96 of 133 (72%) · this can take several minutes · watchlist and manual picks are ready");
-});
-
-test("the swing copy never says position, order, filled, broker or execute, in a row or in a quoted spec sentence", () => {
-  for (const text of [
-    "Swing · 50 names · Week 2 of 4 · Day 7 of 20 · Balance $51,240 · Equity $52,010 · 2 holds open",
-    "End Day 7 at 11:40? Your 2 holds stay open through the close, unwatched.",
-    "NVDA crossed your stop 182.50 at 11:42 · Exit or keep",
-    "Split 10-for-1 before today's open · 100 shares are now 1,000 at 120.38",
-  ]) {
-    assert.equal(containsPracticeBannedTerm(text), false, text);
-  }
-});
-
-test("a message line keeps its sentence and drops the Try again tail it has no button for", () => {
-  assert.equal(withoutRetryHint(PRACTICE_COPY.orderError), "Couldn't place that order");
-  assert.equal(withoutRetryHint(PRACTICE_COPY.advanceError), "Couldn't load the next minute");
-  assert.equal(withoutRetryHint("Not enough practice cash · $450 free"), "Not enough practice cash · $450 free");
 });

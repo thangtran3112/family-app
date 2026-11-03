@@ -13,7 +13,7 @@ export function CapturedContext({ captured, screen, onScreenChange }: { captured
   const rows: [string, string][] = [
     ["Screen", screen],
     ["Route", captured.route],
-    ["Practice day", captured.dayListId ? `Day list ${captured.dayListId}` : EMPTY_VALUE],
+    ["Practice thread", captured.threadId ? `Thread ${captured.threadId}` : EMPTY_VALUE],
     ["Symbol", captured.symbol ?? EMPTY_VALUE],
     ["App version", captured.appVersion],
     ["Captured", formatEtDayTime(captured.capturedAt)],

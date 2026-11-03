@@ -26,7 +26,7 @@ export function TradesTable({ rows }: TradesTableProps) {
       columns={COLUMNS}
       rows={rows}
       rowKey={(row) => String(row.no)}
-      empty={PRACTICE_COPY.noTradesJournal}
+      empty={PRACTICE_COPY.journalNoTrades}
     />
   );
 }

@@ -1,103 +1,152 @@
-import { EMPTY_VALUE, changeToneAt, formatPrice, formatSignedPct, type Tone } from "../desk/format.ts";
+import { EMPTY_VALUE, changeToneAt, formatEtDateClock, formatPrice, type Tone } from "../desk/format.ts";
+import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import { formatSignedUsd } from "../desk/mask.ts";
-import type { PortfolioRow } from "./dayView.ts";
-import { stopCrossedText } from "./dayView.ts";
-import type { Hold } from "./schemas.ts";
-import { daysHeldText, holdStopText } from "./swing.ts";
-import { formatBalance } from "./threadView.ts";
+import type { PortfolioOrder, PortfolioPosition } from "./portfolio.ts";
 
-// The Portfolio tab's position table, read like a broker's (Interactive Brokers: Last, Change, Position, Avg price, Value, P&L).
-// One row model for both threads: a day thread's held names (the day list) and a swing thread's carried holds. Pure, so node --test covers
-// it. Every dollar figure is SIMULATED. A figure the payload does not hold is a dash, never a computed stand-in. The table holds open
-// positions only, so its P/L is the unrealized one; a closed trade's result is in Trades, not here.
+// The Portfolio tab's position table, read like a broker's list of what she holds now (ADR-0025): each open position across the thread's
+// lanes with the price AT the thread clock `T`, its gain or loss, how long it has been held and the orders working on it. Pure, so
+// node --test covers it. Every dollar figure is SIMULATED. A figure the payload does not hold is a dash, never a computed stand-in. The
+// table holds open positions only, so its P/L is the unrealized one; a closed trade's result is in Trades, not here.
 
-/** An open position, in the numbers each mode's payload holds. `null` is "the payload has no such number". */
+/** An open position, in the numbers `GET /threads/{id}/portfolio` holds. */
 export type PositionRow = {
   key: string;
+  /** The lane the position lives in: its chart, and where an exit is placed. */
+  sessionId: number;
   symbol: string;
-  /** null: flat (no open position). A flat row is never shown in the Portfolio; the cells still read it as "Flat". */
-  side: "long" | "short" | null;
-  /** Unsigned; null when flat. */
-  shares: number | null;
-  /** The mark at the thread clock; null when flat. */
-  last: number | null;
-  /** The close before the mark's session; null when the payload has none (a swing hold carries no prior close). */
-  priorClose: number | null;
-  /** The average price the open position was built at; null when flat. */
-  avg: number | null;
-  unrealized: number | null;
-  /** "Day 3 of hold"; swing only. */
-  held: string | null;
-  /** Day only: the name the chart is on, and one behind the thread clock. */
-  current: boolean;
-  behind: boolean;
-  /** "Stop crossed 10:21": the stop paused play on this position. */
+  side: "long" | "short";
+  /** Unsigned. */
+  shares: number;
+  avg: number;
+  /** The price at `T`. */
+  price: number;
+  /** When that price is from, set only when it is old enough to say so ("last price 3d 4h old"); a name that never had a price says it is carried at cost. */
+  priceNote: string | null;
+  unrealized: number;
+  /** "3d 4h". */
+  heldFor: string;
+  /** Working orders on this name. */
+  orders: number;
+  /** "Stop crossed Fri 2026-10-23 · 10:21 AM ET": the stop line is an alert and never exits. */
   stop: string | null;
 };
 
-/** A cell's text and the tone of its sign. `tone` null is plain text; "flat" is muted (a dash, a zero, "Flat"). */
+/** A cell's text and the tone of its sign. `tone` null is plain text; "flat" is muted (a dash, a zero). */
 export type Cell = { text: string; tone: Tone | null };
 
 export type PositionCells = {
-  last: Cell;
-  change: Cell;
-  changePct: Cell;
-  position: Cell;
+  side: Cell;
+  shares: Cell;
   avg: Cell;
-  value: Cell;
+  price: Cell;
   unrealized: Cell;
+  heldFor: Cell;
+  orders: Cell;
 };
 
-const dash: Cell = { text: EMPTY_VALUE, tone: "flat" };
 const plain = (text: string): Cell => ({ text, tone: null });
-const signedUsd = (value: number | null): Cell => (value === null ? dash : { text: formatSignedUsd(value, { cents: true }), tone: changeToneAt(value, 2) });
-const price = (value: number | null): Cell => (value === null ? dash : plain(formatPrice(value)));
+const dash: Cell = { text: EMPTY_VALUE, tone: "flat" };
+const signedUsd = (value: number): Cell => ({ text: formatSignedUsd(value, { cents: true }), tone: changeToneAt(value, 2) });
 
-/** The cells of one row. Position is signed shares ("300", "−100"); value is that position at the mark, so a short is negative. */
-export function positionCells(row: PositionRow): PositionCells {
-  const held = row.side !== null && row.shares !== null;
-  const signed = !held ? null : row.side === "short" ? -row.shares! : row.shares!;
-  const change = row.last !== null && row.priorClose !== null && row.priorClose > 0 ? row.last - row.priorClose : null;
-  const changePct = change === null ? null : (100 * change) / row.priorClose!;
+const MINUTE = 60;
+const HOUR = 3600;
+const DAY = 86_400;
+
+/**
+ * Elapsed thread time as two units: "3d 4h", "4h 12m", "12m", "under a minute". It is elapsed calendar time between the entry and `T`
+ * (a position held over a weekend reads "3d"), never a count of trading days. Zero units are left out ("2d", not "2d 0h").
+ */
+export function heldForText(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < MINUTE) return PRACTICE_COPY.portfolioHeldUnderMinute;
+  const days = Math.floor(seconds / DAY);
+  const hours = Math.floor((seconds % DAY) / HOUR);
+  const minutes = Math.floor((seconds % HOUR) / MINUTE);
+  const parts = days > 0 ? [`${days}d`, hours > 0 ? `${hours}h` : ""] : hours > 0 ? [`${hours}h`, minutes > 0 ? `${minutes}m` : ""] : [`${minutes}m`];
+  return parts.filter(Boolean).join(" ");
+}
+
+/** A price older than this at `T` is flagged: the name had no print since (a halt, a holiday, a weekend, a gap in the data). */
+export const STALE_PRICE_S = 4 * HOUR;
+
+export function priceNote(position: Pick<PortfolioPosition, "price_at" | "price_age_s">): string | null {
+  if (position.price_at === null) return PRACTICE_COPY.portfolioNoPrice;
+  if (position.price_age_s === null || position.price_age_s < STALE_PRICE_S) return null;
+  return practiceText("portfolioPriceAge", { age: heldForText(position.price_age_s) });
+}
+
+export const stopCrossedText = (iso: string): string => practiceText("portfolioStopCrossed", { when: formatEtDateClock(iso, { seconds: false }) });
+
+/** One row per open position; `orders` are the thread's working orders, counted per name. */
+export function positionRow(position: PortfolioPosition, orders: readonly Pick<PortfolioOrder, "symbol" | "status">[] = []): PositionRow {
   return {
-    last: price(row.last),
-    change: signedUsd(change),
-    changePct: changePct === null ? dash : { text: formatSignedPct(changePct), tone: changeToneAt(changePct, 2) },
-    position: signed === null ? { text: "Flat", tone: "flat" } : plain(signed < 0 ? `−${(-signed).toLocaleString("en-US")}` : signed.toLocaleString("en-US")),
-    avg: price(row.avg),
-    value: signed === null || row.last === null ? dash : plain(formatBalance(signed * row.last)),
-    unrealized: signedUsd(row.unrealized),
+    key: `${position.session_id}`,
+    sessionId: position.session_id,
+    symbol: position.symbol,
+    side: position.side,
+    shares: position.shares,
+    avg: position.avg_cost,
+    price: position.price,
+    priceNote: priceNote(position),
+    unrealized: position.unrealized_usd,
+    heldFor: heldForText(position.held_for_s),
+    orders: orders.filter((order) => order.symbol === position.symbol && order.status === "working").length,
+    stop: position.stop_hit_at === null ? null : stopCrossedText(position.stop_hit_at),
   };
 }
 
-/** A day-list name. Only its open position is read: what it realized earlier is a closed trade (Trades). The prior close comes from the list's own candidates. */
-export const dayPositionRow = (row: PortfolioRow): PositionRow => ({
-  key: row.symbol,
-  symbol: row.symbol,
-  side: row.side,
-  shares: row.position?.shares ?? null,
-  last: row.position?.last_price ?? null,
-  priorClose: row.priorClose,
-  avg: row.position?.entry_price ?? null,
-  unrealized: row.unrealized,
-  held: null,
-  current: row.current,
-  behind: row.behind,
-  stop: row.stopHitAt === null ? null : stopCrossedText(row.stopHitAt),
-});
+export const positionRows = (positions: readonly PortfolioPosition[], orders: readonly PortfolioOrder[]): PositionRow[] => positions.map((position) => positionRow(position, orders));
 
-/** An open swing hold, marked at its last finished close (`last_close`). It has no prior close. */
-export const swingPositionRow = (hold: Hold): PositionRow => ({
-  key: String(hold.id),
-  symbol: hold.symbol,
-  side: hold.side,
-  shares: hold.shares,
-  last: hold.last_close,
-  priorClose: null,
-  avg: hold.entry_price,
-  unrealized: hold.unrealized_usd,
-  held: daysHeldText(hold.days_held),
-  current: false,
-  behind: false,
-  stop: hold.stop_hit === "yes" ? holdStopText(hold) : null,
-});
+/** The cells of one row. Shares are signed ("300", "−100"): long positive, short negative. */
+export function positionCells(row: PositionRow): PositionCells {
+  return {
+    side: plain(row.side === "short" ? PRACTICE_COPY.portfolioSideShort : PRACTICE_COPY.portfolioSideLong),
+    shares: plain(row.side === "short" ? `−${row.shares.toLocaleString("en-US")}` : row.shares.toLocaleString("en-US")),
+    avg: plain(formatPrice(row.avg)),
+    price: plain(formatPrice(row.price)),
+    unrealized: signedUsd(row.unrealized),
+    heldFor: plain(row.heldFor),
+    orders: row.orders === 0 ? dash : plain(String(row.orders)),
+  };
+}
+
+/** The open P/L over every row, to the cent: the table's footer. */
+export const openPnl = (rows: readonly Pick<PositionRow, "unrealized">[]): number => Math.round(rows.reduce((sum, row) => sum + row.unrealized, 0) * 100) / 100;
+
+/** "No open positions" / "1 open position" / "3 open positions". */
+export function positionsCountText(count: number): string {
+  return count === 0 ? PRACTICE_COPY.threadPositionsNone : count === 1 ? PRACTICE_COPY.threadPositionsOne : practiceText("threadPositionsMany", { count });
+}
+
+// ---- working orders -------------------------------------------------------------------------------------------------
+
+export type OrderRow = {
+  key: string;
+  symbol: string;
+  /** "Sell stop", "Buy limit", "Buy stop limit". */
+  kind: string;
+  shares: string;
+  /** The limit and/or stop price, "98.00" or "98.00 / 97.50" (stop / limit). */
+  price: string;
+  /** "GTC" or "Day". */
+  tif: string;
+  /** "until Fri 2026-10-23 · 8:00 PM ET" for a Day order; "—" for GTC. */
+  expires: string;
+  reduceOnly: boolean;
+};
+
+const TYPE_WORD = { limit: "limit", stop: "stop", stop_limit: "stop limit" } as const;
+
+export function orderRows(orders: readonly PortfolioOrder[]): OrderRow[] {
+  return orders
+    .filter((order) => order.status === "working")
+    .map((order) => ({
+      key: String(order.id),
+      symbol: order.symbol,
+      kind: `${order.side === "buy" ? "Buy" : "Sell"} ${TYPE_WORD[order.type]}`,
+      shares: order.shares.toLocaleString("en-US"),
+      price: [order.stop_price, order.limit_price].filter((price): price is number => price !== null).map((price) => formatPrice(price)).join(" / ") || EMPTY_VALUE,
+      tif: order.tif === "day" ? PRACTICE_COPY.portfolioTifDay : PRACTICE_COPY.portfolioTifGtc,
+      expires: order.tif === "day" && order.expires_at !== null ? practiceText("portfolioOrderUntil", { when: formatEtDateClock(order.expires_at, { seconds: false }) }) : EMPTY_VALUE,
+      reduceOnly: order.reduce_only,
+    }));
+}

@@ -26,6 +26,8 @@ test("markLabel reads every mark kind as Practice text", () => {
   assert.equal(markLabel({ kind: "short_exit", shares: null, stop_price: null }), "Practice exit");
   assert.equal(markLabel({ kind: "stop", shares: null, stop_price: 186.9 }), "Practice stop 186.90");
   assert.equal(markLabel({ kind: "note", shares: null, stop_price: null }), "Practice note");
+  assert.equal(markLabel({ kind: "split", shares: 200, stop_price: null }), "Split", "a corporate-action mark the server stamps: it is not one of her trades");
+  assert.deepEqual(practiceMarkers([withMark({ kind: "split", source: "auto" })], bars), [], "a split draws no entry or exit marker");
 });
 
 test("practice markers snap to the bar open at the mark time and skip stop, note and pre-session marks", () => {
@@ -64,6 +66,7 @@ test("the stop level is an amber dashed line, present only with a stop, named St
   assert.deepEqual(stopLevel(openTrade), [{ label: "Stop", price: 186.9, color: "#FFB020", style: "dashed" }]);
   assert.deepEqual(stopLevel({ stop_price: null }), []);
   assert.deepEqual(stopLevel(null), []);
+  assert.equal(stopLevel({ stop_price: 186.9, stop_hit_at: "2026-04-07T14:21:00Z" })[0]?.label, "Stop crossed", "a crossed stop is flagged on its line; the position is not closed by it");
   assert.equal(openSide(null), "flat");
   assert.equal(openSide({ side: "short" }), "short");
 });
@@ -90,9 +93,9 @@ test("the Marks tab lists newest first; undo only reaches her last mark while th
     withMark({ id: 4, seq: 2, kind: "stop", at: "2026-04-07T13:48:00Z", price: null, stop_price: 186.9, note: null }),
   ];
   assert.deepEqual(markRows(marks).map((row) => row.id), [6, 5, 4, 3]);
-  assert.deepEqual(markRows(marks)[3], { id: 3, time: "9:47:00 AM ET", label: "Practice buy 100", price: "187.42", note: "ORB hold", auto: false });
-  assert.deepEqual(markRows(marks)[1], { id: 5, time: "9:50:00 AM ET", label: "Practice note", price: "", note: "watch the open", auto: false });
-  assert.deepEqual(markRows(marks)[0], { id: 6, time: "4:00:00 PM ET", label: "Practice exit", price: "189.45", note: null, auto: true });
+  assert.deepEqual(markRows(marks)[3], { id: 3, time: "Tue 2026-04-07 · 9:47:00 AM ET", label: "Practice buy 100", price: "187.42", note: "ORB hold", auto: false });
+  assert.deepEqual(markRows(marks)[1], { id: 5, time: "Tue 2026-04-07 · 9:50:00 AM ET", label: "Practice note", price: "", note: "watch the open", auto: false });
+  assert.deepEqual(markRows(marks)[0], { id: 6, time: "Tue 2026-04-07 · 4:00:00 PM ET", label: "Practice exit", price: "189.45", note: null, auto: true });
   assert.equal(canUndoLast(marks, "2026-04-07T20:00:00Z"), false, "the last mark is an auto exit");
   assert.equal(canUndoLast([mark], "2026-04-07T13:47:00Z"), true);
   assert.equal(canUndoLast([mark], "2026-04-07T13:48:00Z"), false, "the playhead has moved");

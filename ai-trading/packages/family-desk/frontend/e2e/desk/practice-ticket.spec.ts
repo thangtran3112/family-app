@@ -1,25 +1,17 @@
 import type { Locator, Page } from "@playwright/test";
-import { practiceText } from "../../lib/desk/freshness.ts";
-import { expect, expectCleanScreen, openDesk, prepareDesk, test, watchApi } from "./helpers";
-import { createStubSession } from "./hub-helpers";
-import { replayRail } from "./swing-helpers";
+import { stepBar } from "./clock-helpers";
+import { expect, expectCleanScreen, prepareDesk, test, watchApi } from "./helpers";
+import { openTicket as openLaneTicket } from "./lane-helpers";
 
 // The Practice order ticket (owner directive): a broker-style ticket with a side, a quantity and an order type; Market, Limit,
-// Stop and Stop-limit placed from it; a stop that is only ever optional; Close position beside the position. The stub day is TSLA
-// on Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars (TSLA near 380). A standalone session has an account of its own
-// ($50,000, the thread default), so cash is the only size rule here as in a thread: the size and the prices below fit it, and the
-// last test spends past it. A working order holds its notional back (at its limit, else its stop), so the orders a test leaves
-// working must fit the $50,000 together.
+// Stop and Stop-limit placed from it, each resting order with a time in force (GTC, or Day: ADR-0025); a stop that is only ever optional; Close position
+// beside the position. The stub day is TSLA on Fri 2026-09-25 from 09:30 ET at one-minute bars (TSLA near 380). A lane books into its thread, whose cash
+// ($50,000, the default) is the only size rule: the size and the prices below fit it, and the last tests spend past it. A working order holds its
+// notional back (at its limit, else its stop), so the orders a test leaves working must fit the $50,000 together.
 
-async function openTicket(page: Page, context: Parameters<typeof createStubSession>[0]) {
-  const id = await createStubSession(context);
-  await openDesk(page, `/practice/replay?id=${id}`);
-  await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-  await expect(page.getByText(practiceText("ready", { time: "9:30 AM" }))).toBeVisible();
-  // Reveal two bars so the replay has a last price to trade at.
-  for (let step = 0; step < 2; step += 1) await page.getByRole("button", { name: "Step", exact: true }).click();
-  await expect(page.getByTestId("thread-clock-time")).not.toContainText("9:30:00");
-  return replayRail(page, "Practice");
+/** A lane on TSLA with two bars revealed, so there is a last price to trade at; returns the Practice rail. */
+async function openTicket(page: Page, context: Parameters<typeof openLaneTicket>[1]) {
+  return (await openLaneTicket(page, context)).practice;
 }
 
 const orders = (practice: Locator) => practice.getByRole("region", { name: "Orders" });
@@ -62,7 +54,7 @@ test.describe("Practice order ticket", () => {
     await quantity.fill("5");
     await buy.click();
     await expect(practice.getByText(/^Long · 5 shares/)).toBeVisible();
-    await page.getByRole("button", { name: "Step", exact: true }).click(); // a later bar: the second fill is a different price
+    await stepBar(page); // a later bar: the second fill is a different price
     await quantity.fill("3");
     await buy.click(); // already long: it adds, there is no "already open" refusal
     await expect(practice.getByText(/^Long · 8 shares/)).toBeVisible();
@@ -102,7 +94,7 @@ test.describe("Practice order ticket", () => {
     await practice.getByRole("combobox", { name: "Order type" }).selectOption("limit");
     await practice.getByLabel("Quantity").fill("4");
     await practice.getByRole("textbox", { name: "Limit price" }).fill("1");
-    await expect(practice.getByRole("button", { name: "Buy", exact: true })).toHaveAccessibleDescription("Buy 4 TSLA · Limit · limit 1.00");
+    await expect(practice.getByRole("button", { name: "Buy", exact: true })).toHaveAccessibleDescription("Buy 4 TSLA · Limit · limit 1.00 · GTC");
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
     await expect(orders(practice).getByText("Buy 4 · Limit 1.00")).toBeVisible();
     await expect(orders(practice).getByText("Working")).toBeVisible();
@@ -113,7 +105,7 @@ test.describe("Practice order ticket", () => {
     await expect(orders(practice).getByText("Cancelled")).toBeVisible();
     await expect(orders(practice).getByRole("button", { name: /^Cancel order/ })).toHaveCount(0);
 
-    await practice.getByRole("textbox", { name: "Limit price" }).fill("100000");
+    await practice.getByRole("textbox", { name: "Limit price" }).fill("420"); // TSLA is near 380 and 4 x 420 fits the $50,000
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
     await expect(practice.getByText(/^Long · 4 shares/)).toBeVisible(); // a buy limit above the market is marketable
     await expectCleanScreen(page);
@@ -143,15 +135,15 @@ test.describe("Practice order ticket", () => {
     await expect(orders(practice).getByText("Working")).toHaveCount(2);
   });
 
-  test("a standalone session has its own cash: a stop the account cannot carry is refused at the quantity, and a second order is held to what the first leaves", async ({ page, context }) => {
+  test("the thread has its own cash: a stop the account cannot carry is refused at the quantity, and a second order is held to what the first leaves", async ({ page, context }) => {
     const practice = await openTicket(page, context);
     const type = practice.getByRole("combobox", { name: "Order type" });
     const refusal = page.getByRole("alert").filter({ hasText: /^Not enough practice cash/ });
     await type.selectOption("stop");
     await practice.getByRole("textbox", { name: "Stop price" }).fill("100000");
-    await practice.getByRole("button", { name: "Buy", exact: true }).click(); // 100 shares at 100,000 is $10,000,000
-    await expect(refusal).toHaveText("Not enough practice cash · $50,000 free");
-    await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
+    // 100 shares at 100,000 is $10,000,000: the ticket knows the thread's balance, so it says so before it sends and Buy waits.
+    await expect(practice.getByText("Exceeds buying power · this order costs $10,000,000, buying power is $50,000")).toBeVisible();
+    await expect(practice.getByRole("button", { name: "Buy", exact: true })).toBeDisabled();
     await expect(orders(practice).getByText("Working")).toHaveCount(0);
 
     // 100 shares at 400 is $40,000: it fits, and it holds that cash back, so the same order again has only $10,000 left.
@@ -162,6 +154,37 @@ test.describe("Practice order ticket", () => {
     await practice.getByRole("button", { name: "Buy", exact: true }).click();
     await expect(refusal).toHaveText("Not enough practice cash · $10,000 free");
     await expect(orders(practice).getByText("Working")).toHaveCount(1);
+  });
+
+  // ADR-0025: an order rests until it fills or she cancels it (GTC, the default), or lapses at the extended close of the session it was placed in (Day).
+  test("a resting order carries a time in force: GTC by default, Day on request, shown on the ticket summary and in the order list; a market order has none", async ({ page, context }) => {
+    const practice = await openTicket(page, context);
+    const type = practice.getByRole("combobox", { name: "Order type" });
+    const tif = practice.getByRole("combobox", { name: "Time in force" });
+    await expect(tif, "a market order has no time in force").toHaveCount(0);
+    await type.selectOption("limit");
+    await expect(tif).toHaveValue("gtc");
+    await expect(tif.getByRole("option")).toHaveText(["Good till cancelled", "Day · lapses at the session's extended close"]);
+    await practice.getByLabel("Quantity").fill("4");
+    await practice.getByRole("textbox", { name: "Limit price" }).fill("1");
+    const sent: Array<Record<string, unknown>> = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && /\/replay\/sessions\/\d+\/orders$/.test(request.url())) sent.push(request.postDataJSON() as Record<string, unknown>);
+    });
+    await practice.getByRole("button", { name: "Buy", exact: true }).click();
+    await expect(orders(practice).getByText("Buy 4 · Limit 1.00 · GTC")).toBeVisible();
+    expect(sent[0]?.timeInForce, "the default is sent as gtc").toBe("gtc");
+
+    await tif.selectOption("day");
+    await practice.getByRole("textbox", { name: "Limit price" }).fill("1"); // a placed order clears the price box
+    await expect(practice.getByRole("button", { name: "Buy", exact: true })).toHaveAccessibleDescription("Buy 4 TSLA · Limit · limit 1.00 · Day");
+    await practice.getByRole("textbox", { name: "Limit price" }).fill("2");
+    await practice.getByRole("button", { name: "Buy", exact: true }).click();
+    await expect(orders(practice).getByText("Buy 4 · Limit 2.00 · Day")).toBeVisible();
+    await expect(orders(practice).getByText(/Working · lapses /), "a Day order says when it lapses").toHaveCount(1);
+    await expect(orders(practice).getByText("Working", { exact: true }), "the GTC order lapses at no time").toHaveCount(1);
+    expect(sent[1]?.timeInForce).toBe("day");
+    await expectCleanScreen(page);
   });
 
   // Click-to-order (owner directive 2026-11-01): a click on a price of the chart offers Buy and Sell there, each named for the order it
@@ -180,7 +203,7 @@ test.describe("Practice order ticket", () => {
     const price = (await popup.getByText(/^TSLA \d/).innerText()).replace("TSLA ", "");
     await expect(popup.getByRole("button", { name: `Buy stop ${price}` })).toBeVisible();
     await expect(popup.getByRole("button", { name: `Sell limit ${price}` })).toBeVisible();
-    await expect(popup.getByText("Quantity 5 · set in the ticket")).toBeVisible();
+    await expect(popup.getByText("Quantity 5 · GTC · set in the ticket")).toBeVisible();
     await expectCleanScreen(page);
 
     await popup.getByRole("button", { name: `Sell limit ${price}` }).click();
@@ -218,8 +241,9 @@ test.describe("Practice order ticket", () => {
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height - 6);
     const popup = chartOrder(page);
     await popup.getByRole("button", { name: /^Buy limit / }).click();
-    await expect(popup.getByRole("alert"), "the popup says why where she clicked").toHaveText("Not enough practice cash · $50,000 free");
-    await expect(practice.getByRole("alert").filter({ hasText: /^Not enough practice cash/ }), "and the ticket's Quantity does").toHaveText("Not enough practice cash · $50,000 free");
+    const tooBig = /^Exceeds buying power · this order costs \$[\d,]+, buying power is \$50,000$/;
+    await expect(popup.getByRole("alert"), "the popup says why where she clicked").toHaveText(tooBig);
+    await expect(practice.getByRole("alert").filter({ hasText: /^Exceeds buying power/ }), "and the ticket's Quantity does").toHaveText(tooBig);
     await expect(practice.getByLabel("Quantity")).toHaveAttribute("aria-invalid", "true");
     await expect(popup).toBeVisible();
     await expect(orders(practice).getByText("Working")).toHaveCount(0);

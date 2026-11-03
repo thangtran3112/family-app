@@ -1,15 +1,14 @@
-import type { BrowserContext, Locator, Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { chartPalette } from "../../lib/desk/chartPalette.ts";
-import { PRACTICE_COPY, practiceBandText, practiceText } from "../../lib/desk/freshness.ts";
+import { PRACTICE_COPY, practiceBandText } from "../../lib/desk/freshness.ts";
 import { formatEtDay } from "../../lib/desk/format.ts";
-import { defaultDraft, draftToSpec } from "../../lib/replay/setup.ts";
-import { origin } from "../helpers";
-import { expect, openDesk, prepareDesk, test } from "./helpers";
-import { DAY, createStubSession } from "./hub-helpers";
-import { createSwingThread, openNextDay, placeOrder, replayRail, send } from "./swing-helpers";
+import { stepBar } from "./clock-helpers";
+import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { DAY, placeOrder, replayRail, send } from "./hub-helpers";
+import { startLane } from "./lane-helpers";
 
-// The replay chart's full screen and settings (design-replay-chart.md §(d), fix wave 5S stream 3). The stub day is TSLA on
-// Fri 2026-09-25, replayed 09:30 to 09:40 ET at one-minute bars.
+// The replay chart's full screen and settings (design-replay-chart.md §(d), fix wave 5S stream 3). A lane is one name of a freestyle thread (ADR-0025).
+// The stub day is TSLA on Fri 2026-09-25 from 09:30 ET, at one-minute bars.
 
 const STORE_KEY = "desk.replayChart";
 
@@ -20,30 +19,16 @@ const fullScreen = (page: Page) => page.getByRole("button", { name: "Full screen
 const shell = (page: Page) => page.locator(".dk-shell");
 const leftRail = (page: Page) => page.getByRole("complementary", { name: "Practice side panel" });
 const headerVwap = (page: Page) => page.locator("dt", { hasText: /^VWAP$/ }).locator("xpath=following-sibling::dd");
-const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
+const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one time, read-only text above every name
 const chartWidth = async (page: Page) => (await page.locator("section[aria-label='TSLA 1m market chart']").boundingBox())!.width;
 
-async function openReplay(page: Page, id: number) {
-  await openDesk(page, `/practice/replay?id=${id}`);
-  await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
-  await expect(page.getByText(practiceText("ready", { time: "9:30 AM" }))).toBeVisible();
-}
-
-/** Reveal a few bars so VWAP, the EMAs and the OHLC readout have values. */
-async function stepBars(page: Page, count: number) {
-  for (let step = 0; step < count; step++) {
-    const before = await playhead(page).innerText();
-    await page.getByRole("button", { name: "Step", exact: true }).click();
-    await expect(playhead(page)).not.toHaveText(before);
-  }
-}
+/** Reveal a few bars so VWAP, the EMAs and the OHLC readout have values: the thread's clock moves, the chart follows. */
+const stepBars = (page: Page, count: number) => stepBar(page, count);
 
 test.describe("Practice replay chart: full screen and settings", () => {
-  let sessionId: number;
   test.beforeEach(async ({ context, page }) => {
     await prepareDesk(context);
-    sessionId = await createStubSession(context);
-    await openReplay(page, sessionId);
+    await startLane(page, context);
   });
 
   test("hiding EMA 21 from the legend survives a reload, and the header VWAP stays with VWAP hidden", async ({ page }) => {
@@ -263,7 +248,7 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(popover(page).getByRole("radio", { name: "Candles" })).toBeChecked();
   });
 
-  test("Full screen hides the left rail and the shell bars but keeps the tape, the thread clock and the amber band; Escape returns", async ({ page }) => {
+  test("Full screen hides the left rail and the shell bars but keeps the tape, the thread's time and the amber band; Escape returns", async ({ page }) => {
     const url = page.url();
     const inlineWidth = await chartWidth(page);
     await expect(leftRail(page)).toBeVisible();
@@ -276,7 +261,7 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await expect(page.locator(".dk-top")).toBeHidden();
     await expect(page.locator(".dk-status")).toBeHidden();
     await expect(page.getByRole("status", { name: "Practice" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+    await expect(page.getByTestId("thread-time-readout")).toBeVisible();
     await expect(page.locator(".dk-right")).toBeVisible();
     await expect(page.getByRole("link", { name: /Back to practice/ }), "the chart workspace drops its back link while it fills the window").toHaveCount(0);
     expect(await chartWidth(page), "the chart gets the room the rail and the bars gave up").toBeGreaterThan(inlineWidth + 100);
@@ -337,13 +322,12 @@ test.describe("Practice replay chart: full screen and settings", () => {
     await page.keyboard.press("1"); // no speed key either
 
     await expect(playhead(page)).toHaveText(at);
-    await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Pause" })).toHaveCount(0);
 
     await page.keyboard.press("Escape");
     await expect(popover(page)).toHaveCount(0);
     await expect(chartSettings(page)).toBeFocused();
-    await page.keyboard.press("ArrowRight"); // outside the popover the arrow steps nothing: Step is a button
+    await page.keyboard.press("ArrowRight"); // outside the popover the arrow steps nothing: a lane has no Step
     await expect(playhead(page)).toHaveText(at);
     await expect(page.getByRole("button", { name: "Pause" })).toHaveCount(0);
   });
@@ -351,8 +335,8 @@ test.describe("Practice replay chart: full screen and settings", () => {
   test("a press outside closes the popover", async ({ page }) => {
     await chartSettings(page).click();
     await expect(popover(page)).toBeVisible();
-    // The thread clock bar is clear of the popover, which opens upward over the chart and the header at the left.
-    await page.getByTestId("thread-clock").click({ position: { x: 4, y: 4 } });
+    // The thread's time line is clear of the popover, which opens upward over the chart and the header at the left.
+    await page.getByTestId("thread-time-readout").click({ position: { x: 4, y: 4 } });
     await expect(popover(page)).toHaveCount(0);
   });
 
@@ -380,38 +364,31 @@ async function expectNoClip(box: Locator) {
   expect(await box.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
 }
 
-/** A stub session whose plan asks for a stop on every entry (the API takes the plan in the session spec). */
-async function createStopRequiredSession(context: BrowserContext): Promise<number> {
-  const spec = draftToSpec({ ...defaultDraft(), symbol: "TSLA", day: DAY, to: "09:40", interval: "1m" }) as { plan: Record<string, unknown> };
-  const response = await context.request.post(`${origin}/api/desk/replay/sessions`, { data: { ...spec, plan: { ...spec.plan, stopRequired: "yes" } } });
-  expect(response.ok(), await response.text()).toBeTruthy();
-  return ((await response.json()) as { id: number }).id;
-}
-
-test.describe("Practice replay: header, controls and ended session (R-02, R-04, R-05, R-06)", () => {
+test.describe("Practice replay: header and controls (R-02, R-05, R-06)", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });
 
-  // ADR-0022: an open session and an ended one both name their date; there is no hidden state and no Show date.
-  test("an open and an ended session's replay both show their date (R-04)", async ({ page, context }) => {
-    const id = await createStubSession(context);
-    await openReplay(page, id);
+  // ADR-0022, ADR-0025: a lane names its date; there is no hidden state and no Show date. A lane of a closed thread still reads, and nothing can be ordered on it.
+  test("a lane and a lane of a closed thread both show their date, and the closed one can order nothing (R-04)", async ({ page, context }) => {
+    const { threadId, sessionId } = await startLane(page, context);
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
     await expect(page.locator("body")).toContainText(formatEtDay(DAY));
+    await expect((await replayRail(page, "Practice")).getByRole("button", { name: "Buy", exact: true })).toBeEnabled();
 
-    const ended = await context.request.post(`${origin}/api/desk/replay/sessions/${id}/end`);
-    expect(ended.ok(), await ended.text()).toBeTruthy();
-    await openDesk(page, `/practice/replay?id=${id}`);
+    // Closing the thread freezes its clock and cancels its working orders; positions stay open (ADR-0025). The lane stays readable.
+    await send(context, "POST", `/threads/${threadId}/close`, {});
+    await openDesk(page, `/practice/replay?id=${sessionId}`);
     await expect(page.getByRole("heading", { name: "TSLA", level: 1 })).toBeVisible();
     await expect(page.getByRole("status", { name: "Practice" })).toHaveText(practiceBandText(DAY));
     await expect(page.locator("h1").locator("xpath=..")).toContainText(/2026-09-25/);
+    await expect((await replayRail(page, "Practice")).getByRole("button", { name: "Buy", exact: true })).toBeDisabled();
+    await expectCleanScreen(page);
   });
 
   // D-101, reworked: the ticket's fields are named by a real label link, and a plan that asks for a stop never disables or warns on Buy or Sell.
   test("the ticket's fields are named by a label link, and a plan that asks for a stop never disables Buy or Sell (R-05)", async ({ page, context }) => {
-    const id = await createStopRequiredSession(context);
-    await openReplay(page, id);
+    await startLane(page, context, { thread: { stop: true } });
     const practice = await replayRail(page, "Practice");
     const quantity = practice.getByRole("textbox", { name: "Quantity" });
     const quantityId = await quantity.getAttribute("id");
@@ -435,15 +412,17 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
 
   // The broker ticket (owner directive): each order type shows exactly the price fields it needs, and Bracket is named but not offered.
   test("the order type picks the price fields: Market none, Limit a limit, Stop a stop, Stop-limit both, Bracket is not simulated", async ({ page, context }) => {
-    await openReplay(page, await createStubSession(context));
+    await startLane(page, context);
     const practice = await replayRail(page, "Practice");
     const orderType = practice.getByRole("combobox", { name: "Order type" });
     const fields = async () => ({
       limit: await practice.getByRole("textbox", { name: "Limit price" }).count(),
       stop: await practice.getByRole("textbox", { name: "Stop price" }).count(),
+      tif: await practice.getByRole("combobox", { name: "Time in force" }).count(),
     });
-    expect(await fields()).toEqual({ limit: 0, stop: 0 });
-    for (const [type, expected] of [["limit", { limit: 1, stop: 0 }], ["stop", { limit: 0, stop: 1 }], ["stop_limit", { limit: 1, stop: 1 }], ["market", { limit: 0, stop: 0 }]] as const) {
+    expect(await fields()).toEqual({ limit: 0, stop: 0, tif: 0 });
+    // A resting order (everything but Market) also takes its time in force (ADR-0025); a market order is filled at once and has none.
+    for (const [type, expected] of [["limit", { limit: 1, stop: 0, tif: 1 }], ["stop", { limit: 0, stop: 1, tif: 1 }], ["stop_limit", { limit: 1, stop: 1, tif: 1 }], ["market", { limit: 0, stop: 0, tif: 0 }]] as const) {
       await orderType.selectOption(type);
       expect(await fields(), type).toEqual(expected);
     }
@@ -453,83 +432,38 @@ test.describe("Practice replay: header, controls and ended session (R-02, R-04, 
   });
 
   test("the Practice panel carries one honest footnote about replayed prices (R-06)", async ({ page, context }) => {
-    await openReplay(page, await createStubSession(context));
+    await startLane(page, context);
     const practice = await replayRail(page, "Practice");
     await expect(practice.getByText(PRACTICE_COPY.priceFootnote)).toBeVisible();
   });
 
-  // D-146: the header wrapped when P/L widened, and the End confirm shrank the plot.
-  test("the chart keeps its place and size when P/L widens and when the End confirm opens (R-02)", async ({ page, context }) => {
-    await openReplay(page, await createStubSession(context));
+  // D-146: the header wrapped when P/L widened. A lane has no End bar and no confirm to open over the chart (a lane never ends).
+  test("the chart keeps its place and size when P/L widens, and a lane has no End control (R-02)", async ({ page, context }) => {
+    await startLane(page, context);
     const chart = page.locator("section[aria-label='TSLA 1m market chart']");
     const before = (await chart.boundingBox())!;
     const marksPanel = page.getByRole("button", { name: "Marks and levels panel" });
     const panelBefore = await marksPanel.getAttribute("aria-expanded");
-    // The player's state is the thread's, not the name's: its pill is in the thread bar, never in the ticker header.
+    // The thread's state is the thread's, not the name's: it is read in the line above the header, never in the ticker header.
     const heading = page.getByRole("heading", { name: "TSLA", level: 1 });
-    const bar = page.getByTestId("thread-clock");
-    await expect(bar.locator("[data-state]")).toBeVisible();
-    await expect(page.locator("div[class*='header']").filter({ has: heading }).locator("[data-state]")).toHaveCount(0);
-    const barBefore = (await bar.boundingBox())!;
+    const readout = page.getByTestId("thread-time-readout");
+    await expect(readout).toContainText("Paused");
+    await expect(heading.locator("xpath=ancestor::div[1]")).not.toContainText(/Paused|Playing|Running/);
+    const readoutBefore = (await readout.boundingBox())!;
 
     await stepBars(page, 2);
     await placeOrder(page, "Buy");
     await stepBars(page, 3);
     const widened = (await chart.boundingBox())!;
     expect(widened.y, "the chart top does not move when P/L changes").toBeCloseTo(before.y, 0);
-    expect((await bar.boundingBox())!.height, "the thread bar keeps its height as the clock and the state change").toBeCloseTo(barBefore.height, 0);
+    expect((await readout.boundingBox())!.height, "the time line keeps its height as the clock changes").toBeCloseTo(readoutBefore.height, 0);
     // D-146: a mark never opens, closes or resizes the Marks panel, so it never moves the chart; a closed panel names the newest mark.
     expect(await marksPanel.getAttribute("aria-expanded"), "a mark leaves the Marks panel as it was").toBe(panelBefore);
     expect(widened.height, "a mark does not change the chart's height").toBeCloseTo(before.height, 0);
     await expect(page.getByText(/Practice buy \d+/).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "End session…" }).click();
-    const confirm = page.getByRole("group", { name: "Confirm ending the session" });
-    await expect(confirm).toBeVisible();
-    const open = (await chart.boundingBox())!;
-    expect(open.height, "the confirm opens over the chart, it does not shrink it").toBeCloseTo(widened.height, 0);
-    const box = (await confirm.boundingBox())!;
-    expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    await confirm.getByRole("button", { name: "Keep practicing" }).click();
-    await expect(confirm).toHaveCount(0);
-  });
-});
-
-test.describe("Practice replay chart in a swing session (the Daily view)", () => {
-  test.beforeEach(async ({ context }) => {
-    await prepareDesk(context);
-  });
-
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the type applies to the Daily chart; the intraday groups are switched off and say why", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await createSwingThread(context);
-    const dayOne = await openNextDay(context, threadId);
-    await send(context, "PATCH", `/day-lists/${dayOne}`, { watch: ["S01"] });
-    const session = await send(context, "POST", `/day-lists/${dayOne}/sessions`, { symbol: "S01" });
-    await openDesk(page, `/practice/replay?id=${session.id}`);
-    await expect(page.getByRole("heading", { name: "S01", level: 1 })).toBeVisible();
-
-    await chartSettings(page).click();
-    await expect(popover(page).getByRole("checkbox", { name: "VWAP" })).toBeEnabled();
-    await page.keyboard.press("Escape");
-    await page.getByRole("group", { name: "Chart interval" }).getByRole("button", { name: "Daily", exact: true }).click();
-    await expect(page.getByRole("region", { name: "S01 1d market chart" })).toBeVisible();
-    // The left rail's indicators follow the chart: the Daily candles, with no intraday VWAP.
-    const indicators = page.getByTestId("indicators-panel");
-    await expect(indicators).toContainText("Daily");
-    await expect(indicators).toContainText("RSI (14)");
-    await expect(indicators).not.toContainText("VWAP");
-
-    await chartSettings(page).click();
-    await expect(popover(page).getByText("The daily view has no intraday lines.")).toBeVisible();
-    for (const name of ["VWAP", "EMA 9", "EMA 21", "Volume", "Prior close", "Session high and low", "Opening range (first 15 min)"]) {
-      await expect(popover(page).getByRole("checkbox", { name }), name).toBeDisabled();
-    }
-    await popover(page).getByRole("radio", { name: "Area" }).check();
-    await expect(popover(page).getByRole("radio", { name: "Area" })).toBeChecked();
-    await expect(page.getByRole("region", { name: "S01 1d market chart" })).toBeVisible();
-    expect(await page.locator("section[aria-label='S01 1d market chart'] canvas").count()).toBeGreaterThan(0);
+    // Nothing on a lane ends it: no End session, End day or score bar (ADR-0025).
+    await expect(page.getByRole("button", { name: /^End / })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: /Confirm ending/ })).toHaveCount(0);
   });
 });

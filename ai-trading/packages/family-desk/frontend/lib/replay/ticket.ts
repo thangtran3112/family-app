@@ -1,16 +1,20 @@
 import type { PracticeMarkV1 } from "@ai-trading/contracts/replay-session-v1";
 import type { OrderBody } from "../desk/replay.ts";
+import { formatEtDateClock } from "../desk/format.ts";
 import { DECIMAL, SHARES_MAX, SHARES_TOO_BIG, entryMark } from "./markInput.ts";
 import type { OpenTrade, PracticeOrder } from "./schemas.ts";
 
 // The order ticket of the replay workspace: a side, a quantity and an order type, with the price fields that type needs
 // and no others. Pure: the draft in, the request out. The only checks are the broker's own: a whole quantity of 1 or more
 // and prices above 0, and the one size rule: the cost must fit the buying power (`buyingPowerMessage`, from what the client
-// knows; the server holds the exact figure and answers the rest). A stop price is never required.
+// knows; the server holds the exact figure and answers the rest). A stop price is never required. A working order has a time in force
+// (ADR-0025): good till cancelled (the default) or Day, which lapses at the extended close of the session it was placed in. A market
+// order fills at once and has none.
 
 export type TicketSide = "buy" | "sell";
 export type TicketType = "market" | "limit" | "stop" | "stop_limit" | "bracket";
-export type TicketDraft = { side: TicketSide; type: TicketType; shares: string; limitPrice: string; stopPrice: string };
+export type TimeInForce = "gtc" | "day";
+export type TicketDraft = { side: TicketSide; type: TicketType; shares: string; limitPrice: string; stopPrice: string; tif: TimeInForce };
 export type TicketField = "shares" | "limitPrice" | "stopPrice";
 
 export type TicketOption = {
@@ -33,10 +37,16 @@ export const TICKET_TYPES: readonly TicketOption[] = [
   { value: "bracket", label: "Bracket", limit: false, stop: true, unavailable: "Bracket · not simulated yet" },
 ];
 
+export const TIF_OPTIONS: ReadonlyArray<{ value: TimeInForce; label: string; word: string }> = [
+  { value: "gtc", label: "Good till cancelled", word: "GTC" },
+  { value: "day", label: "Day · lapses at the session's extended close", word: "Day" },
+];
+export const tifWord = (tif: TimeInForce): string => (tif === "day" ? "Day" : "GTC");
+
 export const typeOption = (type: TicketType): TicketOption => TICKET_TYPES.find((option) => option.value === type) ?? TICKET_TYPES[0]!;
 export const typeLabel = (type: TicketType): string => typeOption(type).label;
 
-export const initialTicket = (shares: number): TicketDraft => ({ side: "buy", type: "market", shares: String(shares), limitPrice: "", stopPrice: "" });
+export const initialTicket = (shares: number): TicketDraft => ({ side: "buy", type: "market", shares: String(shares), limitPrice: "", stopPrice: "", tif: "gtc" });
 
 export const MESSAGES: Record<TicketField, string> = {
   shares: "Quantity: a whole number of 1 or more",
@@ -77,6 +87,7 @@ export function buildTicket(draft: TicketDraft): TicketBuild {
         shares,
         ...(limitPrice !== undefined ? { limitPrice } : {}),
         ...(stopPrice !== undefined ? { stopPrice } : {}),
+        timeInForce: draft.tif,
       },
     },
   };
@@ -86,8 +97,6 @@ export function buildTicket(draft: TicketDraft): TicketBuild {
 export type PowerBasis = {
   /** The thread's balance (booked trades included). */
   balance: number;
-  /** A swing thread's free cash, already net of its open holds; null for a day thread. */
-  freeCash: number | null;
   /** This name's open position. */
   trade: Pick<OpenTrade, "side" | "shares" | "entry_price"> | null;
   /** The last print: what a market order costs. */
@@ -111,15 +120,15 @@ export function buyingPowerMessage(draft: TicketDraft, basis: PowerBasis | null)
   if (shares < 1 || shares > SHARES_MAX) return null;
   const at = draft.type === "market" ? basis.last : price(option.limit ? draft.limitPrice : draft.stopPrice);
   if (at === null) return null;
-  const { trade, freeCash } = basis;
+  const { trade } = basis;
   const buying = draft.side === "buy";
   const closes = trade !== null && (trade.side === "long") === !buying ? Math.min(trade.shares, shares) : 0;
   const opens = shares - closes;
   if (opens === 0) return null;
   const held = trade === null ? 0 : trade.entry_price * trade.shares;
-  let free = freeCash ?? basis.balance;
-  if (closes > 0) free += (trade!.side === "long" ? 1 : -1) * (at - trade!.entry_price) * closes + (freeCash === null ? 0 : held);
-  else if (freeCash === null) free -= held;
+  let free = basis.balance;
+  if (closes > 0) free += (trade!.side === "long" ? 1 : -1) * (at - trade!.entry_price) * closes;
+  else free -= held;
   const cost = opens * at;
   if (Math.round(cost * 100) <= Math.round(free * 100)) return null;
   return `Exceeds buying power · this order costs ${dollars(Math.ceil(cost))}, buying power is ${dollars(Math.max(0, Math.floor(free)))}`;
@@ -136,19 +145,30 @@ export function ticketSummary(draft: TicketDraft, symbol: string): string {
     option.stop ? `stop ${price(draft.stopPrice) === null ? "—" : money(price(draft.stopPrice)!)}` : null,
     option.limit ? `limit ${price(draft.limitPrice) === null ? "—" : money(price(draft.limitPrice)!)}` : null,
   ].filter((part) => part !== null);
-  return `${sideWord(draft.side)} ${quantity} ${symbol} · ${option.label}${levels.length ? ` · ${levels.join(" · ")}` : ""}`;
+  const resting = option.limit || option.stop ? ` · ${tifWord(draft.tif)}` : "";
+  return `${sideWord(draft.side)} ${quantity} ${symbol} · ${option.label}${levels.length ? ` · ${levels.join(" · ")}` : ""}${resting}`;
 }
 
-/** A working or finished order as one line: "Buy 10 · Limit 49.50", "Sell 5 · Stop-limit 51.00 / 51.20". */
+/** A working or finished order as one line: "Buy 10 · Limit 49.50 · GTC", "Sell 5 · Stop-limit 51.00 / 51.20 · Day". */
 export function orderLine(order: PracticeOrder): string {
   const kind = order.type === "limit" ? "Limit" : order.type === "stop" ? "Stop" : "Stop-limit";
   const levels = [order.stop_price, order.limit_price].filter((value): value is number => value !== null).map(money).join(" / ");
-  return `${sideWord(order.side)} ${order.shares.toLocaleString("en-US")} · ${kind} ${levels}`;
+  return `${sideWord(order.side)} ${order.shares.toLocaleString("en-US")} · ${kind} ${levels} · ${tifWord(order.tif)}`;
 }
 
-/** What became of an order, in the words of the tape: "Working", "Filled at 49.50", "Cancelled · Not enough practice cash · $450 free". */
+/**
+ * What became of an order, in the words of the tape: "Working", "Working · lapses Fri 2026-10-23 · 8:00 PM ET" (a Day order),
+ * "Filled at 49.50", "Cancelled · Not enough practice cash · $450 free". A closing order is reduce-only: it fills for at most the position.
+ */
 export function orderStatusText(order: PracticeOrder): string {
-  if (order.status === "working") return order.triggered_at ? "Working · stop triggered" : "Working";
+  if (order.status === "working") {
+    const parts = [
+      order.triggered_at ? "Working · stop triggered" : "Working",
+      order.tif === "day" && order.expires_at !== null ? `lapses ${formatEtDateClock(order.expires_at, { seconds: false })}` : null,
+      order.reduce_only ? "reduce only" : null,
+    ];
+    return parts.filter((part) => part !== null).join(" · ");
+  }
   if (order.status === "filled") return `Filled at ${order.fill_price === null ? "—" : money(order.fill_price)}`;
   return order.reason ? `Cancelled · ${order.reason}` : "Cancelled";
 }

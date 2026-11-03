@@ -176,7 +176,7 @@ export function useActiveLane(): Lane {
 /** The element a page portals its right-rail content into (see RightRail). Null before mount. */
 export const RailSlotContext = createContext<HTMLElement | null>(null);
 
-/** The element a Practice screen (replay, day list, journal) portals its left panel into (see LeftRailPortal). Null on every other page. */
+/** The element a Practice screen (replay, Screen, journal) portals its left panel into (see LeftRailPortal). Null on every other page. */
 export const LeftSlotContext = createContext<HTMLElement | null>(null);
 
 export type DeskHoldingsValue = {

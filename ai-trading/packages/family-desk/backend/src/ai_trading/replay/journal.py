@@ -21,11 +21,14 @@ the P/L used, and P/L is computed in `Decimal`, never in float. Every dollar fig
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from math import floor
 from typing import Any
 
 import pandas as pd
 
+from ai_trading.core.calendar import ET
 from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS, Fire, Mark, Plan, Span, unseen
 
 MINUTE = pd.Timedelta(minutes=1)
@@ -153,12 +156,25 @@ def assemble(marks: list[Mark]) -> tuple[list[Trade], Trade | None]:
                 _set_stop(pos, mark.at, mark.stop_price)
         elif mark.kind == "stop" and pos is not None and mark.stop_price is not None:
             _set_stop(pos, mark.at, mark.stop_price)
+        elif mark.kind == "split" and pos is not None and mark.ratio is not None:
+            _restate(pos, mark.ratio)
+            if pos.shares == 0:  # a reverse split rounded the position away: cash in lieu is not modeled (ADR-0025 D9)
+                entries, pos = [], None
         elif mark.kind in EXIT_KINDS and pos is not None:
             closed.append(_realize(pos, pos.shares, mark, entries))
             entries, pos = [], None
     if pos is not None:
         pos.entries = entries
     return closed, pos
+
+
+def _restate(pos: Trade, k: float) -> None:
+    """A split with ratio `k` took effect: the same position on the new share basis (shares x k rounded down, every
+    price / k), so the P/L it carries does not move. A stop in force splits with it."""
+    pos.shares = floor(pos.shares * k + 1e-9 + pos.shares * 5e-7)  # k has six decimals; a fraction is dropped (D9)
+    pos.entry_price = round(pos.entry_price / k, 6)
+    pos.stop_price = None if pos.stop_price is None else round(pos.stop_price / k, 6)
+    pos.stops = [(at, round(price / k, 6)) for at, price in pos.stops]
 
 
 def _set_stop(pos: Trade, at: pd.Timestamp, price: float) -> None:
@@ -224,7 +240,12 @@ def _stop_honored(trade: Trade, bars: pd.DataFrame) -> bool:
     return True
 
 
-def _breaches(book: list[Trade], max_loss_usd: int | None) -> int:
+def _on(day: date | None, at: pd.Timestamp) -> bool:
+    """`at` falls on the ET date `day` (always true without one): the day rules count per date, a label only."""
+    return day is None or at.tz_convert(ET).date() == day
+
+
+def _breaches(book: list[Trade], max_loss_usd: int | None, day: date | None = None) -> int:
     """Entries taken after the day's loss had already reached the max loss: every fill that opened or added to a
     position, not only the first. The day's loss at an entry is the snapshot the entry carried: realized plus every open
     trade marked at the day clock. An entry without one (a mark from before several positions could be open, or a
@@ -238,7 +259,9 @@ def _breaches(book: list[Trade], max_loss_usd: int | None) -> int:
             return snapshot
         return usd_sum([trade_pnl(t) for t in book if t.exit_at is not None and t.exit_at <= at])
 
-    return sum(1 for trade in book for at, snapshot in trade.entries if day_pnl(at, snapshot) <= -max_loss_usd)
+    return sum(
+        1 for trade in book for at, snapshot in trade.entries if _on(day, at) and day_pnl(at, snapshot) <= -max_loss_usd
+    )
 
 
 def _checks(
@@ -248,13 +271,15 @@ def _checks(
     bars: pd.DataFrame,
     display_minutes: int,
     day_trades: list[Trade],
+    day: date | None = None,
 ) -> list[dict[str, Any]]:
-    """`day_trades` are the closed trades of the other sessions of the same day list: the max loss and the trade
-    limit are day rules (02o-b2), so they count every name practised that day. The rest score this session alone."""
+    """`day_trades` are the closed trades of the thread's other lanes: the max loss and the trade limit are day rules
+    (02o-b2), so they count every name practised on the ET date `day` (ADR-0025: a date is a key, never an end). The
+    rest score this lane alone."""
     n = len(trades)
     book = sorted([*trades, *day_trades], key=lambda t: t.entry_at)
-    n_day = len(book)  # trades are exits: a position closed in two parts is two
-    n_entries = sum(len(t.entries) for t in book)
+    n_day = sum(1 for t in book if t.exit_at is not None and _on(day, t.exit_at))  # an exit: two parts are two
+    n_entries = sum(1 for t in book for at, _ in t.entries if _on(day, at))
     across = " · across the day" if day_trades else ""
     window = pd.Timedelta(minutes=ON_SIGNAL_BARS * display_minutes)
     has_trades = n > 0
@@ -263,7 +288,7 @@ def _checks(
     stops = [t for t in trades if t.stop_price is not None]
     honored = sum(1 for t in stops if _stop_honored(t, bars))
     on_signal = sum(1 for t in trades if any(timedelta_ok(t.entry_at - f.bar_close, window) for f in fires))
-    breaches = _breaches(book, plan.max_loss_usd)
+    breaches = _breaches(book, plan.max_loss_usd, day)
 
     return [
         {
@@ -394,6 +419,7 @@ def compute_journal(
     final: bool,
     day_trades: list[Trade] | None = None,
     away: Sequence[Span] = (),
+    day: date | None = None,
 ) -> dict[str, Any]:
     """The `JournalOut` dict. `bars`: 1-minute OHLC indexed by UTC bar start (only rows closed by `as_of` are
     read). `fires`: the released signals (all of them when `final`). `final` fills `signals_vs_trades`, which
@@ -403,7 +429,7 @@ def compute_journal(
     trades, _ = assemble(marks)
     visible = bars[bars.index + MINUTE <= as_of]
     watched = [f for f in fires if not unseen(list(away), f.bar_close)]
-    checks = _checks(trades, plan, watched, visible, display_minutes, day_trades or [])
+    checks = _checks(trades, plan, watched, visible, display_minutes, day_trades or [], day)
     applicable = [c for c in checks if c["applicable"]]
     score = round(100 * sum(c["passed"] for c in applicable) / len(applicable)) if applicable else None
     hint = None if score is not None else (HINT_NO_PLAN if not plan.any else HINT_NO_TRADES)

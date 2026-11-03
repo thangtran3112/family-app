@@ -6,26 +6,18 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { FactList } from "@/components/ui/FactList";
 import { RailList } from "@/components/ui/RailList";
 import { Segmented } from "@/components/ui/Segmented";
-import { SwingOpenTradeCard } from "@/components/practice/swing/SwingOpenTradeCard";
 import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
-import { formatEtClock, formatPrice, signToneAt } from "@/lib/desk/format";
+import { formatEtDateClock, formatPrice, signToneAt } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import type { OpenSide } from "@/lib/replay/keys";
 import { formatSignedUsd } from "@/lib/desk/mask";
 import { formatR } from "@/lib/replay/journalView";
 import { noteMark, stopMark } from "@/lib/replay/markInput";
 import type { OpenTrade, PracticeOrder } from "@/lib/replay/schemas";
-import { orderLine, orderStatusText, TICKET_TYPES, ticketSummary, typeOption, type TicketDraft, type TicketField, type TicketSide, type TicketType } from "@/lib/replay/ticket";
+import { orderLine, orderStatusText, TICKET_TYPES, TIF_OPTIONS, ticketSummary, typeOption, type TicketDraft, type TicketField, type TicketSide, type TicketType, type TimeInForce } from "@/lib/replay/ticket";
 import styles from "./replay.module.css";
 
 export type Composer = "stop" | "note" | null;
-
-/** Swing session only (02p b2): the practice-hold card and the cash line. */
-export type SwingControls = {
-  tape: "on" | "off";
-  /** "Free cash $24,720" */
-  cash: string;
-};
 
 export type PracticeControlsProps = {
   symbol: string;
@@ -39,12 +31,12 @@ export type PracticeControlsProps = {
   buyingPower: string | null;
   /** An order is on its way to the server: the Buy or Sell button shows it. */
   placing: boolean;
-  /** Place the ticket as a buy or a sell (the submit button, and the B and S keys). */
+  /** Place the ticket as a buy or a sell (the submit button). */
   onSubmit: (side: TicketSide) => void;
-  /** Every order of the session; the working ones can be cancelled. */
+  /** Every order of the lane; the working ones can be cancelled. */
   orders: PracticeOrder[];
   onCancelOrder: (id: number) => void;
-  /** When the open trade was entered (its entry mark); null when unknown. */
+  /** When the open trade was entered (its entry mark); null when unknown. It can be days ago: a position stays open through the close, the night and a Jump. */
   since: string | null;
   /** Closed trades only: what is already banked. The header's Practice P/L adds the open trade to it. */
   realized: number;
@@ -56,9 +48,8 @@ export type PracticeControlsProps = {
   /** Resolve true when the server took it; the form stays open on a refusal, with what she typed. */
   onStop: (price: string) => Promise<boolean>;
   onNote: (text: string) => Promise<boolean>;
-  /** No session to mark: loading, or the session already ended. */
+  /** Nothing to mark: the thread is closed, the lane is behind the thread clock, or this is a legacy session that ended. */
   disabled: boolean;
-  swing?: SwingControls;
 };
 
 const RECENT_ORDERS = 3;
@@ -73,7 +64,7 @@ function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null
       </div>
       <p className={styles.tradeLine}>
         {`${trade.side === "long" ? "Long" : "Short"} · ${trade.shares} shares`}
-        {since && <span className={styles.muted}>{` · since ${formatEtClock(since)}`}</span>}
+        {since && <span className={styles.muted}>{` · since ${formatEtDateClock(since, { seconds: false })}`}</span>}
       </p>
       <FactList
         label="Open position"
@@ -85,6 +76,8 @@ function PositionCard({ trade, since, realized, pnl }: { trade: OpenTrade | null
           { id: "unrealized", label: "Unrealized", value: `${formatSignedUsd(trade.unrealized_usd, { cents: true })}${trade.r != null ? ` · ${formatR(trade.r)}` : ""}`, tone: signToneAt(trade.unrealized_usd, 2) },
         ]}
       />
+      {/* A stop is an alert line: once a bar crossed it this says so, and the position stays open until she closes it or an order of hers fills. */}
+      {trade.stop_hit_at != null && <p className={styles.muted} data-testid="stop-crossed">{practiceText("positionStopCrossed", { time: formatEtDateClock(trade.stop_hit_at, { seconds: false }) })}</p>}
       <p className={styles.muted}>{`Realized so far ${formatSignedUsd(realized, { cents: true })} · P/L ${formatSignedUsd(pnl, { cents: true })}`}</p>
     </div>
   );
@@ -147,15 +140,17 @@ function ComposerForm({ composer, onStop, onNote, onClose }: { composer: Exclude
  * the price fields that type needs and no others, one Buy or Sell button; below it the working orders, then the open position
  * with its Close position and Set stop. A Buy or Sell is a fill against the position: with a position open it adds to it, sells
  * part of it, or flips it, and nothing but the cash limits that. A stop is never required. Marks are priced by the server at the
- * playhead; a limit, stop or stop-limit order waits on the replayed tape and fills only on a later bar.
+ * thread's time; a limit, stop or stop-limit order waits on the replayed tape and fills when the clock crosses its price, also inside a Jump. It rests
+ * until it fills or she cancels it (GTC), or lapses at the extended close of its session (Day).
  */
 export function PracticeControls(props: PracticeControlsProps) {
-  const { symbol, side, openTrade, ticket, onTicket, ticketError, buyingPower, placing, composer, onComposer, disabled, swing } = props;
+  const { symbol, side, openTrade, ticket, onTicket, ticketError, buyingPower, placing, composer, onComposer, disabled } = props;
   const option = typeOption(ticket.type);
   const sharesId = useId();
   const typeId = useId();
   const limitId = useId();
   const stopId = useId();
+  const tifId = useId();
   const summaryId = useId();
   const powerId = useId();
   const errorOf = (field: TicketField) => (ticketError?.field === field ? ticketError.message : null);
@@ -179,7 +174,6 @@ export function PracticeControls(props: PracticeControlsProps) {
   return (
     <div className={styles.controls}>
       <section ref={ticketRegion} tabIndex={-1} className={styles.ticket} aria-label="Order ticket">
-        {swing && <FactList label="Free cash" facts={[{ id: "cash", label: "Free cash", value: swing.cash.replace(/^Free cash\s+/, "") }]} />}
         <Segmented
           size="touch"
           fill
@@ -213,6 +207,15 @@ export function PracticeControls(props: PracticeControlsProps) {
               </Field>
             )}
           </div>
+        )}
+        {(option.limit || option.stop) && (
+          <Field id={tifId} label={PRACTICE_COPY.ticketTif}>
+            <Select value={ticket.tif} onChange={(event) => edit({ tif: event.target.value as TimeInForce })}>
+              {TIF_OPTIONS.map((tif) => (
+                <option key={tif.value} value={tif.value}>{tif.label}</option>
+              ))}
+            </Select>
+          </Field>
         )}
         <p id={summaryId} className={styles.summary}>{ticketSummary(ticket, symbol)}</p>
         <p id={powerId} className={styles.ticketError} aria-live="polite">{buyingPower}</p>
@@ -266,7 +269,7 @@ export function PracticeControls(props: PracticeControlsProps) {
       )}
 
       <section className={styles.position} aria-label="Position">
-        {swing ? <SwingOpenTradeCard trade={openTrade} tape={swing.tape} /> : <PositionCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />}
+        <PositionCard trade={openTrade} since={props.since} realized={props.realized} pnl={props.pnl} />
         {side !== "flat" && (
           <div className={styles.pair}>
             <Button size="touch" disabled={disabled} onClick={props.onExit}>Close position</Button>
@@ -277,7 +280,7 @@ export function PracticeControls(props: PracticeControlsProps) {
       {composer && <ComposerForm key={composer} composer={composer} onStop={props.onStop} onNote={props.onNote} onClose={() => onComposer(null)} />}
       <div className={styles.footRow}>
         <Button ref={noteOpener} variant="ghost" size="lg" disabled={disabled} onClick={() => onComposer("note")}>Add note</Button>
-        <p className={styles.footnote}>{swing?.tape === "off" ? PRACTICE_COPY.swingTapeOffFootnote : PRACTICE_COPY.priceFootnote}</p>
+        <p className={styles.footnote}>{PRACTICE_COPY.priceFootnote}</p>
       </div>
     </div>
   );

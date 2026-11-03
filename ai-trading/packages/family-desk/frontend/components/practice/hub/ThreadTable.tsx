@@ -1,64 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
-import { backoffMs } from "@/lib/desk/backoff";
+import { Skeleton } from "@/components/ui/StateBlocks";
+import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { useShellBand } from "@/lib/desk/useViewportBand";
-import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { loadDaily } from "@/lib/desk/replay";
-import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { threadProgress } from "@/lib/replay/overviewView";
-import { swingCardView } from "@/lib/replay/swing";
+import { threadCard } from "@/lib/replay/overviewView";
+import { journalHref, threadPageHref } from "@/lib/replay/practiceTabs";
 import type { ThreadSummary } from "@/lib/replay/threads";
-import {
-  dayResultTone,
-  formatBalance,
-  formatDayResult,
-  threadModeLabel,
-  threadName,
-  threadStartedText,
-  todayView,
-  winRateText,
-} from "@/lib/replay/threadView";
+import { formatBalance, threadName, threadStartedText } from "@/lib/replay/threadView";
 import { DeleteThread } from "./DeleteThread";
 import { ThreadAction, lockLink } from "./ThreadAction";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
-import { Skeleton } from "@/components/ui/StateBlocks";
 
-const POLL_MS = 4000;
-
-/** The landing's table (Paper mock LEW-0): one row per thread, the active ones first and the closed ones below. Every
- *  dollar figure is SIMULATED. The thread's name is a link stretched over the whole row, so a click, Enter, a middle click
- *  and a cmd-click all open the thread's overview; the last column holds the one action (Resume, or the swing thread's own
- *  Continue or Start, or Journal for a closed thread) and a Delete button, both clear of that link. Each active day thread reads
- *  its own plan, because several can run at once. While `loading` the rows are two grey skeletons.
- *  `busy` is true while any row's action is opening a day: every row waits, so a second click cannot race the first.
- *  `revision` is bumped when something changed, so each row refetches its plan. */
+/** The landing's table (Paper mock LEW-0): one row per thread, the active ones first and the closed ones below. Every dollar figure is
+ *  SIMULATED. A row is the thread's card: its name, its realized balance, how many positions are open, the thread's time `T` with the
+ *  clock's state, and when it was last used. The name is a link stretched over the whole row, so a click, Enter, a middle click and a
+ *  cmd-click all open the thread's Summary; the last column holds the one action (Open Screen, or Trades for a closed thread) and a
+ *  Delete button, both clear of that link. While `loading` the rows are two grey skeletons. `busy` is true while a thread is being
+ *  deleted: every row waits, so a second click cannot race the first. */
 export function ThreadTable({
   rows,
-  revision,
   loading = false,
   busy,
   onBusy,
   onChanged,
   onDeleted,
-  onNewPlan,
 }: {
   rows: readonly ThreadSummary[];
-  revision: number;
   loading?: boolean;
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
   /** A thread was deleted: its name, for the page's status line (the row is gone by then). */
   onDeleted?: (name: string) => void;
-  onNewPlan: () => void;
 }) {
-  // The last-day column is the first to go at the 1180 band (02l §b3 rule 4).
+  // The last-activity column is the first to go at the 1180 band (02l §b3 rule 4).
   const wide = useShellBand() === "1440";
   return (
     <div className={styles.tableWrap}>
@@ -67,27 +47,25 @@ export function ThreadTable({
         <colgroup>
           <col />
           <col className={styles.colBalance} />
-          <col className={styles.colProgress} />
-          <col className={styles.colRate} />
-          {wide && <col className={styles.colLast} />}
+          <col className={styles.colPositions} />
+          <col className={styles.colClock} />
+          {wide && <col className={styles.colActivity} />}
           <col className={styles.colAction} />
         </colgroup>
         <thead>
           <tr>
             <th scope="col">{PRACTICE_COPY.landingColThread}</th>
-            <th scope="col" className={styles.num}>{PRACTICE_COPY.threadBalance}</th>
-            <th scope="col">{PRACTICE_COPY.landingColProgress}</th>
-            <th scope="col" className={styles.num}>{PRACTICE_COPY.threadWinRate}</th>
-            {wide && <th scope="col">{PRACTICE_COPY.landingColLastDay}</th>}
+            <th scope="col" className={styles.num}>{PRACTICE_COPY.landingColBalance}</th>
+            <th scope="col" className={styles.num}>{PRACTICE_COPY.landingColPositions}</th>
+            <th scope="col">{PRACTICE_COPY.landingColClock}</th>
+            {wide && <th scope="col">{PRACTICE_COPY.landingColActivity}</th>}
             <th scope="col" className={styles.actionHead}>{PRACTICE_COPY.landingColAction}</th>
           </tr>
         </thead>
         <tbody>
           {loading
             ? [0, 1].map((n) => <SkeletonRow key={n} wide={wide} />)
-            : rows.map((row) => (
-                <ThreadRow key={row.thread.id} summary={row} revision={revision} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onDeleted={onDeleted} onNewPlan={onNewPlan} />
-              ))}
+            : rows.map((row) => <ThreadRow key={row.thread.id} summary={row} wide={wide} busy={busy} onBusy={onBusy} onChanged={onChanged} onDeleted={onDeleted} />)}
         </tbody>
       </table>
     </div>
@@ -99,10 +77,10 @@ function SkeletonRow({ wide }: { wide: boolean }) {
   return (
     <tr className={styles.skelRow} aria-hidden="true">
       <td><Skeleton width={120} height={14} /></td>
-      <td className={styles.num}><Skeleton width={96} height={14} /></td>
-      <td><Skeleton width={96} height={14} /></td>
-      <td className={styles.num}><Skeleton width={32} className={styles.skelEnd} /></td>
-      {wide && <td><Skeleton width={120} height={14} /></td>}
+      <td className={styles.num}><Skeleton width={96} height={14} className={styles.skelEnd} /></td>
+      <td className={styles.num}><Skeleton width={72} height={14} className={styles.skelEnd} /></td>
+      <td><Skeleton width={160} height={14} /></td>
+      {wide && <td><Skeleton width={72} height={14} /></td>}
       <td className={styles.actionCell}><Skeleton width={84} height={32} className={styles.skelEnd} /></td>
     </tr>
   );
@@ -110,58 +88,27 @@ function SkeletonRow({ wide }: { wide: boolean }) {
 
 function ThreadRow({
   summary,
-  revision,
   wide,
   busy,
   onBusy,
   onChanged,
   onDeleted,
-  onNewPlan,
 }: {
   summary: ThreadSummary;
-  revision: number;
   wide: boolean;
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onChanged: () => void;
   onDeleted?: (name: string) => void;
-  onNewPlan: () => void;
 }) {
-  const { thread, last_day: lastDay, today } = summary;
-  const href = `/practice/thread?id=${thread.id}`;
-  const { stats } = thread;
+  const { thread } = summary;
   const closed = thread.status === "closed";
-  const swing = swingCardView(summary);
-  const view = todayView(today, lastDay);
-  // An active day thread's own plan (the card says Resume or "New plan needed" from it); other threads need none.
-  const dayActive = !closed && thread.mode === "day";
-  const daily = useDeskQuery(`replay-daily:${thread.id}`, (signal) => loadDaily({ threadId: thread.id, signal }), { enabled: dayActive, revision });
-  const plan = daily.data?.plan ?? null;
-  // The plan's last day has ended: the row says Finished, and its one action starts a new plan (D-096).
-  const progress = threadProgress(summary, dayActive && plan !== null && plan.thread_id === thread.id && plan.finished);
-  const preparing = plan?.prep.state === "running";
-  const { refresh } = daily;
-  // Asked again every POLL_MS while the plan's data is prepared; each read that failed in a row doubles the wait (up to a minute).
-  const failuresRef = useRef(daily.failures);
-  const lastPoll = useRef(0);
-  useEffect(() => {
-    failuresRef.current = daily.failures;
-  });
-  useEffect(() => {
-    if (!preparing) return;
-    const timer = setInterval(() => {
-      if (failuresRef.current > 0 && Date.now() - lastPoll.current < backoffMs(POLL_MS, failuresRef.current)) return;
-      lastPoll.current = Date.now();
-      refresh();
-    }, POLL_MS);
-    return () => clearInterval(timer);
-  }, [preparing, refresh]);
+  const card = threadCard(summary);
   return (
-    <tr className={styles.row} data-status={thread.status} data-busy={busy || undefined} aria-label={`${threadName(thread)} · ${threadModeLabel(thread.mode)}`}>
+    <tr className={styles.row} data-status={thread.status} data-busy={busy || undefined} aria-label={threadName(thread)}>
       <th scope="row" className={styles.threadCell}>
         <span className={styles.threadHead}>
-          <Link href={href} className={styles.threadName} {...lockLink(busy)}>{threadName(thread)}</Link>
-          <Badge tone="neutral">{threadModeLabel(thread.mode)}</Badge>
+          <Link href={threadPageHref(thread.id)} className={styles.threadName} {...lockLink(busy)}>{threadName(thread)}</Link>
           {closed ? (
             <Badge tone="neutral">{PRACTICE_COPY.threadClosedBadge}</Badge>
           ) : (
@@ -172,36 +119,25 @@ function ThreadRow({
           )}
         </span>
         <span className={styles.sub}>{threadStartedText(thread)}</span>
-        {swing && <span className={styles.sub}>{swing.line}</span>}
       </th>
       <td className={styles.num}>
         <span className={styles.balance}>
-          <span className={styles.balanceValue}>{formatBalance(stats.balance)}</span>
+          <span className={styles.balanceValue}>{formatBalance(thread.stats.balance)}</span>
           <SimulatedBadge />
         </span>
-        {summary.swing && <span className={styles.sub}>{practiceText("landingEquity", { amount: formatBalance(summary.swing.equity_usd) })}</span>}
       </td>
+      <td className={styles.num} data-testid="thread-positions">{card.positions}</td>
       <td>
-        <span className={styles.progress}>{progress.main}</span>
-        <span className={styles.sub}>{progress.sub}</span>
-        {progress.gate && <Badge tone="warn" className={styles.gateChip}>{progress.gate}</Badge>}
+        <span className={styles.progress} data-testid="thread-time">{card.clock}</span>
+        {card.state !== "" && <span className={styles.sub}>{card.state}</span>}
       </td>
-      <td className={styles.num}>{winRateText(stats.winRate)}</td>
-      {wide && (
-        <td className={styles.lastDay}>
-          {/* The column header already says "Last day": the label is only for a day that is not that (D-113). */}
-          {view.label !== PRACTICE_COPY.threadLastDay && <span className={styles.sub}>{view.label === PRACTICE_COPY.threadToday && view.pnl !== null ? PRACTICE_COPY.landingTodayRealized : view.label}</span>}
-          <ResultLine pnl={view.pnl} line={view.short} />
-        </td>
-      )}
+      {wide && <td className={styles.lastDay}>{card.lastActivity}</td>}
       <td className={styles.actionCell}>
         <div className={styles.actions}>
           {closed ? (
-            <Button client href={`/practice/journal?thread=${thread.id}`} variant="primary" {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Button>
-          ) : dayActive && daily.loading ? (
-            <Skeleton width={84} height={32} className={styles.skelEnd} />
+            <Button client href={journalHref(thread.id)} variant="primary" {...lockLink(busy)}>{PRACTICE_COPY.landingJournal}</Button>
           ) : (
-            <ThreadAction summary={summary} plan={plan} busy={busy} onBusy={onBusy} onChanged={onChanged} onNewPlan={onNewPlan} />
+            <ThreadAction summary={summary} busy={busy} />
           )}
           <DeleteThread
             thread={thread}
@@ -215,20 +151,5 @@ function ThreadRow({
         </div>
       </td>
     </tr>
-  );
-}
-
-/** A thread's today or last-day line, the signed result colored; the rest of the line stays muted text. */
-export function ResultLine({ pnl, line }: { pnl: number | null; line: string }) {
-  if (pnl === null) return <span>{line}</span>;
-  const amount = formatDayResult(pnl);
-  const at = line.indexOf(amount);
-  if (at < 0) return <span>{line}</span>;
-  return (
-    <span>
-      {line.slice(0, at)}
-      <span className={hub[dayResultTone(pnl)]}>{amount}</span>
-      {line.slice(at + amount.length)}
-    </span>
   );
 }
