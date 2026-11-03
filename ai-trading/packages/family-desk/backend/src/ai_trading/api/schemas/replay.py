@@ -9,12 +9,14 @@ armed strategy). A tape row is `[time, price, size, tick]`, oldest first.
 """
 
 from datetime import date, datetime
-from typing import Any, ClassVar, Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer, model_validator
 
 from ai_trading.api.schemas.common import MarketOut, Stamp, SwingOptional
 from ai_trading.api.schemas.threads import ClockAccountOut, ThreadBriefOut
+from ai_trading.contracts.practice_block import PracticeBlockV1
+from ai_trading.contracts.practice_setup import PracticeSetupV2
 from ai_trading.contracts.replay_session import ReplaySessionV1
 
 Interval = Literal["1m", "5m", "15m"]
@@ -573,8 +575,12 @@ class PracticePlanOut(BaseModel):
 
     id: int
     thread_id: int | None  # the practice thread this plan belongs to
-    spec: dict[str, Any]
+    spec: PracticeSetupV2 | PracticeBlockV1
     filters: list[PlanFilterOut]
+
+    @field_serializer("spec")
+    def _spec_as_authored(self, spec: PracticeSetupV2 | PracticeBlockV1):  # no return annotation: schema unchanged
+        return spec.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 class ListFilterCountsOut(BaseModel):

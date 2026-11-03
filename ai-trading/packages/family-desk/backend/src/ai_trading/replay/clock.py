@@ -199,7 +199,10 @@ def _cross(db: Session, svc: Services, thread: PracticeThread, t0: pd.Timestamp,
 def _split(db: Session, svc: Services, lane: ReplaySession, when: pd.Timestamp, ratio: float) -> None:
     """A split took effect at `when`: the position is restated by a `split` mark (shares x k, average cost / k, no P/L:
     `journal.assemble`) and every working order with it (shares x k rounded down, prices / k). ADR-0025 P7.
-    ponytail: a reverse split's fraction is dropped (no cash in lieu), and a 3-for-1 limit of $100.00 becomes $33.33."""
+    ponytail: a reverse split's fraction is dropped (no cash in lieu), and a 3-for-1 limit of $100.00 becomes $33.33.
+    The restatement is stamped at the ex-date's 04:00 ET, the first raw bar on the new basis; the thread's marks use
+    the previous session's print until 09:30 (ADR-0025 D8), so T in the pre-market of an ex-date prices a restated
+    position at an old-basis print until the open. Fix by dividing a pre-split print by the ratio in `mark_at`."""
     rows = session_mod._load_marks(db, lane.id)
     seq = (rows[-1].seq if rows else 0) + 1
     marks = session_mod._marks_of(rows)

@@ -26,7 +26,7 @@ from freestyle_world import (
     start,
     sync,
 )
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from ai_trading.db.models import PracticeMark, PracticeThread
 from ai_trading.replay import clock as clock_mod
@@ -51,9 +51,9 @@ def _held(db_session, svc, thread) -> list[dict]:
 def _auto_marks(db_session, thread) -> list[PracticeMark]:
     return list(
         db_session.execute(
-            select(PracticeMark).join_from(PracticeMark, session_mod.ReplaySession).where(
-                session_mod.ReplaySession.thread_id == thread.id, PracticeMark.source == "auto"
-            )
+            select(PracticeMark)
+            .join_from(PracticeMark, session_mod.ReplaySession)
+            .where(session_mod.ReplaySession.thread_id == thread.id, PracticeMark.source == "auto")
         ).scalars()
     )
 
@@ -230,9 +230,7 @@ def test_a_resting_stop_sell_fills_inside_a_multi_day_jump_at_the_gap_open(db_se
     assert portfolio(db_session, svc, thread)["account"]["balance"] == 49_000.0
 
 
-def test_a_day_order_expires_at_its_session_end_and_does_not_fill_the_next_day(
-    db_session, user_id, svc, world
-) -> None:
+def test_a_day_order_expires_at_its_session_end_and_does_not_fill_the_next_day(db_session, user_id, svc, world) -> None:
     bend(world, "FLAT", 1, "10:00", None, open=40.0, high=40.0, low=40.0, close=40.0)  # Tuesday trades at 40
     thread = start(db_session, user_id, svc)
     flat = lane(db_session, user_id, svc, thread, "FLAT")
@@ -422,3 +420,18 @@ def test_a_name_cannot_move_the_threads_time(db_session, user_id, svc) -> None:
             )
         assert refused.value.status == 422
     assert read(db_session, user_id, svc, thread)["clock"] == at(0, "10:00")
+
+
+def test_two_threads_of_one_owner_can_hold_the_same_name_on_the_same_data_day(db_session, user_id, svc) -> None:
+    """Migration 0022: the one-active-row-per-owner-symbol-day index narrowed to standalone rows."""
+    first, second = start(db_session, user_id, svc), start(db_session, user_id, svc)
+    one, two = lane(db_session, user_id, svc, first, "FLAT"), lane(db_session, user_id, svc, second, "FLAT")
+    assert one.id != two.id and one.day == two.day
+    mark(db_session, user_id, svc, one, "long_entry", shares=10)
+    mark(db_session, user_id, svc, two, "long_entry", shares=20)
+    assert [p["shares"] for p in _held(db_session, svc, first)] == [10]
+    assert [p["shares"] for p in _held(db_session, svc, second)] == [20]
+    definition = db_session.execute(
+        text("select indexdef from pg_indexes where indexname = 'uq_replay_sessions_owner_user_id_symbol_day_active'")
+    ).scalar_one()
+    assert "thread_id IS NULL" in definition
