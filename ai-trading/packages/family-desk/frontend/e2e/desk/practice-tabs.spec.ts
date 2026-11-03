@@ -105,15 +105,39 @@ test.describe("Practice thread tabs", () => {
     expect(response?.status(), "the retired route is not served").toBe(404);
   });
 
-  test("a swing thread's Day list tab is the Board; with no day open Board lands on Summary", async ({ page, context }) => {
+  // D-207: with no day open the Day list (Board) tab says why it cannot open, instead of a press that does nothing.
+  async function expectNoDayReason(page: Page, name: string) {
+    const target = tab(page, name);
+    await expect(target).toHaveAttribute("aria-disabled", "true");
+    await expect(target).toHaveAttribute("title", PRACTICE_COPY.tabNoDay);
+    await expect(target, "the reason is the tab's accessible description").toHaveAccessibleDescription(PRACTICE_COPY.tabNoDay);
+    await expect(target, "the reason is not part of the tab's name").toHaveAccessibleName(name);
+    await target.click({ force: true }); // Playwright waits forever on an aria-disabled target otherwise
+    await expectSelected(page, "Summary"); // a press is a no-op, not a silent navigation
+  }
+
+  test("a day thread with no day open: the Day list tab is described, and keyboard focus reaches it without selecting it", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const threadId = await startThread(page, context);
+    const summaryUrl = `/practice/thread?id=${threadId}`;
+    await expectNoDayReason(page, "Day list");
+    await expect(tab(page, "Portfolio")).not.toHaveAttribute("aria-disabled", "true");
+    await tab(page, "Portfolio").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tab(page, "Day list")).toBeFocused();
+    await expectSelected(page, "Summary"); // focus is reachable, selection is not
+    await expect(page).not.toHaveURL(/\/practice\/day/);
+    expect(page.url()).toContain(summaryUrl);
+  });
+
+  test("a swing thread's Day list tab is the Board; with no day open it is described, not silent", async ({ page, context }) => {
     test.setTimeout(120_000);
     const threadId = await createSwingThread(context);
     const summaryUrl = `/practice/thread?id=${threadId}`;
     await openDesk(page, summaryUrl);
     await expect(strip(page).getByRole("tab")).toHaveText(["Summary", "Portfolio", "Board", "Trades"]);
-    await tab(page, "Board").click();
+    await expectNoDayReason(page, "Board");
     await expect(page).toHaveURL(summaryUrl);
-    await expectSelected(page, "Summary");
     await tab(page, "Portfolio").click();
     await expect(page.getByRole("region", { name: "Open holds" }).getByText(PRACTICE_COPY.swingNoHoldsOpen)).toBeVisible();
   });

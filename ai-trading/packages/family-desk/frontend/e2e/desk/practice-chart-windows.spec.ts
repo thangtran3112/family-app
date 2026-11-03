@@ -20,8 +20,11 @@ const EVERY_NAME = {
 
 /** What a window shows: the chart data table's bar count and its last row, and the VWAP of the chart legend. */
 async function read(page: Page) {
-  const summary = (await page.locator("details summary", { hasText: "Chart data table" }).first().textContent()) ?? "";
-  const lastRow = (await page.locator("details table tbody tr th").last().textContent()) ?? "";
+  const table = page.locator("details", { has: page.locator("summary", { hasText: "Chart data table" }) }).first();
+  // The table has rows only while it is open (D-206): a closed one is nothing to read.
+  if (!(await table.evaluate((element) => (element as HTMLDetailsElement).open))) await table.locator("summary").click();
+  const summary = (await table.locator("summary").textContent()) ?? "";
+  const lastRow = (await table.locator("tbody tr th").last().textContent()) ?? "";
   const vwap = /VWAP\s+(\d+\.\d+|—)/.exec(await page.locator("#main-content").innerText())?.[1] ?? null;
   return { bars: Number(/(\d+) source bars/.exec(summary)?.[1] ?? -1), lastRow, vwap };
 }

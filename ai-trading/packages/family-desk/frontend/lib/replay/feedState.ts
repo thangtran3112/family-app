@@ -79,13 +79,54 @@ export type ReplayView = {
   paused: Paused | null;
 };
 
-/** Indicator rows keyed by bar open: a later answer replaces the same bar, new bars append, order stays ascending. */
+/** True when two flat records hold the same values (a bar, an indicator row). */
+const sameRecord = (a: object, b: object): boolean => {
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
+};
+
+/** Keeps `previous` when `next` says the same, so a poll that brings nothing new hands the chart nothing new (D-206). For the small records of an answer (levels, the open trade, the forming candle). */
+const unchanged = <T,>(previous: T, next: T): T => (previous === next || JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+
+/**
+ * Rows keyed by start time, ascending: a later answer replaces the row with the same start, new ones append. An answer continues the series at its
+ * tail (the newest row again, newer ones after it), so it is folded in without touching the rest: a row that is the same as the one held stays that
+ * very object, and an answer that changes nothing returns `existing` itself. The 6,000 bars of a 1m lookback are then neither re-keyed, re-sorted nor
+ * re-drawn by every poll (D-206). An answer that reaches back past the newest row takes the general path: the rows keyed, sorted, and the later one wins.
+ */
+function mergeByStart<T extends { t: string }>(existing: readonly T[], incoming: readonly T[]): T[] {
+  if (incoming.length === 0) return existing as T[];
+  let merged: T[] | null = null;
+  let tail = existing.length === 0 ? Number.NEGATIVE_INFINITY : ms(existing[existing.length - 1]!.t);
+  for (const item of incoming) {
+    const start = ms(item.t);
+    if (start > tail) {
+      merged ??= existing.slice();
+      merged.push(item);
+      tail = start;
+    } else if (start === tail) {
+      const held = (merged ?? existing)[(merged ?? existing).length - 1]!;
+      if (sameRecord(held, item)) continue;
+      merged ??= existing.slice();
+      merged[merged.length - 1] = item;
+    } else {
+      const byTime = new Map<number, T>();
+      for (const row of existing) byTime.set(ms(row.t), row);
+      for (const row of incoming) byTime.set(ms(row.t), row);
+      return [...byTime.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
+    }
+  }
+  return merged ?? (existing as T[]);
+}
+
+/** Indicator rows keyed by bar open: a later answer replaces the same bar, new bars append, order stays ascending. Nothing new returns `existing`. */
 function mergeIndicators(existing: IndicatorTable | null, incoming: Indicators | null | undefined): IndicatorTable | null {
   if (incoming == null) return existing;
-  const kept = existing !== null && existing.interval === incoming.interval ? existing.rows : [];
-  const byTime = new Map<number, IndicatorBar>(kept.map((row) => [ms(row.t), row]));
-  for (const row of incoming.rows) byTime.set(ms(row.t), row);
-  return { interval: incoming.interval, asOfBar: incoming.as_of_bar, rows: [...byTime.entries()].sort(([a], [b]) => a - b).map(([, row]) => row) };
+  const same = existing !== null && existing.interval === incoming.interval;
+  const rows = mergeByStart(same ? existing.rows : [], incoming.rows);
+  return same && rows === existing.rows && existing.asOfBar === incoming.as_of_bar ? existing : { interval: incoming.interval, asOfBar: incoming.as_of_bar, rows };
 }
 
 /**
@@ -108,20 +149,15 @@ function tapeMetaOf(prints: ReplayDelta["prints"]): TapeMeta {
   };
 }
 
-/** Bars keyed by start time: a later answer replaces the same bar, new bars append, order stays ascending. */
-export function mergeBars(existing: readonly ReplayBar[], incoming: readonly ReplayBar[]): ReplayBar[] {
-  if (incoming.length === 0) return existing as ReplayBar[];
-  const byTime = new Map<number, ReplayBar>();
-  for (const bar of existing) byTime.set(ms(bar.t), bar);
-  for (const bar of incoming) byTime.set(ms(bar.t), bar);
-  return [...byTime.entries()].sort(([a], [b]) => a - b).map(([, bar]) => bar);
-}
+/** Bars keyed by start time: a later answer replaces the same bar, new bars append, order stays ascending. Nothing new returns `existing`, and a bar that did not change stays the same object. */
+export const mergeBars = (existing: readonly ReplayBar[], incoming: readonly ReplayBar[]): ReplayBar[] => mergeByStart(existing, incoming);
 
 function mergeSignals(existing: readonly ReplaySignal[], incoming: readonly ReplaySignal[]): ReplaySignal[] {
+  if (incoming.length === 0) return existing as ReplaySignal[];
   const key = (signal: ReplaySignal) => `${signal.source}:${signal.id}:${signal.bar_time}`;
   const seen = new Map(existing.map((signal) => [key(signal), signal]));
   for (const signal of incoming) seen.set(key(signal), signal);
-  return [...seen.values()].sort((a, b) => ms(a.bar_close) - ms(b.bar_close));
+  return unchanged(existing as ReplaySignal[], [...seen.values()].sort((a, b) => ms(a.bar_close) - ms(b.bar_close)));
 }
 
 /** A fresh view from a `feed` answer: resume, an interval switch, or a new tape filter. */
@@ -173,19 +209,19 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
   return {
     ...view,
     bars: mergeBars(view.bars, delta.bars),
-    forming: delta.forming,
+    forming: unchanged(view.forming, delta.forming),
     tape: rows.length === 0 ? view.tape : [...view.tape, ...rows].slice(-TAPE_CAP),
     tapeMeta: tapeMetaOf(delta.prints),
     paceSamples: [...view.paceSamples, sample].filter((item) => item.toMs > next - 60_000),
     signals: mergeSignals(view.signals, delta.signals),
-    levels: delta.levels,
+    levels: unchanged(view.levels, delta.levels),
     last: delta.last ?? view.last,
     quietS: delta.quiet_s,
-    openTrade: delta.open_trade,
+    openTrade: unchanged(view.openTrade, delta.open_trade),
     revealedThrough: delta.revealed_through,
     threadTime: delta.thread_time ?? null,
     dataThrough: delta.data_through,
-    market: delta.market ?? null,
+    market: unchanged(view.market, delta.market ?? null),
     indicators: mergeIndicators(view.indicators, delta.indicators),
     dayClock: delta.day_clock,
     behindClock: delta.behind_clock,

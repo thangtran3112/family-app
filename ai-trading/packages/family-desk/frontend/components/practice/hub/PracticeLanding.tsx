@@ -12,8 +12,8 @@ import { ThreadTable } from "./ThreadTable";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 
-/** Practice landing (02r2, Paper mock LEW-0): the header with New plan (always available: any number of threads of a mode
- *  can run), and one table of her practice threads. The thread, plan and swing setup all live in the New plan modal;
+/** Practice landing (02r2, Paper mock LEW-0): the header with New plan (always available: any number of threads
+ *  can run), and one table of her practice threads. The thread and plan setup live in the New plan modal;
  *  nothing else is on this page. */
 export function PracticeLanding() {
   // Bumped when a thread or the plan changes (a day opened, the data prepared), so the table refetches.
@@ -45,7 +45,7 @@ export function PracticeLanding() {
               {practiceText("daySlots", { active: capacity.data.day_active, max: capacity.data.day_max })}
             </span>
           )}
-          {/* Swing threads use no slot, so the button stays: with every slot taken the Day choice in the form is off, with the reason, and Swing starts. */}
+          {/* The button stays when every slot is taken: the form opens and its footer gives the reason Start is off. */}
           <Button variant="primary" disabled={threads.loading} onClick={() => {
               setDeleted(null);
               setModal(true);

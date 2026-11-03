@@ -25,7 +25,6 @@ import { DayBars } from "./DayBars";
 import { ImprovementPanel } from "./ImprovementPanel";
 import { SwingThreadJournal } from "./SwingThreadJournal";
 import { CloseThreadPanel, ThreadPlanPanel } from "./ThreadPlanPanel";
-import { ThreadPicker } from "./ThreadPicker";
 import { ThreadFills } from "./ThreadFills";
 import { ThreadSidePanel } from "./ThreadSidePanel";
 import { ThreadTiles } from "./ThreadTiles";
@@ -33,10 +32,10 @@ import styles from "./threadJournal.module.css";
 
 /** `/practice/journal?thread=`: one practice thread's journal (02r). Every dollar on it is SIMULATED. Reads the URL, so the page wraps it in Suspense. */
 export function ThreadJournalScreen() {
-  const { id, given } = routeId(useSearchParams().get("thread"));
+  const { id } = routeId(useSearchParams().get("thread"));
   const query = useDeskQuery(`replay-thread:${id}`, (signal) => loadThread(id ?? 0, { signal }), { enabled: id !== null });
 
-  if (id === null && !given) return <ThreadPicker />;
+  // JournalRoute opens this only with `?thread=` given, so a null id is a bad one (never "no thread chosen").
   if (id === null || (query.error instanceof DeskApiError && query.error.status === 404)) {
     return <div className={styles.center}><PracticeNotice title={PRACTICE_COPY.threadPageNotFound} /></div>;
   }

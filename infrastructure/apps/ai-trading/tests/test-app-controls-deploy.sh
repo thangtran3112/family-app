@@ -1553,6 +1553,78 @@ cat /var/lib/family-app/ai-trading/control.json
   fi
   echo "    exit=$rc11"
 
+  echo "=== Install Case 11b (RED): the lifecycle lock is held by another process -- install.sh waits AI_TRADING_LOCK_WAIT_SECONDS, then fails non-zero with a message naming the lock, the holder, and the retry command (never 'delete the lock file') ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  mkdir -p "$IROOT/override11b"
+  # fuser reports pids on stdout (the file name goes to stderr), like psmisc's.
+  cat >"$IROOT/override11b/fuser" <<'EOF'
+#!/bin/bash
+echo "$*" >> /fake-state/fuser.log
+echo "$1: " >&2
+echo " 4242"
+EOF
+  chmod +x "$IROOT/override11b/fuser"
+  lock_holder_script='
+set -e
+umask 077
+install -d -m 0700 /var/lib/family-app/ai-trading
+python3 -c "
+import fcntl, sys, time
+f = open(\"/var/lib/family-app/ai-trading/.control.lock\", \"a\")
+fcntl.flock(f, fcntl.LOCK_EX)
+print(\"held\", flush=True)
+time.sleep(float(sys.argv[1]))
+" "$HOLD_SECONDS" &
+sleep 1
+'
+  rm -f "$IROOT/fake-state/fuser.log"
+  out11b="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/override11b:/overridebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/overridebin:/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    -e HOLD_SECONDS=30 -e AI_TRADING_LOCK_WAIT_SECONDS=2 \
+    python:3.12-slim bash -c "$lock_holder_script"'
+start=$SECONDS
+rc=0
+bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app || rc=$?
+echo "elapsed=$((SECONDS - start)) rc=$rc"
+exit 0
+' 2>&1)" || install_fail "install11b: harness failed: $out11b"
+  echo "$out11b" | grep -q 'rc=0$' && install_fail "install11b: expected non-zero exit while the lock is held: $out11b"
+  echo "$out11b" | grep -q 'elapsed=[2-9] ' || install_fail "install11b: expected a bounded wait of about AI_TRADING_LOCK_WAIT_SECONDS (2s) before giving up: $out11b"
+  echo "$out11b" | grep -q '/var/lib/family-app/ai-trading/.control.lock' || install_fail "install11b: message must name the lock file: $out11b"
+  echo "$out11b" | grep -qi 'held by another' || install_fail "install11b: message must say the lock is held by another operation: $out11b"
+  echo "$out11b" | grep -q '4242' || install_fail "install11b: message must name the holder pid reported by fuser: $out11b"
+  echo "$out11b" | grep -q 'bash /src/install.sh --src-dir /src' || install_fail "install11b: message must print the exact retry command: $out11b"
+  echo "$out11b" | grep -qiE '(rm|delete|remove)[^.]*\.control\.lock' && install_fail "install11b: message must never suggest deleting the lock file: $out11b"
+  echo "$out11b" | grep -q 'failed to initialize control state' || install_fail "install11b: the original final line must remain: $out11b"
+
+  echo "=== Install Case 11c (GREEN): a lock released inside the wait window -> install.sh succeeds (bounded wait works) and the lock holder is unknown when no fuser/lsof exists ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  out11c="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    -e HOLD_SECONDS=3 -e AI_TRADING_LOCK_WAIT_SECONDS=20 \
+    python:3.12-slim bash -c "$lock_holder_script"'
+bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app
+' 2>&1)" && rc11c=0 || rc11c=$?
+  [[ "$rc11c" == 0 ]] || install_fail "install11c: expected exit 0 once the lock is released within the wait: $out11c"
+  echo "$out11c" | grep -q 'bootstrap complete' || install_fail "install11c: missing success message: $out11c"
+
+  echo "=== Install Case 11d (RED): lock held and no way to name the holder -> 'holder unknown', still non-zero ==="
+  INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
+  out11d="$(docker run --rm \
+    -v "$IROOT/bin:/fakebin:ro" -v "$IROOT/src:/src:ro" -v "$IROOT/fake-state:/fake-state" \
+    -e PATH="/fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    -e HOLD_SECONDS=30 -e AI_TRADING_LOCK_WAIT_SECONDS=1 \
+    python:3.12-slim bash -c "$lock_holder_script"'
+rc=0
+bash /src/install.sh --src-dir /src --state-dir /var/lib/family-app/ai-trading --run-dir /run/family-app || rc=$?
+echo "rc=$rc"
+exit 0
+' 2>&1)" || install_fail "install11d: harness failed: $out11d"
+  echo "$out11d" | grep -q 'rc=0$' && install_fail "install11d: expected non-zero exit while the lock is held: $out11d"
+  echo "$out11d" | grep -qi 'holder unknown' || install_fail "install11d: expected 'holder unknown' when no tool can name the holder: $out11d"
+
   echo "=== Install Case 12 (GREEN, real systemd-analyze, task-5-review minor ledger): a genuinely valid unit file passes the REAL systemd-analyze verify binary (no PID 1 needed -- static analysis only), run against deploy.sh's own stage_unit() validation path ==="
   INSTALL_CASE_COUNT=$((INSTALL_CASE_COUNT + 1))
   if docker run --rm debian:12-slim bash -c 'command -v apt-get' >/dev/null 2>&1; then

@@ -76,6 +76,50 @@ test("mergeBars returns the same array when nothing arrived", () => {
   assert.equal(mergeBars(bars, []), bars);
 });
 
+const bar = (minute: number, close = 2) => ({ t: `2026-04-07T14:${String(minute).padStart(2, "0")}:00Z`, o: 1, h: 3, l: 1, c: close, v: 10, ext: false });
+
+test("mergeBars folds an answer into the tail and keeps every other bar the same object (D-206)", () => {
+  const held = [bar(0), bar(1), bar(2)];
+  const same = mergeBars(held, [bar(2)]);
+  assert.equal(same, held, "the newest bar again, unchanged: nothing is rebuilt");
+  const appended = mergeBars(held, [bar(2), bar(3)]);
+  assert.deepEqual(appended.map((item) => item.t.slice(14, 16)), ["00", "01", "02", "03"]);
+  assert.ok(appended.slice(0, 3).every((item, index) => item === held[index]), "the bars it already had stay the same objects");
+  const revised = mergeBars(held, [bar(2, 9)]);
+  assert.equal(revised.length, 3);
+  assert.equal(revised[2]?.c, 9);
+  assert.equal(revised[1], held[1]);
+  assert.equal(held[2]?.c, 2, "the held array is not touched");
+});
+
+test("mergeBars still keys, sorts and dedupes an answer that does not continue the tail", () => {
+  const held = [bar(0), bar(1), bar(2)];
+  const reached = mergeBars(held, [bar(1, 7), bar(4), bar(3)]);
+  assert.deepEqual(reached.map((item) => [item.t.slice(14, 16), item.c]), [["00", 2], ["01", 7], ["02", 2], ["03", 2], ["04", 2]]);
+  assert.deepEqual(mergeBars([], [bar(2), bar(0), bar(2, 5)]).map((item) => [item.t.slice(14, 16), item.c]), [["00", 2], ["02", 5]]);
+});
+
+test("a poll that brings nothing new hands back the same bars, forming candle, levels, open trade, signals and indicator rows (D-206)", () => {
+  const withRows = (rows: Array<{ t: string; ema9: number }>) =>
+    next({ indicators: { interval: "5m", as_of_bar: rows.at(-1)!.t, rows: rows.map((row) => ({ ...row, ema21: 1, vwap: 1, rsi14: 50, macd: 0, macd_signal: 0, macd_hist: 0 })) } });
+  const first = applyAdvance(base(), withRows([{ t: "2026-04-07T14:00:00Z", ema9: 1 }, { t: "2026-04-07T14:05:00Z", ema9: 2 }]));
+  const again = applyAdvance(first, withRows([{ t: "2026-04-07T14:05:00Z", ema9: 2 }]));
+  assert.notEqual(again, first, "the view moves (the clock, the tape)");
+  assert.equal(again.bars, first.bars);
+  assert.equal(again.forming, first.forming);
+  assert.equal(again.levels, first.levels);
+  assert.equal(again.openTrade, first.openTrade);
+  assert.equal(again.signals, first.signals);
+  assert.equal(again.indicators, first.indicators);
+  assert.equal(chartBars(again).length, chartBars(first).length);
+  // A revised newest row and a new one: only those change, and the older row stays the same object.
+  const moved = applyAdvance(again, withRows([{ t: "2026-04-07T14:05:00Z", ema9: 3 }, { t: "2026-04-07T14:10:00Z", ema9: 4 }]));
+  assert.deepEqual(moved.indicators?.rows.map((row) => [row.t.slice(11, 16), row.ema9]), [["14:00", 1], ["14:05", 3], ["14:10", 4]]);
+  assert.equal(moved.indicators?.rows[0], first.indicators?.rows[0]);
+  const forming = applyAdvance(moved, next({ forming: { ...delta.forming, c: 190 } }));
+  assert.equal(forming.forming?.c, 190, "a forming candle that moved is the new one");
+});
+
 test("pace prefers the API's numbers, else counts the last 10 market seconds across advances", () => {
   const withApi = applyAdvance(base(), next({}));
   assert.deepEqual(paceOf(withApi), { windowS: 10, printsPerSecond: 12.4, sharesPerSecond: 3400, band: "busy", timesAverage: 1.8 });

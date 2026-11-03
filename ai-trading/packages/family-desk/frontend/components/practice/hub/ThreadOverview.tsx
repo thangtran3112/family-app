@@ -98,7 +98,7 @@ export function ThreadOverview() {
       title={threadName(thread)}
       titleRef={titleRef}
       aside={<OverviewChips thread={thread} />}
-      tabs={<PracticeTabs threadId={thread.id} active={tab} mode={thread.mode} back={false} panelMounted />}
+      tabs={<PracticeTabs threadId={thread.id} active={tab} mode={thread.mode} back={false} panelMounted dayOpen={summary.today !== null} />}
     >
       <TabPanel idBase={PRACTICE_TABS_ID} id={tab}>
         {tab === "portfolio" ? (

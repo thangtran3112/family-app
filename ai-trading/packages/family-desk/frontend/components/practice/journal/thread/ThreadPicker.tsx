@@ -8,10 +8,10 @@ import { ThreadList } from "./ThreadList";
 import styles from "./threadJournal.module.css";
 
 /**
- * No thread chosen (D-037): says so in plain words and lists her threads, the active one first. Each row is a link to the journal
- * unless the screen names its own next step: `hint` is that step in words and `href` where a row goes (D-183).
+ * No thread chosen (D-037): says so in plain words and lists her threads, the active one first. The screen names its own next step:
+ * `hint` is that step in words and `href` where a row goes (D-183). No picker opens a journal: that lives inside a thread.
  */
-export function ThreadPicker({ hint = PRACTICE_COPY.threadPickHint, href }: { hint?: string; href?: (threadId: number) => string } = {}) {
+export function ThreadPicker({ hint, href }: { hint: string; href: (threadId: number) => string }) {
   const list = useDeskQuery("replay-threads:picker", (signal) => loadThreads({ signal }));
   return (
     <div className={styles.center}>

@@ -9,7 +9,7 @@ import { formatSignedUsd } from "@/lib/desk/mask";
 import { loadDayList, placeMark, startDaySession } from "@/lib/desk/replay";
 import { useDeskQuery, type DeskQueryResult } from "@/lib/desk/useDeskQuery";
 import type { DayList } from "@/lib/replay/daily";
-import { openPositionsText, portfolioFooter, portfolioRows } from "@/lib/replay/dayView";
+import { heldRows, openPositionsText, portfolioFooter, portfolioRows } from "@/lib/replay/dayView";
 import { exitMark } from "@/lib/replay/markInput";
 import { exitKindFor } from "@/lib/replay/playView";
 import { dayPositionRow, type PositionRow } from "@/lib/replay/positionTable";
@@ -25,8 +25,9 @@ export const useDayPortfolio = (dayListId: number | null, revision = 0, enabled 
   useDeskQuery(`portfolio:${dayListId}`, (signal) => loadDayList(dayListId ?? 0, {}, { signal }), { revision, enabled: enabled && dayListId !== null });
 
 /** The day's portfolio (practice = portfolio), read like a broker's positions list: a head with the open-position count, then one table row for every
- *  name she opened, flat or holding its one open position (any number of fills, one average cost): last price, day change against the prior close,
- *  signed position, average price, value, and its unrealized, realized and total P/L (`PositionTable`). SIMULATED. Any number of names hold a
+ *  name she holds right now (any number of fills, one average cost; long is positive shares, short negative): last price, day change against the prior
+ *  close, signed position, average price, value and its unrealized P/L (`PositionTable`). A name she exited is not a row: its result is a closed trade,
+ *  which lives in Trades. The footer is the open P/L only. SIMULATED. Any number of names hold a
  *  position at once. A ticker opens or resumes that name's chart at the shared day clock; a held row also has Exit, which closes that name's trade
  *  from wherever she is. It lives on the Portfolio tab only: the chart view has none. */
 export function PortfolioPanel({ dayListId, query }: { dayListId: number; query: DeskQueryResult<DayList> }) {
@@ -38,7 +39,7 @@ export function PortfolioPanel({ dayListId, query }: { dayListId: number; query:
     return query.error === null ? null : <p className={styles.muted}>{PRACTICE_COPY.dayLoadError}</p>;
   }
   const day = query.data;
-  const rows = portfolioRows(day);
+  const rows = heldRows(portfolioRows(day));
   const footer = portfolioFooter(day.day_pnl);
   const ended = day.status === "ended";
 
@@ -81,7 +82,7 @@ export function PortfolioPanel({ dayListId, query }: { dayListId: number; query:
         <SimulatedBadge />
       </div>
       {rows.length === 0 ? (
-        <p className={styles.muted}>{ended ? PRACTICE_COPY.reviewNoPicks : PRACTICE_COPY.dayPortfolioEmpty}</p>
+        <p className={styles.muted}>{ended ? PRACTICE_COPY.dayPortfolioEnded : PRACTICE_COPY.dayPortfolioEmpty}</p>
       ) : (
         <PositionTable
           caption={PRACTICE_COPY.dayPortfolioTable}
@@ -96,7 +97,7 @@ export function PortfolioPanel({ dayListId, query }: { dayListId: number; query:
             <span className={toneClass(footer.total)}>{formatSignedUsd(footer.total, { cents: true })}</span>
           </span>
           <span className={styles.muted}>
-            {footer.split} · {footer.openOf} · {query.connection === "reconnecting" ? practiceText("dayPortfolioNotUpdated", { time: formatEtTimeZone(day.day_pnl.as_of) }) : footer.asOf}
+            {footer.openOf} · {query.connection === "reconnecting" ? practiceText("dayPortfolioNotUpdated", { time: formatEtTimeZone(day.day_pnl.as_of) }) : footer.asOf}
           </span>
         </p>
       )}
