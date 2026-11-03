@@ -16,7 +16,15 @@ export const BOARD_PRIORITIES = {
   // Daily-list practice (02o-b v1, D-157): the candidate table drops the time the match began, then volume, gap and vs VWAP, then prev close. It keeps price
   // at list, price now, vs prev close, prev RVOL, prev change, ATR %, RSI and earnings, whatever the pane. The filter names have no priority: they say why
   // each name is on the Screen, so they never drop (D-223).
-  practiceList: { matched_since: 1, volume: 2, gap_pct_open: 3, vs_vwap_pct: 4, prev_close: 5 },
+  // A filter that reads the 52-week high adds its two numbers (D-243); they drop after the previous close and before everything else.
+  practiceList: { matched_since: 1, volume: 2, gap_pct_open: 3, vs_vwap_pct: 4, prev_close: 5, high_252d: 6, dist_to_252d_high_pct: 7 },
+  // The same Screen once the scan was read after the open (D-243), when it carries the scan's own RVOL and change % and, with them, 18 columns that no pane holds.
+  // The first five drop as above. Then what a column beside it already says: the scan's change % (the same move as "vs prev close %", or "vs prev close % now"
+  // following the clock), then the previous session's change and RVOL, which the scan's own RVOL and the move now replace; last the filter's own numbers beyond the
+  // fixed block (52-week high, distance from it). What never drops: the name (symbol, filters: they say why it is listed, D-223), the scan price, the price now and
+  // its move, RVOL (the scan's), ATR %, RSI and earnings: 1,064 px with the pinned actions beside the widest Filters cell measured (186 px; 162 on the walks),
+  // inside the 1,088 px pane at 1440 and the 1,108 px pane at 1180. A scan read before the open keeps `practiceList`: its previous-session figures are its figures.
+  practiceListOpen: { matched_since: 1, volume: 2, gap_pct_open: 3, vs_vwap_pct: 4, prev_close: 5, change_pct: 6, prev_change_pct: 7, prev_rvol: 8, high_252d: 9, dist_to_252d_high_pct: 10 },
   practiceReview: { range_pct: 1, close_move_pct: 2 },
   // The Trades fills table (D-157): what a fill did to the position goes first (the action says Buy or Sell), then the day; the time, name, size and price stay.
   threadFills: { effect: 1, day: 2 },

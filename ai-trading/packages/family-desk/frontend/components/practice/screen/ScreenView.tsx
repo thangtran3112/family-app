@@ -197,7 +197,12 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   const today = live?.today ?? false;
   const pending = live?.pending ?? false;
   const columns = useMemo(
-    () => withPriorities(columnsOf({ columns: screen.columns, universe: screen.universe }, following ? { today, pending } : null), "practiceList"),
+    () =>
+      withPriorities(
+        columnsOf({ columns: screen.columns, universe: screen.universe }, following ? { today, pending } : null),
+        // A scan read after the open adds the scan's own RVOL and change % to the previous session's: which of them give way is that board's (D-243).
+        screen.universe.prev_basis ? "practiceList" : "practiceListOpen",
+      ),
     [screen.columns, screen.universe, following, today, pending],
   );
   const liveAt = rows.find((row) => row.live)?.live?.at ?? clock;
