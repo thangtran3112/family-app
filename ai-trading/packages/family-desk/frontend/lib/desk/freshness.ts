@@ -161,6 +161,16 @@ const SHORT: Partial<Record<FreshnessState, string>> = {
   unavailable: COPY.unavailableShort,
 };
 
+/** The states whose whole sentence is wider than the badge's 238 px text box (`.topBadge` in topbar.module.css) even at the 1440 band: 291 px for the
+ * backup source, 251 px for reconnecting (a two-digit hour adds 7), 242 px for unavailable. The paused sentence fits there (232 px with two-digit days). */
+const WIDER_THAN_BADGE: ReadonlySet<FreshnessState> = new Set(["reconnecting", "backup", "unavailable"]);
+
+/** The top-bar badge's text. A sentence that does not fit its band shows `short` (1180: the Fundamental bar leaves 287 px beside the pill, D-232;
+ * 1440: the badge's box, D-238); the badge keeps the whole `label` in its title and aria-label. A page badge has no band and shows the whole sentence. */
+export function badgeText(view: FreshnessView, band?: ShellBand): string {
+  return band === "1180" || (band === "1440" && WIDER_THAN_BADGE.has(view.state)) ? view.short : view.label;
+}
+
 const fill = (template: string, values: Record<string, string>) =>
   template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 export const fillCopy = fill;
@@ -215,14 +225,15 @@ export function sourceLabel(source: string | null | undefined): string {
   return SOURCE_LABELS[source] ?? source;
 }
 
-/** Status-bar text: "Quotes live · IBKR", "Quotes: Alpaca · Delayed 15 min" (02l §b2). */
-export function statusBarText(input: FreshnessInput): string {
+/** Status-bar text: "Quotes live · IBKR", "Quotes: Alpaca · Delayed 15 min" (02l §b2). At the 1180 band a long sentence shows its short form, as the
+ * top-bar badge does (D-237): the Feedback bar also carries a 387 px privacy line, so the sentence has 214 px there. The bar has room for the whole one at 1440. */
+export function statusBarText(input: FreshnessInput, band?: ShellBand): string {
   const view = resolveFreshness(input);
   const source = sourceLabel(input.stamp?.source);
   if (view.state === "live") return `Quotes live · ${source}`;
   if (view.state === "delayed") return `Quotes: ${source} · ${COPY.delayed}`;
   if (view.state === "closed") return input.stamp?.source ? `Quotes: ${source} · Market closed` : view.label;
-  return view.label;
+  return band === "1180" ? view.short : view.label;
 }
 
 const QUALITY_PHRASE: Record<Stamp["quality"], string> = {

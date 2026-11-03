@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { reportUrl } from "@/lib/desk/feedbackContext";
 import { Freshness } from "@/components/ui/Freshness";
 import { alertsBanner, COPY } from "@/lib/desk/freshness";
+import type { ShellBand } from "@/lib/desk/viewport";
 import { shows } from "@/lib/lanes";
 import { useDeskStatus, useDeskUi } from "./DeskContext";
 import { usePracticeChrome, useReplayBadge } from "./PracticeChrome";
@@ -27,7 +28,7 @@ function ReportProblem({ pathname }: { pathname: string }) {
 
 /** 24 px bar: quote source and state, last update in ET, alert delivery state (02l §b2). A Practice route may bring its own line (D-043).
  * Backtest has no live quote line or alerts state (ADR-0014): it says the data is past. */
-export function StatusBar() {
+export function StatusBar({ band }: { band: ShellBand }) {
   const { status } = useDeskStatus();
   const { lane } = useDeskUi();
   const pathname = usePathname() ?? "/";
@@ -55,7 +56,7 @@ export function StatusBar() {
       ) : !shows(lane, "statusQuotes") ? (
         <span>{COPY.backtestStatus}</span>
       ) : (
-        <Freshness variant="statusBar" />
+        <Freshness variant="statusBar" band={band} />
       )}
       {onFeedback && <span>Feedback stays on this Desk · nothing is sent to a third-party tracker</span>}
       <span className={styles.right}>
