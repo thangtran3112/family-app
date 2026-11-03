@@ -187,13 +187,54 @@ test.describe("Practice landing", () => {
     await fillNewPlan(dialog, { balance: "1000" });
     await expect(submit).not.toHaveAttribute("aria-disabled", "true");
     await dialog.getByLabel(PRACTICE_COPY.threadStartingBalance).fill("500");
-    // The contract's rule, shown under its field and echoed by the button; nothing was created.
+    // The contract's rule, shown under its field only: the footer does not repeat it (D-204, ADR-0026); nothing was created.
     await expect(dialog.getByRole("alert").filter({ hasText: /Starting balance/ })).toBeVisible();
-    await expect(status).toContainText(/Starting balance/);
+    await expect(status).not.toContainText(/Starting balance/);
+    await expect(status).toHaveText(practiceText("threadSubmitHint", { balance: "$500" }));
     await expect(submit).toBeDisabled();
     await submit.click({ force: true });
     await expect(dialog).toBeVisible();
     expect((await (await context.request.get("/api/desk/replay/threads")).json()) as unknown[]).toHaveLength(0);
+  });
+
+  /** How many text nodes on the page hold `sentence`: a sentence printed at its field and again in the footer counts two. */
+  const textNodes = (page: Page, sentence: string) =>
+    page.evaluate((needle) => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let count = 0;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) if ((node.textContent ?? "").includes(needle)) count++;
+      return count;
+    }, sentence);
+
+  test("a field's sentence shows once on screen, at its field; the footer never repeats it (D-204)", async ({ page, context }) => {
+    await saveFilter(context);
+    const dialog = await openNewPlan(page);
+    await fillNewPlan(dialog, { balance: "50000" });
+    const footer = dialog.locator("footer");
+    const start = dialog.getByRole("button", { name: START_BUTTON });
+    await expect(start).not.toHaveAttribute("aria-disabled", "true");
+
+    // One bad value per kind of field: a money box, the start's time and date, a number box and a risk rule.
+    const edits: Array<{ name: string; apply: () => Promise<void>; undo: () => Promise<void>; field: RegExp }> = [
+      { name: "Starting balance", field: /^Starting balance/, apply: () => dialog.getByLabel(PRACTICE_COPY.threadStartingBalance).fill("500"), undo: () => dialog.getByLabel(PRACTICE_COPY.threadStartingBalance).fill("50000") },
+      { name: "Start time before 4:00 AM", field: /4:00 AM and 8:00 PM/, apply: () => dialog.getByLabel(PRACTICE_COPY.newThreadStartTime).fill("03:00"), undo: () => dialog.getByLabel(PRACTICE_COPY.newThreadStartTime).fill("09:30") },
+      { name: "Start date after the last finished day", field: /\S/, apply: () => dialog.getByLabel(PRACTICE_COPY.newThreadStartDay).fill("2026-10-16"), undo: () => dialog.getByLabel(PRACTICE_COPY.newThreadStartDay).fill(DAY) },
+      { name: "Screen size", field: /^Screen size/, apply: () => dialog.getByLabel(PRACTICE_COPY.newThreadListSize).fill("5"), undo: () => dialog.getByLabel(PRACTICE_COPY.newThreadListSize).fill("30") },
+      { name: "Max loss", field: /^Max loss/, apply: () => dialog.getByLabel(PRACTICE_COPY.threadMaxLoss).fill("500000"), undo: () => dialog.getByLabel(PRACTICE_COPY.threadMaxLoss).fill("") },
+    ];
+    for (const edit of edits) {
+      await edit.apply();
+      const alerts = dialog.getByRole("alert");
+      await expect(alerts, `${edit.name}: one sentence, at the field`).toHaveCount(1);
+      await expect(alerts.first()).toHaveText(edit.field);
+      const sentence = (await alerts.first().innerText()).trim();
+      expect(await textNodes(page, sentence), `${edit.name}: "${sentence}" is printed once on the whole page`).toBe(1);
+      await expect(footer.getByRole("status"), `${edit.name}: the footer says what Start does, not the field's sentence`).not.toContainText(sentence);
+      await expect(start, `${edit.name}: Start is off, and the sentence above explains it`).toHaveAttribute("aria-disabled", "true");
+      await edit.undo();
+      await expect(dialog.getByRole("alert")).toHaveCount(0);
+      await expect(start).not.toHaveAttribute("aria-disabled", "true");
+    }
   });
 
   test("a start after the last finished day says so as she edits, clears when she fixes it and never moves the form", async ({ page, context }) => {

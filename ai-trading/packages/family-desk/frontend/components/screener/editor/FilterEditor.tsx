@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/Button";
 import { ErrorSummary } from "@/components/ui/ErrorSummary";
 import { Field, FieldError, FieldRow, Input, NumberInput } from "@/components/ui/Field";
 import { FormActionBar } from "@/components/ui/FormActionBar";
-import { rowsBoxLabels } from "@/lib/desk/conditionLabels";
+import { filterBoxLabels } from "@/lib/desk/conditionLabels";
 import { OPERAND_CATALOG } from "@/lib/desk/operands";
 import { fieldError, formProblems } from "@/lib/desk/problems";
 import { filterHref } from "@/lib/desk/hrefs";
@@ -171,7 +171,7 @@ function EditorForm({ filter, spec, refresh, onNotice }: {
           {copyFailed && <FieldError>Couldn&apos;t copy · Try again</FieldError>}
         </>
       )}
-      <ErrorSummary problems={formProblems(problems, "error", rowsBoxLabels(form, OPERAND_CATALOG))} />
+      <ErrorSummary problems={formProblems(problems, "error", filterBoxLabels(form, OPERAND_CATALOG))} />
       {saveNote && <FieldError>{saveNote}</FieldError>}
       {!readOnly && defaultForm && (
         <FieldRow>
