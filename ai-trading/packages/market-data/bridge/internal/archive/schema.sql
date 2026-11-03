@@ -1,6 +1,16 @@
 -- H1 write-once RAW archive (02u §2). Idempotent: `bridge migrate` and the boot step both run it.
 -- Own schema, so it can share the Desk's database without touching a Desk table.
-CREATE SCHEMA IF NOT EXISTS market_archive;
+-- Not `CREATE SCHEMA IF NOT EXISTS`: Postgres checks the database-level CREATE privilege before it
+-- checks existence, so that statement fails for the production role (zz-20-market-archive-roles.sh
+-- hands it the schema, not the database) even when the schema is already there. A database-level
+-- grant would not survive a restore, so the schema is created only when it is missing.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'market_archive') THEN
+        CREATE SCHEMA market_archive;
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS market_archive.raw_1d (
     symbol       text             NOT NULL,
