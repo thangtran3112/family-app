@@ -4,6 +4,7 @@ import { expect, openDesk, prepareDesk, test } from "./helpers";
 
 // D-205: one box, one name. The error summary above a form names a field exactly as the box under it is labelled, for every operand the
 // condition kit offers (the screener's filter editor and the alert setup share it), on both sides of a comparison.
+// D-242: the same box is also marked invalid and described by the line under its row that holds the sentence, and unmarked again once the value is good.
 
 const KIT = OPERAND_CATALOG.filter((def) => def.params.length > 0);
 
@@ -25,7 +26,8 @@ async function setSide(page: Page, side: Side, label: string) {
   await pick(page, side, label);
 }
 
-/** Puts every number box of the metric one above its allowed top, then checks each summary line names its box as the box itself is labelled. */
+/** Puts every number box of the metric one above its allowed top, then checks each summary line names its box as the box itself is labelled
+ *  and each box is `aria-invalid` and described by a line that says why (D-242); a good value takes both attributes away again. */
 async function expectSummaryNamesBoxes(page: Page, side: Side, def: (typeof KIT)[number]) {
   await setSide(page, side, def.label);
   for (const param of def.params) {
@@ -36,6 +38,20 @@ async function expectSummaryNamesBoxes(page: Page, side: Side, def: (typeof KIT)
   for (const param of def.params) {
     const line = lineStart(side, param.label);
     await expect.poll(async () => (await summary(page).allInnerTexts()).some((text) => text.startsWith(line)), { message: `${def.id} ${side}: a summary line starts "${line}"` }).toBe(true);
+  }
+  for (const param of def.params) {
+    const box = page.getByLabel(param.label, { exact: true });
+    await expect(box, `${def.id} ${side} ${param.label}: aria-invalid`).toHaveAttribute("aria-invalid", "true");
+    const line = (await box.getAttribute("aria-describedby")) ?? "";
+    expect(line, `${def.id} ${side} ${param.label}: aria-describedby`).not.toBe("");
+    // The id holds a spec path (dots), so match it as an attribute, not as `#id`.
+    await expect(page.locator(`p[id="${line}"]`), `${def.id} ${side} ${param.label}: the line it points at`).toContainText(`Must be ${param.max} or less.`);
+  }
+  for (const param of def.params) {
+    const box = page.getByLabel(param.label, { exact: true });
+    await box.fill(String(param.defaultValue));
+    await expect(box, `${def.id} ${side} ${param.label}: a good value is not invalid`).not.toHaveAttribute("aria-invalid", "true");
+    await expect(box, `${def.id} ${side} ${param.label}: a good value is not described`).not.toHaveAttribute("aria-describedby", /.+/);
   }
 }
 
