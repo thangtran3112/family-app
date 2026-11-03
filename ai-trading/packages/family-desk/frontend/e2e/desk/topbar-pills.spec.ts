@@ -58,7 +58,7 @@ test("fundamental top bar, quotes paused: the longest badge fits and the bar doe
 });
 
 // D-232: the Fundamental bar leaves 287 px at 1180 for the market pill and the quote badge together. Every sentence the two can print
-// (lib/desk/freshness.ts: the ten freshness states, the first-load wording and "Status unavailable") must leave the page exactly as wide
+// (lib/desk/freshness.ts: the eight freshness states, the first-load wording and "Status unavailable") must leave the page exactly as wide
 // as the window, the account button whole inside it, and its menu reachable. At 1180 the long sentences show their short form; the whole
 // sentence stays in the badge's title and aria-label (D-232). "Market closed · showing last close" stays whole (D-211).
 // D-238: the badge's text box is 238 px at 1440 too, so the three sentences wider than that (backup, unavailable, reconnecting) show their
@@ -97,8 +97,9 @@ const SENTENCES: Sentence[] = [
   { name: "paused 99 days, pre-market", session: "pre", quotes: live("paused", "realtime", 99 * 24 * 60), full: "Quotes paused · last update 99 days ago", short: "Quotes paused · 99 days ago", only1180: true },
   { name: "backup source", session: "regular", quotes: live("live", "fallback"), full: "Using backup quotes · may differ slightly from IBKR", short: "Backup quotes · may differ", wide: true },
   { name: "closed", session: "closed", quotes: live("closed", "eod", 15 * 60), full: "Market closed · showing last close" },
-  { name: "pre-market", session: "pre", quotes: live("live"), full: "Pre-market · 11:30 AM ET" },
-  { name: "after hours", session: "after", quotes: live("live"), full: "After hours" },
+  // D-245: the session word is the pill's alone; the badge beside it names the quote.
+  { name: "pre-market, quotes live", session: "pre", quotes: live("live"), full: "Live", pill: ["Pre-market", "Pre-market"] },
+  { name: "after hours, quotes delayed", session: "after", quotes: live("delayed", "delayed-15m"), full: "Delayed 15 min", pill: ["After hours", "After hours"] },
   { name: "unavailable", session: "regular", quotes: live("unavailable", "unavailable"), full: "Quotes unavailable right now · trying again", short: "Quotes unavailable", wide: true },
   { name: "refresh running", session: "regular", quotes: live("live", "realtime", 3), status: "updating", full: "Updating quotes…" },
   { name: "reconnecting", session: "regular", quotes: live("live", "realtime", 3), status: "reconnecting", full: "Reconnecting… · last update 11:27:00 AM ET", short: "Reconnecting…", wide: true },
