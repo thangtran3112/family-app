@@ -118,7 +118,8 @@ export function DenseTable<R>({
     };
     measure();
     // The first measure may run before the web font has: measure again once it is in, because a letter's width is what is being summed.
-    void document.fonts?.ready.then(measure);
+    // With the fonts already in, the second measure would find what the first did, and a laid-out table costs two forced layouts for it (D-217).
+    if (document.fonts && document.fonts.status !== "loaded") void document.fonts.ready.then(measure);
     return () => {
       live = false;
     };

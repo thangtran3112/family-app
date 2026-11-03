@@ -16,12 +16,24 @@ const cleanSpaces = (text: string) => text.replace(/[  ]/g, " ");
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
+// A New York `Intl.DateTimeFormat` costs far more to build than to use, and every poll of the replay screen formats several times of day: one per option set (D-217).
+const etFormats = new Map<string, Intl.DateTimeFormat>();
+function etFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = JSON.stringify(options);
+  let format = etFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: ET, ...options });
+    etFormats.set(key, format);
+  }
+  return format;
+}
+
 function partsOf(iso: string, options: Intl.DateTimeFormatOptions): Record<string, string> {
   // A plain date (a daily bar's as-of) has no time of day: reading it as midnight UTC would print the evening before.
   if (DATE_ONLY.test(iso) && (options.hour || options.minute)) return {};
   const date = new Date(DATE_ONLY.test(iso) ? `${iso}T12:00:00Z` : iso);
   if (Number.isNaN(date.getTime())) return {};
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: ET, ...options }).formatToParts(date);
+  const parts = etFormat(options).formatToParts(date);
   return Object.fromEntries(parts.map(({ type, value }) => [type, cleanSpaces(value)]));
 }
 
