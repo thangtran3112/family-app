@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "startAt": "2026-10-23T09:30:00-04:00",
+  "screen": {
+    "filters": [
+      {
+        "id": 1
+      }
+    ],
+    "maxList": 30
+  },
+  "setup": {
+    "interval": "5m",
+    "session": "regular",
+    "armed": [
+      {
+        "source": "alert_strategy",
+        "id": 1
+      },
+      {
+        "source": "filter",
+        "id": 1
+      },
+      {
+        "source": "alert_strategy",
+        "id": 2
+      },
+      {
+        "source": "filter",
+        "id": 2
+      },
+      {
+        "source": "filter",
+        "id": 3
+      },
+      {
+        "source": "filter",
+        "id": 6
+      }
+    ]
+  }
+}

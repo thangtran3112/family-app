@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "startAt": "2016-01-04T04:59:59Z",
+  "screen": {
+    "filters": [
+      {
+        "id": 1
+      }
+    ],
+    "maxList": 30
+  },
+  "setup": {
+    "interval": "5m",
+    "session": "regular",
+    "armed": []
+  }
+}

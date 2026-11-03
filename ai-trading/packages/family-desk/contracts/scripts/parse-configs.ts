@@ -1,12 +1,13 @@
 // Parses every `*.json` file in the given directories with one Zod schema. Exits 1 when a file
 // fails (or, with --expect-fail, when a file passes). The backend's cross-check test runs it over
 // Pydantic's own serialization of the shared fixtures, so Pydantic JSON must be Zod JSON.
-//   node scripts/parse-configs.ts --schema spec|filter|alert|draft|catalog|replay|mark|block|thread|threadcreate|threadpatch|ledger [--expect-fail] <directory>...
+//   node scripts/parse-configs.ts --schema spec|filter|alert|draft|catalog|replay|mark|block|setup|thread|threadcreate|threadpatch|ledger [--expect-fail] <directory>...
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { AlertStrategySpecV1Schema } from "../src/alert-strategy.ts";
 import { FilterStrategySpecV1Schema } from "../src/filter-strategy-spec-v1.ts";
 import { PracticeBlockV1Schema } from "../src/practice-block-v1.ts";
+import { PracticeSetupV2Schema } from "../src/practice-setup-v2.ts";
 import {
   PracticeLedgerEntryV1Schema,
   PracticeThreadCreateV1Schema,
@@ -27,6 +28,7 @@ const SCHEMAS = {
   replay: ReplaySessionV1Schema,
   mark: PracticeMarkV1Schema,
   block: PracticeBlockV1Schema,
+  setup: PracticeSetupV2Schema,
   threadcreate: PracticeThreadCreateV1Schema,
   threadpatch: PracticeThreadPatchV1Schema,
   thread: PracticeThreadV1Schema,
@@ -38,7 +40,7 @@ const expectFail = args.includes("--expect-fail");
 const schemaFlag = args.indexOf("--schema");
 const schema = SCHEMAS[args[schemaFlag + 1] as keyof typeof SCHEMAS];
 if (schemaFlag < 0 || !schema) {
-  console.error("usage: parse-configs.ts --schema spec|filter|alert|draft|catalog|replay|mark|block|thread|threadcreate|threadpatch|ledger [--expect-fail] <directory>...");
+  console.error("usage: parse-configs.ts --schema spec|filter|alert|draft|catalog|replay|mark|block|setup|thread|threadcreate|threadpatch|ledger [--expect-fail] <directory>...");
   process.exit(2);
 }
 const directories = args.filter((arg, index) => !arg.startsWith("--") && index !== schemaFlag + 1);

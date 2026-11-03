@@ -23,7 +23,7 @@ ledger and the ended day lists, so the numbers cannot drift from the trades (the
 All money here is SIMULATED and every sentence that mentions it says so.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -41,6 +41,8 @@ from ai_trading.db.models import (
     ReplayDayList,
     ReplaySession,
 )
+from ai_trading.replay import hold_rows
+from ai_trading.replay import holds as holds_mod
 from ai_trading.replay.ledger import entry_out, utc_z
 from ai_trading.replay.session import ReplayProblem, Services
 
@@ -68,6 +70,28 @@ def _swing() -> Any:
     from ai_trading.replay import swing
 
     return swing
+
+
+# -- the thread's cash ---------------------------------------------------------------------------------------
+
+
+def balance(db: Session, thread: PracticeThread) -> float:
+    """The thread's balance: the starting balance plus its ledger (never unrealized P/L, 02p b3)."""
+    total = db.execute(
+        select(func.coalesce(func.sum(PracticeLedger.pnl_usd), 0)).where(PracticeLedger.thread_id == thread.id)
+    ).scalar_one()
+    return _money(thread.starting_balance + Decimal(total))
+
+
+def free_cash(db: Session, thread: PracticeThread, rows: list[PracticeHold], day: date | None) -> float:
+    """Free cash on `day` (b2): the ledger balance, plus today's realized P/L of the holds that exited today (credited
+    to the ledger only when the day ends), minus the entry notional of every open hold. `day` None: between days,
+    nothing is waiting to be credited."""
+    realized = sum(
+        holds_mod.closed_pnl(hold_rows.to_hold(r)) for r in rows if r.status == "closed" and r.exit_day == day
+    )
+    held = [hold_rows.to_hold(r) for r in rows if r.status == "open"]
+    return holds_mod.free_cash(balance(db, thread), realized, held)
 
 
 # -- reading -------------------------------------------------------------------------------------------------

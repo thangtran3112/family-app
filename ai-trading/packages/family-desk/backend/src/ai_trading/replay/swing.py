@@ -49,7 +49,6 @@ from ai_trading.data.universe import MIN_DAILY_BARS
 from ai_trading.db.models import (
     FilterStrategy,
     PracticeHold,
-    PracticeLedger,
     PracticePlan,
     PracticeThread,
     PracticeWeek,
@@ -59,7 +58,7 @@ from ai_trading.db.models import (
     WatchlistItem,
 )
 from ai_trading.replay import days as days_mod
-from ai_trading.replay import hold_rows, screen, swing_play
+from ai_trading.replay import hold_rows, positions, screen, swing_play
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
@@ -547,15 +546,7 @@ def _days(plan: PracticePlan) -> list[date]:
     return plan_mod.plan_days(plan.first_day, plan.spec["sessions"])
 
 
-def balance(db: Session, thread: PracticeThread) -> float:
-    """The thread's balance: the starting balance plus its ledger (never unrealized P/L, 02p b3)."""
-    total = db.execute(
-        select(func.coalesce(func.sum(PracticeLedger.pnl_usd), 0)).where(PracticeLedger.thread_id == thread.id)
-    ).scalar_one()
-    return _money(thread.starting_balance + Decimal(total))
-
-
-def _value_price(hold: holds_mod.Hold) -> float:
+def _value_price(hold: positions.Hold) -> float:
     """The price an open hold is valued at outside the live day: its last official close, else (a hold entered on a day
     that has not ended) where it was bought, so nothing later than the last ended close is ever read."""
     return hold.last_close if hold.last_close is not None else hold.entry_price
@@ -709,11 +700,11 @@ def _restate_splits(
         closes += [float(raw.loc[day, "close"]), float(adjusted.loc[day, "close"])]
         if not all(close > 0 for close in closes):
             continue  # a missing or zero close is bad data, not a split
-        k = holds_mod.split_factor(*closes)
+        k = positions.split_factor(*closes)
         if k == 1.0:
             continue
         hold = hold_rows.to_hold(row)
-        restated = holds_mod.restate(hold, k, day)
+        restated = positions.restate(hold, k, day)
         if restated.shares == 0:
             restated = holds_mod.exit_hold(
                 replace(hold, splits=restated.splits),
@@ -968,14 +959,14 @@ def _day_summary(
         first = _first_regular_close(minutes.get(r.symbol), day)
         if first is not None and not splits_to_zero:
             gaps[r.id] = holds_mod.gap_usd(hold_rows.to_hold(r), first, start_close[r.id])
-    unrealized_end = sum(holds_mod.pnl(h, _value_price(h)) for h in map(hold_rows.to_hold, still_open))
+    unrealized_end = sum(positions.pnl(h, _value_price(h)) for h in map(hold_rows.to_hold, still_open))
     attribution = holds_mod.day_attribution(
         realized_credit=sum(holds_mod.closed_pnl(hold_rows.to_hold(r)) for r in exits),
-        unrealized_start=sum(holds_mod.pnl(hold_rows.to_hold(r), start_close[r.id]) for r in carried),
+        unrealized_start=sum(positions.pnl(hold_rows.to_hold(r), start_close[r.id]) for r in carried),
         unrealized_end=unrealized_end,
         gap=sum(gaps.values()),
     )
-    cash = balance(db, thread)
+    cash = threads_mod.balance(db, thread)
     chips = {c["symbol"]: c.get("earnings") for c in row.candidates}
     found = trading_session("stock", day)
     assert found is not None
@@ -1042,7 +1033,7 @@ def end_day(db: Session, user_id: int, day_list_id: int, svc: Services) -> Repla
             stop_hits.append({"symbol": r.symbol, "at": hit.tz_convert(ET).strftime("%H:%M"), "watched": "yes"})
     for r in open_rows:
         hold = hold_rows.to_hold(r)
-        crossing = holds_mod.first_stop_crossing([hold], minutes, clock, found.regular_close)
+        crossing = positions.first_stop_crossing([hold], minutes, clock, found.regular_close)
         if crossing is not None:
             hold_rows.apply(r, replace(hold, stop_hit_at=crossing.at))
             stop_hits.append({"symbol": r.symbol, "at": crossing.at.tz_convert(ET).strftime("%H:%M"), "watched": "no"})
@@ -1169,9 +1160,9 @@ def hold_view(
         "exit_source": hold.exit_source,
         "last_close": hold.last_close,
         "price_basis": None if closed or hold.last_close is None else price_basis,
-        "unrealized_usd": None if closed else holds_mod.pnl(hold, price),
+        "unrealized_usd": None if closed else positions.pnl(hold, price),
         "pnl_usd": holds_mod.closed_pnl(hold) if closed else None,
-        "r": holds_mod.r_multiple(hold, price),
+        "r": positions.r_multiple(hold, price),
         "gap_usd": gap,
         "earnings": chip,
         "split_note": None if split is None else _split_note(split, hold.last_close),
@@ -1180,13 +1171,13 @@ def hold_view(
 
 def live_numbers(db: Session, thread: PracticeThread, day: date | None) -> tuple[float, float]:
     """`(free cash, equity)` of the thread while `day` is under way (None: between days). Free cash is the entry
-    rule's (`swing_play.free_cash`): a hold she exited today counts as realized, though the ledger credits it when the
+    rule's (`threads.free_cash`): a hold she exited today counts as realized, though the ledger credits it when the
     day ends. Equity values every hold that was open at the last ended close at that close, an exit of today's
     included (a3 rule 6: the thread's stats move when a day ends), so an exit moves cash and not equity until then."""
     rows = hold_rows.load(db, thread.id)
     valued = [hold_rows.to_hold(r) for r in rows if r.status == "open" or r.exit_day == day]
-    equity = _money(balance(db, thread) + sum(holds_mod.pnl(h, _value_price(h)) for h in valued))
-    return swing_play.free_cash(db, thread, rows, day), equity
+    equity = _money(threads_mod.balance(db, thread) + sum(positions.pnl(h, _value_price(h)) for h in valued))
+    return threads_mod.free_cash(db, thread, rows, day), equity
 
 
 def state(db: Session, thread: PracticeThread) -> dict[str, Any]:
@@ -1370,7 +1361,6 @@ __all__ = (
     "SURVIVORSHIP_LABEL",
     "PreviewRequest",
     "PreviewResult",
-    "balance",
     "close_thread",
     "create_thread",
     "day_list_out",

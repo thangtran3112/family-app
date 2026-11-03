@@ -478,6 +478,15 @@ class ReplaySession(Base):
             unique=True,
             postgresql_where=text("status = 'active'"),
         ),
+        # Alembic 0021 (ADR-0025): a thread's sessions are lanes, one per name for the thread's life. The index above
+        # narrows to standalone rows once two threads may hold one name.
+        Index(
+            "uq_replay_sessions_thread_id_symbol_active",
+            "thread_id",
+            "symbol",
+            unique=True,
+            postgresql_where=text("status = 'active' AND thread_id IS NOT NULL"),
+        ),
         CheckConstraint("status IN ('active', 'ended')", name="ck_replay_sessions_status"),
         CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="ck_replay_sessions_rating"),
     )
@@ -530,7 +539,7 @@ class PracticeMark(Base):
     __table_args__ = (
         UniqueConstraint("session_id", "seq", name="uq_practice_marks_session_id_seq"),
         CheckConstraint(
-            "kind IN ('long_entry', 'short_entry', 'long_exit', 'short_exit', 'stop', 'note')",
+            "kind IN ('long_entry', 'short_entry', 'long_exit', 'short_exit', 'stop', 'note', 'split')",
             name="ck_practice_marks_kind",
         ),
         CheckConstraint("source IN ('her', 'auto')", name="ck_practice_marks_source"),
@@ -632,6 +641,7 @@ class ReplayDayList(Base):
     __tablename__ = "replay_day_lists"
     __table_args__ = (
         UniqueConstraint("plan_id", "day", name="uq_replay_day_lists_plan_id_day"),
+        UniqueConstraint("thread_id", name="uq_replay_day_lists_thread_id"),
         Index("ix_replay_day_lists_owner_user_id_day", "owner_user_id", "day"),
         CheckConstraint("status IN ('listed', 'practicing', 'ended')", name="ck_replay_day_lists_status"),
         CheckConstraint("clock_speed IN (1, 2, 5, 10)", name="ck_replay_day_lists_clock_speed"),
@@ -670,6 +680,9 @@ class ReplayDayList(Base):
     clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default=text("1"))
     clock_anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     clock_pause: Mapped[Any | None] = mapped_column(JSONB)  # unused: nothing but Pause stops the clock
+    # Alembic 0021 (ADR-0025): the thread this row is the Screen of (one row per thread). Set for a day thread's open
+    # day by the migration's data step; null on every other row (legacy history). Nothing reads it yet.
+    thread_id: Mapped[int | None] = mapped_column(ForeignKey("practice_threads.id", ondelete="CASCADE"), nullable=True)
 
 
 class ReplayDayScan(Base):
@@ -710,7 +723,8 @@ class PracticeThread(Base):
 
     __tablename__ = "practice_threads"
     __table_args__ = (
-        CheckConstraint("mode IN ('day', 'swing')", name="ck_practice_threads_mode"),
+        CheckConstraint("mode IN ('day', 'swing', 'freestyle')", name="ck_practice_threads_mode"),
+        CheckConstraint("clock_speed IN (1, 2, 5, 10)", name="ck_practice_threads_clock_speed"),
         CheckConstraint("status IN ('active', 'closed')", name="ck_practice_threads_status"),
         CheckConstraint("starting_balance BETWEEN 1000 AND 10000000", name="ck_practice_threads_starting_balance"),
         CheckConstraint("stop_note_on_entry IN ('yes', 'no')", name="ck_practice_threads_stop_note_on_entry"),
@@ -725,7 +739,8 @@ class PracticeThread(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
-    mode: Mapped[str] = mapped_column(String, nullable=False)  # "day" | "swing" (swing is unused until 02p)
+    # "day" | "swing" | "freestyle". Alembic 0021 allows "freestyle" (ADR-0025); nothing writes it yet.
+    mode: Mapped[str] = mapped_column(String, nullable=False)
     # Her threads' own labels (Alembic 0020, D-069): "Day thread · Oct 15", "(2)" on the second of that day. Written
     # once, when the thread starts (`replay/threads.thread_name`); nothing renames it yet.
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -742,6 +757,17 @@ class PracticeThread(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Alembic 0021 (ADR-0025): the thread's own clock, which replaces the day list's. `clock_at` is the simulated time
+    # as of `clock_anchor_at`; while `clock_running` it advances `clock_speed` x wall time since then. `start_at` is
+    # where the thread began; `clock_pause` is `{"kind": "horizon"}` when the data ran out. Nothing reads them yet.
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # No Python-side default on the two NOT NULL ones: the database fills them, so an insert into a schema that is
+    # below 0021 (the migration tests downgrade) never names a column that is not there.
+    clock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("1"))
+    clock_anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clock_pause: Mapped[Any | None] = mapped_column(JSONB)
 
 
 class PracticeLedger(Base):

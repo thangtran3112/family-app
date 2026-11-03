@@ -224,6 +224,14 @@ class PracticeArmedV1(SpecModel):
     source: Literal["alert_strategy", "filter"]
 
 
+class PracticeArmedV2(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: Annotated[int, Field(ge=1, le=9007199254740991)]
+    source: Literal["alert_strategy", "filter"]
+
+
 class PracticeLedgerEntryV1(SpecModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -310,6 +318,38 @@ class PracticeScreenV1(SpecModel):
     filters: Annotated[list[Filter], Field(max_length=3, min_length=1)]
     listAt: Annotated[str, Field(pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$")]
     maxList: Annotated[int, Field(ge=20, le=50)]
+
+
+class PracticeScreenV2(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filters: Annotated[list[Filter], Field(max_length=3, min_length=1)]
+    maxList: Annotated[int, Field(ge=20, le=49)]
+
+
+class PracticeSessionSetupV2(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    armed: Annotated[list[PracticeArmedV2], Field(max_length=5)]
+    interval: Literal["1m", "5m", "15m"]
+    session: Literal["regular", "extended"]
+
+
+class PracticeSetupV2(SpecModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    schemaVersion: Literal[2]
+    screen: PracticeScreenV2
+    setup: PracticeSessionSetupV2
+    startAt: Annotated[
+        str,
+        Field(
+            pattern="^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$"
+        ),
+    ]
 
 
 class PracticeThreadPlanV1(SpecModel):

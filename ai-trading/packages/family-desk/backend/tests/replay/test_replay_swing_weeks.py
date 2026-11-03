@@ -28,8 +28,7 @@ from test_replay_swing_setup import _filter
 
 from ai_trading.core.calendar import et, previous_session
 from ai_trading.db.models import PracticeWeek
-from ai_trading.replay import hold_rows, swing, swing_weeks
-from ai_trading.replay import holds as holds_mod
+from ai_trading.replay import hold_rows, positions, swing, swing_weeks
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import threads as threads_mod
@@ -492,7 +491,7 @@ def test_a_hold_carried_into_the_next_week_reports_only_that_weeks_gaps_and_stop
 def test_a_hold_a_reverse_split_closed_flat_is_priced_on_the_session_before_the_split() -> None:
     ts = pd.Timestamp(et(DAYS[5], "09:30"))
     split = {"day": DAYS[5].isoformat(), "ratio": 0.333333, "shares_before": 2, "shares_after": 0}
-    flat = holds_mod.Hold(
+    flat = positions.Hold(
         id=1, symbol="S06", side="long", shares=2, entry_day=DAYS[2], entry_at=ts, entry_price=60.0,
         stop_at_entry=None, stop_price=None, stop_hit_at=None, status="closed", exit_day=DAYS[5], exit_at=ts,
         exit_price=60.0, exit_source="auto", splits=(split,),
@@ -702,7 +701,7 @@ def test_an_early_close_freezes_the_partial_week_and_books_the_exits_in_it(db_se
     assert s03["exit_price"] == pytest.approx(close, abs=1e-4) and s03["pnl_usd"] == _approx(80 * (close - entry))
     tiles = review["tiles"]
     assert tiles["realized_usd"] == _approx(s03["pnl_usd"] + s04["pnl_usd"])  # the auto exit counts as realized
-    assert tiles["balance_usd"] == swing.balance(db_session, thread)  # and the balance is the ledger's
+    assert tiles["balance_usd"] == threads_mod.balance(db_session, thread)  # and the balance is the ledger's
     journals = [d.journal for d in threads_mod._ended_days(db_session, thread.id) if d.day >= W2[0]]
     assert tiles["equity_change_usd"] == _approx(sum(j["equity_change_usd"] for j in journals))
     assert review["equity"][-1]["equity_usd"] == tiles["balance_usd"]  # nothing is open any more
