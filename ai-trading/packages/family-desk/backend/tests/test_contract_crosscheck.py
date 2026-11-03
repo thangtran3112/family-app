@@ -16,6 +16,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ai_trading.contracts.alert_strategy import AlertStrategySpecV1
 from ai_trading.contracts.practice_block import PracticeBlockV1
+from ai_trading.contracts.practice_setup import PRACTICE_SETUP_RULES, PracticeSetupV2
 from ai_trading.contracts.practice_thread import (
     PRACTICE_THREAD_RULES,
     SWING_SETUP_RULES,
@@ -49,6 +50,7 @@ FAMILIES: dict[str, tuple[type[BaseModel], list[str], list[str]]] = {
     "replay": (ReplaySessionV1, ["fixtures/replay-session-v1/valid"], ["fixtures/replay-session-v1/invalid"]),
     "mark": (PracticeMarkV1, ["fixtures/practice-mark-v1/valid"], ["fixtures/practice-mark-v1/invalid"]),
     "block": (PracticeBlockV1, ["fixtures/practice-block-v1/valid"], ["fixtures/practice-block-v1/invalid"]),
+    "setup": (PracticeSetupV2, ["fixtures/practice-setup-v2/valid"], ["fixtures/practice-setup-v2/invalid"]),
     "threadcreate": (
         PracticeThreadCreateV1,
         ["fixtures/practice-thread-create-v1/valid"],
@@ -88,7 +90,7 @@ _id = lambda pair: f"{pair[0]}:{_rel(pair[1])}"  # noqa: E731
 
 
 def test_every_family_has_fixtures():
-    assert len(VALID) >= 168 and len(INVALID) >= 420
+    assert len(VALID) >= 179 and len(INVALID) >= 476
 
 
 @pytest.mark.parametrize("pair", VALID, ids=_id)
@@ -121,6 +123,22 @@ def test_swing_rules_fail_with_their_own_message(family: str, fixture: str, rule
     path = CONTRACTS / "fixtures" / f"practice-thread-{fixture}"
     with pytest.raises(ValidationError, match=rule.description):
         FAMILIES[family][0].model_validate_json(path.read_text())
+
+
+@pytest.mark.parametrize(
+    ("fixture", "rule"),
+    [
+        ("start-at-feb-31", PRACTICE_SETUP_RULES[0]),
+        ("start-at-feb-29-not-leap", PRACTICE_SETUP_RULES[0]),
+        ("start-at-before-floor", PRACTICE_SETUP_RULES[1]),
+        ("start-at-before-floor-utc", PRACTICE_SETUP_RULES[1]),
+    ],
+)
+def test_setup_rules_fail_with_their_own_message(fixture: str, rule):
+    """A fixture could be rejected for another reason: prove the hand-written rule is the one that fires."""
+    path = CONTRACTS / "fixtures" / "practice-setup-v2" / "invalid" / f"{fixture}.json"
+    with pytest.raises(ValidationError, match=rule.description):
+        PracticeSetupV2.model_validate_json(path.read_text())
 
 
 def _run_zod(family: str, *args: str | Path) -> subprocess.CompletedProcess[str]:

@@ -1,12 +1,8 @@
 import type {
-  DailyBar,
-  DailyBlock,
-  Hold,
   IndicatorBar,
   Indicators,
   Market,
   OpenTrade,
-  Paused,
   ReplayBar,
   ReplayDelta,
   ReplayFeed,
@@ -14,15 +10,15 @@ import type {
   ReplayLevels,
   ReplayPace,
   ReplaySignal,
-  StripRow,
   TapeFeed,
 } from "./schemas.ts";
 import { inRegularWindow } from "../indicators.ts";
 import { ms } from "./time.ts";
 
-// What the browser holds of a replay: only what the server has revealed. This module merges `feed` and
-// `advance` answers; it never slices, trims, or filters by the playhead (the server owns the reveal boundary,
-// 02o decision 1). The only cut is the tape's display cap, which keeps the newest rows.
+// What the browser holds of a lane's chart: only what the server has revealed, which is the thread's time T and nothing after it. This module
+// merges `feed` and `advance` answers; it never slices, trims, or filters by the playhead (the server owns the reveal boundary, 02o decision 1).
+// Bars are keyed by their start instant, so a lane that a Jump carried over several sessions holds the bars of every one of them in order, with
+// no assumption that they share a day. The only cut is the tape's display cap, which keeps the newest rows.
 
 export const TAPE_CAP = 500;
 export const PACE_WINDOW_S = 10;
@@ -53,30 +49,22 @@ export type ReplayView = {
   quietS: number | null;
   openTrade: OpenTrade | null;
   revealedThrough: string;
-  /** The thread's own time T from this payload (ADR-0022): uncapped, never extrapolated by the server. Null for a standalone or swing session. */
+  /** The thread's own time T from this payload (ADR-0022): never extrapolated by the server. Null for a legacy standalone session. */
   threadTime: string | null;
-  /** How far this payload's data runs: `min(T, tape end)` for an open day-thread name, the playhead for every other session. */
+  /** How far this payload's data runs: the last bar at or before T (T itself in the regular session, the tape's end overnight). */
   dataThrough: string;
-  /** The exchange at T (a day thread's payloads): the phase, the day's tape end, this name's last bar and when the next day's data starts. */
+  /** The exchange at T: the phase, the tape end of the latest session, this name's last bar and when the next open is. */
   market: Market | null;
   /** The server's EMA 9/21, VWAP, RSI and MACD for the bars held (and the forming candle), from the same cut as the price: the chart and the left rail read these. */
   indicators: IndicatorTable | null;
-  /** The day list's shared clock (null for a standalone session) and whether this name's playhead is behind it. */
-  dayClock: string | null;
+  /** The thread clock at this read (null for a legacy standalone session) and whether this name's playhead is behind it. */
+  threadClock: string | null;
   behindClock: boolean;
-  /** The thread clock runs on the server right now (ADR-0018). False when it is paused, at the close, or this is not a day thread. */
+  /** The thread clock runs on the server right now (ADR-0018). False when it is paused (also at the horizon) or the lane has no thread. */
   clockRunning: boolean;
   /** Market seconds per wall second while it runs (1 when it does not). */
   clockSpeed: number;
   atEnd: boolean;
-  /** Swing only (null for a day session): the day strip at the day clock, the latest answer wins. */
-  strip: StripRow[] | null;
-  /** Swing only: the Daily chart's bars through the prior close and this name's hold marker (a feed answer). */
-  daily: DailyBlock | null;
-  /** Swing only: the forming day candle, the latest answer wins. */
-  dailyForming: DailyBar | null;
-  /** Swing only: the stop that paused the last advance, kept for the toast until she dismisses it or the next advance. */
-  paused: Paused | null;
 };
 
 /** True when two flat records hold the same values (a bar, an indicator row). */
@@ -130,11 +118,11 @@ function mergeIndicators(existing: IndicatorTable | null, incoming: Indicators |
 }
 
 /**
- * The one time a name's screen shows: the payload's own thread time T. A swing or standalone session has no T, so its time is its playhead, or the
- * day list's shared clock when a name was left behind it (the thread's time, not that name's older playhead).
+ * The one time a name's screen shows: the payload's own thread time T. A legacy standalone session has no T, so its time is its playhead, or the
+ * thread clock when a name was left behind it (the thread's time, not that name's older playhead).
  */
-export const viewClock = (view: Pick<ReplayView, "threadTime" | "revealedThrough" | "dayClock">): string =>
-  view.threadTime ?? (view.dayClock !== null && ms(view.dayClock) > ms(view.revealedThrough) ? view.dayClock : view.revealedThrough);
+export const viewClock = (view: Pick<ReplayView, "threadTime" | "revealedThrough" | "threadClock">): string =>
+  view.threadTime ?? (view.threadClock !== null && ms(view.threadClock) > ms(view.revealedThrough) ? view.threadClock : view.revealedThrough);
 
 const toRow = ([t, price, size, tick]: ReplayDelta["prints"]["rows"][number]): TapeRow => ({ t, price, size, tick });
 
@@ -180,20 +168,16 @@ export function viewFromFeed(feed: ReplayFeed, interval: ReplayInterval): Replay
     dataThrough: feed.data_through,
     market: feed.market ?? null,
     indicators: mergeIndicators(null, feed.indicators),
-    dayClock: feed.day_clock,
+    threadClock: feed.day_clock,
     behindClock: feed.behind_clock,
     clockRunning: feed.thread_clock?.running === true,
     clockSpeed: feed.thread_clock?.speed ?? 1,
     atEnd: feed.at_end,
-    strip: feed.strip ?? null,
-    daily: feed.daily ?? null,
-    dailyForming: feed.daily?.forming ?? null,
-    paused: null,
   };
 }
 
 /**
- * The follow poll of a window: bring the session to the thread clock, and say where this window's view ends. The server has one playhead per session,
+ * The follow poll of a window: bring the lane to the thread clock, and say where this window's view ends. The server has one playhead per session,
  * so a second window on the same name finds it already moved; the answer starts at `since` instead, and the merge below is by bar start, so a bar
  * that arrives twice is one bar (D-198).
  */
@@ -223,46 +207,12 @@ export function applyAdvance(view: ReplayView, delta: ReplayDelta): ReplayView {
     dataThrough: delta.data_through,
     market: unchanged(view.market, delta.market ?? null),
     indicators: mergeIndicators(view.indicators, delta.indicators),
-    dayClock: delta.day_clock,
+    threadClock: delta.day_clock,
     behindClock: delta.behind_clock,
     clockRunning: delta.thread_clock?.running === true,
     clockSpeed: delta.thread_clock?.speed ?? 1,
     atEnd: delta.at_end,
-    // The latest value stands; an answer without a strip (a day session) leaves what the view had.
-    strip: delta.strip ?? view.strip,
-    dailyForming: delta.daily_forming ?? view.dailyForming,
-    // A pause belongs to the advance that found it: the next advance clears it.
-    paused: delta.paused ?? null,
   };
-}
-
-/** Clears the stop pause (she dismissed the toast). */
-export const dismissPause = (view: ReplayView): ReplayView => (view.paused === null ? view : { ...view, paused: null });
-
-/** Takes the day strip and the Daily block from a fresh `feed` answer and leaves the rest alone (after a mark moved a hold). */
-export function applyFeedSwing(view: ReplayView, feed: ReplayFeed): ReplayView {
-  if (ms(feed.revealed_through) < ms(view.revealedThrough)) return view;
-  return { ...view, strip: feed.strip ?? view.strip, daily: feed.daily ?? view.daily, dailyForming: feed.daily?.forming ?? view.dailyForming };
-}
-
-/** The Daily chart's data with the newest forming candle in place: bars through the prior close, the forming candle, the hold marker. */
-export function dailyBlock(view: Pick<ReplayView, "daily" | "dailyForming">): DailyBlock | null {
-  return view.daily === null ? null : { ...view.daily, forming: view.dailyForming ?? view.daily.forming };
-}
-
-/**
- * Moves this name's hold marker after a mark: an open hold gets (or keeps) its marker with the new stop, a closed hold or
- * none removes it. A hold entered today has no earlier marker, so it starts at `today` (the session's day). A day
- * session has no Daily block and is returned as it is.
- */
-export function withHoldMarker(view: ReplayView, hold: Pick<Hold, "status" | "side" | "entry_price" | "stop_price"> | null, today: string): ReplayView {
-  if (view.daily === null) return view;
-  const old = view.daily.holds[0];
-  const holds =
-    hold === null || hold.status !== "open"
-      ? []
-      : [{ entry_t: old?.entry_t ?? today, side: hold.side, entry_price: hold.entry_price, stop_price: hold.stop_price }];
-  return { ...view, daily: { ...view.daily, holds } };
 }
 
 /** The chart's bars: closed bars plus the forming one (replacing a closed bar with the same start). */

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import test from "node:test";
-import { HUB_SWING_COPY } from "../replay/hubSwing.ts";
-import { SWING_PLAY_COPY } from "../replay/playView.ts";
-import { WEEK_TEXT } from "../replay/weekScreen.ts";
 import { PRACTICE_COPY } from "./freshness.ts";
 
 // Owner rulings (2026-11-02, ADR-0022): the date and time of a thread are always shown (no hidden day, no "Show date", no spoiler protection),
@@ -12,17 +9,19 @@ import { PRACTICE_COPY } from "./freshness.ts";
 
 const BANNED = /hidden day|hide dates?|show date|replayed market date|spoil|practice window|stop on every entry/i;
 
+// Owner ruling (2026-11-03, ADR-0025, freestyle): a thread is one account and one clock. Nothing happens at the close or the open, no position closes
+// because time passed, and there is no day to end, skip or hand over, no numbered day of a plan and no block of days. The words for any of those are gone.
+const FREESTYLE_BANNED = /day ends?|day-end|hands? over|hand-over|closes with it|skip(?:ped|ping)? (?:a |the |this |to the next )?day|\bday (?:\d+|\{\w+\}) of\b|\bblock of days|block days|end day|start day\b|list comes out|\bday list/i;
+
 test("no Practice copy string talks about a hidden day, hiding dates, a practice window or a stop on every entry", () => {
-  const tables: Array<[string, Record<string, string>]> = [
-    ["PRACTICE_COPY", PRACTICE_COPY],
-    ["HUB_SWING_COPY", HUB_SWING_COPY],
-    ["SWING_PLAY_COPY", SWING_PLAY_COPY],
-    ["WEEK_TEXT", WEEK_TEXT as Record<string, string>],
-  ];
-  for (const [name, table] of tables) {
-    for (const [key, value] of Object.entries(table)) {
-      if (typeof value === "string") assert.equal(BANNED.test(value), false, `${name}.${key}: ${value}`);
-    }
+  for (const [key, value] of Object.entries(PRACTICE_COPY)) {
+    if (typeof value === "string") assert.equal(BANNED.test(value), false, `PRACTICE_COPY.${key}: ${value}`);
+  }
+});
+
+test("no Practice copy string talks about a day that ends, a skipped day, a hand-over, a numbered day of a plan or a block of days", () => {
+  for (const [key, value] of Object.entries(PRACTICE_COPY)) {
+    if (typeof value === "string") assert.equal(FREESTYLE_BANNED.test(value), false, `PRACTICE_COPY.${key}: ${value}`);
   }
 });
 
@@ -40,7 +39,10 @@ test("no screen or view source spells those words either: the strings a screen b
   assert.ok(files.length > 100, `${files.length} source files read`);
   for (const file of files) {
     if (file.endsWith("/lib/desk/noGuidanceCopy.test.ts")) continue;
-    const match = BANNED.exec(readFileSync(file, "utf8"));
-    assert.equal(match, null, `${file.slice(root.pathname.length)}: "${match?.[0]}"`);
+    const text = readFileSync(file, "utf8");
+    for (const banned of [BANNED, FREESTYLE_BANNED]) {
+      const match = banned.exec(text);
+      assert.equal(match, null, `${file.slice(root.pathname.length)}: "${match?.[0]}"`);
+    }
   }
 });

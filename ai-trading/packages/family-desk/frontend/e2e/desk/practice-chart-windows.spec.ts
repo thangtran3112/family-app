@@ -1,22 +1,13 @@
 import type { Page } from "@playwright/test";
 import { stepBar } from "./clock-helpers";
 import { expect, openDesk, prepareDesk, test } from "./helpers";
-import { openFirstDay, saveFilter, startThread } from "./hub-helpers";
+import { openNameFromScreen } from "./lane-helpers";
 
-// D-198: the same replay chart open in two windows. The server keeps one playhead per session, and a followed chart used to be answered with only the
+// D-198: the same lane's chart open in two windows. The server keeps one playhead per lane, and a followed chart used to be answered with only the
 // bars that playhead moved over, so the window that polled first took each bar and the other never got it. Every window must show every closed bar
 // through the thread clock. The market moves through the thread's clock route (what Play, and Pause in another window, end up calling).
 
-const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const SYMBOL = "XOM"; // a name no other spec opens on its own: the server keeps the prepared bars of every name it has served
-const EVERY_NAME = {
-  schemaVersion: 1,
-  name: "Every name",
-  watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
-  liquidity: { minPrice: 1, minAvgVolume: 1 },
-  when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
-  maxResults: 50,
-};
 
 /** What a window shows: the chart data table's bar count and its last row, and the VWAP of the chart legend. */
 async function read(page: Page) {
@@ -32,12 +23,7 @@ async function read(page: Page) {
 test("the same replay chart in two windows shows every closed bar through the thread clock in both (D-198)", async ({ page, context }) => {
   test.setTimeout(240_000);
   await prepareDesk(context);
-  await saveFilter(context, EVERY_NAME);
-  await startThread(page, context, { filter: EVERY_NAME.name });
-  await openFirstDay(page);
-  await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: new RegExp(SYMBOL) }).getByText(SYMBOL, { exact: true }).click();
-  await page.waitForURL(SESSION_URL);
-  await expect(page.getByRole("heading", { name: SYMBOL, level: 1 })).toBeVisible();
+  await openNameFromScreen(page, context, SYMBOL);
   const second = await context.newPage();
   const url = new URL(page.url());
   await openDesk(second, url.pathname + url.search);

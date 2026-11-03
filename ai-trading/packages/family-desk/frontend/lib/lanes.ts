@@ -9,7 +9,7 @@ export const LANE_LABEL: Record<Lane, string> = { technical: "Technical", fundam
 export const LANE_SUMMARY: Record<Lane, string> = {
   technical: "Screener, watchlists, alerts, strategies",
   fundamental: "Holdings, covered calls, research",
-  backtest: "Day and swing practice on past days, journal",
+  backtest: "Freestyle practice on past days, journal",
 };
 
 /** Where "Back" goes from the shared futures specs page: the active mode's own futures screen (a link to the other mode's would land there and switch the mode). */
@@ -185,8 +185,8 @@ export function isPracticePath(pathname: string): boolean {
 /** The replay workspace puts its Session panel in the left rail instead of the watchlists. */
 export const isReplayWorkspacePath = (pathname: string): boolean => normalize(pathname) === "/practice/replay";
 
-/** Every Practice route owns the left slot, never the global watchlists: the replay, the day list and the journal fill it (D-013, D-039);
- * the hub, the thread page and the week review leave it empty, and the shell collapses an empty slot to 0 px. The watchlists were inert
+/** Every Practice route owns the left slot, never the global watchlists: the replay, the Screen and the journal fill it (D-013, D-039);
+ * the hub and the thread page leave it empty, and the shell collapses an empty slot to 0 px. The watchlists were inert
  * there (a Backtest symbol has no link, `SYMBOL_HREF.backtest`) and showed live quotes beside a practice day. */
 export const hasPracticeLeftRail = (pathname: string): boolean => isPracticePath(pathname);
 

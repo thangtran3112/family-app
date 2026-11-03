@@ -14,7 +14,7 @@ export type PracticeChromeState = {
   day: string | null;
   /** `revealed_through`; null until a session loads. */
   playhead: string | null;
-  /** The screen covers past days (day list, journal), not one session: the band says "past days" (D-015). */
+  /** The screen covers past days (Screen, journal), not one session: the band says "past days" (D-015). */
   scope?: "session" | "days";
   /** This route's own status bar text; absent keeps the shell's line. */
   status?: PracticeStatusLine | null;

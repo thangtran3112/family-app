@@ -12,9 +12,9 @@ const INDICATORS: ReadonlySet<IndicatorId> = new Set<IndicatorId>(["vwap", "ema9
 const AMBER = "#FFB020";
 
 /**
- * The session's whole window with her marks, the would-fire bells and a `Practice P/L` pane. The indicators are the server's, over
- * the lookback plus the window, then the chart starts at the window start. After `end` the feed covers the whole day;
- * while a session is still open it holds only what is revealed, so nothing is unsealed early.
+ * The lane's chart with her marks, the would-fire bells and a `Practice P/L` pane. The indicators are the server's, over
+ * the lookback plus the lane, then the chart starts at the lane's first bar. The feed holds only what the thread clock has
+ * passed, so nothing is unsealed early.
  */
 export function JournalChart({ session, feed }: { session: ReplaySession; feed: ReplayFeed }) {
   const model = useMemo(() => {
@@ -48,7 +48,7 @@ export function JournalChart({ session, feed }: { session: ReplaySession; feed: 
       interval={model.view.interval}
       bars={model.bars}
       quality="delayed-15m"
-      asOf={session.window_end}
+      asOf={feed.data_through}
       overlays={model.overlays}
       panes={model.panes}
       clockTicks

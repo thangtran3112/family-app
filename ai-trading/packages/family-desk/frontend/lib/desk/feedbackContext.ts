@@ -22,10 +22,9 @@ const SCREENS: ReadonlyArray<readonly [prefix: string, label: string]> = [
   ["/strategies/new", "Strategies · New strategy"],
   ["/practice", "Practice"],
   ["/practice/replay", "Practice · Replay"],
-  ["/practice/day", "Practice · Day list"],
+  ["/practice/screen", "Practice · Screen"],
   ["/practice/thread", "Practice · Thread"],
   ["/practice/journal", "Practice · Journal"],
-  ["/practice/week", "Practice · Week"],
   ["/technicals", "Technicals"],
   ["/futures", "Futures"],
   ["/futures/specs", "Futures · Specs"],
@@ -96,31 +95,32 @@ export function symbolOf(route: string): string | null {
   return /^[A-Z0-9.\-^=]{1,12}$/.test(symbol) ? symbol : null;
 }
 
-/** The day list a Practice day route points at (`/practice/day?id=5`). */
-export function dayListOf(route: string): number | null {
-  if (pathOf(route) !== "/practice/day") return null;
-  const id = Number(query(route).get("id"));
-  return Number.isInteger(id) && id > 0 ? id : null;
+/** The practice thread a Practice route points at: the thread page's `?id=5`, the Screen's and the journal's `?thread=5`. */
+export function threadOf(route: string): number | null {
+  const path = pathOf(route);
+  const raw = path === "/practice/thread" ? query(route).get("id") : path === "/practice/screen" || path === "/practice/journal" ? query(route).get("thread") : null;
+  const id = Number(raw);
+  return raw !== null && Number.isInteger(id) && id > 0 ? id : null;
 }
 
 export type Captured = {
   screen: string;
   route: string;
   symbol: string | null;
-  dayListId: number | null;
+  threadId: number | null;
   appVersion: string;
   /** ISO instant the form opened. */
   capturedAt: string;
 };
 
 export function capture({ route, now, appVersion = APP_VERSION }: { route: string; now: Date; appVersion?: string }): Captured {
-  return { screen: screenFor(route), route, symbol: symbolOf(route), dayListId: dayListOf(route), appVersion, capturedAt: now.toISOString() };
+  return { screen: screenFor(route), route, symbol: symbolOf(route), threadId: threadOf(route), appVersion, capturedAt: now.toISOString() };
 }
 
 /** The `context` object of the report: only what the route actually carried. */
 export const contextOf = (captured: Captured): Record<string, unknown> => ({
   ...(captured.symbol ? { symbol: captured.symbol } : {}),
-  ...(captured.dayListId ? { day_list_id: captured.dayListId } : {}),
+  ...(captured.threadId ? { thread_id: captured.threadId } : {}),
 });
 
 /** The link behind "Report a problem": the form, with the screen she is on. */

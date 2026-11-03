@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createDeskApiClient, DeskApiError } from "../api/client.ts";
-import { dayLabels, fillEffect, fillRows, FillSchema, loadThreadFills, ThreadFillsSchema, type Fill } from "./fills.ts";
-import { thread } from "./threadFixtures.ts";
+import { fillEffect, fillRows, FillSchema, loadThreadFills, ThreadFillsSchema, type Fill } from "./fills.ts";
 
 const fill = (over: Partial<Fill> = {}): Fill => ({
   id: 9,
@@ -57,18 +56,11 @@ test("a fill's effect comes from the shares it closed and opened", () => {
   assert.equal(fillEffect({ closes: 0, opens: 0 }), "—");
 });
 
-test("the days are named by number, weekday and date, for the ended days and the open one", () => {
-  const labels = dayLabels(thread);
-  assert.equal(labels.get("2026-02-25"), "Day 3 · Wed 2026-02-25");
-  assert.equal(labels.get("2026-03-10"), "Day 8 · Tue 2026-03-10", "the open day");
-  assert.equal(dayLabels({ daily: [], today: null }).size, 0);
-});
-
-test("rows keep the server's order, show the ET clock and the dated day name", () => {
-  const rows = fillRows([sell, fill(), fill({ id: 8, source: "auto", day: "2026-04-01", closes: 20, opens: 0 })], dayLabels(thread));
-  assert.deepEqual(rows[0], { key: "10", day: "Day 3 · Wed 2026-02-25", time: "10:40:00 AM ET", symbol: "TSLA", action: "Sell", shares: "100", price: "212.25", effect: "Closed" });
-  assert.deepEqual(rows[1], { key: "9", day: "Day 3 · Wed 2026-02-25", time: "10:07:00 AM ET", symbol: "TSLA", action: "Buy", shares: "100", price: "210.50", effect: "Opened or added" });
-  assert.equal(rows[2]!.effect, "Closed (auto, day end)");
-  assert.equal(rows[2]!.day, "—", "a day the thread does not list is a dash");
-  assert.deepEqual(fillRows([], dayLabels(thread)), []);
+test("rows keep the server's order, show the ET clock and the ET date", () => {
+  const rows = fillRows([sell, fill(), fill({ id: 8, source: "auto", day: "2026-04-01", closes: 20, opens: 0 })]);
+  assert.deepEqual(rows[0], { key: "10", date: "Wed 2026-02-25", time: "10:40:00 AM ET", symbol: "TSLA", action: "Sell", shares: "100", price: "212.25", effect: "Closed" });
+  assert.deepEqual(rows[1], { key: "9", date: "Wed 2026-02-25", time: "10:07:00 AM ET", symbol: "TSLA", action: "Buy", shares: "100", price: "210.50", effect: "Opened or added" });
+  assert.equal(rows[2]!.effect, "Closed (auto)");
+  assert.equal(rows[2]!.date, "Wed 2026-04-01", "any date names itself: the thread keeps no list of days");
+  assert.deepEqual(fillRows([]), []);
 });

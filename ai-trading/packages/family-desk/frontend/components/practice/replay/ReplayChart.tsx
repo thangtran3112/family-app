@@ -2,21 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { MarketChart } from "@/components/charts/MarketChart";
-import play from "@/components/practice/swing/play.module.css";
 import { ChartLegend } from "@/components/workspace/ChartLegend";
 import type { CrosshairPoint } from "@/lib/chart-data";
 import { legendModel, type ChartSeries, type IndicatorId } from "@/lib/desk/workspace";
-import { dailyBlock, type ReplayView } from "@/lib/replay/feedState";
+import type { ReplayView } from "@/lib/replay/feedState";
 import { chartLevels, declutterMarkers, firstDrawBars, positionLevel, signalMarkers, stopLevel } from "@/lib/replay/marks";
 import { visibleOverlays, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
-import { dailyChartModel, dailyLegend, type ChartMode } from "@/lib/replay/playView";
 import type { ReplayBar } from "@/lib/replay/schemas";
-import type { TicketSide } from "@/lib/replay/ticket";
+import type { TicketSide, TimeInForce } from "@/lib/replay/ticket";
 import { ms } from "@/lib/replay/time";
 import { ChartOrder } from "./ChartOrder";
 import styles from "./replay.module.css";
 
-// Practice charts show a day's price, VWAP and the two EMAs with volume. RSI and MACD stay on the live workspace.
+// Practice charts show the thread's price, VWAP and the two EMAs with volume. RSI and MACD stay on the live workspace.
 export const REPLAY_INDICATORS: ReadonlySet<IndicatorId> = new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume"]);
 
 export type ReplayChartProps = {
@@ -31,58 +29,19 @@ export type ReplayChartProps = {
   prefs: ChartPrefs;
   /** A click on an overlay in the legend hides or shows it. */
   onTogglePref: (id: PrefId) => void;
-  /** Swing session only (02p d2): `daily` plots the rebased daily bars and today's forming candle in place of the intraday bars. */
-  swing?: { mode: ChartMode };
-  /** Click-to-order on the intraday chart: the ticket's quantity and the way an order goes in. Absent while she cannot order (the session ended, or the name is behind the day clock). */
-  order?: { shares: string; place: (side: TicketSide, price: number) => Promise<boolean>; error: string | null };
+  /** Click-to-order: the ticket's quantity and time in force, and the way an order goes in. Absent while she cannot order (the thread is closed, or the name is behind the thread clock). */
+  order?: { shares: string; tif: TimeInForce; place: (side: TicketSide, price: number) => Promise<boolean>; error: string | null };
 };
 
 /**
  * The replay chart: `MarketChart` fed only with what the server revealed (closed bars plus the forming one), the would-fire
  * bells of released signals, key levels, and her position and stop as price lines. It draws no entry or exit arrows and no
  * "Practice" wording: it reads as a broker's chart (the Marks list and the journal keep the labelled marks). A level is only its
- * number on the axis, with its name on hover. A click on a price offers Buy and Sell there. No bar is ever sliced here.
+ * number on the axis, with its name on hover. A click on a price offers Buy and Sell there. No bar is ever sliced here: the bars of every
+ * session the thread's time has crossed are drawn in one series, and the library's own tick marks name the date where a day changes.
  */
 export function ReplayChart(props: ReplayChartProps) {
-  return props.swing?.mode === "daily" && props.view.daily !== null ? <DailyChart {...props} /> : <IntradayChart {...props} />;
-}
-
-/**
- * Swing Daily view (02p a3 rule 4): the API's rebased daily bars through the prior close plus the forming candle, her hold's
- * entry marker and stop line across the days. The axis and the legend name each bar by its real date.
- */
-function DailyChart({ symbol, view, dimmed, prefs }: ReplayChartProps) {
-  const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
-  const { daily, dailyForming } = view;
-  const model = useMemo(() => {
-    const block = dailyBlock({ daily, dailyForming });
-    return block === null ? null : dailyChartModel(block);
-  }, [daily, dailyForming]);
-  if (model === null) return null;
-  const legend = dailyLegend(symbol, model, crosshair);
-  return (
-    <>
-      <div className={styles.chartArea}>
-        <ChartLegend model={legend} />
-        <MarketChart
-          symbol={symbol}
-          interval="1d"
-          bars={model.bars}
-          quality="eod"
-          asOf={null}
-          levels={model.levels}
-          levelTips
-          chartType={prefs.type}
-          volume
-          onCrosshair={setCrosshair}
-          chrome="bare"
-          height="fill"
-          dimmed={dimmed}
-        />
-      </div>
-      <p className={play.dailyNote}>{model.note}</p>
-    </>
-  );
+  return <IntradayChart {...props} />;
 }
 
 function IntradayChart({ symbol, view, bars, series, focus, dimmed, prefs, onTogglePref, order }: ReplayChartProps) {
@@ -119,7 +78,7 @@ function IntradayChart({ symbol, view, bars, series, focus, dimmed, prefs, onTog
         panes={series.panes}
         levels={levels}
         levelTips
-        renderPick={order && last !== null ? (price, close) => <ChartOrder symbol={symbol} price={price} last={last} shares={order.shares} onPlace={order.place} error={order.error} onClose={close} /> : undefined}
+        renderPick={order && last !== null ? (price, close) => <ChartOrder symbol={symbol} price={price} last={last} shares={order.shares} tif={order.tif} onPlace={order.place} error={order.error} onClose={close} /> : undefined}
         chartType={prefs.type}
         markers={markers}
         volume={series.volume && prefs.on.volume}

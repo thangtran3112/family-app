@@ -13,6 +13,8 @@ const PATH_SENTENCES: Readonly<Record<string, string>> = {
   "window.from must be at or after screen.listAt": "Start at must be at or after List time",
   "screen.listAt must be between 04:30 and 15:30 ET": "List time must be between 4:30 AM and 3:30 PM",
   "a regular-session window must stay inside 09:30-16:00 ET": "Start at must be between 9:30 AM and 4:00 PM",
+  "startAt must be a real date and time": "Pick a real date and time",
+  "startAt must be on or after 2016-01-04 ET": "Replay goes back to Jan 4, 2016",
 };
 
 /** Pydantic (server) and Zod (client) wording for the same mistake maps to one sentence. Anything else is already English and passes through. */

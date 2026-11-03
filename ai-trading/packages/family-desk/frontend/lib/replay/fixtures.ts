@@ -1,20 +1,7 @@
 // Illustrative Practice payloads in the shapes of the generated contract (`lib/api/openapi.d.ts`). The numbers are
 // made up (they are not market data); the node tests parse them with the real schemas, and the components can be
-// developed against them.
-import type { ReplayDays } from "./schemas.ts";
-
+// developed against them. `session` is a legacy standalone row (no thread): a freestyle lane is the same shape with `thread_id` and `thread` set.
 export const stamp = { as_of: "2026-04-07T14:07:00Z", source: "alpaca", quality: "delayed-15m", freshness: "replay" } as const;
-
-export const daysResponse: ReplayDays = {
-  days: [
-    { symbol: "NVDA", day: "2026-04-07", weekday: "Tue", rank: 1, rv_pct_rank: 99.6, gap_pct: -6.2, tags: ["gap_down", "heavy_volume", "earnings"], attempts: 0 },
-    { symbol: "NVDA", day: "2026-02-19", weekday: "Thu", rank: 2, rv_pct_rank: 99.2, gap_pct: 3.1, tags: ["gap_up"], attempts: 1 },
-    { symbol: "TSLA", day: "2026-03-11", weekday: "Wed", rank: 1, rv_pct_rank: 99.6, gap_pct: null, tags: ["heavy_volume"], attempts: 0 },
-  ],
-  symbols: ["NVDA", "TSLA"],
-  lookback_sessions: 252,
-  stamp,
-};
 
 export const spec = {
   schemaVersion: 1,
@@ -77,22 +64,6 @@ export const session = {
   stamp,
 } as const;
 
-export const sessionSummary = {
-  id: 12,
-  day_list_id: null,
-  thread_id: null,
-  symbol: "NVDA",
-  day: "2026-04-07",
-  attempt: 1,
-  status: "active",
-  revealed_through: "2026-04-07T14:07:00Z",
-  window_end: "2026-04-07T20:00:00Z",
-  trades: 1,
-  pnl_usd: 63,
-  adherence_pct: null,
-  updated_at: "2026-04-07T14:07:12Z",
-} as const;
-
 export const delta = {
   revealed_through: "2026-04-07T14:07:12Z",
   day_clock: null,
@@ -122,7 +93,7 @@ export const feed = { ...delta, interval: "5m", window_start: "2026-04-07T13:30:
 
 export const markResult = { mark, open_trade: openTrade, journal, warning: null, thread: null };
 
-/** A day-thread name overnight (ADR-0022): T is Thursday 1:22:24 AM ET, the tape ended at 8:00 PM ET Wednesday, and the price is the last print. */
+/** A lane overnight (ADR-0022, ADR-0025): T is Thursday 1:22:24 AM ET, the tape ended at 8:00 PM ET Wednesday, and the price is the last print. */
 export const overnightDelta = {
   ...delta,
   revealed_through: "2026-04-08T00:00:00Z",

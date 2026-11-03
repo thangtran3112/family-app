@@ -36,8 +36,6 @@ export type ChartSettingsProps = {
   onOpenChange: (open: boolean) => void;
   prefs: ChartPrefs;
   onChange: (prefs: ChartPrefs) => void;
-  /** The swing Daily view draws none of the intraday lines: those groups show, switched off, with the reason. */
-  daily?: boolean;
 };
 
 /**
@@ -45,12 +43,11 @@ export type ChartSettingsProps = {
  * they are picked. Native radios and checkboxes. The popover keeps every key that reaches it, so Escape closes the popover and
  * leaves full screen alone.
  */
-export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = false }: ChartSettingsProps) {
+export function ChartSettings({ open, onOpenChange, prefs, onChange }: ChartSettingsProps) {
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const popoverId = useId();
-  const noteId = useId();
 
   const close = (refocus: boolean) => {
     onOpenChange(false);
@@ -96,7 +93,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
               ))}
             </div>
           </fieldset>
-          <fieldset className={styles.setGroup} disabled={daily} aria-describedby={daily ? noteId : undefined}>
+          <fieldset className={styles.setGroup}>
             <legend>Overlays</legend>
             {OVERLAY_ROWS.map((row) => (
               <label key={row.id} className={styles.toggle}>
@@ -106,7 +103,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
               </label>
             ))}
           </fieldset>
-          <fieldset className={styles.setGroup} disabled={daily} aria-describedby={daily ? noteId : undefined}>
+          <fieldset className={styles.setGroup}>
             <legend>Levels</legend>
             {LEVEL_ROWS.map((row) => (
               <label key={row.id} className={styles.toggle}>
@@ -116,7 +113,7 @@ export function ChartSettings({ open, onOpenChange, prefs, onChange, daily = fal
               </label>
             ))}
           </fieldset>
-          <p id={noteId} className={styles.footnote}>{daily ? "The daily view has no intraday lines." : "The practice stop and your marks always show."}</p>
+          <p className={styles.footnote}>The practice stop and your marks always show.</p>
           <div className={styles.settingsFoot}>
             <button type="button" className={styles.linkButton} onClick={() => onChange(defaultChartPrefs())}>Reset to defaults</button>
             <span className={styles.footnote}>Saved in this browser</span>

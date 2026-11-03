@@ -2,115 +2,45 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SimulatedBadge } from "@/components/practice/thread/SimulatedBadge";
 import { Button } from "@/components/ui/Button";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
-import { loadDayList } from "@/lib/desk/replay";
-import { useDeskQuery } from "@/lib/desk/useDeskQuery";
-import { openAtClock, openTodayText, planCard } from "@/lib/replay/dayView";
-import type { PracticePlan } from "@/lib/replay/daily";
-import { planFinishedLine, swingGate } from "@/lib/replay/overviewView";
-import { swingCardView } from "@/lib/replay/swing";
-import type { ClockAccount } from "@/lib/replay/threadClock";
+import { journalHref } from "@/lib/replay/practiceTabs";
 import type { ThreadSummary } from "@/lib/replay/threads";
-import { todayView } from "@/lib/replay/threadView";
 import { DeleteThread } from "./DeleteThread";
-import { ThreadAction, planOpensIn } from "./ThreadAction";
-import { ResultLine } from "./ThreadTable";
+import { ThreadAction } from "./ThreadAction";
 import hub from "./hub.module.css";
 import styles from "./landing.module.css";
 
 /**
- * The overview's one primary step (a region named "Practice day"). A day thread: Start Trading, Start day or New plan needed, with
- * Delete plan beside it (a plan is never replaced or edited: a new plan is a new thread). A swing thread: Continue or Start Day n, or while its week review is owed (the gate) the review first
- * and, beneath it, what unlocks after it. A closed thread has none. The last day's result sits under the button.
+ * The Summary's one primary step (ADR-0025): an active thread opens its Screen, with Delete thread beside it. The clock below it runs with or
+ * without a name open, so the card never says "Resume" or names a day. A thread with no setup says it has no clock yet. A closed
+ * thread has no step: its positions stay open at the time it stopped, and its journal and final balance stay here.
  */
-export function NextStep({ summary, plan, account = null, onChanged, onNewPlan }: { summary: ThreadSummary; plan: PracticePlan | null; /** A day thread's account at the clock: the open figure on the Today row is its, as the headline's is (D-169). */ account?: ClockAccount | null; onChanged: () => void; onNewPlan: () => void }) {
-  const { thread, today, last_day: lastDay } = summary;
+export function NextStep({ summary }: { summary: ThreadSummary }) {
+  const { thread, clock } = summary;
   const closed = thread.status === "closed";
-  const swing = swingCardView(summary);
-  const gate = swingGate(summary);
-  const view = todayView(today, lastDay);
   const router = useRouter();
-  const dayThread = !closed && thread.mode === "day";
-  // The plan's data is still being prepared (D-084): the action slot says so, and the card says nothing else about Day 1.
-  const preparing = dayThread && planOpensIn(plan, thread) && planCard(plan).action === "none";
-  const preparingHint = preparing ? planCard(plan).detail : null;
-  // A thread with a plan and no day yet: nothing to resume, so it says what comes next instead of "no day open".
-  const fresh = !closed && thread.mode === "day" && today === null && lastDay === null && planOpensIn(plan, thread) && !preparing;
-  const finished = swing?.action.kind === "none";
-  // A day plan whose last day has ended: its summary sits above the one action, "Start a new plan" (D-096).
-  const planDone = !closed && thread.mode === "day" && plan !== null && plan.thread_id === thread.id && plan.finished;
-  // A day is listed but not started: the card shows the last ended day's result, and its button opens the listed one. The title says "Next step"
-  // and the result keeps its own "Last day" label, so the card never reads "Last day" above a button that says "Start Trading".
-  const showsLastDay = !swing && today !== null && view.label === PRACTICE_COPY.threadLastDay;
-  const title = closed ? PRACTICE_COPY.threadClosedTitle : swing || showsLastDay ? PRACTICE_COPY.overviewNext : view.label;
-  // A day under way may hold open trades. A day thread reads them from its clock account, the one the headline is built from, so the row never
-  // shows a second, older open P/L (D-169); a swing thread has no clock and reads the day list's `day_pnl` (the server prices it at the day clock).
-  const live = useDeskQuery(`thread-open:${today?.day_list_id}`, (signal) => loadDayList(today?.day_list_id ?? 0, {}, { signal }), {
-    enabled: !closed && today?.status === "practicing" && thread.mode !== "day",
-  });
-  const open = thread.mode === "day" ? openAtClock(account) : live.data === null ? null : live.data.day_pnl;
-  const openText = open === null ? null : openTodayText(open);
-  const result = (
-    <>
-      <ResultLine pnl={view.pnl} line={view.line} />
-      {open !== null && openText !== null && (
-        <>
-          {" · "}
-          <span data-testid="today-open"><ResultLine pnl={open.open_usd} line={openText} /></span>
-          {" "}
-          <SimulatedBadge />
-        </>
-      )}
-    </>
-  );
 
   return (
-    <section className={`${styles.panel} ${styles.nextStep}`} aria-label="Practice day">
-      <h2 className={styles.panelTitle}>{title}</h2>
+    <section className={`${styles.panel} ${styles.nextStep}`} aria-label={PRACTICE_COPY.overviewStepTitle}>
+      <h2 className={styles.panelTitle}>{closed ? PRACTICE_COPY.threadClosedTitle : PRACTICE_COPY.overviewStepTitle}</h2>
       {closed ? (
         <>
-          <p className={hub.muted}>{PRACTICE_COPY.threadPageClosed}</p>
+          <p className={hub.muted}>{PRACTICE_COPY.overviewStepClosed}</p>
           <div className={styles.dayActions}>
-            <Button client href={`/practice/journal?thread=${thread.id}`} variant="primary">{PRACTICE_COPY.threadOpenJournal}</Button>
+            <Button client href={journalHref(thread.id)} variant="primary">{PRACTICE_COPY.threadOpenJournal}</Button>
             <Link href="/practice" className={styles.secondaryLink}>{PRACTICE_COPY.threadStartNew}</Link>
           </div>
         </>
       ) : (
         <>
           <div className={styles.dayActions}>
-            {gate ? (
-              <div className={styles.resumeAction}>
-                <Button client href={`/practice/week?thread=${thread.id}&week=${gate.weekNo}`} variant="primary">{gate.step}</Button>
-              </div>
-            ) : (
-              !finished && (
-                <div className={styles.resumeAction}>
-                  <ThreadAction summary={summary} plan={plan} onChanged={onChanged} onNewPlan={onNewPlan} />
-                </div>
-              )
-            )}
-            {/* Delete plan is the plan's only change; the server refuses it while a day is practicing (a plain 409, shown in the dialog). */}
-            {dayThread && <DeleteThread thread={thread} plan onDeleted={() => router.push("/practice")} />}
+            <div className={styles.resumeAction}>
+              <ThreadAction summary={summary} />
+            </div>
+            <DeleteThread thread={thread} onSummary onDeleted={() => router.push("/practice")} />
           </div>
-          {gate && <p className={hub.muted}>{gate.locked}</p>}
-          {finished && <p className={hub.muted}>{PRACTICE_COPY.swingThreadFinished}</p>}
-          {planDone && <p className={styles.dayLine}>{planFinishedLine(thread)}</p>}
-          <p className={styles.dayLine}>
-            {preparing ? (
-              preparingHint
-            ) : fresh ? (
-              PRACTICE_COPY.threadPageFresh
-            ) : swing || showsLastDay ? (
-              <>
-                <span className={hub.muted}>{`${view.label}: `}</span>
-                {result}
-              </>
-            ) : (
-              result
-            )}
-          </p>
+          <p className={styles.dayLine}>{clock === null ? PRACTICE_COPY.overviewStepNoClock : PRACTICE_COPY.overviewStepLine}</p>
         </>
       )}
     </section>

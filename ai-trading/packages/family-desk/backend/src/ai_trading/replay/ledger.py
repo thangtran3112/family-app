@@ -1,6 +1,6 @@
 """The practice ledger (02r): one row per realized practice trade, keyed by the exit mark that realized it.
 
-`book` is idempotent per mark, so every path that can realize a trade (her exit mark, the day's auto-exit) calls it
+`book` is idempotent per mark, so every path that can realize a trade (her exit mark, a resting order's fill) calls it
 without checking first. Undoing an exit mark deletes the mark, and the foreign key takes the ledger row with it. The
 P/L is the journal's own `trade_pnl`, so a ledger sum and a journal total can only differ if a row is missing.
 """
@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_trading.core.calendar import ET
 from ai_trading.db.models import PracticeLedger, PracticeMark, ReplaySession
 from ai_trading.replay.journal import Trade, fill_split, trade_pnl
 from ai_trading.replay.model import ENTRY_KINDS, EXIT_KINDS
@@ -41,7 +42,7 @@ def book(db: Session, row: ReplaySession, trades: list[Trade], now: datetime) ->
                 thread_id=row.thread_id,
                 session_id=row.id,
                 mark_id=trade.exit_mark_id,
-                day=row.day,
+                day=trade.exit_at.astimezone(ET).date(),
                 symbol=row.symbol,
                 side=trade.side,
                 shares=trade.shares,
@@ -108,6 +109,9 @@ def fills_of(rows: list[PracticeMark]) -> list[dict[str, Any]]:
         elif mark.kind in EXIT_KINDS and held_side is not None:
             shares, take, rest = held, held, 0
             held_side, held = None, 0
+        elif mark.kind == "split" and held_side is not None and mark.position_before:
+            held = mark.position_before["shares_after"]  # a split restates the position; it is not an execution
+            continue
         else:
             continue
         out.append(

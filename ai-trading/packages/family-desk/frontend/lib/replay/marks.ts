@@ -1,7 +1,7 @@
 import type { MarketChartLevel } from "../../components/charts/MarketChart.tsx";
 import type { ChartMarkerInput } from "../chart-data.ts";
 import { chartPalette } from "../desk/chartPalette.ts";
-import { formatEtClock, formatPrice } from "../desk/format.ts";
+import { formatEtDateClock, formatPrice } from "../desk/format.ts";
 import type { ChartPrefs, LevelId } from "./chartPrefs.ts";
 import type { OpenTrade, ReplayBar, ReplayLevels, ReplayMark, ReplaySignal } from "./schemas.ts";
 import { ms } from "./time.ts";
@@ -30,6 +30,7 @@ export function markLabel(mark: Pick<ReplayMark, "kind" | "shares" | "stop_price
     case "short_exit": return "Practice exit";
     case "stop": return `Practice stop ${formatPrice(mark.stop_price)}`;
     case "note": return "Practice note";
+    case "split": return "Split";
   }
 }
 
@@ -51,8 +52,9 @@ export function signalMarkers(signals: readonly ReplaySignal[], bars: readonly R
 }
 
 /** The stop of the open trade as an amber dashed level; none when no stop note exists. On the chart it is only a number; the name is the hover tooltip. */
-export function stopLevel(trade: Pick<OpenTrade, "stop_price"> | null): MarketChartLevel[] {
-  return trade?.stop_price != null ? [{ label: "Stop", price: trade.stop_price, color: AMBER, style: "dashed" }] : [];
+export function stopLevel(trade: Pick<OpenTrade, "stop_price" | "stop_hit_at"> | null): MarketChartLevel[] {
+  // The stop is an alert line, never an exit (ADR-0016, ADR-0025): once a bar crossed it the line says so, and the position stays open.
+  return trade?.stop_price != null ? [{ label: trade.stop_hit_at ? "Stop crossed" : "Stop", price: trade.stop_price, color: AMBER, style: "dashed" }] : [];
 }
 
 /**
@@ -111,13 +113,14 @@ export function levelRows(levels: ReplayLevels): LevelRow[] {
 
 export type MarkRow = { id: number; time: string; label: string; price: string; note: string | null; auto: boolean };
 
-/** The Marks tab: newest first. */
+/** The Marks tab: newest first, each with its ET date and time. */
 export function markRows(marks: readonly ReplayMark[]): MarkRow[] {
   return [...marks]
     .sort((a, b) => b.seq - a.seq)
     .map((mark) => ({
       id: mark.id,
-      time: formatEtClock(mark.at),
+      // The date too: a position and its marks can be days apart (ADR-0025), and a time of day alone would not say which day.
+      time: formatEtDateClock(mark.at),
       label: markLabel(mark),
       price: mark.kind === "note" ? "" : formatPrice(mark.kind === "stop" ? mark.stop_price : mark.price),
       note: mark.note,

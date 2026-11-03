@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
-import { EMPTY_VALUE } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { positionCells, type Cell, type PositionCells, type PositionRow } from "@/lib/replay/positionTable";
+import { orderRows, positionCells, type Cell, type OrderRow, type PositionCells, type PositionRow } from "@/lib/replay/positionTable";
+import { replayHref } from "@/lib/replay/practiceTabs";
 import styles from "./positionTable.module.css";
 
-/** What a day thread's table can do: open a name's chart (`busy` is the symbol being opened or exited, which holds every other row), and exit a held one. */
-export type PositionActions = { busy: string | null; onOpen: (symbol: string) => void; onExit: (row: PositionRow) => void };
+/** What the table can do: exit a held position (`busy` is the symbol being exited, which holds every other row). Without it the rows only read (a closed thread). */
+export type PositionActions = { busy: string | null; onExit: (row: PositionRow) => void };
 
 /** A cell: its text in the sign's colour (a dash is muted). */
 function cellText(row: PositionRow, pick: (cells: PositionCells) => Cell, { strong = false }: { strong?: boolean } = {}): ReactNode {
@@ -19,87 +19,87 @@ function cellText(row: PositionRow, pick: (cells: PositionCells) => Cell, { stro
   return classes === "" ? text : <span className={classes}>{text}</span>;
 }
 
-/** The columns that leave the table when they are a dash in every row: a swing hold has no prior close to change from. */
-const LEAVES_WHEN_EMPTY: Record<string, (cells: PositionCells) => Cell> = {
-  change: (cells) => cells.change,
-  changePct: (cells) => cells.changePct,
-};
-
-function columns(actions: PositionActions | undefined): DenseColumn<PositionRow>[] {
+function columns(): DenseColumn<PositionRow>[] {
   return [
     {
       key: "symbol",
       label: "Ticker",
-      render: (row) =>
-        actions === undefined ? (
-          <span className={styles.symbol}>{row.symbol}</span>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={styles.ticker}
-            aria-label={practiceText("dayOpen", { symbol: row.symbol })}
-            aria-current={row.current ? "true" : undefined}
-            aria-disabled={!row.current && actions.busy !== null ? "true" : undefined}
-            loading={actions.busy === row.symbol}
-            onClick={() => {
-              if (!row.current && actions.busy === null) actions.onOpen(row.symbol);
-            }}
-          >
-            {row.symbol}
-          </Button>
-        ),
+      render: (row) => (
+        <Button client href={replayHref(row.sessionId)} variant="ghost" size="sm" className={styles.ticker} aria-label={practiceText("portfolioOpen", { symbol: row.symbol })}>
+          {row.symbol}
+        </Button>
+      ),
     },
-    { key: "last", label: "Last", kind: "num", render: (row) => cellText(row, (cells) => cells.last) },
-    { key: "change", label: "Change", kind: "num", priority: 2, render: (row) => cellText(row, (cells) => cells.change) },
-    { key: "changePct", label: "Change %", kind: "num", priority: 1, render: (row) => cellText(row, (cells) => cells.changePct) },
-    { key: "position", label: "Position", kind: "num", render: (row) => cellText(row, (cells) => cells.position) },
-    { key: "avg", label: "Avg price", kind: "num", render: (row) => cellText(row, (cells) => cells.avg) },
-    { key: "value", label: "Value", kind: "num", priority: 3, render: (row) => cellText(row, (cells) => cells.value) },
-    { key: "unrealized", label: "Unrealized P/L", kind: "num", render: (row) => cellText(row, (cells) => cells.unrealized, { strong: true }) },
-    { key: "held", label: "Held", priority: 6, hideWhenEmpty: true, render: (row) => row.held ?? "" },
+    { key: "side", label: "Side", priority: 3, render: (row) => cellText(row, (cells) => cells.side) },
+    { key: "shares", label: "Shares", kind: "num", render: (row) => cellText(row, (cells) => cells.shares) },
+    { key: "avg", label: "Avg cost", kind: "num", render: (row) => cellText(row, (cells) => cells.avg) },
+    {
+      key: "price",
+      label: "Price at T",
+      kind: "num",
+      render: (row) => (
+        <span className={styles.priceCell}>
+          {cellText(row, (cells) => cells.price)}
+          {row.priceNote !== null && <span className={styles.note}>{row.priceNote}</span>}
+        </span>
+      ),
+    },
+    { key: "unrealized", label: "Gain/loss", kind: "num", render: (row) => cellText(row, (cells) => cells.unrealized, { strong: true }) },
+    { key: "heldFor", label: "Held for", kind: "num", priority: 2, render: (row) => cellText(row, (cells) => cells.heldFor) },
+    { key: "orders", label: "Working orders", kind: "num", priority: 1, render: (row) => cellText(row, (cells) => cells.orders) },
     {
       key: "status",
       label: "Status",
       hideWhenEmpty: true,
-      render: (row) =>
-        row.current || row.behind || row.stop !== null ? (
-          <span className={styles.flags}>
-            {row.current && <Badge tone="up">{PRACTICE_COPY.dayOnNow}</Badge>}
-            {row.behind && <Badge tone="neutral" title={PRACTICE_COPY.dayBehind}>{PRACTICE_COPY.dayBehindShort}</Badge>}
-            {row.stop !== null && <Badge tone="warn">{row.stop}</Badge>}
-          </span>
-        ) : null,
+      render: (row) => (row.stop === null ? null : <Badge tone="warn">{row.stop}</Badge>),
     },
   ];
 }
 
 /**
- * The position table of the Portfolio tab, one per mode, read like a broker's list of what she holds now: Ticker, Last, Change, Change %, Position
- * (signed shares: long positive, short negative), Avg price (what the position was built at), Value (position at the mark) and Unrealized P/L (never
- * dropped). A closed trade is not a row and has no column: its result is in Trades. All SIMULATED. A figure the payload does not hold is a dash;
- * a column that is a dash in every row (a swing hold has no prior close) leaves the table. With
- * `actions` a ticker opens that name's chart and a held row has Exit; without, the rows only read (a swing thread, an ended day).
+ * The position table of the Portfolio tab, read like a broker's list of what she holds now (ADR-0025): Ticker (a link to its chart), Side, Shares,
+ * Avg cost (what the position was built at), Price at T (the price at the thread clock, with a note when it is old), Gain/loss (never dropped),
+ * Held for (elapsed thread time, "3d 4h") and the working orders on the name. A closed trade is not a row: its result is in Trades. All
+ * SIMULATED. With `actions` a held row has Exit; without, the rows only read.
  */
 export function PositionTable({ caption, rows, empty, actions }: { caption: string; rows: readonly PositionRow[]; empty?: string; actions?: PositionActions }) {
-  const exitDisabled = actions === undefined || actions.busy !== null;
   return (
     <DenseTable
       caption={caption}
-      columns={columns(actions).filter((column) => {
-        const pick = LEAVES_WHEN_EMPTY[column.key];
-        return pick === undefined || rows.length === 0 || rows.some((row) => pick(positionCells(row)).text !== EMPTY_VALUE);
-      })}
+      columns={columns()}
       rows={rows}
       rowKey={(row) => row.key}
-      selectedKey={rows.find((row) => row.current)?.key ?? null}
-      rowActions={actions === undefined ? undefined : (row) =>
-        row.side === null ? null : (
-          <Button size="sm" disabled={exitDisabled} aria-label={practiceText("dayPortfolioExit", { symbol: row.symbol })} onClick={() => actions.onExit(row)}>
-            {PRACTICE_COPY.dayPortfolioExitButton}
-          </Button>
-        )}
+      rowActions={actions === undefined ? undefined : (row) => (
+        <Button size="sm" disabled={actions.busy !== null} aria-label={practiceText("portfolioExit", { symbol: row.symbol })} onClick={() => actions.onExit(row)}>
+          {PRACTICE_COPY.portfolioExitButton}
+        </Button>
+      )}
       empty={empty}
     />
   );
+}
+
+const ORDER_COLUMNS: DenseColumn<OrderRow>[] = [
+  { key: "symbol", label: "Ticker", render: (row) => <span className={styles.symbol}>{row.symbol}</span> },
+  { key: "kind", label: "Order", render: (row) => row.kind },
+  { key: "shares", label: "Shares", kind: "num", render: (row) => row.shares },
+  { key: "price", label: "Price", kind: "num", render: (row) => row.price },
+  { key: "tif", label: "Time in force", priority: 2, render: (row) => row.tif },
+  {
+    key: "expires",
+    label: "Expires",
+    priority: 1,
+    hideWhenEmpty: true,
+    render: (row) => (
+      <span className={styles.flags}>
+        {row.expires}
+        {row.reduceOnly && <Badge tone="neutral">{PRACTICE_COPY.portfolioReduceOnly}</Badge>}
+      </span>
+    ),
+  },
+];
+
+/** The thread's working orders, across its lanes: what rests, how long it lasts (GTC, or Day with its expiry) and whether it can only close a position. */
+export function OrderTable({ orders }: { orders: Parameters<typeof orderRows>[0] }) {
+  return <DenseTable caption={PRACTICE_COPY.portfolioOrdersTitle} columns={ORDER_COLUMNS} rows={orderRows(orders)} rowKey={(row) => row.key} empty={PRACTICE_COPY.portfolioOrdersNone} />;
 }

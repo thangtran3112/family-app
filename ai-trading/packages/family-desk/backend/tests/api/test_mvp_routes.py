@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 
 from ai_trading.api.app import app
 
-# (method, path) of 02m §a2 rows 1-53, 02o §b1 rows 54-63, 02o-b v1 rows 64-69 (plus the D-012 relist route), 02r rows
-# 70-75, 02p rows 77-81, 02o-b2 (the recorded universe, the re-scan) and 02s (the feedback log, eight routes).
+# (method, path) of 02m §a2 rows 1-53, the Practice lane as ADR-0025 left it (the freestyle thread, its Screen and
+# lanes), the recorded universe (02o-b2) and 02s (the feedback log, eight routes).
 # Path parameters are normalised to `{}`.
 INVENTORY: list[tuple[str, str]] = [
     ("GET", "/api/desk/me"),
@@ -67,48 +67,34 @@ INVENTORY: list[tuple[str, str]] = [
     ("POST", "/api/desk/strategies/{}/versions"),
     ("PUT", "/api/desk/strategies/{}/stage"),
     ("GET", "/api/desk/futures/specs"),
-    # Rows 54-63: the Practice (replay) lane, 02o §b1.
-    ("GET", "/api/desk/replay/days"),
+    # The Practice (replay) lane, ADR-0025: the recorded universe, a lane's own routes (`/sessions/{id}`: the
+    # server's "session" is a thread's book for one name), then the freestyle thread's routes.
     ("GET", "/api/desk/replay/universe-days"),
-    ("GET", "/api/desk/replay/sessions"),
-    ("POST", "/api/desk/replay/sessions"),
     ("GET", "/api/desk/replay/sessions/{}"),
     ("PATCH", "/api/desk/replay/sessions/{}"),
-    ("POST", "/api/desk/replay/sessions/{}/advance"),
+    ("POST", "/api/desk/replay/sessions/{}/advance"),  # `sync` only: a name does not move the thread's time
     ("GET", "/api/desk/replay/sessions/{}/feed"),
     ("POST", "/api/desk/replay/sessions/{}/marks"),
     ("DELETE", "/api/desk/replay/sessions/{}/marks/{}"),
     ("POST", "/api/desk/replay/sessions/{}/orders"),
     ("DELETE", "/api/desk/replay/sessions/{}/orders/{}"),
-    ("POST", "/api/desk/replay/sessions/{}/end"),
-    # Rows 64-69: daily-list practice, 02o-b v1.
-    ("GET", "/api/desk/replay/daily"),
-    ("POST", "/api/desk/replay/daily/next"),
-    ("GET", "/api/desk/replay/day-lists/{}"),
-    ("PATCH", "/api/desk/replay/day-lists/{}"),
-    ("POST", "/api/desk/replay/day-lists/{}/relist"),
-    ("POST", "/api/desk/replay/day-lists/{}/sessions"),
-    ("POST", "/api/desk/replay/day-lists/{}/end"),
-    ("POST", "/api/desk/replay/day-lists/{}/rescan"),  # 02o-b2
-    # Rows 70-75: practice threads, 02r.
     ("POST", "/api/desk/replay/threads"),
     ("GET", "/api/desk/replay/threads"),
     ("GET", "/api/desk/replay/threads/{}"),
     ("PATCH", "/api/desk/replay/threads/{}"),
     ("DELETE", "/api/desk/replay/threads/{}"),
+    ("PUT", "/api/desk/replay/threads/{}/setup"),
     ("POST", "/api/desk/replay/threads/{}/close"),
     ("GET", "/api/desk/replay/threads/{}/ledger"),
-    ("GET", "/api/desk/replay/threads/{}/fills"),  # ADR-0018: every Buy and Sell of a day thread
-    ("GET", "/api/desk/replay/threads/capacity"),  # the day-trade slots in use across all users (at most 10)
-    ("GET", "/api/desk/replay/threads/{}/clock"),  # ADR-0018: the day thread's server-side clock and account
-    ("POST", "/api/desk/replay/threads/{}/clock"),
-    ("POST", "/api/desk/replay/threads/{}/skip-day"),
-    # Rows 77-81: swing practice, 02p.
-    ("POST", "/api/desk/replay/threads/swing-universe"),
-    ("GET", "/api/desk/replay/threads/{}/holds"),
-    ("GET", "/api/desk/replay/threads/{}/weeks"),
-    ("GET", "/api/desk/replay/threads/{}/weeks/{}"),
-    ("PATCH", "/api/desk/replay/threads/{}/weeks/{}"),
+    ("GET", "/api/desk/replay/threads/{}/fills"),  # every Buy and Sell of the thread
+    ("GET", "/api/desk/replay/threads/capacity"),  # the thread slots in use across all users (at most 10)
+    ("GET", "/api/desk/replay/threads/{}/clock"),  # ADR-0025: the thread's server-side clock and account
+    ("POST", "/api/desk/replay/threads/{}/clock"),  # play, pause, speed, step, Jump / Next open (forward only)
+    ("GET", "/api/desk/replay/threads/{}/portfolio"),  # every open position at the thread's time
+    ("POST", "/api/desk/replay/threads/{}/lanes"),  # open (or resume) her book for a name
+    ("GET", "/api/desk/replay/threads/{}/screen"),
+    ("PATCH", "/api/desk/replay/threads/{}/screen"),
+    ("POST", "/api/desk/replay/threads/{}/screen/rescan"),
     # The feedback log, 02s: the list, filing, one report, its status or edit, and the screenshots.
     ("GET", "/api/desk/feedback"),
     ("POST", "/api/desk/feedback"),
@@ -168,7 +154,7 @@ def test_inventory_is_exactly_the_spec() -> None:
     found = _desk_routes()
     assert len(found) == len(set(found)), "a method and path is declared twice"
     assert sorted(found) == sorted(INVENTORY)
-    assert len(INVENTORY) == 118
+    assert len(INVENTORY) == 106
 
 
 def test_no_route_can_place_preview_or_name_an_order_a_position_or_a_broker() -> None:

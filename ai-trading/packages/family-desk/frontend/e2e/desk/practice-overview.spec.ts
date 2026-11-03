@@ -1,221 +1,43 @@
 import type { Locator, Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
-import { HUB_SWING_COPY } from "../../lib/replay/hubSwing.ts";
-import { formatBalance } from "../../lib/replay/threadView.ts";
-import { brokenTileValues, expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
 import { origin } from "../helpers";
-import { THREAD_URL, createThreadByApi, startThread, threadIdOf } from "./hub-helpers";
-import { positionCells } from "./position-table";
-import { DAY_ISO, createSwingThread, enterByApi, markByApi, openNextDay, send, swingRow } from "./swing-helpers";
+import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
+import { DAY, ET_OFFSET, createThreadByApi, expectNoDayLanguage, saveFilter, send } from "./hub-helpers";
 
-// The thread overview (5R): a dashboard per thread, the Progress column and the row that is one stretched link.
+// The thread's Summary (5R, ADR-0025): one card of the thread (equity, the next step, the clock and its controls), the results by ET date and the stats,
+// and the landing's row that is one stretched link.
 
-const overviewUrl = (id: number) => `/practice/thread?id=${id}`;
-const practiceDay = (page: Page) => page.getByRole("region", { name: "Practice day" });
-const rows = (table: Locator) => table.getByRole("row").filter({ has: table.page().getByRole("cell") });
+const summaryUrl = (id: number) => `/practice/thread?id=${id}`;
+const table = (page: Page) => page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
+const rows = (page: Page) => table(page).getByRole("row", { name: /^Freestyle · / });
 
 /** True when a table is wider than the box that holds it (a clipped column) or the page scrolls sideways. */
 async function clipped(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const out: string[] = [];
-    for (const table of document.querySelectorAll<HTMLElement>("#main-content table")) {
-      const wrap = table.parentElement!;
-      if (table.scrollWidth > wrap.clientWidth + 1 || wrap.scrollWidth > wrap.clientWidth + 1) out.push(`${table.getAttribute("aria-label") ?? "table"} ${Math.max(table.scrollWidth, wrap.scrollWidth)}>${wrap.clientWidth}`);
+    for (const grid of document.querySelectorAll<HTMLElement>("#main-content table")) {
+      const wrap = grid.parentElement!;
+      if (grid.scrollWidth > wrap.clientWidth + 1 || wrap.scrollWidth > wrap.clientWidth + 1) out.push(`${grid.getAttribute("aria-label") ?? "table"} ${Math.max(grid.scrollWidth, wrap.scrollWidth)}>${wrap.clientWidth}`);
     }
     if (document.scrollingElement!.scrollWidth > window.innerWidth) out.push("the page scrolls sideways");
     return out;
   });
 }
 
-/** A swing thread whose Week 1 has ended: Day 1 held S01 and S04 open, Days 2 to 5 ended. The next day is gated behind the Week 1 review. */
-async function gatedSwingThread(context: Parameters<typeof createSwingThread>[0]): Promise<number> {
-  const threadId = await createSwingThread(context);
-  const dayOne = await openNextDay(context, threadId);
-  await enterByApi(context, dayOne, { symbol: "S01", watch: ["S01", "S04"], day: DAY_ISO[0]!, stopPrice: 95 });
-  await markByApi(context, dayOne, "S04", { kind: "long_entry", shares: 100 });
-  await send(context, "POST", `/day-lists/${dayOne}/end`);
-  for (let day = 2; day <= 5; day++) await send(context, "POST", `/day-lists/${await openNextDay(context, threadId)}/end`);
-  return threadId;
-}
-
-test.describe("Practice thread overview", () => {
+test.describe("Practice thread Summary", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });
 
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("a swing thread owing its Week 1 review: the review is the one primary step, the week list, days, holds and curve are on the page, and the row has no review button", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context);
-
-    // The landing: one Progress column, the owed review as a chip (not a link or a button), and no Continue.
-    await openDesk(page, "/practice");
-    const row = swingRow(page);
-    await expect(row).toContainText("Day 6 of 15");
-    await expect(row).toContainText(/\d+ practiced · \d+ passed/);
-    await expect(row).toContainText("Week 1 review due");
-    await expect(row.getByRole("link", { name: /review/i })).toHaveCount(0);
-    await expect(row.getByRole("button", { name: /^Continue Day/ })).toHaveCount(0);
-    await expect(row.getByRole("link")).toHaveCount(1); // the thread's own name, stretched over the row
-    await row.click({ position: { x: 8, y: 8 } });
-    await page.waitForURL(overviewUrl(threadId));
-
-    // The place strip and the next step: Week 1 review first, Day 6 behind it.
-    const place = page.getByRole("region", { name: "Thread balance" });
-    await expect(place).toContainText("Week 2 of 3 · Day 6 of 15");
-    await expect(place).toContainText(PRACTICE_COPY.threadSimulated);
-    await expect(place).toContainText("Equity $");
-    await expect(place).toContainText("Free cash $");
-    const next = practiceDay(page);
-    await expect(next.getByRole("heading", { name: PRACTICE_COPY.overviewNext })).toBeVisible();
-    await expect(next.getByRole("link", { name: "Week 1 review", exact: true })).toHaveAttribute("href", `/practice/week?thread=${threadId}&week=1`);
-    await expect(next).toContainText("Week 1 is done. Review it to unlock Day 6.");
-    await expect(next.getByRole("status")).toHaveCount(0); // D-085: the notice is not printed a second time under the button
-    await expect(page.getByRole("button", { name: /^Continue Day|^Start Day/ })).toHaveCount(0);
-
-    // Weeks: Week 1 owes its review (a link to it), Weeks 2 and 3 are still to come.
-    const weeks = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption });
-    await expect(rows(weeks)).toHaveCount(3);
-    await expect(rows(weeks).nth(0)).toContainText(PRACTICE_COPY.overviewWeekReview);
-    await expect(rows(weeks).nth(0).getByRole("link", { name: "Week 1", exact: true })).toHaveAttribute("href", `/practice/week?thread=${threadId}&week=1`);
-    await expect(rows(weeks).nth(1)).toContainText(PRACTICE_COPY.overviewWeekUpcoming);
-    await expect(rows(weeks).nth(1).getByRole("link")).toHaveCount(0);
-    await expect(rows(weeks).nth(2)).toContainText(PRACTICE_COPY.overviewWeekUpcoming);
-
-    // Days: one row per ended day, the newest first, by number, weekday and date.
-    const days = page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption });
-    await expect(rows(days)).toHaveCount(5);
-    await expect(rows(days).first()).toContainText("Day 5 · Fri 2026-09-18");
-    await expect(rows(days).last()).toContainText("Day 1 · Mon 2026-09-14");
-    await expect(rows(days).first().getByRole("link", { name: "Day 5 · Fri 2026-09-18" })).toHaveAttribute("href", /\/practice\/day\?id=\d+$/);
-    await expect(rows(days).last()).toContainText(PRACTICE_COPY.overviewDayPracticed);
-    await expect(rows(days).first()).toContainText(PRACTICE_COPY.overviewDaySkipped);
-
-    // Holds sit on the Portfolio tab, not in Summary: the two holds carried out of Day 1 (S01 and S04), with their count.
-    await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption })).toHaveCount(0);
-    await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
-    await expect(page).toHaveURL(`${overviewUrl(threadId)}&tab=portfolio`);
-    const holds = page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption });
-    await expect(rows(holds)).toHaveCount(2);
-    // Each hold is a broker-style row: signed shares (S04 is a long, so unsigned), the entry price as Avg price, the mark as Last, a value and an unrealized P/L.
-    // A swing hold has no prior close, so its Change columns are dropped, not filled with dashes; no Portfolio table has a Realized or Total column.
-    const holdsRegion = page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle });
-    expect((await positionCells(holdsRegion, "S04"))["Position"]).toMatch(/^\d[\d,]*$/);
-    expect(await positionCells(holdsRegion, "S01")).toMatchObject({ Position: "100", "Avg price": expect.stringMatching(/^[\d,]+\.\d{2}$/), Last: expect.stringMatching(/^[\d,]+\.\d{2}$/), "Unrealized P/L": expect.stringMatching(/^[+−]?\$[\d,]+\.\d{2}$/) });
-    await expect(holds.getByRole("columnheader", { name: "Change", exact: true })).toHaveCount(0);
-    await expect(holds.getByRole("columnheader", { name: "Realized P/L", exact: true })).toHaveCount(0);
-    await expect(holds.getByRole("columnheader", { name: "Total P/L", exact: true })).toHaveCount(0);
-    await expect(holdsRegion.getByText(PRACTICE_COPY.threadSimulated, { exact: true })).toBeVisible(); // the holds are pretend money
-    await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle })).toContainText("2 open");
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.overviewHoldsLink })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
-    // Summary again: the curve, the plan and the stats.
-    await page.getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
-    await expect(page).toHaveURL(overviewUrl(threadId));
-    await expect(page.getByRole("img", { name: /^Balance and equity at the close of each day/ })).toBeVisible();
-    const plan = page.getByRole("region", { name: PRACTICE_COPY.overviewPlanCaption });
-    await expect(plan).toContainText("Swing · 12 names");
-    await expect(plan).toContainText(PRACTICE_COPY.threadSharesPerEntry);
-    const stats = page.getByRole("region", { name: "Thread stats" });
-    await expect(stats.getByText(PRACTICE_COPY.threadAdherence, { exact: true })).toBeVisible();
-    await expect(stats).toContainText(PRACTICE_COPY.threadAdherenceMeaning);
-    await expect(stats.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${threadId}`);
-    await expectCleanScreen(page);
-
-    // The review is the way on: it opens, Start Week 2 opens Day 6, and the overview then offers Continue with Week 1 done.
-    await next.getByRole("link", { name: "Week 1 review", exact: true }).click();
-    await page.waitForURL(new RegExp(`/practice/week\\?thread=${threadId}&week=1`));
-    await page.getByRole("button", { name: "Start Week 2" }).click();
-    await page.waitForURL(/\/practice\/day\?id=\d+/);
-    await openDesk(page, overviewUrl(threadId));
-    await expect(practiceDay(page).getByRole("button", { name: "Continue Day 6" })).toBeVisible();
-    await expect(practiceDay(page).getByRole("link", { name: /review/i })).toHaveCount(0);
-    await expect(practiceDay(page)).not.toContainText("unlocks after");
-    await expect(rows(weeks).nth(0)).toContainText(PRACTICE_COPY.overviewWeekDone);
-    await expect(rows(weeks).nth(1)).toContainText(PRACTICE_COPY.overviewWeekCurrent);
-  });
-
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("a fresh swing thread: Start Day 1 is the step, every week is still ahead, and the empty sections say so", async ({ page, context }) => {
-    test.setTimeout(120_000);
-    const threadId = await createSwingThread(context);
-    await openDesk(page, overviewUrl(threadId));
-    await expect(practiceDay(page).getByRole("button", { name: "Start Day 1" })).toBeVisible();
-    await expect(practiceDay(page)).not.toContainText("unlocks after");
-    const weeks = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption });
-    await expect(rows(weeks)).toHaveCount(3);
-    await expect(rows(weeks).nth(0)).toContainText(PRACTICE_COPY.overviewWeekCurrent);
-    await expect(rows(weeks).nth(0).getByRole("link")).toHaveCount(0); // no day has ended, so no review to open
-    await expect(page.getByText(PRACTICE_COPY.overviewDaysNone)).toBeVisible();
-    await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle })).toHaveCount(0);
-    await expect(page.getByText(HUB_SWING_COPY.noDaysYet)).toBeVisible();
-    await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
-    await expect(page.getByRole("region", { name: HUB_SWING_COPY.holdsTitle }).getByText(PRACTICE_COPY.swingNoHoldsOpen)).toBeVisible();
-    await page.getByRole("tab", { name: PRACTICE_COPY.tabSummary }).click();
-    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Week 1 of 3 · No holds open"); // D-112: the place line has names, week and holds
-    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText("Day 1 of 15");
-    await expectCleanScreen(page);
-  });
-
-  test("a day thread: Resume or Start with the plan beside it above the fold, the days section and the stats", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    await startThread(page, context, { balance: "25000" });
-    const id = threadIdOf(page);
-    await expect(page).toHaveURL(THREAD_URL);
-    const plan = page.getByRole("region", { name: "Daily list plan" });
-    await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 });
-    const next = practiceDay(page);
-    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(formatBalance(25_000));
-    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(PRACTICE_COPY.landingProgressNone);
-    // Item 8: the plan sits in view, on the same row as the step, at both widths.
-    const [nextBox, planBox] = [await next.boundingBox(), await plan.boundingBox()];
-    const viewport = page.viewportSize()!;
-    expect(planBox!.y + planBox!.height, "the plan is above the fold").toBeLessThan(viewport.height);
-    expect(Math.abs(planBox!.y - nextBox!.y), "beside the step, not under it").toBeLessThan(4);
-    expect(planBox!.x).toBeGreaterThan(nextBox!.x + nextBox!.width - 4);
-    // Item 9: the days section is there (no day ended yet), and the stats explain adherence.
-    await expect(page.getByRole("region", { name: PRACTICE_COPY.overviewDaysTitle })).toContainText(PRACTICE_COPY.overviewDaysNone);
-    await expect(page.getByRole("region", { name: "Thread stats" })).toContainText(PRACTICE_COPY.threadAdherenceNone);
-    await expect(page.getByRole("link", { name: PRACTICE_COPY.threadJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
-    await expectCleanScreen(page);
-  });
-
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the grid: two columns with a 320 px side at 1440 and one column at 1180, the page using its whole region, nothing clipped", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context);
-    await openDesk(page, overviewUrl(threadId));
-    await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption })).toBeVisible();
-    const wide = page.viewportSize()!.width >= 1440;
-    const place = (await page.getByRole("region", { name: "Thread balance" }).boundingBox())!;
-    const stats = (await page.getByRole("region", { name: "Thread stats" }).boundingBox())!;
-    const planBox = (await page.getByRole("region", { name: PRACTICE_COPY.overviewPlanCaption }).boundingBox())!;
-    if (wide) {
-      expect(Math.round(stats.width), "the side column is 320 px").toBe(320);
-      expect(stats.x).toBeGreaterThan(place.x + place.width - 4);
-      expect(Math.abs(planBox.y - place.y), "the side starts level with the main column").toBeLessThan(4);
-      expect(stats.x + stats.width - place.x, "the page fills its region (the old page body stopped at 860 px)").toBeGreaterThan(1000);
-    } else {
-      expect(Math.abs(stats.x - place.x), "one column: the side stacks under the main column").toBeLessThan(2);
-      expect(stats.y).toBeGreaterThan(place.y + place.height);
-      expect(planBox.y, "in the same order: the plan before the stats").toBeLessThan(stats.y);
-    }
-    expect(await clipped(page)).toEqual([]);
-    // The holds are the Portfolio tab's table: it fits its region too.
-    await page.getByRole("tab", { name: PRACTICE_COPY.tabPortfolio }).click();
-    await expect(page.getByRole("table", { name: PRACTICE_COPY.overviewHoldsCaption })).toBeVisible();
-    expect(await clipped(page)).toEqual([]);
-  });
-
-  test("a thread row is one stretched link: Tab, Enter, middle click and cmd-click open the overview, the action and Delete stay their own", async ({ page, context }) => {
+  test("a thread row is one stretched link: Tab, Enter, middle click and cmd-click open the Summary, the Screen link and Delete stay their own", async ({ page, context }) => {
     const id = await createThreadByApi(context, { balance: 30_000 });
     await openDesk(page, "/practice");
-    const table = page.getByRole("table", { name: PRACTICE_COPY.landingTableLabel });
-    const row = table.getByRole("row", { name: /Day trading/ });
-    const link = row.getByRole("link");
-    await expect(link).toHaveCount(1);
+    const row = rows(page).first();
+    const name = row.getByRole("link", { name: /^Freestyle · / });
+    await expect(row.getByRole("link"), "the name and the Screen").toHaveCount(2);
     await expect(row.locator("xpath=self::tr[@role]")).toHaveCount(0); // a plain row: no role=link on <tr>
 
-    // Hit areas: the whole row is the link; the header and the action are not.
+    // Hit areas: the whole row is the name's link; the header and the Screen link and Delete are not.
     const hit = (target: Locator, dx: number, dy: number) =>
       target.evaluate(
         (node, [x, y]) => {
@@ -228,13 +50,13 @@ test.describe("Practice thread overview", () => {
     const box = (await row.boundingBox())!;
     expect(await hit(row, 6, 6), "top left of the row").toEqual({ link: true, button: false });
     expect(await hit(row, box.width / 2, box.height - 4), "bottom middle of the row").toEqual({ link: true, button: false });
-    expect(await hit(table.getByRole("columnheader").first(), 6, 6), "the header is not a link").toEqual({ link: false, button: false });
-    const action = row.getByRole("button", { name: PRACTICE_COPY.landingNeedsPlan });
+    expect(await hit(table(page).getByRole("columnheader").first(), 6, 6), "the header is not a link").toEqual({ link: false, button: false });
+    const screen = row.getByRole("link", { name: PRACTICE_COPY.landingOpenScreen });
     const deleteButton = row.getByRole("button", { name: /^Delete/ });
-    for (const button of [action, deleteButton]) {
-      const rect = (await button.boundingBox())!;
-      const top = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.closest("button")?.textContent ?? null, [rect.x + rect.width / 2, rect.y + rect.height / 2]);
-      expect(top, "the button is above the stretched link").toBe(await button.innerText());
+    for (const control of [screen, deleteButton]) {
+      const rect = (await control.boundingBox())!;
+      const top = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.closest("a, button")?.textContent ?? null, [rect.x + rect.width / 2, rect.y + rect.height / 2]);
+      expect(top, "the control is above the stretched link").toBe(await control.innerText());
     }
 
     // Hover shades the row (the raised token), the overlay does not swallow it.
@@ -249,7 +71,7 @@ test.describe("Practice thread overview", () => {
     });
     expect(shades[0]).toBe(shades[1]);
 
-    // Keyboard: Tab reaches the name link, then the action, then Delete; the ring is drawn round the row; Enter opens the overview.
+    // Keyboard: Tab reaches the name link, then Open Screen, then Delete; the ring is drawn round the row; Enter opens the Summary.
     await page.getByRole("heading", { name: "Practice", level: 1 }).evaluate((node) => (node.setAttribute("tabindex", "-1"), node.focus()));
     const order: string[] = [];
     for (let step = 0; step < 12 && order.length < 3; step++) {
@@ -261,14 +83,14 @@ test.describe("Practice thread overview", () => {
       });
       if (here) order.push(`${here.tag} ${here.text}`.trim());
     }
-    expect(order).toEqual([expect.stringMatching(/^A (Day|Swing) thread · .+$/), `BUTTON ${PRACTICE_COPY.landingNeedsPlan}`, expect.stringMatching(/^BUTTON Delete/)]);
-    await link.focus();
+    expect(order).toEqual([expect.stringMatching(/^A Freestyle · .+$/), `A ${PRACTICE_COPY.landingOpenScreen}`, expect.stringMatching(/^BUTTON Delete/)]);
+    await name.focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");
-    await expect(link).toBeFocused();
-    expect(await link.evaluate((node) => getComputedStyle(node, "::after").outlineStyle), "a visible ring on the row").toBe("solid");
+    await expect(name).toBeFocused();
+    expect(await name.evaluate((node) => getComputedStyle(node, "::after").outlineStyle), "a visible ring on the row").toBe("solid");
     await page.keyboard.press("Enter");
-    await page.waitForURL(overviewUrl(id));
+    await page.waitForURL(summaryUrl(id));
 
     // Middle click and cmd-click are a link's own: a new tab, this page stays.
     await openDesk(page, "/practice");
@@ -276,230 +98,117 @@ test.describe("Practice thread overview", () => {
       const opened = context.waitForEvent("page");
       await row.click({ position: { x: 8, y: 8 }, ...open });
       const tab = await opened;
-      await tab.waitForURL(new RegExp(`${overviewUrl(id).replace("?", "\\?")}$`));
+      await tab.waitForURL(new RegExp(`${summaryUrl(id).replace("?", "\\?")}$`));
       await tab.close();
       await expect(page).toHaveURL(/\/practice$/);
     }
   });
-});
 
-// Fix wave 5S, stream 1: the thread overview.
-test.describe("Practice thread overview · fix wave 5S", () => {
-  test.beforeEach(async ({ context }) => {
-    await prepareDesk(context);
-  });
+  test("a new thread's Summary: the equity, the next step, the clock with its controls, the results by date and the stats, with nothing about a day", async ({ page, context }) => {
+    const id = await createThreadByApi(context, { balance: 30_000 });
+    await openDesk(page, summaryUrl(id));
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Freestyle · ");
+    // The big figure is a heading: Balance until the clock is read, then Equity.
+    await expect(page.getByRole("heading", { level: 2, name: /^(Balance|Equity)$/ })).toBeVisible();
+    await expect(page.getByTestId("thread-balance")).toHaveText("$30,000.00");
 
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("a swing thread with open holds: the week gate is said once, the weeks table has Equity change, the balance line counts the holds, and the plan reads per week (D-080..D-085)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context);
-    await openDesk(page, overviewUrl(threadId));
-    // D-085: one sentence says why Day 6 waits, and "review ready" is not printed a second time.
-    const gateLine = "Week 1 is done. Review it to unlock Day 6.";
-    await expect(page.getByText(gateLine)).toHaveCount(1);
-    await expect(page.getByText(/Week 1 review ready/)).toHaveCount(0);
-    // D-080: two holds are open, so the balance line says what is realized and what the holds add, not "no change yet".
-    const place = page.getByRole("region", { name: "Thread balance" });
-    await expect(place).toContainText(/Started with \$[\d,]+ · realized .* · open holds /);
-    await expect(place).not.toContainText("no change yet");
-    // D-081: the weeks table carries the equity change beside the realized figure.
-    const weeks = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption });
-    await expect(weeks.getByRole("columnheader", { name: PRACTICE_COPY.landingColEquityChange })).toBeVisible();
-    // D-083: a swing plan's limits count per week.
-    const plan = page.getByRole("region", { name: PRACTICE_COPY.overviewPlanCaption });
-    await expect(plan).toContainText("Max loss, pretend dollars a week");
-    await expect(plan).toContainText("Max trades a week");
-    await expect(plan).not.toContainText("a day");
-    // D-082: a day she passed says "Passed" (the day page's word), never "Skipped".
-    const days = page.getByRole("table", { name: PRACTICE_COPY.overviewDaysCaption });
-    await expect(rows(days).first()).toContainText("Passed");
-    await expect(days).not.toContainText("Skipped");
+    // The next step: the Screen, and Delete thread beside it. No Resume, no Start day, no plan to replace.
+    const step = page.getByRole("region", { name: PRACTICE_COPY.overviewStepTitle });
+    await expect(step.getByRole("link", { name: PRACTICE_COPY.overviewOpenScreen })).toHaveAttribute("href", `/practice/screen?thread=${id}`);
+    await expect(step.getByRole("button", { name: PRACTICE_COPY.threadDeleteConfirm, exact: true })).toBeVisible();
+    await expect(step).toContainText(PRACTICE_COPY.overviewStepLine);
+    for (const gone of [/^Resume$/, /^Start Trading$/, /^Start day/i, /^Replace/, /^Skip day/i, /^End day/i]) {
+      await expect(page.getByRole("button", { name: gone }).or(page.getByRole("link", { name: gone }))).toHaveCount(0);
+    }
 
-    // D-085: the ended Day 5 says the same sentence, once, beside its review link.
-    await rows(days).first().getByRole("link").click();
-    await page.waitForURL(/\/practice\/day\?id=\d+/);
-    await expect(page.getByText(gateLine)).toHaveCount(1);
-    await expect(page.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
-  });
+    // The clock: paused at the start, Play, the four speeds, Next open and Jump. Next open names the open it goes to; there is no Step and no Skip day.
+    const clock = page.getByTestId("thread-clock");
+    await expect(clock.getByTestId("thread-clock-time")).toHaveText("Fri 2026-09-25 · 9:30:00 AM ET");
+    for (const name of ["Play", "1x", "2x", "5x", "10x"]) await expect(clock.getByRole("button", { name, exact: true })).toBeEnabled();
+    const nextOpen = clock.getByTestId("thread-clock-next-open");
+    await expect(nextOpen).toBeEnabled();
+    await expect(nextOpen).toHaveText("Next open · Mon 2026-09-28 · 9:30 AM ET");
+    await expect(clock.getByRole("button", { name: PRACTICE_COPY.clockJumpGo, exact: true }), "Jump waits for a date and a time").toBeDisabled();
+    await expect(clock.getByTestId("thread-clock-stays"), "nothing is open, so nothing stays").toHaveCount(0);
+    for (const gone of ["Step", "Skip day", "End day"]) await expect(clock.getByRole("button", { name: gone, exact: true })).toHaveCount(0);
 
-  test("while the plan's data prepares the step card says so once: one state, a unit on the count, Delete plan stays and Replace plan is gone (D-084)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    await startThread(page, context);
-    const id = threadIdOf(page);
-    await page.route(/\/api\/desk\/replay\/daily(\?|$)/, async (route) => {
-      const answer = await route.fetch();
-      const body = await answer.json();
-      if (body.plan) Object.assign(body.plan, { current: null, days_opened: 0, prep: { state: "running", done: 2, total: 18, failed: 0 } });
-      await route.fulfill({ response: answer, json: body });
-    });
-    await openDesk(page, overviewUrl(id));
-    const step = practiceDay(page);
-    await expect(step).toContainText("Preparing data · 2 of 18 names");
-    // D-176: the state is said once on the screen: the plan card keeps its filters and says nothing of the preparation.
-    await expect(page.getByText("Preparing data · 2 of 18 names")).toHaveCount(1);
-    await expect(page.getByText(PRACTICE_COPY.planPreparingHint)).toHaveCount(1);
-    await expect(step).not.toContainText("Your thread is ready");
-    await expect(step).not.toContainText("Day 1 is next");
-    await expect(step.getByRole("button", { name: "Replace plan" })).toHaveCount(0);
-    await expect(step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true })).toBeEnabled();
-    // The card keeps its height when the preparation ends (it used to be 40 px shorter then).
-    const preparing = (await step.boundingBox())!.height;
-    await page.unroute(/\/api\/desk\/replay\/daily(\?|$)/);
-    await openDesk(page, overviewUrl(id));
-    await expect(step.getByRole("button", { name: /^Start Day \d+$/ })).toBeVisible({ timeout: 60_000 }); // the real prepare may still be running
-    expect((await step.boundingBox())!.height).toBe(preparing);
-  });
-});
-
-// Fix wave 5S, stream 1: the thread page's panels and links.
-test.describe("Practice thread page · fix wave 5S", () => {
-  test.beforeEach(async ({ context }) => {
-    await prepareDesk(context);
-  });
-
-  test("the plan panel is titled Plan and names the filters once; Balance is a heading; the journal link is one amber 32 px link (D-118, D-119, D-120)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    await startThread(page, context);
-    const plan = page.getByRole("region", { name: "Daily list plan" });
-    await expect(plan).toContainText("Day 1 of 5", { timeout: 60_000 });
-    await expect(plan.getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
-    await expect(plan).not.toContainText("Armed on practice days");
-    await expect(plan.getByText("Any close"), "the filters line is said once").toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 2, name: PRACTICE_COPY.threadBalance, exact: true })).toBeVisible();
+    // The results by ET date start empty, and the stats count trades, not days.
+    const results = page.getByRole("region", { name: PRACTICE_COPY.overviewResultsTitle });
+    await expect(results).toContainText(PRACTICE_COPY.overviewResultsNone);
+    const stats = page.getByRole("region", { name: "Thread stats" });
+    await expect(stats).toContainText(PRACTICE_COPY.overviewStatOpen);
+    for (const gone of ["Days practiced", "Days passed", "Adherence"]) await expect(stats).not.toContainText(gone);
     const journal = page.getByRole("link", { name: PRACTICE_COPY.threadJournal });
-    const box = (await journal.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(32);
+    expect((await journal.boundingBox())!.height).toBeGreaterThanOrEqual(32);
     await expect(journal).toHaveCSS("color", "rgb(255, 176, 32)");
+
+    expect(await clipped(page), "no table is cut and the page does not scroll sideways").toEqual([]);
+    await expectNoDayLanguage(page);
+    await expectCleanScreen(page);
   });
 
-  test("a closed thread's card finishes its sentence and offers the journal and a new thread (D-121)", async ({ page, context }) => {
+  test("a closed thread's card finishes its sentence and offers the journal and a new thread, and its clock is gone (D-121)", async ({ page, context }) => {
     const id = await createThreadByApi(context);
     expect((await context.request.post(`${origin}/api/desk/replay/threads/${id}/close`)).ok()).toBeTruthy();
-    await openDesk(page, overviewUrl(id));
-    const card = practiceDay(page);
-    await expect(card).toContainText("This thread is closed. Its journal and final balance stay here.");
+    await openDesk(page, summaryUrl(id));
+    const card = page.getByRole("region", { name: PRACTICE_COPY.overviewStepTitle });
+    await expect(card).toContainText(PRACTICE_COPY.overviewStepClosed);
     await expect(card.getByRole("link", { name: PRACTICE_COPY.threadOpenJournal })).toHaveAttribute("href", `/practice/journal?thread=${id}`);
     await expect(card.getByRole("link", { name: PRACTICE_COPY.threadStartNew })).toHaveAttribute("href", "/practice");
+    await expect(page.getByTestId("thread-clock"), "a closed thread's clock has stopped: no board").toHaveCount(0);
+    await expect(page.getByText(PRACTICE_COPY.threadClosedBadge, { exact: true }).first()).toBeVisible();
+    await expectNoDayLanguage(page);
   });
 
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the swing curve's axis is labelled at one regular step over the whole span, and no label prints over another (D-123)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context);
-    await openDesk(page, overviewUrl(threadId));
-    const curve = page.getByRole("img", { name: /^Balance and equity at the close of each day/ });
-    for (const tick of ["Start", "D5", "D10", "D15"]) await expect(curve.getByText(tick, { exact: true })).toHaveCount(1);
-    await expect(curve.getByText("D1", { exact: true })).toHaveCount(0); // 5 of 15 days are played: D1 is no tick, D10 and D15 are
-    const boxes = await curve.locator("text").evaluateAll((nodes) => nodes.map((node) => ({ text: node.textContent, ...node.getBoundingClientRect().toJSON() })));
-    const crossed = boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom).map((b) => `${a.text} / ${b.text}`));
-    expect(crossed, "no two labels of the curve overlap").toEqual([]);
-    // The balance rests on the bottom tick here: its label goes above the line, not into the row of the day labels.
-    const label = (await curve.getByText(/^Balance \$/).boundingBox())!;
-    const axis = (await curve.getByText("Start", { exact: true }).boundingBox())!;
-    expect(label.y + label.height, "the end label is clear of the day labels").toBeLessThanOrEqual(axis.y);
-  });
+  test("a thread made without a setup has no clock: the row, the Summary and the Screen say so, and saving a setup starts the clock paused at its start", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const filter = await saveFilter(context);
+    const made = await send(context, "POST", "/threads", { schemaVersion: 1, mode: "day", startingBalance: 50_000, plan: { stopNoteOnEntry: "no", tradeOnlyOnSignal: "no" } });
+    const id: number = made.thread.id;
+    await openDesk(page, "/practice");
+    const row = rows(page).first();
+    await expect(row.getByTestId("thread-time")).toHaveText(PRACTICE_COPY.landingNoClock);
+    await expect(row.getByRole("link", { name: PRACTICE_COPY.landingOpenScreen }), "no clock, no Screen to open").toHaveCount(0);
 
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("a week's link in the overview is stretched over its row, like the landing's (D-122)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context);
-    await openDesk(page, overviewUrl(threadId));
-    const link = page.getByRole("table", { name: PRACTICE_COPY.overviewWeeksCaption }).getByRole("link", { name: "Week 1", exact: true });
-    expect(await link.evaluate((node) => getComputedStyle(node, "::after").position)).toBe("absolute");
-  });
-});
+    await openDesk(page, summaryUrl(id));
+    await expect(page.getByTestId("thread-clock")).toContainText(PRACTICE_COPY.clockNotStarted);
+    await expect(page.getByRole("region", { name: PRACTICE_COPY.overviewStepTitle })).toContainText(PRACTICE_COPY.overviewStepNoClock);
+    await openDesk(page, `/practice/screen?thread=${id}`);
+    await expect(page.getByText(PRACTICE_COPY.screenNoSetup)).toBeVisible();
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.screenToSummary })).toHaveAttribute("href", summaryUrl(id));
 
-// Fix wave 5S, stream 1: the week review.
-test.describe("Practice week review · fix wave 5S", () => {
-  test.beforeEach(async ({ context }) => {
-    await prepareDesk(context);
-  });
-
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("a swing thread opened on the week route with no week offers the last week that has started, not the next one (D-183, D-192)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context); // Days 1 to 5 ended: the thread now reads "Week 2", but only Week 1 has a review
-    for (const path of [`/practice/week?thread=${threadId}`, `/practice/week?thread=${threadId}&week=0`]) {
-      await openDesk(page, path);
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText("No week selected");
-      await expect(page.getByRole("link", { name: "Open Week 2" }), path).toHaveCount(0);
-      const offered = page.getByRole("link", { name: "Open Week 1" });
-      await expect(offered, path).toHaveAttribute("href", `/practice/week?thread=${threadId}&week=1`);
-    }
-    await page.getByRole("link", { name: "Open Week 1" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Week 1");
-    await expect(page.getByText("has not started yet")).toHaveCount(0);
-  });
-
-  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
-  test.skip("the way on and a way back sit in the header, a tile's number never wraps, and the chart key names every mark (D-086, D-087, D-088)", async ({ page, context }) => {
-    test.setTimeout(180_000);
-    const threadId = await gatedSwingThread(context);
-    await openDesk(page, `/practice/week?thread=${threadId}&week=1`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Week 1");
-    // D-088: Start Week 2 is in the first screen beside the "Final" chip, and ← Thread goes to the thread's page.
-    await expect(page.getByRole("button", { name: "Start Week 2" })).toBeInViewport();
-    await expect(page.getByRole("link", { name: "← Thread" })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
-    // D-126: the twelve tiles sit four across, three even rows, and the values of a row share one baseline.
-    const tiles = await page
-      .locator("#main-content ul[role=list] > li")
-      .filter({ has: page.locator("[data-tone]") })
-      .evaluateAll((items) => items.map((li) => ({ top: Math.round(li.getBoundingClientRect().top), value: Math.round(li.querySelector("[data-tone]")!.getBoundingClientRect().top) })));
-    const rows = Map.groupBy(tiles, (tile) => tile.top);
-    expect([...rows.values()].map((row) => row.length), "three rows of four tiles").toEqual([4, 4, 4]);
-    for (const row of rows.values()) expect(new Set(row.map((tile) => tile.value)).size, "one baseline a row").toBe(1);
-    // D-130: the universe line keeps its first sentence; the survivorship caveat is folded behind a summary.
-    await expect(page.getByText(/^Fixed universe · \d+ symbols chosen today/)).toBeVisible();
-    await expect(page.locator("summary", { hasText: "Why this list leans toward survivors" })).toBeVisible();
-    await expect(page.getByText(/delisted or renamed since Day 1/)).toBeHidden();
-    // D-127: the Days and Holds tables are one density: their rows are the same height.
-    const rowHeights = (name: string) => page.getByRole("table", { name }).locator("tbody tr").evaluateAll((trs) => trs.map((tr) => Math.round(tr.getBoundingClientRect().height)));
-    expect([...new Set([...(await rowHeights("Days this week")), ...(await rowHeights("Holds this week"))])], "one row height in both tables").toHaveLength(1);
-    // D-086: every tile value is one line inside its tile, also in a narrow tile (the grid is squeezed to about 154 px a tile, as the audit saw it).
-    await page.locator("#main-content ul[role=list]").filter({ has: page.locator("[data-tone]") }).first().evaluate((list) => ((list as HTMLElement).style.width = "470px"));
-    const broken = await brokenTileValues(page);
-    expect(broken, "a tile value wraps or spills").toEqual([]);
-    expect(await page.locator("#main-content [data-tone]").count(), "the tiles are there").toBeGreaterThan(5);
-    // D-087: the key lists the day-close ticks too, and "this week is shaded" is a filled block, not a box that looks ticked.
-    const key = page.getByRole("list", { name: "Chart key" });
-    await expect(key).toContainText("Close of each day");
-    const shade = key.getByRole("listitem").filter({ hasText: "This week is shaded" }).locator("span").first();
-    await expect(shade).toHaveCSS("border-top-width", "0px");
-    // D-085: the swing journal's next step says why Day 6 waits, once, beside the review link.
-    await openDesk(page, `/practice/journal?thread=${threadId}`);
-    await expect(page.getByText("Week 1 is done. Review it to unlock Day 6.")).toHaveCount(1);
-    await expect(page.getByRole("link", { name: "Open Week 1 review" })).toBeVisible();
-  });
-
-  test("a day thread's week page has a heading, a full sentence and a link to the thread's page (D-089)", async ({ page, context }) => {
-    const id = await createThreadByApi(context);
-    await openDesk(page, `/practice/week?thread=${id}&week=1`);
-    await expect(page.getByRole("heading", { level: 1, name: "Weekly review" })).toBeVisible();
-    await expect(page.getByText("Weekly reviews are for swing threads. This is a day thread, so it has no weeks.")).toBeVisible();
-    await expect(page.getByText("swing threads only", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Back to your thread" })).toHaveAttribute("href", `/practice/thread?id=${id}`);
+    // The first setup starts the clock paused at `startAt`; time does not move until she moves it.
+    await send(context, "PUT", `/threads/${id}/setup`, {
+      schemaVersion: 2,
+      startAt: `${DAY}T09:30:00${ET_OFFSET}`,
+      screen: { filters: [{ id: filter }], maxList: 30 },
+      setup: { interval: "1m", session: "regular", armed: [] },
+    });
+    await openDesk(page, summaryUrl(id));
+    await expect(page.getByTestId("thread-clock-time")).toHaveText("Fri 2026-09-25 · 9:30:00 AM ET");
+    await expect(page.getByTestId("thread-clock-state")).toHaveText(PRACTICE_COPY.clockStatePaused);
   });
 });
 
-// The Watchlists rail was inert on Practice (a Backtest symbol has no link) and showed live quotes beside a practice day, so the
-// landing, the thread page and the week review leave the left slot empty at zero width, like the other Practice routes own theirs.
 test.describe("Practice · no Watchlists rail", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });
 
-  test("the landing, the thread page and the week review have no Watchlists rail and no left column; Technical keeps its rail", async ({ page, context }) => {
+  test("the landing and the Summary have no Watchlists rail and no left column, the Screen and the journal carry no Watchlists either; Technical keeps its rail", async ({ page, context }) => {
     const id = await createThreadByApi(context);
-    for (const path of ["/practice", overviewUrl(id), `/practice/week?thread=${id}&week=1`]) {
+    for (const path of ["/practice", summaryUrl(id), `/practice/screen?thread=${id}`, `/practice/journal?thread=${id}`]) {
       await openDesk(page, path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(page.getByRole("complementary", { name: /^Watchlists/ }), path).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Watchlists", exact: true }), path).toHaveCount(0);
       await expect(page.getByText("Add symbols to start watching"), path).toHaveCount(0);
       await expect(page.getByRole("link", { name: "Open Watchlists" }), path).toHaveCount(0);
-      const [left, center] = [await page.locator(".dk-left").boundingBox(), await page.locator("#main-content").boundingBox()];
-      expect(Math.round(left!.width), `${path}: no left column`).toBe(0);
-      expect(Math.round(center!.x), `${path}: the page starts at the window's left edge`).toBe(0);
+      if (path === "/practice" || path === summaryUrl(id)) {
+        const [left, center] = [await page.locator(".dk-left").boundingBox(), await page.locator("#main-content").boundingBox()];
+        expect(Math.round(left!.width), `${path}: no left column`).toBe(0);
+        expect(Math.round(center!.x), `${path}: the page starts at the window's left edge`).toBe(0);
+      }
       await expectCleanScreen(page);
     }
     // The other modes are untouched.

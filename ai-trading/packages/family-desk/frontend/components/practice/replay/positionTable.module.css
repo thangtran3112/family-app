@@ -7,3 +7,5 @@
 .ticker { margin-left: calc(-1 * var(--space-2)); font-weight: var(--weight-semibold); }
 .symbol { font-weight: var(--weight-semibold); }
 .flags { display: inline-flex; align-items: center; gap: var(--space-1); }
+.priceCell { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.note { color: var(--color-muted); font-size: var(--text-meta); line-height: var(--line-meta); white-space: normal; text-align: right; }

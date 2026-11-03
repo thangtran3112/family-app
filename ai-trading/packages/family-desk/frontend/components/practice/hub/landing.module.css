@@ -1,4 +1,4 @@
-/* Practice landing and New plan modal (02r2, Paper mocks LEW-0 and X9Y-0). Tokens only; the form controls come from hub.module.css. */
+/* Practice landing and New thread modal (02r2, Paper mocks LEW-0 and X9Y-0). Tokens only; the form controls come from hub.module.css. */
 
 .headerSplit { justify-content: space-between; gap: var(--space-4); }
 .headerActions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-3); }
@@ -12,10 +12,10 @@
 .table thead th { color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; white-space: nowrap; }
 .table tbody th { font-weight: inherit; }
 .num { text-align: right !important; white-space: nowrap; }
-.colBalance { width: 200px; }
-.colProgress { width: 180px; }
-.colRate { width: 84px; }
-.colLast { width: 190px; }
+.colBalance { width: 190px; }
+.colPositions { width: 150px; }
+.colClock { width: 250px; }
+.colActivity { width: 130px; }
 .colAction { width: 210px; }
 .lastDay { white-space: nowrap; }
 .actionHead { width: 1%; text-align: right !important; white-space: nowrap; }
@@ -40,7 +40,6 @@
 /* The action and Delete sit above the stretched link, so a click on them is theirs (not the dialog: a modal dialog keeps its own position). */
 .actions > :is(a, button, div, p) { position: relative; z-index: 1; }
 .progress { display: block; font-weight: var(--weight-semibold); white-space: nowrap; }
-.gateChip { margin-top: 4px; color: var(--color-amber); }
 
 /* Loading skeletons (the landing's rows and the thread page): grey bars in the shape of what is coming. */
 .skelRow:hover { background: transparent; }
@@ -69,13 +68,13 @@ button.deleteButton:hover:not(:disabled) { border-color: var(--color-down); colo
 .panelTitle { margin: 0; color: var(--color-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .dayLine { margin: 0; font-size: var(--text-body); line-height: var(--line-body); }
 .dayActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-/* Resume is the page's one primary control: a bigger, filled button (ThreadAction renders it; a swing thread's review link and "New plan needed" get the same size). */
+/* Open Screen is the page's one primary control: a bigger, filled button (ThreadAction renders it). */
 .resumeAction { display: contents; }
+/* The next-step card is one short block: the Screen button, Delete, and a line. */
+.nextStep { min-height: 0; }
 .resumeAction a, .resumeAction button { min-height: 40px; padding: 0 var(--space-6); font-size: var(--text-body); }
 .resumeAction a:not([aria-disabled="true"]), .resumeAction button:not(:disabled) { background: var(--color-amber); color: var(--color-ground); }
 .resumeAction a:not([aria-disabled="true"]):hover, .resumeAction button:not(:disabled):hover { background: var(--color-amber); filter: brightness(1.12); }
-/* The next-step card keeps one height whether the data is preparing or ready, so the page does not jump when it finishes (D-084). */
-.nextStep { min-height: 158px; }
 .secondaryLink { display: inline-flex; min-height: 32px; align-items: center; border: 1px solid var(--color-hairline); border-radius: var(--radius-sm); padding: 0 var(--space-3); color: var(--color-text); font-size: var(--text-label); font-weight: var(--weight-semibold); text-decoration: none; white-space: nowrap; }
 .secondaryLink:hover { background: var(--color-raised); }
 .secondaryLink:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }

@@ -69,8 +69,8 @@ def test_no_deploy_file_sets_the_stub_flag() -> None:
 
 
 def test_the_stub_flag_serves_the_tsla_fixture_and_nothing_else(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The swing world the browser server serves (`tests/e2e/swing_services.py`) is installed by the E2E lifespan only:
-    the flag's own services still answer for TSLA on the fixture day and say `NoData` for a swing symbol."""
+    """The services the browser server serves (`tests/e2e/replay_services.py`) are installed by the E2E lifespan only:
+    the flag's own services still answer for TSLA on the fixture day and say `NoData` for anything else."""
     monkeypatch.setenv(fixture.STUB_FLAG, "1")
     base = DataSources(**{field.name: object() for field in dataclasses.fields(DataSources)})
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))

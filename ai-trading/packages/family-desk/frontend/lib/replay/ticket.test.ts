@@ -4,10 +4,11 @@ import { SHARES_TOO_BIG } from "./markInput.ts";
 import { buildTicket, buyingPowerMessage, initialTicket, orderLine, orderStatusText, ticketSummary, TICKET_TYPES, typeOption, type PowerBasis, type TicketDraft } from "./ticket.ts";
 import type { PracticeOrder } from "./schemas.ts";
 
-const base: TicketDraft = { side: "buy", type: "market", shares: "100", limitPrice: "", stopPrice: "" };
+const base: TicketDraft = { side: "buy", type: "market", shares: "100", limitPrice: "", stopPrice: "", tif: "gtc" };
 const order = (changes: Partial<PracticeOrder> = {}): PracticeOrder => ({
   id: 1, side: "buy", type: "limit", shares: 10, limit_price: 49.5, stop_price: null, status: "working",
-  placed_at: "2026-09-28T13:35:00Z", triggered_at: null, closed_at: null, fill_price: null, mark_id: null, reason: null, ...changes,
+  placed_at: "2026-09-28T13:35:00Z", triggered_at: null, closed_at: null, fill_price: null, mark_id: null, reason: null,
+  tif: "gtc", expires_at: null, reduce_only: false, ...changes,
 });
 
 test("the ticket lists Market, Limit, Stop, Stop-limit and Bracket, and shows exactly the price fields each type needs", () => {
@@ -38,11 +39,11 @@ test("an entry needs no stop price, and a quantity over 10,000 is not refused by
 
 test("limit, stop and stop-limit tickets are orders that carry only the prices their type takes", () => {
   const limit = buildTicket({ ...base, type: "limit", limitPrice: "49.5", stopPrice: "ignored" });
-  assert.deepEqual(limit.ok && limit.action, { kind: "order", order: { side: "buy", orderType: "limit", shares: 100, limitPrice: 49.5 } });
+  assert.deepEqual(limit.ok && limit.action, { kind: "order", order: { side: "buy", orderType: "limit", shares: 100, limitPrice: 49.5, timeInForce: "gtc" } });
   const stop = buildTicket({ ...base, side: "sell", type: "stop", stopPrice: "48", limitPrice: "ignored" });
-  assert.deepEqual(stop.ok && stop.action, { kind: "order", order: { side: "sell", orderType: "stop", shares: 100, stopPrice: 48 } });
+  assert.deepEqual(stop.ok && stop.action, { kind: "order", order: { side: "sell", orderType: "stop", shares: 100, stopPrice: 48, timeInForce: "gtc" } });
   const both = buildTicket({ ...base, type: "stop_limit", stopPrice: "51", limitPrice: "51.2" });
-  assert.deepEqual(both.ok && both.action, { kind: "order", order: { side: "buy", orderType: "stop_limit", shares: 100, limitPrice: 51.2, stopPrice: 51 } });
+  assert.deepEqual(both.ok && both.action, { kind: "order", order: { side: "buy", orderType: "stop_limit", shares: 100, limitPrice: 51.2, stopPrice: 51, timeInForce: "gtc" } });
 });
 
 test("the checks are the broker's own and name the field", () => {
@@ -67,12 +68,15 @@ test("a bracket ticket is named and refused rather than pretended", () => {
 test("the summary and the order lines read like a broker's", () => {
   assert.equal(initialTicket(100).shares, "100");
   assert.equal(ticketSummary(base, "AAPL"), "Buy 100 AAPL · Market");
-  assert.equal(ticketSummary({ ...base, side: "sell", type: "stop_limit", stopPrice: "51", limitPrice: "51.2", shares: "2500" }, "AAPL"), "Sell 2,500 AAPL · Stop-limit · stop 51.00 · limit 51.20");
-  assert.equal(ticketSummary({ ...base, type: "limit", limitPrice: "" }, "AAPL"), "Buy 100 AAPL · Limit · limit —");
-  assert.equal(orderLine(order()), "Buy 10 · Limit 49.50");
-  assert.equal(orderLine(order({ side: "sell", type: "stop_limit", stop_price: 51, limit_price: 51.2 })), "Sell 10 · Stop-limit 51.00 / 51.20");
+  assert.equal(ticketSummary({ ...base, side: "sell", type: "stop_limit", stopPrice: "51", limitPrice: "51.2", shares: "2500" }, "AAPL"), "Sell 2,500 AAPL · Stop-limit · stop 51.00 · limit 51.20 · GTC");
+  assert.equal(ticketSummary({ ...base, type: "limit", limitPrice: "", tif: "day" }, "AAPL"), "Buy 100 AAPL · Limit · limit — · Day");
+  assert.equal(orderLine(order()), "Buy 10 · Limit 49.50 · GTC");
+  assert.equal(orderLine(order({ side: "sell", type: "stop_limit", stop_price: 51, limit_price: 51.2, tif: "day" })), "Sell 10 · Stop-limit 51.00 / 51.20 · Day");
   assert.equal(orderStatusText(order()), "Working");
   assert.equal(orderStatusText(order({ triggered_at: "2026-09-28T14:21:00Z" })), "Working · stop triggered");
+  assert.equal(orderStatusText(order({ tif: "day", expires_at: "2026-09-29T00:00:00Z" })), "Working · lapses Mon 2026-09-28 · 8:00 PM ET", "a Day order says when it lapses (the 8:00 PM ET extended close)");
+  assert.equal(orderStatusText(order({ reduce_only: true })), "Working · reduce only");
+  assert.equal(orderStatusText(order({ status: "cancelled", tif: "day", expires_at: "2026-09-29T00:00:00Z", reason: "Expired" })), "Cancelled · Expired");
   assert.equal(orderStatusText(order({ status: "filled", fill_price: 49.5 })), "Filled at 49.50");
   assert.equal(orderStatusText(order({ status: "cancelled", reason: "Not enough practice cash · $450 free" })), "Cancelled · Not enough practice cash · $450 free");
   assert.equal(orderStatusText(order({ status: "cancelled" })), "Cancelled");
@@ -90,7 +94,7 @@ test("limit and stop prices are plain decimals, and a quantity over the column n
 
 // -- buying power: the one size rule, said in the ticket before anything is sent ------------------------------------------
 
-const day: PowerBasis = { balance: 50_000, freeCash: null, trade: null, last: 11.98 };
+const day: PowerBasis = { balance: 50_000, trade: null, last: 11.98 };
 
 test("an order that costs more than the balance is refused with its cost and the buying power, and one that fits is not", () => {
   // 5,000 CNH at 11.98 is $59,900 against $50,000
@@ -118,16 +122,10 @@ test("there is no share cap: the cost to the cent is the only limit, and an exac
 
 test("shares that close the position need no cash; a flip pays only for the shares it opens, with the closed position's cash back", () => {
   const long100 = { side: "long", shares: 100, entry_price: 100 } as const;
-  const held: PowerBasis = { balance: 40_000, freeCash: null, trade: long100, last: 110 }; // day: $10,000 of the balance is this position
+  const held: PowerBasis = { balance: 40_000, trade: long100, last: 110 }; // day: $10,000 of the balance is this position
   assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "100" }, held), null); // exit
   assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "300" }, held), null); // flip: opens 200 short at 110 = $22,000; free is 40,000 plus the 1,000 gain
   assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "400" }, held), null); // opens 300 at 110 = $33,000, fits
   assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "500" }, held), "Exceeds buying power · this order costs $44,000, buying power is $41,000"); // opens 400
 });
 
-test("a swing thread's free cash is already net of its holds", () => {
-  const swing: PowerBasis = { balance: 50_000, freeCash: 8_240, trade: { side: "long", shares: 100, entry_price: 100 }, last: 100 };
-  assert.equal(buyingPowerMessage({ ...base, shares: "82" }, swing), null); // $8,200
-  assert.equal(buyingPowerMessage({ ...base, shares: "83" }, swing), "Exceeds buying power · this order costs $8,300, buying power is $8,240");
-  assert.equal(buyingPowerMessage({ ...base, side: "sell", shares: "150" }, swing), null); // opens 50 = $5,000; the closed 100 gives back $10,000
-});

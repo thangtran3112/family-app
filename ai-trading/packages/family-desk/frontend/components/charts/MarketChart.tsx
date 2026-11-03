@@ -244,7 +244,7 @@ const ChartDataTable = memo(function ChartDataTable({ bars, rowLabels }: { bars:
   );
 });
 
-/** One row of the data table. A refresh hands over the same bar objects but the newest (the replay's merge keeps them), so only the newest row is formatted and patched: 6,000 rows of `sourceTimeLabel` and `formatValue` cost ~0.55 s a pass (D-206). */
+/** One row of the data table. A refresh passes on the same bar objects but the newest (the replay's merge keeps them), so only the newest row is formatted and patched: 6,000 rows of `sourceTimeLabel` and `formatValue` cost ~0.55 s a pass (D-206). */
 const ChartDataRow = memo(function ChartDataRow({ bar, label }: { bar: ChartBar; label?: string }) {
   return <tr><th scope="row">{label ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>;
 });

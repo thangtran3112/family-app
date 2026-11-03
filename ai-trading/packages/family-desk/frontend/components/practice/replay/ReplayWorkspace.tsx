@@ -1,13 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChartIntervalToggle } from "@/components/practice/swing/ChartIntervalToggle";
-import { DayStrip } from "@/components/practice/swing/DayStrip";
-import { StopPausedToast } from "@/components/practice/swing/StopPausedToast";
-import { SwingPlanChecklist } from "@/components/practice/swing/SwingPlanChecklist";
-import { useSwingContext } from "@/components/practice/swing/useSwingContext";
 import { PracticeTabs } from "@/components/practice/hub/PracticeTabs";
 import { ThreadStrip } from "@/components/practice/thread/ThreadStrip";
 import { useDeskUi } from "@/components/shell/desktop/DeskContext";
@@ -23,48 +18,25 @@ import { currentValue } from "@/lib/chart-data";
 import { isSpeed } from "@/lib/replay/clock";
 import { formatEtDateClock, formatEtDay, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { threadPageHref } from "@/lib/replay/practiceTabs";
+import { screenHref, threadPageHref } from "@/lib/replay/practiceTabs";
 import { openRailTab } from "@/lib/desk/rail";
 import { useShellBand } from "@/lib/desk/useViewportBand";
 import { buildChartSeries } from "@/lib/desk/workspace";
-import { placeMark as sendMark, startDaySession } from "@/lib/desk/replay";
-import { whenReady } from "@/lib/desk/patience";
-import { endAnyDay } from "@/lib/replay/swingApi";
-import { portfolioRows } from "@/lib/replay/dayView";
 import { readChartPrefs, togglePref, writeChartPrefs, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
-import { exitMark } from "@/lib/replay/markInput";
 import { entrySince, levelRows, markRows, openSide } from "@/lib/replay/marks";
-import { practicePnl, tradeCount } from "@/lib/replay/planView";
-import {
-  SWING_PLAY_COPY,
-  dailyChartModel,
-  initialChartMode,
-  intradayOf,
-  isSwingSession,
-  pauseExit,
-  stripHoldCount,
-  swingDayChip,
-  swingMoneyLine,
-  swingPlanItems,
-  tapeNote,
-  type ChartMode,
-  type PauseExit,
-} from "@/lib/replay/playView";
-import type { Paused, ReplaySession } from "@/lib/replay/schemas";
-import { problemMessage } from "@/lib/replay/setup";
+import { practicePnl } from "@/lib/replay/planView";
+import type { ReplaySession } from "@/lib/replay/schemas";
 import { routeId } from "@/lib/replay/routeId";
 import { replayStatusLine } from "@/lib/replay/statusLine";
-import { freeCashText } from "@/lib/replay/swing";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
 import { buildTicket, buyingPowerMessage, initialTicket, type PowerBasis, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
+import { etDayOf } from "@/lib/replay/time";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
 import { useShownClock } from "@/lib/replay/useShownClock";
 import { serverSeries } from "@/lib/replay/serverIndicators";
-import { chartBars, dailyBlock, viewClock, type ReplayView } from "@/lib/replay/feedState";
+import { chartBars, viewClock, type ReplayView } from "@/lib/replay/feedState";
 import { ChartSettings, FullScreenButton } from "./ChartSettings";
 import { ChartToolbar } from "./ChartToolbar";
-import { useDayPortfolio } from "./Portfolio";
-import { EndPrompt } from "./EndPrompt";
 import { LevelsList } from "./LevelsList";
 import { MarksList } from "./MarksList";
 import { PracticeControls, type Composer } from "./PracticeControls";
@@ -74,12 +46,12 @@ import { ReplayHeader } from "./ReplayHeader";
 import { ReplayToast } from "./ReplayToast";
 import { SignalsRail, signalKey } from "./SignalsRail";
 import { TapePanel } from "./TapePanel";
-import { ThreadClockBar } from "./ThreadClockBar";
 import styles from "./replay.module.css";
 
 const BOTTOM_TABS_ID = "replay-bottom";
 
-/** `/practice/replay?id=`: the chart, the tape and the controls (02o §a3). Reads the URL, so the page wraps it in Suspense. */
+/** `/practice/replay?id=`: one LANE of a freestyle thread (ADR-0025): the chart, the tape and the ticket of one name, at the thread's time `T`. The id is
+ *  the lane's. Reads the URL, so the page wraps it in Suspense. */
 export function ReplayWorkspace() {
   const params = useSearchParams();
   const { id, given } = routeId(params.get("id"));
@@ -91,7 +63,7 @@ export function ReplayWorkspace() {
       </div>
     );
   }
-  // A new id (a swing day strip click opens another name's session) is a fresh workspace: nothing of the old one carries over.
+  // A new id is a fresh workspace: nothing of the old lane carries over.
   return <ReplayById key={id} id={id} />;
 }
 
@@ -104,39 +76,18 @@ function ReplayById({ id }: { id: number }) {
 }
 
 function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: ReplaySession; view: ReplayView }) {
-  const router = useRouter();
   const band = useShellBand();
   const { spec } = session;
-  const ended = session.status === "ended";
-  // A swing session (02p) belongs to a swing thread: the day strip, the Daily chart, the stop pause and the hold rules.
-  const swing = isSwingSession(session);
-  const [chartMode, setChartMode] = useState<ChartMode>(() => initialChartMode(spec.interval));
-  const [opening, setOpening] = useState<string | null>(null);
-  // The stop pause belongs to the playhead it stopped at: it shows until she answers or the playhead moves, so a chart
-  // toggle (which re-reads the feed and drops `api.paused`) does not take the question away.
-  const [pause, setPause] = useState<{ paused: Paused; at: string } | null>(null);
-  // A day thread's clock stays stopped at a crossed stop until she resumes it, so every follow answer repeats the same pause: it is one
-  // pause (the same name, stop and minute), and once answered it does not come back until the clock stops somewhere else.
-  const [answered, setAnswered] = useState<string | null>(null);
-  const pauseKey = (paused: Paused) => `${paused.symbol}|${paused.at}`;
-  if (api.paused !== null && pause?.paused !== api.paused && answered !== pauseKey(api.paused) && (pause === null || pauseKey(pause.paused) !== pauseKey(api.paused))) {
-    setPause({ paused: api.paused, at: view.revealedThrough });
-  }
-  const shownPause = pause !== null && pause.at === view.revealedThrough && session.status !== "ended" ? pause.paused : null;
-  const answerPause = () => {
-    if (pause !== null) setAnswered(pauseKey(pause.paused));
-    setPause(null);
-    api.dismissPause();
-  };
-  const swingContext = useSwingContext(swing ? session.thread_id : null, session.thread?.week_no, session.marks.length);
-  // The order ticket: a side, a quantity and an order type with the prices that type takes. A stop is never part of it.
+  const threadId = session.thread_id;
+  // A lane of a closed thread, and a legacy standalone session that ended, are read as they were left: nothing can be ordered on them. A lane never
+  // ends on its own (ADR-0025): no close, night or Jump ends it.
+  const locked = session.status === "ended" || session.thread?.status === "closed";
+  // The order ticket: a side, a quantity, an order type with the prices that type takes, and (for a working order) its time in force. A stop is never part of it.
   const [ticket, setTicket] = useState<TicketDraft>(() => initialTicket(spec.shares));
   const [ticketError, setTicketError] = useState<{ field: TicketField | "type" | "order"; message: string } | null>(null);
   const [placing, setPlacing] = useState(false);
-  // What the ticket can tell of the buying power before it sends: the thread's numbers and this name's position (the server holds the exact cash).
-  const powerBasis: PowerBasis | null = session.thread
-    ? { balance: session.thread.balance, freeCash: session.thread.free_cash_usd ?? null, trade: view.openTrade, last: view.last?.price ?? null }
-    : null;
+  // What the ticket can tell of the buying power before it sends: the thread's balance and this name's position (the server holds the exact cash).
+  const powerBasis: PowerBasis | null = session.thread ? { balance: session.thread.balance, trade: view.openTrade, last: view.last?.price ?? null } : null;
   const buyingPower = buyingPowerMessage(ticket, powerBasis);
   const editTicket = (next: TicketDraft) => {
     setTicket(next);
@@ -151,7 +102,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     writeChartPrefs(window.localStorage, next);
   };
   // Full screen is a view state of this route, never a navigation: the shell hides its top bar, left rail and status bar while it is on,
-  // and it is reset when this screen goes away (Back, another name, End day), so the shell is never left in focus mode.
+  // and it is reset when this screen goes away (Back, another name), so the shell is never left in focus mode.
   const [full, setFull] = useState(false);
   const { setChartFocus } = useDeskUi();
   useEffect(() => {
@@ -162,37 +113,22 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [railOpen, setRailOpen] = useState<string[]>([]);
   const [bottomTab, setBottomTab] = useState<"marks" | "levels">("marks");
   const [bottomOpen, setBottomOpen] = useState<boolean | null>(null);
-  const [dayBusy, setDayBusy] = useState(false);
   const [focus, setFocus] = useState<{ time: string; at: number } | null>(null);
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
-  const dayListId = session.day_list_id;
   const side = openSide(view.openTrade);
   const pnl = practicePnl(session.journal, view.openTrade);
-  const trades = tradeCount(session.journal, view.openTrade);
-  const atEnd = api.player.status === "at_end" || ended;
-  // A day thread's clock runs on the server and is controlled from the Summary: this screen has no transport at all (ADR-0018).
+  // The thread's clock runs on the server and is controlled from the Summary: this screen has no transport at all (ADR-0018, ADR-0025).
   const followed = api.follows;
-  const behind = view.behindClock && !ended;
-  // The thread's one time: the payload's own `thread_time` (ADR-0022), uncapped, so past the tape it keeps counting while the chart's data stands still. A swing
-  // or standalone session has none, and its time is its playhead (or the day clock a name was left behind).
-  // An ended session keeps the time it ended at; the day list it belonged to has moved on (the thread time is now a later day's).
-  const clock = ended ? view.revealedThrough : viewClock(view);
-  // What a day thread's chart SHOWS of that time ticks every second between two polls; the readout, the status bar and the top-bar chip all read this one
+  const behind = view.behindClock && !locked;
+  // The thread's one time: the payload's own `thread_time` (ADR-0022), uncapped, so past the tape it keeps counting while the chart's data stands still.
+  const clock = viewClock(view);
+  // What a lane's chart SHOWS of that time ticks every second between two polls; the readout, the status bar and the top-bar chip all read this one
   // value (D-166). `clock` stays the polled time for everything that prices or compares. While the polls fail (`api.stale`) the readout is held, as the Summary's is.
   const ticking = useShownClock(clock, followed && view.clockRunning && !api.stale, isSpeed(view.clockSpeed) ? view.clockSpeed : 1);
   const shownClock = followed ? ticking : clock;
-  // A day's portfolio: every name she holds, read here only for the stop-pause toast (which name to exit). The chart view shows no portfolio panel: it is the Portfolio tab's (owner, 2026-11-01).
-  // The list prices every open trade at the day clock, so it is read again after a mark and whenever the clock settles (a step, a
-  // jump, a stop pause), not on every bar of a running replay: each read prices up to five names.
-  // While paused the clock follows the playhead; while playing it stays at the playhead it had when the replay last paused. It is
-  // adjusted during render (as `pause` above is), so a paused reveal re-renders once before commit, not again after an effect.
-  const playing = api.player.status === "playing";
-  const [clockSeen, setClockSeen] = useState(view.revealedThrough);
-  if (!playing && clockSeen !== view.revealedThrough) setClockSeen(view.revealedThrough);
-  const dayList = useDayPortfolio(swing ? null : dayListId, session.marks.length * 2 + (behind ? 1 : 0) + Math.floor(Date.parse(clockSeen) / 1000));
-  const dayRows = dayList.data === null ? [] : portfolioRows(dayList.data, { symbol: spec.symbol, playhead: clock, openTrade: view.openTrade });
 
-  useReportPracticeChrome({ day: spec.day, playhead: shownClock, status: replayStatusLine(session.tape_feed, shownClock) });
+  // The band and the status bar name the ET date of the thread's time: a label that follows T, never a day she is "in".
+  useReportPracticeChrome({ day: etDayOf(shownClock), playhead: shownClock, status: replayStatusLine(session.tape_feed === "iex" ? "iex" : "sip", shownClock) });
 
   // The chart's bars and series are built once: the chart draws them, the header reads VWAP from the same series and the left rail reads the same rows.
   // EMA 9/21, VWAP, RSI and MACD are the server's, computed from the same cut as the price and the forming candle (ADR-0022): the browser computes none
@@ -204,13 +140,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const server = useMemo(() => serverSeries(bars, indicators, view.interval, forming?.t ?? null), [bars, indicators, view.interval, forming]);
   const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval, "stock", server), [bars, view.interval, server]);
   const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
-  // The left rail's indicators are read off what the chart shows: the intraday bars, or the rebased daily bars while a swing session is on Daily.
-  const { daily, dailyForming } = view;
-  const dailyBars = useMemo(() => {
-    const block = dailyBlock({ daily, dailyForming });
-    return block === null ? null : dailyChartModel(block).bars;
-  }, [daily, dailyForming]);
-  const indicatorBars = swing && chartMode === "daily" && dailyBars !== null ? { bars: dailyBars, interval: "1d", timeframe: "Daily" } : { bars, interval: view.interval, timeframe: view.interval };
 
   const openComposer = (next: Composer) => {
     setComposer(next);
@@ -244,7 +173,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     };
     setPlacing(true);
     return api.ticket(built.action, refused).then((accepted) => {
-      if (accepted && !chartDraft) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity stays as typed
+      if (accepted && !chartDraft) setTicket((current) => ({ ...current, side: chosen, limitPrice: "", stopPrice: "" })); // the quantity and the time in force stay as set
       return accepted;
     }).finally(() => setPlacing(false));
   };
@@ -253,19 +182,16 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       void submitTicket(kind === "long_entry" ? "buy" : "sell");
       return;
     }
-    void api.mark(kind, {}).then((accepted) => {
-      // Closing the name whose stop paused play answers the toast.
-      if (accepted && shownPause?.symbol === spec.symbol) answerPause();
-    });
+    void api.mark(kind, {});
   };
   /**
    * The Buy, Sell and Close position buttons (there are no keys). Buy and Sell send the ticket as it stands and the server nets it
-   * against the position; Close exits the whole open side. The buttons are off while the name is behind the day clock or the session
-   * has ended; this says so instead of marking anyway.
+   * against the position; Close exits the whole open side. The buttons are off while the name is behind the thread clock or the thread
+   * is closed; this says so instead of marking anyway.
    */
   const order = (choice: "buy" | "sell" | "close") => {
-    if (ended || behind) {
-      api.notify("info", ended ? PRACTICE_COPY.markEnded : practiceText("markBehind", { symbol: spec.symbol }));
+    if (locked || behind) {
+      api.notify("info", locked ? (threadId !== null ? PRACTICE_COPY.markThreadClosed : PRACTICE_COPY.markEnded) : practiceText("laneMarkBehind", { symbol: spec.symbol }));
       return;
     }
     if (choice === "close") {
@@ -286,53 +212,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [full]);
 
-  // Daily needs no request (the daily block is in the view already); 15m and 5m re-read the feed at that interval.
-  const pickMode = (mode: ChartMode) => {
-    setChartMode(mode);
-    if (mode !== "daily" && mode !== api.interval) api.setInterval(intradayOf(mode));
-  };
-  /** Opens (or resumes) another name's session at the day clock and shows it in this workspace; the day clock never goes back. */
-  const switchTo = (symbol: string) => {
-    if (dayListId === null || opening !== null) return;
-    if (api.player.status === "playing") api.togglePlay();
-    setOpening(symbol);
-    startDaySession(dayListId, symbol)
-      .then((next) => router.replace(`/practice/replay?id=${next.id}`))
-      .catch((error) => {
-        api.notify("error", problemMessage(error, SWING_PLAY_COPY.switchError));
-        setOpening(null);
-      });
-  };
-  const exitTarget = shownPause
-    ? pauseExit(shownPause, { sessionSymbol: spec.symbol, openSide: side, strip: view.strip, held: dayRows.map((row) => ({ symbol: row.symbol, side: row.side })) })
-    : null;
-  /** Exit on the toast: an exit mark at the revealed price, on this chart's name or (through its session) on another's. */
-  const exitPaused = (target: PauseExit) => {
-    if (target.here) {
-      void api.mark(target.kind, {}).then((accepted) => accepted && answerPause());
-      return;
-    }
-    if (dayListId === null) return;
-    const built = exitMark(target.kind);
-    if (!built.ok) return;
-    setOpening(target.symbol);
-    startDaySession(dayListId, target.symbol)
-      .then(async (other) => {
-        // Opening the name's session lifted it to the shared day clock (it cannot be marked while behind it): the exit follows.
-        await sendMark(other.id, built.mark);
-        router.replace(`/practice/replay?id=${other.id}`);
-      })
-      .catch((error) => {
-        api.notify("error", problemMessage(error, PRACTICE_COPY.orderError));
-        setOpening(null);
-      });
-  };
-  const holdsOpen = stripHoldCount(view.strip);
-  const swingDay = swing && session.thread ? swingDayChip(session.thread, spec.day) : null;
-  // The swing Daily view draws none of the intraday lines, so the settings show those groups switched off.
-  const dailyView = swing && chartMode === "daily" && view.daily !== null;
-
-  const dayLabel = formatEtDay(spec.day);
+  const dateLabel = formatEtDay(etDayOf(shownClock));
   const bottomShown = bottomOpen ?? band === "1440";
   const realized = practicePnl(session.journal, null);
 
@@ -342,9 +222,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   // Click-to-order on the chart: only while she could use the ticket's buttons, and once there is a print to price against.
   const lastPrice = view.last?.price ?? null;
-  const chartOrder = ended || behind || lastPrice === null
+  const chartOrder = locked || behind || lastPrice === null
     ? undefined
-    : { shares: ticket.shares, place: (chosen: "buy" | "sell", price: number) => submitTicket(chosen, chartOrderDraft(ticket, chosen, price, lastPrice)), error: ticketError?.message ?? null };
+    : { shares: ticket.shares, tif: ticket.tif, place: (chosen: "buy" | "sell", price: number) => submitTicket(chosen, chartOrderDraft(ticket, chosen, price, lastPrice)), error: ticketError?.message ?? null };
 
   const controls = (
     <PracticeControls
@@ -367,8 +247,7 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       onExit={() => order("close")}
       onStop={api.stopNote}
       onNote={api.note}
-      disabled={ended || behind}
-      swing={swing ? { tape: session.tape_feed === "off" ? "off" : "on", cash: freeCashText(session.thread?.free_cash_usd) } : undefined}
+      disabled={locked || behind}
     />
   );
   // The crosshair goes to the display bar open one second before the signal's bar close.
@@ -390,7 +269,6 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       }}
     />;
 
-  const tapeOff = swing && session.tape_feed === "off";
   // The right rail is the order side of the workspace: the ticket (Practice) and the signals. The tape is the left rail's.
   const sections: RailSection[] = [
     { id: "practice", label: "Practice", node: controls },
@@ -399,119 +277,55 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   const quick = band === "1180" ? (
     <span className={styles.quick} role="group" aria-label="Practice buttons">
-      <Button variant="up" size="md" disabled={ended || behind} onClick={() => order("buy")}>Buy</Button>
-      <Button variant="down" size="md" disabled={ended || behind} onClick={() => order("sell")}>Sell</Button>
-      <Button size="md" disabled={ended || behind || side === "flat"} onClick={() => order("close")}>Close position</Button>
+      <Button variant="up" size="md" disabled={locked || behind} onClick={() => order("buy")}>Buy</Button>
+      <Button variant="down" size="md" disabled={locked || behind} onClick={() => order("sell")}>Sell</Button>
+      <Button size="md" disabled={locked || behind || side === "flat"} onClick={() => order("close")}>Close position</Button>
     </span>
   ) : null;
 
   return (
     <div className={styles.workspace} data-drawer={band === "1180" && railOpen.length > 0 ? "open" : undefined} data-full={full ? "true" : undefined}>
-      {!full && <PracticeTabs threadId={session.thread_id ?? session.thread?.id ?? null} active={null} mode={swing ? "swing" : "day"} back={dayListId === null} />}
-      {/* A day thread's clock is the thread's, on the server, and its controls are on the Summary: none of that is on a chart (ADR-0018).
-          A swing session and a standalone replay still carry their own clock bar. */}
-      {!followed && (
-        <ThreadClockBar
-          label={dayListId !== null ? PRACTICE_COPY.threadTime : PRACTICE_COPY.replayTime}
-          hint={dayListId !== null ? PRACTICE_COPY.threadTimeHint : PRACTICE_COPY.replayTimeHint}
-          status={api.player.status}
-          busy={api.player.busy}
-          speed={api.player.speed}
-          error={api.player.error}
-          windowStart={session.window_start}
-          windowEnd={session.window_end}
-          clock={clock}
-          marks={session.marks}
-          signals={view.signals}
-          onToggle={api.togglePlay}
-          onStep={api.step}
-          onSpeed={api.setSpeed}
-          onJumpBy={api.jumpBy}
-          onJumpToTime={api.jumpToTime}
-          onNextSignal={api.nextSignal}
-          onJumpEnd={api.jumpToEnd}
-          swing={swing}
-        />
-      )}
-      {followed && (
-        // Read-only: the thread's time and whether it is running. Play or Pause, the speed and Skip day are on the Summary.
-        <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
-          <span>{PRACTICE_COPY.threadTime}</span>
-          <span data-testid="thread-clock-time">{formatEtDateClock(shownClock)}</span>
-          {api.stale && <span role="status" className={styles.staleNote} data-testid="chart-stale">{practiceText("chartNotUpdating", { when: formatEtDateClock(view.dataThrough) })}</span>}
-          {view.market?.phase === "closed" && (
-            <span data-testid="market-closed">{practiceText("marketClosed", { time: formatEtTimeZone(view.dataThrough) })}</span>
-          )}
-          {view.market?.phase === "closed" && view.market.next_open_at !== null && (
-            <span data-testid="market-next-open">{practiceText("marketNextOpen", { when: formatEtDateClock(view.market.next_open_at, { seconds: false }) })}</span>
-          )}
-          <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : PRACTICE_COPY.clockStatePaused}</span>
-          {session.thread_id !== null && <Link href={`/practice/thread?id=${session.thread_id}`} className={styles.link}>{view.clockRunning || atEnd ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
-        </p>
-      )}
-      <ReplayHeader
-        symbol={spec.symbol}
-        dayLabel={swingDay ?? dayLabel}
-        attempt={session.attempt}
-        lastPrice={view.last?.price ?? null}
-        vwap={vwap}
-        priorClose={view.levels.prior_close ?? null}
-        pnl={pnl}
-        swing={swing && session.thread ? { money: swingMoneyLine(session.thread), tapeNote: tapeNote(session.tape_feed) } : undefined}
-      />
-      {session.thread && !swing && !full && <ThreadStrip thread={session.thread} />}
+      {!full && <PracticeTabs threadId={threadId ?? session.thread?.id ?? null} active={null} back={false} />}
+      {/* The thread's clock is the thread's, on the server, and its controls are on the Summary: none of that is on a chart (ADR-0018, ADR-0025).
+          This line is a read-only readout of it. A legacy standalone session that ended has no thread: it shows only the time it stopped at. */}
+      <p className={styles.timeReadout} role="status" aria-live="off" data-testid="thread-time-readout" data-running={view.clockRunning ? "true" : "false"}>
+        <span>{threadId !== null ? PRACTICE_COPY.threadTime : PRACTICE_COPY.replayTime}</span>
+        <span data-testid="thread-clock-time">{formatEtDateClock(shownClock)}</span>
+        {api.stale && <span role="status" className={styles.staleNote} data-testid="chart-stale">{practiceText("chartNotUpdating", { when: formatEtDateClock(view.dataThrough) })}</span>}
+        {view.market?.phase === "closed" && (
+          <span data-testid="market-closed">{practiceText("marketClosed", { time: formatEtTimeZone(view.dataThrough) })}</span>
+        )}
+        {view.market?.phase === "closed" && view.market.next_open_at !== null && (
+          <span data-testid="market-next-open">{practiceText("marketNextOpen", { when: formatEtDateClock(view.market.next_open_at, { seconds: false }) })}</span>
+        )}
+        {threadId !== null && <span>{view.clockRunning ? practiceText("clockStateRunning", { speed: view.clockSpeed }) : PRACTICE_COPY.clockStatePaused}</span>}
+        {threadId !== null && <Link href={threadPageHref(threadId)} className={styles.link}>{view.clockRunning ? PRACTICE_COPY.chartClockLinkControls : PRACTICE_COPY.chartClockLink}</Link>}
+        {threadId !== null && <Link href={screenHref(threadId)} className={styles.link}>{PRACTICE_COPY.tabScreen}</Link>}
+      </p>
+      <ReplayHeader symbol={spec.symbol} dateLabel={dateLabel} lastPrice={view.last?.price ?? null} vwap={vwap} priorClose={view.levels.prior_close ?? null} pnl={pnl} />
+      {session.thread && !full && <ThreadStrip thread={session.thread} />}
       <ReplayToast toast={api.toast} onDismiss={api.dismissToast} onHold={api.holdToast} onRelease={api.releaseToast} />
-      {shownPause && (
-        <StopPausedToast paused={shownPause} exit={exitTarget} busy={api.player.busy || opening !== null} onExit={() => exitTarget && exitPaused(exitTarget)} onKeep={answerPause} />
-      )}
-      {behind && view.dayClock && (
+      {behind && view.threadClock && (
         <p className={styles.warning} role="status" data-testid="behind-clock">
-          <span>{practiceText("replayBehind", { symbol: spec.symbol, clock: formatEtTimeZone(view.dayClock) })}</span>
-          <button type="button" className={styles.linkButton} disabled={api.player.busy} onClick={api.catchUp}>{PRACTICE_COPY.replayCatchUp}</button>
+          <span>{practiceText("laneBehind", { symbol: spec.symbol, clock: formatEtTimeZone(view.threadClock) })}</span>
+          <button type="button" className={styles.linkButton} disabled={api.busy} onClick={api.catchUp}>{PRACTICE_COPY.replayCatchUp}</button>
         </p>
       )}
       <div className={styles.chartSlot} data-testid="chart-slot">
-        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} focus={focus} dimmed={Boolean(api.player.error) || api.stale} swing={swing ? { mode: chartMode } : undefined} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
+        <ReplayChart symbol={spec.symbol} view={view} bars={bars} series={series} focus={focus} dimmed={Boolean(api.error) || api.stale} order={chartOrder} prefs={prefs} onTogglePref={(id: PrefId) => updatePrefs(togglePref(prefs, id))} />
       </div>
       <ChartToolbar
         symbol={spec.symbol}
         interval={view.interval}
         onInterval={api.setInterval}
         quick={quick}
-        chartToggle={swing ? <ChartIntervalToggle mode={chartMode} onMode={pickMode} /> : undefined}
         view={
           <>
-            <ChartSettings open={settingsOpen} onOpenChange={setSettingsOpen} prefs={prefs} onChange={updatePrefs} daily={dailyView} />
+            <ChartSettings open={settingsOpen} onOpenChange={setSettingsOpen} prefs={prefs} onChange={updatePrefs} />
             <FullScreenButton full={full} onToggle={() => setFull((on) => !on)} />
           </>
         }
       />
-      {/* A day-trade list's session has no foot: its day is ended from the Day list, which the tab strip above reaches. A standalone session and a swing day (whose Board cannot end a practiced day) keep the one End control. */}
-      {(dayListId === null || swing) && (
-        <EndPrompt
-          tradeCount={trades}
-          atEnd={atEnd}
-          busy={api.player.busy || dayBusy}
-          swing={swing && session.thread?.day_no != null ? { dayNo: session.thread.day_no, clock, holdsOpen } : undefined}
-          ended={ended ? { swing, journalHref: `/practice/journal?id=${session.id}` } : null}
-          onEnd={() => {
-            if (dayListId === null) {
-              void api.end().then((done) => done && router.push(`/practice/journal?id=${done.id}`));
-              return;
-            }
-            // A swing day leaves its holds open overnight and goes back to its board, ended.
-            if (api.player.status === "playing") api.togglePlay();
-            setDayBusy(true);
-            const ending: Promise<unknown> = whenReady(() => endAnyDay(dayListId));
-            ending
-              .then(() => router.push(`/practice/day?id=${dayListId}`))
-              .catch(() => {
-                api.notify("error", PRACTICE_COPY.swingEndError);
-                setDayBusy(false);
-              });
-          }}
-        />
-      )}
       <section className={styles.bottom} aria-label="Marks and levels" data-open={bottomShown ? "true" : "false"}>
         <div className={styles.bottomTabs}>
           <Tabs
@@ -543,34 +357,12 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
       </section>
       <LeftRailPortal>
         <div className={styles.session}>
-          {swing && (
-            <>
-              <div className={styles.sessionSection}>
-                <DayStrip rows={view.strip} current={spec.symbol} opening={opening} disabled={ended} onSwitch={switchTo} />
-              </div>
-              <SwingPlanChecklist
-                items={swingPlanItems({
-                  holdsOpen,
-                  maxTrades: swingContext.plan?.maxTrades ?? null,
-                  maxLossUsd: swingContext.plan?.maxLossUsd ?? null,
-                  week: swingContext.week,
-                })}
-              />
-            </>
-          )}
-          <IndicatorsPanel bars={indicatorBars.bars} interval={indicatorBars.interval} timeframe={indicatorBars.timeframe} server={indicatorBars.bars === bars ? server : undefined} />
-          <section className={tapeOff ? styles.sessionSection : styles.tapeSection} aria-label="Tape" data-testid="tape-panel">
+          <IndicatorsPanel bars={bars} interval={view.interval} timeframe={view.interval} server={server} />
+          <section className={styles.tapeSection} aria-label="Tape" data-testid="tape-panel">
             <h2 className={styles.railTitle}>Tape</h2>
-            {tapeOff ? (
-              <>
-                <p className={styles.muted}>{PRACTICE_COPY.swingTapeOff}</p>
-                <p className={styles.footnote}>{PRACTICE_COPY.swingTapeOffFootnote}</p>
-              </>
-            ) : (
-              <div className={styles.tapeSlot}>
-                <TapePanel view={view} filterId={api.filterId} onFilter={api.setFilter} />
-              </div>
-            )}
+            <div className={styles.tapeSlot}>
+              <TapePanel view={view} filterId={api.filterId} onFilter={api.setFilter} />
+            </div>
           </section>
         </div>
       </LeftRailPortal>

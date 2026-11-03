@@ -13,7 +13,7 @@ function moveFocus(main: HTMLElement, options?: FocusOptions) {
 
 /**
  * Keeps the keyboard inside the page (D-093). Both shells render it once, after `#main-content`; it draws nothing.
- * 1. A route change (path or query: End day, Next day, Start day and New plan submit all push one) moves focus to the new
+ * 1. A route change (path or query: a tab, a thread opened, Start thread and a name opened all push one) moves focus to the new
  *    page's h1, else to `#main-content`, unless the page has already put focus on one of its own controls.
  * 2. When the focused control leaves the page (Buy becomes Next day) and focus drops to the body, focus goes to the same
  *    place, so the keyboard never restarts at the skip link and the chrome. A page that places focus itself wins: this runs a frame later.

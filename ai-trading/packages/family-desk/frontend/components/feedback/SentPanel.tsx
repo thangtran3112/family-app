@@ -8,11 +8,11 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 
 /** What she sees after Send (02s States): the new id, a way to open it, and what was attached to it. */
 export function SentPanel({ report }: { report: FeedbackDetail }) {
-  const dayList = typeof report.context.day_list_id === "number" ? `Day list ${report.context.day_list_id}` : EMPTY_VALUE;
+  const thread = typeof report.context.thread_id === "number" ? `Thread ${report.context.thread_id}` : EMPTY_VALUE;
   const rows: [string, string][] = [
     ["Screen", report.screen],
     ["Route", report.route],
-    ["Practice day", dayList],
+    ["Practice thread", thread],
     ["App version", report.app_version],
     ["Captured", formatEtDayTime(report.captured_at)],
     ["Links · screenshots", `${count(report.links.length, "link", "links")} · ${count(report.attachments.length, "screenshot", "screenshots")}`],
