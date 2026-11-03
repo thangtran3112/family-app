@@ -54,6 +54,15 @@
 #                                    unset -- there is no single stable
 #                                    container name across family-app projects.
 #   RECOVERY_RECEIPT_PATH            Default "/tmp/expense_tax_storage".
+#   RECOVERY_REQUIRED_DATABASES      Optional, space-separated database names that
+#                                    must exist on the destination after the
+#                                    restore, e.g. "ai_trading_market_archive_db"
+#                                    (the bridge's write-once H1 history: if a
+#                                    backup silently lacked it, the drill must
+#                                    say so). Unset = skipped, so a drill of an
+#                                    older backup, or of another app, is not
+#                                    held to it. Reported as
+#                                    required_databases_passed.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -113,6 +122,23 @@ verify_receipt_volume() {
   return 1
 }
 
+# Every name in RECOVERY_REQUIRED_DATABASES must be a database on the destination (the same
+# PGHOST/PGPORT/PGUSER/PGPASSWORD_FILE restore.sh just wrote to). restore.sh already fails on a
+# database it was given; this catches one that never made it into the backup.
+verify_required_databases() {
+  local required="${RECOVERY_REQUIRED_DATABASES:-}" present db rc=0
+  [[ -n "$required" ]] || return 0
+  present=$(PGPASSWORD="$(< "$PGPASSWORD_FILE")" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -v ON_ERROR_STOP=1 -tAc "SELECT datname FROM pg_database WHERE NOT datistemplate") || return 1
+  for db in $required; do
+    if ! grep -qxF -- "$db" <<< "$present"; then
+      log "required database missing after restore: $db"
+      rc=1
+    fi
+  done
+  return "$rc"
+}
+
 main() {
 : "${RESTORE_OBJECT_URI:?RESTORE_OBJECT_URI is required}"
 : "${RESTORE_WORK_DIR:?RESTORE_WORK_DIR is required}"
@@ -163,6 +189,18 @@ else
   log "postgres: FAIL"
 fi
 
+databases_status=0
+if verify_required_databases; then
+  if [[ -n "${RECOVERY_REQUIRED_DATABASES:-}" ]]; then
+    log "required-databases: PASS (${RECOVERY_REQUIRED_DATABASES})"
+  else
+    log "required-databases: skipped (RECOVERY_REQUIRED_DATABASES not supplied)"
+  fi
+else
+  databases_status=1
+  log "required-databases: FAIL"
+fi
+
 receipts_status=0
 if verify_receipt_volume; then
   if [[ -n "${RECOVERY_RECEIPT_CONTAINER:-}" ]]; then
@@ -197,6 +235,7 @@ overall_pass=true
 [[ "$restore_status" == 0 ]] || overall_pass=false
 [[ "$deploy_status" == 0 ]] || overall_pass=false
 [[ "$postgres_status" == 0 ]] || overall_pass=false
+[[ "$databases_status" == 0 ]] || overall_pass=false
 [[ "$receipts_status" == 0 ]] || overall_pass=false
 [[ "$health_status" == 0 ]] || overall_pass=false
 [[ "$smoke_status" == 0 ]] || overall_pass=false
@@ -213,6 +252,7 @@ jq -n \
   --argjson migrations_run "$migrations_run" \
   --argjson deploy_passed "$(report_bool "$deploy_status")" \
   --argjson postgres_passed "$(report_bool "$postgres_status")" \
+  --argjson required_databases_passed "$(report_bool "$databases_status")" \
   --argjson receipt_volume_passed "$(report_bool "$receipts_status")" \
   --argjson health_check_passed "$(report_bool "$health_status")" \
   --argjson smoke_test_passed "$(report_bool "$smoke_status")" \
@@ -228,6 +268,7 @@ jq -n \
     migrations_run: $migrations_run,
     deploy_passed: $deploy_passed,
     postgres_passed: $postgres_passed,
+    required_databases_passed: $required_databases_passed,
     receipt_volume_passed: $receipt_volume_passed,
     health_check_passed: $health_check_passed,
     smoke_test_passed: $smoke_test_passed,

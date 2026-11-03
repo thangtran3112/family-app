@@ -80,4 +80,39 @@ if ( PATH="$stub_dir:$PATH" RECOVERY_RECEIPT_CONTAINER=app-api-1 verify_receipt_
 fi
 ok "verify_receipt_volume fails when the receipt directory is not reachable"
 
+# ---------------------------------------------------------------------------
+# verify_required_databases(): RECOVERY_REQUIRED_DATABASES names databases that must exist on the
+# destination after the restore (the bridge's write-once H1 archive). `psql` is a stub on PATH that
+# lists $FAKE_DATABASES, one per line, and fails when the password file is not what restore.sh used.
+# ---------------------------------------------------------------------------
+cat > "$stub_dir/psql" <<'SH'
+#!/usr/bin/env bash
+[[ "${PGPASSWORD:-}" == "stub-password" ]] || { echo "psql: bad or missing PGPASSWORD" >&2; exit 2; }
+[[ "$*" == *"-h db.test -p 5432 -U postgres"* ]] || { echo "psql: wrong target: $*" >&2; exit 2; }
+printf '%s\n' $FAKE_DATABASES
+SH
+chmod +x "$stub_dir/psql"
+printf 'stub-password' > "$d/pgpass"
+export PGHOST=db.test PGPORT=5432 PGUSER=postgres PGPASSWORD_FILE="$d/pgpass"
+ARCHIVE_DB=ai_trading_market_archive_db
+
+unset RECOVERY_REQUIRED_DATABASES 2>/dev/null || true
+PATH="/nonexistent" verify_required_databases || fail "verify_required_databases must skip (and never shell out) when unset"
+ok "verify_required_databases is skipped when RECOVERY_REQUIRED_DATABASES is unset"
+
+( PATH="$stub_dir:$PATH" FAKE_DATABASES="postgres expense_app $ARCHIVE_DB" RECOVERY_REQUIRED_DATABASES="$ARCHIVE_DB" verify_required_databases ) \
+  || fail "verify_required_databases failed although the archive database is present"
+ok "verify_required_databases passes when the archive database was restored"
+
+if ( PATH="$stub_dir:$PATH" FAKE_DATABASES="postgres expense_app" RECOVERY_REQUIRED_DATABASES="$ARCHIVE_DB" verify_required_databases ) 2>"$d/err"; then
+  fail "verify_required_databases passed although the archive database is missing from the restore"
+fi
+grep -q "required database missing after restore: $ARCHIVE_DB" "$d/err" || fail "the missing database was not named"
+ok "verify_required_databases fails, naming it, when the archive database is missing"
+
+if ( PATH="$stub_dir:$PATH" FAKE_DATABASES="postgres ${ARCHIVE_DB}_old" RECOVERY_REQUIRED_DATABASES="$ARCHIVE_DB" verify_required_databases ) 2>/dev/null; then
+  fail "a database whose name merely starts with the required one must not satisfy it"
+fi
+ok "verify_required_databases matches whole names, not prefixes"
+
 printf '\n%d checks passed (recovery-drill.sh fast)\n' "$PASS"
