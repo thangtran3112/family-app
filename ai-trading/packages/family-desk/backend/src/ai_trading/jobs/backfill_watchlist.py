@@ -1,5 +1,5 @@
-"""Backfill on watchlist join (Lane L3): called synchronously from the API's watchlist-item-
-create endpoint (L4), not on a cadence."""
+"""Backfill on watchlist join (Lane L3): called from the API's watchlist-item-create endpoint (L4) on its own thread
+and session, after the item is committed (a stock's backfill is ~90 s of provider calls, D-244), not on a cadence."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
