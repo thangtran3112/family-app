@@ -28,6 +28,8 @@ import {
   type SourcePrefill,
 } from "@/lib/desk/alertForm";
 import { createAlertStrategy, loadAlertStrategy, resumeAlertStrategy, updateAlertStrategy, validateAlertStrategy } from "@/lib/desk/alerts";
+import { rowsBoxLabels } from "@/lib/desk/conditionLabels";
+import { OPERAND_CATALOG } from "@/lib/desk/operands";
 import { formProblems } from "@/lib/desk/problems";
 import { loadChannels } from "@/lib/desk/settings";
 import { loadFilters } from "@/lib/desk/screener";
@@ -171,7 +173,7 @@ function SetupBody({ editId, spec, prefill, lists, filters, channels }: {
   return (
     <>
       <ErrorSummary
-        problems={formProblems(problems)}
+        problems={formProblems(problems, "error", rowsBoxLabels(form, OPERAND_CATALOG))}
         // Each line jumps to the step it belongs to; a problem outside the four steps has nowhere to jump.
         hrefFor={(problem) => {
           const step = stepOf(problem.path);

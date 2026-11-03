@@ -5,6 +5,7 @@ import type { Problem } from "@/lib/api/schemas";
 import { OperandPicker } from "@/components/conditions/OperandPicker";
 import { PatternFields, type PatternCondition } from "@/components/conditions/PatternFields";
 import { ALERT_OPERATORS, operatorOf, withOperator, type AlertForm, type AlertOperatorId } from "@/lib/desk/alertForm";
+import { rowsBoxLabels } from "@/lib/desk/conditionLabels";
 import { problemsForRow } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG, choiceOf } from "@/lib/desk/operands";
 import { describeCondition } from "@/lib/spec/describe";
@@ -25,6 +26,7 @@ export function ConditionStep({ form, onChange, problems }: {
   onChange: (next: AlertForm) => void;
   problems: readonly Problem[];
 }) {
+  const boxLabels = rowsBoxLabels(form, OPERAND_CATALOG);
   const rowProblems = form.rows.map((_, index) => problemsForRow(problems, form, index));
   const loose = problems.filter((problem) => !rowProblems.some((list) => list.includes(problem)));
   const setRow = (index: number, next: Condition) => onChange({ ...form, rows: form.rows.map((row, position) => (position === index ? next : row)) });
@@ -50,10 +52,10 @@ export function ConditionStep({ form, onChange, problems }: {
               Remove
             </Button>
           </FieldRow>
-          {rowProblems[index]!.map((problem, position) => <FieldError key={position}>{problemLine(problem)}</FieldError>)}
+          {rowProblems[index]!.map((problem, position) => <FieldError key={position}>{problemLine(problem, boxLabels)}</FieldError>)}
         </div>
       ))}
-      {loose.map((problem, index) => <FieldError key={index}>{problemLine(problem)}</FieldError>)}
+      {loose.map((problem, index) => <FieldError key={index}>{problemLine(problem, boxLabels)}</FieldError>)}
       <FieldRow>
         <Button onClick={() => onChange({ ...form, rows: [...form.rows, BLANK_ROW] })}>Add condition</Button>
       </FieldRow>
