@@ -27,6 +27,7 @@ import {
   riskPlanText,
   scanBuiltText,
   screenCellText,
+  screenCellTitle,
   screenCellTone,
   screenColumns,
   screenCountsText,
@@ -106,6 +107,20 @@ test("the risk plan reads as one sentence, its limits count per ET date; no limi
   assert.equal(riskPlanText({ tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade per ET date.");
 });
 
+test("D-236: the earnings dash keeps 'checked, no report' apart from 'not checked' in its tooltip, never in a second spelling", () => {
+  const earnings = screenColumns(screen).find((column) => column.key === "earnings")!;
+  const checkedNone = { ...smci, earnings_state: "none" as const };
+  const notChecked = { ...smci, earnings_state: null };
+  assert.equal(anet.earnings_state, "none");
+  assert.deepEqual([screenCellText(earnings, checkedNone), screenCellText(earnings, notChecked)], ["—", "—"]);
+  assert.equal(screenCellTitle(earnings, checkedNone), "No report before the open");
+  assert.equal(screenCellTitle(earnings, notChecked), undefined);
+  assert.equal(screenCellTitle(earnings, smci), undefined, "a report is a badge, not a dash");
+  // Only the earnings column carries it.
+  assert.equal(screenCellTitle(screenColumns(screen).find((column) => column.key === "prev_close")!, checkedNone), undefined);
+  assert.equal(PRACTICE_COPY.screenEarningsNone.includes("None"), false);
+});
+
 test("D-234: the refusal of a scan names where time moves, ends in a full stop and leaves no separator hanging", () => {
   const text = rescanRefusedText("Abnormal volume waits until 10:00 AM ET · no filter has a bar to read at 9:30 AM ET");
   assert.equal(text, "Abnormal volume waits until 10:00 AM ET · no filter has a bar to read at 9:30 AM ET. Move the clock on the Summary (Play, Next open or Jump), then scan.");
@@ -142,8 +157,8 @@ test("D-018: Prev RVOL and Prev change % are the candidate's own previous-sessio
   assert.deepEqual([screenCellText(byKey.prev_change_pct!, tiny(0.01)), screenCellTone(byKey.prev_change_pct!, tiny(0.01))], ["+0.01%", "up"]);
   assert.equal(screenCellText(byKey.prev_rvol!, anet), "—");
   assert.equal(screenCellText(byKey.earnings!, smci), "Reported before the open");
-  // D-018: a name checked with no report reads "None"; a name that was not checked reads a dash.
-  assert.equal(screenCellText(byKey.earnings!, anet), "None");
+  // D-236: a name checked with no report and a name that was not checked read the same dash; the word "None" is never a cell's text.
+  assert.equal(screenCellText(byKey.earnings!, anet), "—");
   assert.equal(screenCellText(byKey.earnings!, { ...smci, earnings_state: null }), "—");
   assert.equal(screenCellText(byKey.matched_since!, smci), "8:30 AM");
   assert.equal(screenCellText(byKey.volume!, smci), "1.8M");

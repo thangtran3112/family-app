@@ -456,7 +456,7 @@ export const PRACTICE_COPY = {
   screenPeekEarningsFlagged: "Reported before the open",
   screenPeekEarningsNone: "None flagged before the open",
   screenReported: "Reported before the open",
-  screenEarningsNone: "None",
+  screenEarningsNone: "No report before the open",
   threadsLoading: "Loading your practice threads…",
   threadsLoadError: "Couldn't load your practice threads · Try again",
   threadSimulated: "Simulated",

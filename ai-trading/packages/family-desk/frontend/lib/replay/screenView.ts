@@ -128,9 +128,8 @@ const nowLabel = (label: string): string => {
 
 const EARNINGS_FORMAT = "earnings";
 
-/** The earnings cell: a report before the open, "None" for a name whose report history was read and holds none, and nothing (a dash) for a name that was not checked (D-018). */
-const earningsText = (state: Candidate["earnings_state"]): string | null =>
-  state === "reported" ? PRACTICE_COPY.screenReported : state === "none" ? PRACTICE_COPY.screenEarningsNone : null;
+/** The earnings cell: a report before the open, else a dash. A name whose report history was read and holds none is a dash too, one spelling of no value (D-236); `screenCellTitle` keeps that it was checked (D-018). */
+const earningsText = (state: Candidate["earnings_state"]): string | null => (state === "reported" ? PRACTICE_COPY.screenReported : null);
 
 /**
  * The table's columns in the order of P7: scan price, prev close, prev RVOL, prev change %, ATR %, RSI, earnings, then the rest of the
@@ -191,6 +190,10 @@ export function screenCellText(column: ScreenColumn, row: Candidate): string {
   const format = FORMATS.has(column.format) ? (column.format as MetricFormat) : "number";
   return formatMetric(format, typeof value === "number" ? value : null);
 }
+
+/** A cell's tooltip: the earnings dash of a name that was checked says so, so "no report" and "not checked" stay apart without a second spelling (D-236). */
+export const screenCellTitle = (column: Pick<ScreenColumn, "format">, row: Pick<Candidate, "earnings_state">): string | undefined =>
+  column.format === EARNINGS_FORMAT && row.earnings_state === "none" ? PRACTICE_COPY.screenEarningsNone : undefined;
 
 export function screenCellTone(column: ScreenColumn, row: Candidate): Tone | null {
   const value = column.value(row);

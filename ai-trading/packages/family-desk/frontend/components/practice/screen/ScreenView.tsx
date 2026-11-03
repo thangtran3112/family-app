@@ -47,6 +47,7 @@ import {
   riskPlanText,
   scanBuiltText,
   screenCellText,
+  screenCellTitle,
   screenCellTone,
   screenColumns,
   screenCountsText,
@@ -546,7 +547,12 @@ function columnsOf(screen: Screen, live: FollowState | null): DenseColumn<Candid
         // The read at the clock has not landed: the column is here, its value is on its way (D-159).
         if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} />;
         const text = screenCellText(column, row);
-        if (column.format === "earnings") return row.earnings_state === "reported" ? <Badge tone="warn">{text}</Badge> : text;
+        if (column.format === "earnings") {
+          if (row.earnings_state === "reported") return <Badge tone="warn">{text}</Badge>;
+          // One spelling of no value (D-236); a name that was checked and holds no report says so in its tooltip.
+          const title = screenCellTitle(column, row);
+          return title ? <span title={title}>{text}</span> : text;
+        }
         const tone = screenCellTone(column, row);
         return <span className={tone ? styles[tone] : undefined}>{text}</span>;
       },
