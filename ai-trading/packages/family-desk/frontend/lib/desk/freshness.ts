@@ -578,7 +578,6 @@ export const PRACTICE_COPY = {
   threadSharesPlaceholder: "Optional · tickets open at 100",
   threadPlanNoteNone: "None",
   threadPickTitle: "No practice thread selected",
-  threadPickHint: "Pick a thread to open its journal.",
   // Each screen that lists the threads names its own next step (D-183); the rows go to the same place.
   threadPickHintThread: "Pick a thread to open its Summary.",
   threadPickHintReplay: "Pick a thread, then open a name from its day.",
