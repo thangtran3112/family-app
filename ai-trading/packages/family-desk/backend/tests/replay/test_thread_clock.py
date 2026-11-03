@@ -282,6 +282,81 @@ def test_a_resting_order_the_running_clock_reaches_fills_while_she_is_away_and_i
     assert (booked.shares, float(booked.pnl_usd)) == (10, 5.0)  # the balance moved without her
 
 
+def _limit(db_session, user_id, svc, session_id, side: str, price: float, shares: int = 3) -> dict:
+    out = session_mod.place_order(
+        db_session,
+        user_id,
+        session_id,
+        svc,
+        {"side": side, "orderType": "limit", "limitPrice": price, "shares": shares},
+    )
+    db_session.commit()
+    return out
+
+
+@pytest.mark.parametrize(("speed", "gap_s"), [(1, 0), (1, 19), (5, 0), (5, 19)])
+def test_a_limit_through_the_market_fills_at_once_on_a_running_clock_even_when_the_name_trails_it(
+    db_session, user_id, svc, wall, world, speed, gap_s
+) -> None:
+    """The reported "stays Working for ~30 s": a limit the last price already crosses is never left to a later bar or
+    sync. The name trails the running clock by the last poll's age (up to `ATTENTION_S`); the order lifts it quietly and
+    fills at the last print AT THE CLOCK (not at its limit, not at a bar that has not closed)."""
+    _bend(world, "FLAT", "04:00", None, open=52.0, high=52.0, low=52.0, close=52.0)
+    thread_id, row, _ = _started(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    _control(db_session, user_id, svc, thread_id, running=True, speed=speed)
+    wall[0] += timedelta(seconds=5)
+    _sync(db_session, user_id, svc, flat.id)
+    db_session.commit()
+    wall[0] += timedelta(seconds=gap_s)  # the screen's last poll is this old when she clicks Buy
+
+    placed = _limit(db_session, user_id, svc, flat.id, "buy", 52.5)
+
+    assert (placed["order"]["status"], placed["order"]["fill_price"]) == ("filled", 52.0)  # at the print, not at 52.50
+    assert placed["mark"]["kind"] == "long_entry" and placed["open_trade"]["shares"] == 3
+    assert [o["status"] for o in _row(db_session, flat.id).orders] == ["filled"]  # nothing is left Working
+    clock = pd.Timestamp(db_session.get(ReplayDayList, row.id).revealed_through)
+    (entry,) = session_mod._load_marks(db_session, flat.id)
+    assert entry.at == clock and pd.Timestamp(_row(db_session, flat.id).revealed_through) == clock  # lifted, not future
+
+
+def test_a_sell_limit_through_the_market_fills_at_once_and_closes_the_position(
+    db_session, user_id, svc, wall, world
+) -> None:
+    _bend(world, "FLAT", "04:00", None, open=52.0, high=52.0, low=52.0, close=52.0)
+    thread_id, row, _ = _started(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    _mark(db_session, user_id, svc, flat.id, "long_entry", shares=3)
+    _control(db_session, user_id, svc, thread_id, running=True, speed=1)
+    wall[0] += timedelta(seconds=7)
+
+    placed = _limit(db_session, user_id, svc, flat.id, "sell", 51.5)  # below the last print: a broker fills it now
+
+    assert (placed["order"]["status"], placed["order"]["fill_price"]) == ("filled", 52.0)
+    assert placed["mark"]["kind"] == "short_entry" and placed["open_trade"] is None  # the long is sold flat
+
+
+def test_a_limit_through_the_market_does_not_wait_for_the_bar_it_was_placed_in_to_close(
+    db_session, user_id, svc, wall, world
+) -> None:
+    """A resting limit fills at the CLOSE of the first bar that reaches it (`orders.first_fill`), up to a minute after
+    the touch; a crossed one must not inherit that wait: placed 59 s into a minute it is booked 59 s into it."""
+    _bend(world, "FLAT", "04:00", None, open=52.0, high=52.0, low=52.0, close=52.0)
+    thread_id, row, _ = _started(db_session, user_id, svc, "FLAT")
+    flat = plan_mod.start_session(db_session, user_id, row.id, "FLAT", svc)
+    _control(db_session, user_id, svc, thread_id, running=True, speed=1)
+    wall[0] += timedelta(seconds=40)
+    _sync(db_session, user_id, svc, flat.id)
+    db_session.commit()
+    wall[0] += timedelta(seconds=19)  # the clock is 09:30:59: the 09:30 bar closes in one second
+
+    placed = _limit(db_session, user_id, svc, flat.id, "buy", 53.0)
+
+    assert placed["order"]["status"] == "filled"
+    (entry,) = session_mod._load_marks(db_session, flat.id)
+    assert entry.at == _at("09:30") + pd.Timedelta(seconds=59)  # not stamped at 09:31 (lookahead), not left Working
+
+
 # -- the account at the clock -------------------------------------------------------------------------------------
 
 
