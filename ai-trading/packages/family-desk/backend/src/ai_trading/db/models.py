@@ -469,17 +469,17 @@ class ReplaySession(Base):
             "owner_user_id", "symbol", "day", "attempt", name="uq_replay_sessions_owner_user_id_symbol_day_attempt"
         ),
         Index("ix_replay_sessions_owner_user_id_updated_at", "owner_user_id", text("updated_at DESC")),
-        # One active session per symbol and day per user; ended attempts are unconstrained.
+        # One active standalone session per symbol and day per user (Alembic 0022 narrowed it to `thread_id IS NULL`: a
+        # thread's sessions are lanes, below); ended attempts are unconstrained.
         Index(
             "uq_replay_sessions_owner_user_id_symbol_day_active",
             "owner_user_id",
             "symbol",
             "day",
             unique=True,
-            postgresql_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active' AND thread_id IS NULL"),
         ),
-        # Alembic 0021 (ADR-0025): a thread's sessions are lanes, one per name for the thread's life. The index above
-        # narrows to standalone rows once two threads may hold one name.
+        # Alembic 0021 (ADR-0025): a thread's sessions are lanes, one per name for the thread's life.
         Index(
             "uq_replay_sessions_thread_id_symbol_active",
             "thread_id",
