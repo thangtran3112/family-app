@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeskApiError, READ_TIMEOUT_MS } from "../api/client.ts";
 import { backoffMs } from "../desk/backoff.ts";
 import { advanceReplay, cancelOrder, loadReplayFeed, loadReplaySession, placeMark, placeOrder, undoMark, type AdvanceTarget, type OrderBody, type TapeParams } from "../desk/replay.ts";
@@ -155,11 +155,15 @@ export function useReplaySession(id: number | null): ReplaySessionApi {
           if (delta) shown = applyAdvance(shown, delta);
         }
         lastAnswer.current = performance.now();
-        setStalled(false);
-        setSession(loaded);
-        setIntervalState(loaded.spec.interval);
-        setView(shown);
-        setError(null);
+        // The lane's first paint is a transition: React renders the whole workspace in slices of a few milliseconds with the browser free between them, not as one
+        // task of 60 ms or more on a slow machine (D-240). The polls that follow stay plain updates, which the chart's per-bar work (D-217) relies on.
+        startTransition(() => {
+          setStalled(false);
+          setSession(loaded);
+          setIntervalState(loaded.spec.interval);
+          setView(shown);
+          setError(null);
+        });
       } catch (failure) {
         if (controller.signal.aborted) return;
         if (failure instanceof DeskApiError && failure.status === 404) setNotFound(true);
