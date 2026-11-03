@@ -47,12 +47,12 @@ export async function pickMode(page: Page, mode: "Technical" | "Fundamental" | "
   await expect(top.getByRole("button", { name: `Mode: ${mode}` })).toBeVisible();
 }
 
-/** Backtest chrome (ADR-0014): the mode button, the Practice and Trades tabs with one active, and no live-market parts in the top bar. */
-export async function expectBacktestChrome(page: Page, active: "Practice" | "Trades") {
+/** Backtest chrome (ADR-0014): the mode button, the one Practice tab (active; no global Trades tab), and no live-market parts in the top bar. */
+export async function expectBacktestChrome(page: Page, active: "Practice" = "Practice") {
   const top = page.locator(".dk-top");
   const nav = top.getByRole("navigation", { name: "Primary navigation" });
   await expect(top.getByRole("button", { name: "Mode: Backtest" })).toBeVisible();
-  await expect(nav.getByRole("link")).toHaveText(["Practice", "Trades"]);
+  await expect(nav.getByRole("link")).toHaveText(["Practice"]);
   await expect(nav.locator("[aria-current='page']")).toHaveText([active]);
   await expect(top.getByTitle(/market|pre-market|after hours/i), "no market-status pill in Backtest").toHaveCount(0);
   await expect(top.getByRole("button", { name: /^Alerts/ })).toHaveCount(0);

@@ -401,6 +401,10 @@ export function portfolioRows(
   return [...crossed, ...held, ...rows.filter((row) => !row.holding)];
 }
 
+/** The Portfolio tab's rows: only the names held right now (a non-zero net position, long or short). A name she exited is a closed trade, and closed
+ *  trades live in Trades (the journal), never in the Portfolio. */
+export const heldRows = <T extends Pick<PortfolioRow, "holding">>(rows: readonly T[]): T[] => rows.filter((row) => row.holding);
+
 /** The open trades' sum, from the rows. The footer itself reads the server's `day_pnl`; this is for a screen without one. */
 export function portfolioTotal(rows: readonly PortfolioRow[]): { realized: number; open: number; total: number } {
   const realized = rows.reduce((sum, row) => sum + row.realized, 0);
@@ -408,11 +412,10 @@ export function portfolioTotal(rows: readonly PortfolioRow[]): { realized: numbe
   return { realized, open, total: realized + open };
 }
 
-/** The footer, driven by `DayListOut.day_pnl`: "Day P/L +$154.00" with "realized −$46.00 · open +$200.00", "2 open", "as of 10:30 AM ET". */
-export function portfolioFooter(pnl: DayPnl): { total: number; split: string; openOf: string; asOf: string } {
+/** The footer, driven by `DayListOut.day_pnl`: "Open P/L +$200.00", "2 open", "as of 10:30 AM ET". Only the open positions' P/L: what the day realized is in Trades. */
+export function portfolioFooter(pnl: DayPnl): { total: number; openOf: string; asOf: string } {
   return {
-    total: pnl.total_usd,
-    split: practiceText("dayPortfolioSplit", { realized: formatSignedUsd(pnl.realized_usd, { cents: true }), open: formatSignedUsd(pnl.open_usd, { cents: true }) }),
+    total: pnl.open_usd,
     openOf: practiceText("dayPortfolioOpenOf", { open: pnl.open_count }),
     asOf: practiceText("dayPortfolioAsOf", { time: formatEtTimeZone(pnl.as_of) }),
   };
