@@ -1,32 +1,30 @@
-"""`/api/desk/replay/*` (02o §b): the Practice lane. Ten routes (02o), the recorded universe (02o-b2), seven for
-daily-list practice (02o-b v1: the hub plan read, open or advance the next day list, read, star, start the day's
-session, end the day; 02o-b2: the re-scan at the day clock, a background job; plus the relist route), six for
-practice threads (02r: create, list, read with stats and curve, edit the plan, close, the ledger) and five for
-swing practice (02p: the universe preview, the holds, the weeks and one week's review and notes), all behind the
-gateway identity, all scoped to the signed-in user (a non-owner gets 404), all `Cache-Control: no-store`.
+"""`/api/desk/replay/*` (02o §b, rewritten by ADR-0025): the freestyle Practice lane.
 
-The day-list, open-next, thread and session routes serve a swing thread too: they dispatch on the plan's mode, so a day
-thread's responses are exactly what they were and a swing thread's carry the extra (additive) shapes of
-`schemas/swing.py`. The two day-list responses and open-next are a union of the day model and the swing one (`kind` is
-`"swing"` on the swing model).
+A practice thread is a SIMULATED paper account with ONE clock. Its routes: the thread (create with its setup, list,
+read, edit the plan, `PUT setup`, close, delete, the ledger, the fills, the capacity), its clock (`GET`/`POST
+/threads/{id}/clock`: play, pause, speed, a step or a Jump, all forward only), its Portfolio
+(`GET /threads/{id}/portfolio`), its Screen (`GET`/`PATCH /threads/{id}/screen`, `POST .../screen/rescan`) and its
+lanes (`POST /threads/{id}/lanes`); then a lane's own routes (`/sessions/{id}`: read, patch notes and rating,
+`advance` with `sync` only, the feed, marks, orders). There is no day to open, list, skip or end, and no swing thread.
 
-Nothing in these paths reaches a broker or an account: a practice mark is a record on a finished past day
-(`/replay/sessions/{id}/marks`), and a practice order (`/replay/sessions/{id}/orders`: a limit, stop or stop-limit
-entry that waits on the replayed tape) is the one simulated order the Desk has. The route guard in
-`tests/api/test_mvp_routes.py` names exactly those two paths. The server owns the playhead (`replay/session.py`):
-nothing past `revealed_through` leaves it.
+Everything is behind the gateway identity and scoped to the signed-in user (a non-owner gets 404), all `Cache-Control:
+no-store`. Nothing in these paths reaches a broker or an account: a practice mark is a record on a finished past
+(`/replay/sessions/{id}/marks`), and a practice order (`/replay/sessions/{id}/orders`: a limit, stop or stop-limit that
+waits on the replayed tape, GTC or Day) is the one simulated order the Desk has. The route guard in
+`tests/api/test_mvp_routes.py` names exactly those two paths. The server owns the clock (`replay/clock.py`) and every
+lane's playhead (`replay/session.py`): nothing past them leaves it.
 
-Request bodies are the contracts (`ReplaySessionV1`, `PracticeMarkV1`, `PracticeBlockV1`, `PracticeThreadCreateV1`,
-`PracticeThreadPatchV1`), validated by hand so a
-failure is the plain `422 {"detail": {"problems": [...]}}` list. `DESK_REPLAY_STUB=1` swaps the data sources for
-the trimmed R0 fixture (`replay/fixture.py`); the services themselves run unchanged.
+Request bodies are the contracts (`ReplaySessionV1`, `PracticeMarkV1`, `PracticeSetupV2`, `PracticeThreadCreateV1`,
+`PracticeThreadPatchV1`), validated by hand so a failure is the plain `422 {"detail": {"problems": [...]}}` list.
+`DESK_REPLAY_STUB=1` swaps the data sources for the trimmed R0 fixture (`replay/fixture.py`); the services themselves
+run unchanged.
 """
 
 import logging
 import threading
 from collections.abc import Callable
-from datetime import UTC, date, datetime
-from typing import Any, Literal
+from datetime import date
+from typing import Any
 
 from ai_trading_common.errors import ProviderError
 from ai_trading_common.registry import DataSources
@@ -39,39 +37,23 @@ from ai_trading.api.problems import problems_from_validation_error
 from ai_trading.api.schemas.replay import (
     AdvanceIn,
     AdvanceOut,
-    DailyOut,
-    DayListOut,
-    DayListPatch,
-    DayRelistIn,
-    DaySessionIn,
     FeedOut,
     Interval,
+    LaneIn,
     MarkResultOut,
     MarkUndoOut,
-    OpenNextOut,
     OrderCancelOut,
     OrderIn,
     OrderResultOut,
-    ReplayDaysOut,
+    PortfolioOut,
     ReplaySessionOut,
     ReplaySessionPatch,
-    ReplaySessionSummaryOut,
-    SessionStatus,
+    ScreenOut,
+    ScreenPatch,
     UniverseDaysOut,
-)
-from ai_trading.api.schemas.swing import (
-    HoldsOut,
-    SwingDayListOut,
-    SwingOpenNextOut,
-    SwingUniversePreviewIn,
-    SwingUniversePreviewOut,
-    WeekOut,
-    WeekPatch,
-    WeeksOut,
 )
 from ai_trading.api.schemas.threads import (
     ClockIn,
-    SkipDayOut,
     ThreadCapacityOut,
     ThreadClockOut,
     ThreadFillsOut,
@@ -79,17 +61,15 @@ from ai_trading.api.schemas.threads import (
     ThreadOut,
     ThreadSummaryOut,
 )
-from ai_trading.contracts.practice_block import PracticeBlockV1
+from ai_trading.contracts.practice_setup import PracticeSetupV2
 from ai_trading.contracts.practice_thread import PracticeThreadCreateV1, PracticeThreadPatchV1
-from ai_trading.contracts.replay_session import PracticeMarkV1, ReplaySessionV1
+from ai_trading.contracts.replay_session import PracticeMarkV1
 from ai_trading.db.engine import session_scope
 from ai_trading.replay import clock as clock_mod
-from ai_trading.replay import days as days_mod
-from ai_trading.replay import fixture, swing_weeks
+from ai_trading.replay import fixture
 from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import session as svc_mod
-from ai_trading.replay import swing as swing_mod
 from ai_trading.replay import threads as threads_mod
 from ai_trading.replay import universe_days as universe_mod
 from ai_trading.replay.data import History, ReplayDayError
@@ -168,22 +148,9 @@ def _call[T](fn, *args, **kwargs) -> T:
         raise HTTPException(status_code=503, detail="Market data is unavailable right now · try again") from None
 
 
-def _with_thread(db: Session, out: dict[str, Any], thread_id: int | None, day_list_id: int | None) -> dict[str, Any]:
-    """Add the thread header strip (the SIMULATED balance and the day's realized P/L) to a response dict."""
-    return {**out, "thread": threads_mod.brief(db, thread_id, day_list_id)}
-
-
-# -- notable days and the session list -----------------------------------------------------------------------
-
-
-@router.get("/days", response_model=ReplayDaysOut)
-def list_days(
-    symbol: str | None = Query(default=None, max_length=10, pattern=r"^[A-Z][A-Z0-9.]*$"),
-    limit: int = Query(default=20, ge=1, le=100),
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> dict[str, Any]:
-    return days_mod.list_days(db, user.id, symbol=symbol, limit=limit, now=datetime.now(UTC))
+def _with_thread(db: Session, out: dict[str, Any], thread_id: int | None) -> dict[str, Any]:
+    """Add the thread header strip (the SIMULATED balance) to a response dict."""
+    return {**out, "thread": threads_mod.brief(db, thread_id)}
 
 
 @router.get("/universe-days", response_model=UniverseDaysOut)
@@ -198,43 +165,7 @@ def get_universe_days(
     return universe_mod.read(db, day, services.now())
 
 
-@router.get("/sessions", response_model=list[ReplaySessionSummaryOut])
-def list_sessions(
-    status: SessionStatus | None = None,
-    limit: int = Query(default=20, ge=1, le=100),
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> list[dict[str, Any]]:
-    return svc_mod.list_sessions(db, user.id, status=status, limit=limit)
-
-
 # -- one session --------------------------------------------------------------------------------------------
-
-
-@router.post(
-    "/sessions",
-    response_model=ReplaySessionOut,
-    openapi_extra={
-        "requestBody": {
-            "required": True,
-            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReplaySessionV1"}}},
-        }
-    },
-)
-def create_session(
-    raw: Any = Depends(_json_body),
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Start a practice session from a `ReplaySessionV1`: validates the day and its data, snapshots the armed
-    strategy versions, and computes the would-fire signals (held back until the playhead reaches them). One
-    active session per symbol and day: a second POST returns the existing one; after `end` it is attempt n + 1."""
-    spec = _validated(ReplaySessionV1, raw)
-    row = _call(svc_mod.create, db, user.id, spec, services)
-    return _with_thread(
-        db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
-    )
 
 
 @router.get("/sessions/{session_id}", response_model=ReplaySessionOut)
@@ -245,10 +176,8 @@ def get_session_state(
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
     row = _call(svc_mod.get_row, db, user.id, session_id)
-    _call(svc_mod.settle_day, db, services, row.day_list_id)  # a running thread clock has moved (ADR-0018)
-    return _with_thread(
-        db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
-    )
+    _call(svc_mod.settle_thread, db, services, row.thread_id)  # a running thread clock has moved (ADR-0018)
+    return _with_thread(db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id)
 
 
 @router.patch("/sessions/{session_id}", response_model=ReplaySessionOut)
@@ -270,7 +199,7 @@ def patch_session(
         rating=body.rating,
         fields=set(body.model_fields_set),
     )
-    return _with_thread(db, out, out["thread_id"], out["day_list_id"])
+    return _with_thread(db, out, out["thread_id"])
 
 
 # -- the playhead -------------------------------------------------------------------------------------------
@@ -280,12 +209,13 @@ def patch_session(
 def advance_session(
     session_id: int,
     body: AdvanceIn,
-    request: Request,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    frame = _call(
+    """Follow the thread's clock (`sync`): the only thing a name may do to time. `to` and `step` are a 422 (a name does
+    not move the thread's time; the thread's clock does, forward only)."""
+    return _call(
         svc_mod.advance,
         db,
         user.id,
@@ -300,11 +230,6 @@ def advance_session(
         min_notional=body.min_notional,
         max_prints=body.max_prints,
     )
-    if frame.get(
-        "thread_clock"
-    ):  # a running clock may have reached the next session: hand over now, not when the Summary is next opened
-        _roll_closed_day(db, request, services, lambda: clock_mod.roll_of_session(db, user.id, session_id, services))
-    return frame
 
 
 @router.get("/sessions/{session_id}/feed", response_model=FeedOut)
@@ -322,9 +247,9 @@ def session_feed(
         svc_mod.feed, db, user.id, session_id, services, interval=interval, min_size=min_size, min_notional=min_notional
     )
     if interval is not None and out["market"] is not None:
-        # A day-thread chart switched interval: this name's series was built in the request; prepare the rest of the
-        # day's names at it in the background, so the next name she opens is a slice too.
-        _warm_day(db, request, services, svc_mod.get_row(db, user.id, session_id).day_list_id, interval)
+        # A chart switched interval: this name's series was built in the request; prepare the rest of the Screen's names
+        # at it in the background, so the next name she opens is a slice too.
+        _warm_screen(db, request, services, svc_mod.get_row(db, user.id, session_id).day_list_id, interval)
     return out
 
 
@@ -352,7 +277,7 @@ def place_mark(
     mark = _validated(PracticeMarkV1, raw).root.model_dump(mode="json", by_alias=True, exclude_none=True)
     out = _call(svc_mod.place_mark, db, user.id, session_id, services, mark)
     row = svc_mod.get_row(db, user.id, session_id)
-    return _with_thread(db, out, row.thread_id, row.day_list_id)
+    return _with_thread(db, out, row.thread_id)
 
 
 @router.delete("/sessions/{session_id}/marks/{mark_id}", response_model=MarkUndoOut)
@@ -366,7 +291,7 @@ def undo_mark(
     """Undo the last mark, only while the playhead has not moved since it was placed (else 409)."""
     out = _call(svc_mod.undo_mark, db, user.id, session_id, mark_id, services)
     row = svc_mod.get_row(db, user.id, session_id)
-    return _with_thread(db, out, row.thread_id, row.day_list_id)
+    return _with_thread(db, out, row.thread_id)
 
 
 @router.post("/sessions/{session_id}/orders", response_model=OrderResultOut)
@@ -377,12 +302,13 @@ def place_order(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Place a limit, stop or stop-limit practice entry. It fills only on a later one-minute bar of the replayed tape
-    (or at once at the last print when a limit already accepts it); a market entry is a mark."""
+    """Place a limit, stop or stop-limit practice order, GTC (default) or Day (`timeInForce`). It fills when the
+    thread's clock crosses a later one-minute bar that proves it, however many days that takes (or at once at the last
+    print when a limit already accepts it); a market entry is a mark. A closing order is derived reduce-only."""
     body = _validated(OrderIn, raw, rule_path="orderType").model_dump(exclude_none=True)
     out = _call(svc_mod.place_order, db, user.id, session_id, services, body)
     row = svc_mod.get_row(db, user.id, session_id)
-    return _with_thread(db, out, row.thread_id, row.day_list_id)
+    return _with_thread(db, out, row.thread_id)
 
 
 @router.delete("/sessions/{session_id}/orders/{order_id}", response_model=OrderCancelOut)
@@ -395,18 +321,6 @@ def cancel_order(
 ) -> dict[str, Any]:
     """Cancel a working practice order (409 once it has filled or been cancelled)."""
     return _call(svc_mod.cancel_order, db, user.id, session_id, order_id, services)
-
-
-@router.post("/sessions/{session_id}/end", response_model=ReplaySessionOut)
-def end_session(
-    session_id: int,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Auto-exit an open trade at the last price, reveal the whole window, and store the final journal. Idempotent."""
-    out = _call(svc_mod.end, db, user.id, session_id, services)
-    return _with_thread(db, out, out["thread_id"], out["day_list_id"])
 
 
 # -- daily-list practice (02o-b v1) ---------------------------------------------------------------------------
@@ -425,37 +339,55 @@ def _detach(task: Callable[..., None], *args: Any) -> None:
     threading.Thread(target=task, args=args, name=task.__name__, daemon=True).start()
 
 
-def _roll_closed_day(db: Session, request: Request, services: Services, roll) -> None:
-    """Run `roll` (the day hands over when the clock reaches the next trading day's start) and, when the next day's data
-    still needs preparing, start that prep the way every open does."""
-    opened = _call(roll)
-    if opened is not None and opened.restart_prep:
-        db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
-        _detach(_prep_in_background, request.app, services, opened.plan.id)
-    if opened is not None and opened.day_list is not None:  # a day opened: prepare its names (`plan.warm_day`)
-        _warm_day(db, request, services, opened.day_list.id, None)
-
-
-def _prep_in_background(app: Any, services: Services, plan_id: int) -> None:
-    """Fetch the plan's bars once, on its own session, after the response. A process without a session factory
-    (a test) skips it: the tests call `plan.run_prep` directly."""
-    factory = getattr(app.state, "session_factory", None)
-    if factory is None:
-        return
-    try:
-        with session_scope(factory) as db:
-            plan_mod.run_prep(db, services, plan_id)
-    except Exception:  # noqa: BLE001 -- a dead prep is picked up again by the next open (it goes stale)
-        log.exception("daily-list prep failed for plan %s", plan_id)
-
-
 _WARMING: set[tuple[int, str]] = set()  # (day list, interval) pairs being warmed in this process right now
 
 
+_PREPARING: set[tuple[int, str]] = set()  # (user, symbol) pairs a pool prep in this process is fetching right now
+_PREPARING_LOCK = threading.Lock()
+
+
+@router.get("/threads/{thread_id}/screen", response_model=ScreenOut)
+def get_screen(
+    thread_id: int,
+    peek: str | None = Query(default=None, max_length=10, pattern=r"^[A-Z][A-Z0-9.]*$"),
+    live: bool = Query(default=False),
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """The thread's Screen (ADR-0025): the latest scan of her filters at the thread's time, her stars, the names she
+    holds, and (with `peek`) the pre-open chart data of one candidate. With `live`, each candidate also carries `live`:
+    the name priced at the thread's time (nothing later); the scan's values stay in the candidate itself."""
+    return _call(plan_mod.screen_out, db, user.id, thread_id, services, peek=peek, live=live)
+
+
+@router.patch("/threads/{thread_id}/screen", response_model=ScreenOut)
+def patch_screen(
+    thread_id: int,
+    body: ScreenPatch,
+    user: AuthedUser = Depends(get_current_user),
+    db: Session = Depends(get_session),
+    services: Services = Depends(get_services),
+) -> dict[str, Any]:
+    """Stars (at most 20 names from the Screen, each stamped with the thread's time), notes and the self-rating."""
+    _call(
+        plan_mod.patch_screen,
+        db,
+        user.id,
+        thread_id,
+        services,
+        watch=body.watch,
+        notes=body.notes,
+        rating=body.rating,
+        fields=set(body.model_fields_set),
+    )
+    return _call(plan_mod.screen_out, db, user.id, thread_id, services)
+
+
 def _warm_in_background(app: Any, services: Services, day_list_id: int, interval: str | None) -> None:
-    """Prepare a day's names at a chart interval on their own session, after the response (`plan.warm_day`): the decode
-    work moves off the first read of the day. One warm of a (day list, interval) at a time in this process; a process
-    without a session factory (a test) skips it, and a failed warm costs nothing (the first read builds the series)."""
+    """Prepare the Screen's names at a chart interval on their own session, after the response (`plan.warm`): the decode
+    work moves off the first read. One warm of a (Screen, interval) at a time in this process; a process without a
+    session factory (a test) skips it, and a failed warm costs nothing (the first read builds the series)."""
     factory = getattr(app.state, "session_factory", None)
     key = (day_list_id, interval or "")
     if factory is None:
@@ -466,210 +398,21 @@ def _warm_in_background(app: Any, services: Services, day_list_id: int, interval
         _WARMING.add(key)
     try:
         with session_scope(factory) as db:
-            plan_mod.warm_day(db, services, day_list_id, interval)
+            plan_mod.warm(db, services, day_list_id, interval)
     except Exception:  # noqa: BLE001 -- the first read of an unprepared name builds it
-        log.exception("day warm failed for day list %s", day_list_id)
+        log.exception("screen warm failed for %s", day_list_id)
     finally:
         with _PREPARING_LOCK:
             _WARMING.discard(key)
 
 
-def _warm_day(db: Session, request: Request, services: Services, day_list_id: int | None, interval: str | None) -> None:
-    """Start a warm of a day's names after this request: the day list must be committed first (see `open_next`)."""
+def _warm_screen(
+    db: Session, request: Request, services: Services, day_list_id: int | None, interval: str | None
+) -> None:
+    """Start a warm of the Screen's names after this request: the rows must be committed first."""
     if day_list_id is not None:
         db.commit()
         _detach(_warm_in_background, request.app, services, day_list_id, interval)
-
-
-_PREPARING: set[tuple[int, str]] = set()  # (user, symbol) pairs a pool prep in this process is fetching right now
-_PREPARING_LOCK = threading.Lock()
-
-
-def _pool_prep_in_background(
-    app: Any, services: Services, user_id: int, req: swing_mod.PreviewRequest, symbols: list[str]
-) -> None:
-    """Fetch the pool symbols the preview could not afford, on their own session after the response. The setup form
-    polls the preview while it says "preparing", so a pair already being fetched here is skipped (ponytail: per
-    process; a second worker would fetch the same symbol twice, which the write-once blob cache makes harmless)."""
-    factory = getattr(app.state, "session_factory", None)
-    if factory is None:
-        return
-    with _PREPARING_LOCK:
-        mine = [symbol for symbol in symbols if (user_id, symbol) not in _PREPARING]
-        _PREPARING.update((user_id, symbol) for symbol in mine)
-    try:
-        if mine:
-            with session_scope(factory) as db:
-                swing_mod.pool_prep(db, services, user_id, req, mine)
-    except Exception:  # noqa: BLE001 -- the next preview call finds what is still missing and asks again
-        log.exception("swing pool prep failed for user %s", user_id)
-    finally:
-        with _PREPARING_LOCK:
-            _PREPARING.difference_update((user_id, symbol) for symbol in mine)
-
-
-@router.get("/daily", response_model=DailyOut)
-def get_daily(
-    request: Request,
-    thread_id: int | None = Query(default=None, alias="threadId", ge=1),
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """The daily-list card: a plan and where its cursor is, and its thread with its SIMULATED balance and stats; either
-    is `null` before she has one. `threadId` names the thread whose plan to read (404 when it is not hers); without it
-    the answer is her most recently started active day thread."""
-    # This is the poll of a thread that is still preparing its data. A prep that stopped reporting (its process died)
-    # is started again from here, once, so a thread is never stranded on "Preparing" (`plan.restart_stale_prep`).
-    stale = _call(plan_mod.restart_stale_prep, db, user.id, services.now(), thread_id)
-    if stale is not None:
-        db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
-        _detach(_prep_in_background, request.app, services, stale.id)
-    return _call(plan_mod.hub, db, user.id, thread_id)
-
-
-@router.post(
-    "/daily/next",
-    response_model=OpenNextOut | SwingOpenNextOut,
-    openapi_extra={
-        "requestBody": {
-            "required": True,
-            "content": {
-                "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "plan": {"$ref": "#/components/schemas/PracticeBlockV1"},
-                            "threadId": {"type": "integer", "minimum": 1},
-                        },
-                        "additionalProperties": False,
-                    }
-                }
-            },
-        }
-    },
-)
-def open_next(
-    request: Request,
-    raw: Any = Depends(_json_body),
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Open the next day's list, or continue the current one. A body with a `plan` (a `PracticeBlockV1`) first saves
-    that plan, replacing hers, and starts preparing its data in the background. While the data is not ready the
-    answer carries no `day_list_id`; poll `GET /replay/daily`. Days open in order, one at a time.
-
-    A new plan binds to a practice thread: `threadId`, else her active day thread (a closed or missing one is a 409
-    in plain words). The thread, not the plan, carries the risk plan (D-007): `setup.plan` and `setup.shares` from an
-    old client are ignored.
-
-    `{"threadId": n}` alone continues that thread: a SWING thread's calendar (it has no plan to send: its universe is
-    frozen with the thread; the answer is `kind: "swing"`), or a day thread's current plan. `{}` continues her most
-    recently started day thread."""
-    if not isinstance(raw, dict) or set(raw) - {"plan", "threadId"}:
-        raise _problem('Send {} to continue, or {"plan": ..., "threadId": ...} to start a plan', "")
-    started = raw.get("plan") is not None
-    thread_id = raw.get("threadId")
-    if thread_id is not None and (isinstance(thread_id, bool) or not isinstance(thread_id, int)):
-        raise _problem("Send threadId, a whole number", "threadId")
-    swing_thread_id = None
-    if thread_id is not None and not started:
-        swing_thread_id = thread_id if _call(threads_mod.get_thread, db, user.id, thread_id).mode == "swing" else None
-    if started:
-        block = _validated(PracticeBlockV1, plan_mod.without_legacy_plan_fields(raw["plan"]))
-        thread = _call(threads_mod.resolve_for_plan, db, user.id, thread_id)
-        _call(plan_mod.create_plan, db, user.id, block, services, thread)
-        thread_id = thread.id
-    opened = _call(plan_mod.open_next, db, user.id, services, thread_id)
-    if started or opened.restart_prep:
-        # The task runs on its own session while this request's one is still open, so the plan must be committed
-        # before the task can see it.
-        db.commit()
-        _detach(_prep_in_background, request.app, services, opened.plan.id)
-    if opened.day_list is not None:  # the day is open: prepare its names (`plan.warm_day`)
-        _warm_day(db, request, services, opened.day_list.id, None)
-    out = {
-        "plan": plan_mod.plan_out(db, opened.plan),
-        "day_list_id": None if opened.day_list is None else opened.day_list.id,
-    }
-    return out if swing_thread_id is None else {"kind": "swing", **out}
-
-
-@router.get("/day-lists/{day_list_id}", response_model=DayListOut | SwingDayListOut)
-def get_day_list(
-    day_list_id: int,
-    peek: str | None = Query(default=None, max_length=10, pattern=r"^[A-Z][A-Z0-9.]*$"),
-    live: bool = Query(default=False),
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """One practice day: the frozen candidate list as of `data_through`, her stars, the day clock, the day's
-    session, and (with `peek`) the pre-open chart data of one candidate. The review and the day journal are null
-    until the day has ended. A swing thread's day is the board as of the prior close (`SwingDayListOut`).
-    With `live`, each candidate also carries `live`: the name priced at the day clock (its price, move from the prior
-    close and metric block, nothing later than the clock); the list-time values stay in the candidate itself."""
-    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services, peek=peek, live=live)
-
-
-@router.patch("/day-lists/{day_list_id}", response_model=DayListOut | SwingDayListOut)
-def patch_day_list(
-    day_list_id: int,
-    body: DayListPatch,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Stars (at most 20 names from the list, each stamped with the day clock), notes and the self-rating."""
-    _call(
-        plan_mod.patch_day_list,
-        db,
-        user.id,
-        day_list_id,
-        services,
-        watch=body.watch,
-        notes=body.notes,
-        rating=body.rating,
-        fields=set(body.model_fields_set),
-    )
-    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
-
-
-@router.post("/day-lists/{day_list_id}/relist", response_model=DayListOut)
-def relist_day_list(
-    day_list_id: int,
-    body: DayRelistIn,
-    request: Request,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Re-list a day she has not started at a later list time: moves the open plan's list time (the practice window
-    follows when it would start before the list) and rebuilds this day's list on today's Desk universe. The plan's
-    list-time rules answer 422; a day under way or on a replaced plan is a 409. When the universe grew and its bars
-    are not ready the list stays as it was while the data prepares: re-list again then."""
-    opened = _call(plan_mod.relist, db, user.id, day_list_id, body.listAt, services)
-    if opened.restart_prep:
-        db.commit()  # see `open_next`: the task runs on its own session
-        _detach(_prep_in_background, request.app, services, opened.plan.id)
-    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
-
-
-@router.post("/day-lists/{day_list_id}/sessions", response_model=ReplaySessionOut)
-def start_day_session(
-    day_list_id: int,
-    body: DaySessionIn,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Open one name from the list and practise it, built from the plan's setup, starting at the day clock. Any list
-    name opens, and a position open on another name never blocks the switch."""
-    row = _call(plan_mod.start_session, db, user.id, day_list_id, body.symbol, services)
-    return _with_thread(
-        db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id, row.day_list_id
-    )
 
 
 def _rescan_in_background(app: Any, services: Services, day_list_id: int, run: str) -> None:
@@ -683,41 +426,25 @@ def _rescan_in_background(app: Any, services: Services, day_list_id: int, run: s
         plan_mod.run_rescan(db, services, day_list_id, run)
 
 
-@router.post("/day-lists/{day_list_id}/rescan", response_model=DayListOut)
-def rescan_day(
-    day_list_id: int,
+@router.post("/threads/{thread_id}/screen/rescan", response_model=ScreenOut)
+def rescan_screen(
+    thread_id: int,
     request: Request,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Start a re-scan of the day's filters at the day clock (02o-b2) and answer at once: the day list with
-    `rescan_job` `running` and its `done` of `total` symbols read. Poll `GET /day-lists/{id}` while it runs. When
-    `state` is `done` the scan has REPOPULATED the list (its names, columns and counts are the scan's) and `rescan`
-    labels it with the clock it ran at. Stars, the day's sessions and the review stay; a name she opened or starred
-    that the scan no longer matches stays on the list as `held_over`. A scan already running is joined, not doubled;
-    a second scan at the same clock starts nothing. A 409 before the first name is practised (no clock yet) and
-    after the day ends."""
-    run = _call(plan_mod.start_rescan, db, user.id, day_list_id, services)
+    """Start a re-scan of the Screen's filters at the thread's time (02o-b2) and answer at once: the Screen with
+    `rescan_job` `running` and its `done` of `total` symbols read. Poll `GET /threads/{id}/screen` while it runs. When
+    `state` is `done` the scan has REPOPULATED the Screen (its names, columns and counts are the scan's) and `rescan`
+    labels it with the time it ran at. Stars and lanes stay; a name she holds or starred that the scan no longer matches
+    stays on the Screen as `held_over`. A scan already running is joined, not doubled; a second scan at the same time
+    starts nothing. A 409 on a closed thread and for a filter that cannot have bars at this time yet."""
+    screen_id, run = _call(plan_mod.start_rescan, db, user.id, thread_id, services)
     if run is not None:
-        db.commit()  # see `open_next`: the task runs on its own session
-        _detach(_rescan_in_background, request.app, services, day_list_id, run)
-    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
-
-
-@router.post("/day-lists/{day_list_id}/end", response_model=DayListOut | SwingDayListOut)
-def end_day(
-    day_list_id: int,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """End a swing day: the open holds are marked at the close, the window unseals, and the list review (every
-    candidate's move from its list price) is stored and served. Idempotent. A day-trade day has no manual end (409 while
-    it is open): it ends when the thread clock reaches the next open, by itself, by a skip or by a jump
-    (`POST /threads/{id}/clock`, `POST /threads/{id}/skip-day`), and the review is stored then."""
-    _call(plan_mod.end_day_by_hand, db, user.id, day_list_id, services)
-    return _call(plan_mod.day_list_out, db, user.id, day_list_id, services)
+        db.commit()  # the task runs on its own session: the claim must be visible to it
+        _detach(_rescan_in_background, request.app, services, screen_id, run)
+    return _call(plan_mod.screen_out, db, user.id, thread_id, services)
 
 
 # -- practice threads (02r) -------------------------------------------------------------------------------------
@@ -735,7 +462,14 @@ def _swing_closed() -> None:
     openapi_extra={
         "requestBody": {
             "required": True,
-            "content": {"application/json": {"schema": {"type": "object", "description": "A PracticeThreadCreateV1"}}},
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "description": "A PracticeThreadCreateV1, plus an optional `setup` (a PracticeSetupV2)",
+                    }
+                }
+            },
         }
     },
 )
@@ -746,49 +480,22 @@ def create_thread(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-    risk plan, and the mode (`day`; `swing` is closed: a 409 on `mode`, ADR-0025). Day threads share ten slots across
-    all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each thread has its own plan and
-    balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when she already has it)."""
-    swing = isinstance(raw, dict) and raw.get("mode") == "swing"
-    if swing:
+    """Start a freestyle practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000)
+    and the risk plan. A `setup` key beside them (a `PracticeSetupV2`: the start instant, her filters, the chart setup)
+    also starts the thread's clock, paused at `startAt`, and its Screen. `mode: swing` is closed (409, ADR-0025).
+    Threads share ten slots across all users (a full house is a 409 on `mode`; closing a thread frees a slot). Each
+    thread has its own balance and its own `name` (the server gives it one: "Freestyle · Oct 15", "(2)" when she
+    already has it)."""
+    if isinstance(raw, dict) and raw.get("mode") == "swing":
         _swing_closed()
-    spec = _validated(PracticeThreadCreateV1, raw, "swing" if swing else "plan")
-    if not swing:
-        row = _call(threads_mod.create_thread, db, user.id, spec, services.now())
-        return threads_mod.detail(db, row)
-    row, plan = _call(swing_mod.create_thread, db, user.id, spec, services)
-    db.commit()  # the prep runs on its own session: the plan must be visible to it
-    _detach(_prep_in_background, request.app, services, plan.id)
+    setup = raw.get("setup") if isinstance(raw, dict) else None
+    body = {key: value for key, value in raw.items() if key != "setup"} if isinstance(raw, dict) else raw
+    spec = _validated(PracticeThreadCreateV1, body, "plan")
+    setup_spec = None if setup is None else _validated(PracticeSetupV2, setup, "setup")
+    row = _call(threads_mod.create_thread, db, user.id, spec, services.now())
+    if setup_spec is not None:
+        _call(plan_mod.create_plan, db, user.id, setup_spec, services, row)
     return threads_mod.detail(db, row)
-
-
-@router.post("/threads/swing-universe", response_model=SwingUniversePreviewOut)
-def preview_swing_universe(
-    request: Request,
-    body: SwingUniversePreviewIn,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """The universe table of a swing thread's setup form (02p c1), every figure as of the close before the first day.
-    Nothing is saved but the bar cache. Her own picks are fetched first; what the request's time budget could not reach
-    is `pending` and fetched in the background, so the form calls this again while `state` is `preparing`."""
-    req = swing_mod.PreviewRequest(
-        first_day=body.first_day,
-        sessions=body.sessions,
-        watchlist_ids=tuple(body.watchlist_ids),
-        filter_ids=tuple(body.filter_ids),
-        fill=body.fill,
-        add=tuple(body.add),
-        remove=tuple(body.remove),
-        target=body.target,
-    )
-    result = _call(swing_mod.preview, db, user.id, req, services)
-    db.commit()  # the preview cached bars through this session; the background prep and the next call read them
-    if result.pending:
-        _detach(_pool_prep_in_background, request.app, services, user.id, req, result.pending)
-    return {**result.body, "label": result.body["survivorship"], "pending_symbols": len(result.pending)}
 
 
 @router.get("/threads", response_model=list[ThreadSummaryOut])
@@ -847,10 +554,9 @@ def close_thread(
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Close the thread: its daily plan is archived and its plan and balance freeze. A day thread's open practice day
-    ends with it (its open positions book at the clock and its review is stored: there is no manual End day); a swing
-    thread's open day is a 409 (End Day first), and its open holds exit at the last ended close and its open week is
-    frozen with its review. Idempotent."""
+    """Close the thread (ADR-0025 P1): its working orders are cancelled ("Thread closed"), its plan is archived and its
+    clock freezes where it is. Every position stays open, valued at the frozen time; nothing is sold or booked.
+    Idempotent."""
     row = _call(threads_mod.close_thread, db, user.id, thread_id, services.now(), services)
     return threads_mod.detail(db, row)
 
@@ -859,9 +565,8 @@ def close_thread(
 def delete_thread(
     thread_id: int, user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)
 ) -> Response:
-    """Delete the thread and everything under it: its ledger, plans, day lists, sessions and (swing) holds and weeks. An
-    open practice day is a 409 (close the thread first: that ends the day). It cannot be undone; a thread that is not
-    hers is a 404."""
+    """Delete the thread and everything under it: its ledger, plans, Screen and lanes. It cannot be undone; a thread
+    that is not hers is a 404."""
     _call(threads_mod.delete_thread, db, user.id, thread_id)
     return Response(status_code=204)
 
@@ -884,29 +589,24 @@ def get_thread_fills(
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    """The day thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how
+    """The thread's executions (ADR-0018), newest first: every Buy and Sell with its shares, price and time, and how
     many of the shares closed the name's position. The server keeps the book; the screen never rebuilds a trade from
-    memory. A swing thread keeps its positions as holds (`/holds`): 404 here."""
+    memory."""
     thread = _call(threads_mod.get_thread, db, user.id, thread_id)
-    if thread.mode != "day":
-        raise HTTPException(status_code=404, detail="day threads only")
     return ledger_mod.fills_page(db, thread.id, limit=limit)
 
 
 @router.get("/threads/{thread_id}/clock", response_model=ThreadClockOut)
 def get_thread_clock(
     thread_id: int,
-    request: Request,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """The day thread's clock now (ADR-0018): its state, speed, the simulated time, the day's tape, when the next day
-    opens (the exchange's open, `next_start`), the latest time the clock can be jumped to (`jump_limit`), and the
-    simulated account at that time (balance, open P/L, equity). A running clock is brought to now first, so this is
-    the answer whether or not anyone was looking in between. A clock that reached the open that ends the day hands
-    it over first (the answer is then the next day's, or `no_day` after the plan's last). Poll it; it is idempotent."""
-    _roll_closed_day(db, request, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
+    """The thread's clock now (ADR-0025): its state, speed, the simulated time, when the first regular open after it
+    is (`next_open`), the latest time it can be jumped to (`horizon`) and the simulated account at that time (balance,
+    open P/L, equity). A running clock is brought to now first, so this is the answer whether or not anyone was
+    looking in between. Nothing happens at a close or an open. Poll it; it is idempotent."""
     return _call(clock_mod.read, db, user.id, thread_id, services)
 
 
@@ -914,16 +614,16 @@ def get_thread_clock(
 def control_thread_clock(
     thread_id: int,
     body: ClockIn,
-    request: Request,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:
-    `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (422 on a `to`
-    already past; a `to` equal to the clock changes nothing) and no later than `jump_limit` (422 on `to` beyond it).
-    409 without an open day. Time then runs on the server until she pauses it, through the close and the night; the
-    day hands over at the next trading day's open, and a jump across several opens hands over day by day."""
+    """Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar, or jump it:
+    `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time (Next open is a Jump to
+    `next_open`).
+    Forward only (422 on a `to` already past; a `to` equal to the clock changes nothing) and no later than `horizon`
+    (422). Every position and working order is kept: orders fill as the clock crosses them, splits restate holdings, and
+    each position is valued at the new time. A running clock stops at the horizon with `pause`."""
     _call(
         clock_mod.control,
         db,
@@ -935,101 +635,63 @@ def control_thread_clock(
         to=body.to,
         step=body.step,
     )
-    _roll_closed_day(db, request, services, lambda: clock_mod.roll(db, user.id, thread_id, services))
     return _call(clock_mod.read, db, user.id, thread_id, services)
-
-
-@router.post("/threads/{thread_id}/skip-day", response_model=SkipDayOut)
-def skip_thread_day(
-    thread_id: int,
-    request: Request,
-    user: AuthedUser = Depends(get_current_user),
-    db: Session = Depends(get_session),
-    services: Services = Depends(get_services),
-) -> dict[str, Any]:
-    """Skip to the next day: the clock jumps to the next trading day's market open, 9:30 ET and never the plan's "Start
-    at" time (over the night and the weekend), the day ends (every open position flattens at its tape's end and its
-    review is stored) and the next day's list opens with the clock there. On the plan's last day the clock jumps to
-    the open after it, the day ends and no day opens (`next_day_list_id` null). The next list may also wait on its
-    data (null): poll the hub then."""
-    ended, opened = _call(clock_mod.skip_day, db, user.id, thread_id, services)
-    if opened.restart_prep:
-        db.commit()  # the task runs on its own session: the claim must be visible to it (see `open_next`)
-        _detach(_prep_in_background, request.app, services, opened.plan.id)
-    if opened.day_list is not None:
-        _warm_day(db, request, services, opened.day_list.id, None)
-    return {
-        "ended_day_list_id": ended.id,
-        "next_day_list_id": None if opened.day_list is None else opened.day_list.id,
-        "clock": _call(clock_mod.read, db, user.id, thread_id, services),
-    }
 
 
 # -- swing threads (02p): holds and weeks -----------------------------------------------------------------------
 
 
-def _swing_thread(db: Session, user_id: int, thread_id: int):
-    """The thread when it is hers and a swing thread (a day thread has no holds or weeks: 404)."""
-    thread = _call(threads_mod.get_thread, db, user_id, thread_id)
-    if thread.mode != "swing":
-        raise HTTPException(status_code=404, detail="swing threads only")
-    return thread
-
-
-@router.get("/threads/{thread_id}/holds", response_model=HoldsOut)
-def get_thread_holds(
+@router.put(
+    "/threads/{thread_id}/setup",
+    response_model=ThreadOut,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PracticeSetupV2"}}},
+        }
+    },
+)
+def put_thread_setup(
     thread_id: int,
-    status: Literal["open", "closed", "all"] = "all",
+    raw: Any = Depends(_json_body),
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """The thread's practice holds in entry order, each with its P/L. An open hold is marked at the LAST ENDED day's
-    close, never at a later price."""
-    thread = _swing_thread(db, user.id, thread_id)
-    return _call(swing_weeks.holds_out, db, services, thread, status)
+    """Save the thread's setup (a `PracticeSetupV2`): the start instant, her filters and the chart setup. The first one
+    starts the thread's clock, paused at `startAt`; a later one replaces the plan and the Screen's filters and never
+    moves time. A closed thread is a 409."""
+    setup = _validated(PracticeSetupV2, raw, "setup")
+    thread = _call(threads_mod.resolve_for_plan, db, user.id, thread_id)
+    _call(plan_mod.create_plan, db, user.id, setup, services, thread)
+    return threads_mod.detail(db, thread)
 
 
-@router.get("/threads/{thread_id}/weeks", response_model=WeeksOut)
-def get_thread_weeks(
-    thread_id: int, user: AuthedUser = Depends(get_current_user), db: Session = Depends(get_session)
-) -> dict[str, Any]:
-    """One row per week opened so far: its days, status and the headline figures of its review."""
-    return _call(swing_weeks.weeks_out, db, _swing_thread(db, user.id, thread_id))
-
-
-@router.get("/threads/{thread_id}/weeks/{week_no}", response_model=WeekOut)
-def get_thread_week(
+@router.get("/threads/{thread_id}/portfolio", response_model=PortfolioOut)
+def get_thread_portfolio(
     thread_id: int,
-    week_no: int,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """The frozen review of a finished week, or "Week to date" (`to_date` is `yes`) for the open one, computed on read
-    through the last ended close. A week that has not started, or has no finished day yet, is a 404."""
-    return _call(swing_weeks.week_out, db, services, _swing_thread(db, user.id, thread_id), week_no)
+    """The thread's Portfolio at its time T (ADR-0025): every open position across its lanes with its average cost, its
+    price AT T (the one price function, `mark_at`) and its gain or loss, the working orders, and the account. Jump a
+    month ahead and the first read prices every holding at the new time."""
+    thread = _call(threads_mod.get_thread, db, user.id, thread_id)
+    _call(svc_mod.settle_thread, db, services, thread.id)
+    db.refresh(thread)
+    return _call(svc_mod.portfolio, db, services, thread)
 
 
-@router.patch("/threads/{thread_id}/weeks/{week_no}", response_model=WeekOut)
-def patch_thread_week(
+@router.post("/threads/{thread_id}/lanes", response_model=ReplaySessionOut)
+def open_thread_lane(
     thread_id: int,
-    week_no: int,
-    body: WeekPatch,
+    body: LaneIn,
     user: AuthedUser = Depends(get_current_user),
     db: Session = Depends(get_session),
     services: Services = Depends(get_services),
 ) -> dict[str, Any]:
-    """Notes and the self-rating of a week; a key left out is left alone, `null` clears it."""
-    thread = _swing_thread(db, user.id, thread_id)
-    _call(
-        swing_weeks.patch_week,
-        db,
-        thread,
-        week_no,
-        notes=body.notes,
-        rating=body.rating,
-        fields=set(body.model_fields_set),
-        now=services.now(),
-    )
-    return _call(swing_weeks.week_out, db, services, thread, week_no)
+    """Open her lane on a name (or resume it): one book per name for the thread's life, at the thread's time. Any name
+    of the Screen or of the thread's universe opens, and a position open on another name never blocks the switch."""
+    row = _call(plan_mod.open_lane, db, user.id, thread_id, body.symbol, services)
+    return _with_thread(db, svc_mod.session_out(_call(svc_mod.context, db, services, row)), row.thread_id)
