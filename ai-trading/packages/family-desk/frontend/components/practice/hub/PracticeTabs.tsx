@@ -29,6 +29,7 @@ export function PracticeTabs({
   mode = "day",
   back = true,
   panelMounted = false,
+  dayOpen,
 }: {
   threadId: number | null;
   /** The tab this screen is; null on the chart, which is a screen of the thread but no tab of it. */
@@ -37,6 +38,8 @@ export function PracticeTabs({
   /** The thread page already shows its own back link in its header. */
   back?: boolean;
   panelMounted?: boolean;
+  /** Whether the thread has an open day, when the screen already knows. False disables the Day list (Board) tab with its reason; unknown (omitted) leaves it to the click's server read. */
+  dayOpen?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -62,7 +65,11 @@ export function PracticeTabs({
     <div className={styles.bar} aria-busy={busy || undefined}>
       {back && <Link href="/practice" className={`${landing.back} ${styles.back}`}>{`← ${PRACTICE_COPY.backToPractice}`}</Link>}
       <Tabs
-        tabs={PRACTICE_TABS.map((tab) => ({ id: tab, label: practiceTabLabel(tab, mode) }))}
+        tabs={PRACTICE_TABS.map((tab) => ({
+          id: tab,
+          label: practiceTabLabel(tab, mode),
+          disabledReason: tab === "day" && dayOpen === false ? PRACTICE_COPY.tabNoDay : undefined,
+        }))}
         value={active}
         onChange={go}
         label={PRACTICE_COPY.tabsLabel}

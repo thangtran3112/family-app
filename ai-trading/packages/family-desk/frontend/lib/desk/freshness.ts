@@ -927,6 +927,8 @@ export const PRACTICE_COPY = {
   tabPortfolio: "Portfolio",
   tabDayList: "Day list",
   tabBoard: "Board",
+  /** Why the Day list (Board) tab cannot open: the thread has no open day (D-207). */
+  tabNoDay: "No day is open · start the next day first",
   tabJournal: "Trades",
   portfolioNoDay: "No day is open · start the next day from Summary",
   portfolioNoDayLink: "Go to Summary",

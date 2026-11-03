@@ -13,16 +13,22 @@ import { ms } from "./time.ts";
  * then reads the VWAP of the bar before it (as of the last closed minute), as the old minute-bar VWAP did (D-168), so the newest point is not a hole.
  */
 export function serverSeries(bars: readonly Pick<ReplayBar, "t">[], table: IndicatorTable | null, interval: string, formingAt: string | null = null): ServerSeries {
-  const rows = new Map((table !== null && table.interval === interval ? table.rows : []).map((row) => [ms(row.t), row]));
-  const pick = (value: (row: IndicatorTable["rows"][number]) => number | null): Array<number | null> => bars.map((bar) => (rows.get(ms(bar.t)) ? value(rows.get(ms(bar.t))!) : null));
-  const vwap = pick((row) => row.vwap);
-  const last = bars.length - 1;
-  if (formingAt !== null && last > 0 && bars[last]!.t === formingAt && vwap[last] === null && rows.has(ms(bars[last]!.t))) vwap[last] = vwap[last - 1] ?? null;
-  return {
-    vwap,
-    ema9: pick((row) => row.ema9),
-    ema21: pick((row) => row.ema21),
-    rsi14: pick((row) => row.rsi14),
-    macd: { dif: pick((row) => row.macd), signal: pick((row) => row.macd_signal), histogram: pick((row) => row.macd_hist) },
-  };
+  const rows = new Map<number, IndicatorTable["rows"][number]>();
+  if (table !== null && table.interval === interval) for (const row of table.rows) rows.set(ms(row.t), row);
+  // One pass, one lookup a bar: parsing the 6,000 start times and reading each row five times over was 15 ms of every new bar (D-206).
+  const count = bars.length;
+  const out: ServerSeries = { vwap: new Array(count), ema9: new Array(count), ema21: new Array(count), rsi14: new Array(count), macd: { dif: new Array(count), signal: new Array(count), histogram: new Array(count) } };
+  for (let index = 0; index < count; index += 1) {
+    const row = rows.get(ms(bars[index]!.t));
+    out.vwap[index] = row ? row.vwap : null;
+    out.ema9[index] = row ? row.ema9 : null;
+    out.ema21[index] = row ? row.ema21 : null;
+    out.rsi14[index] = row ? row.rsi14 : null;
+    out.macd.dif[index] = row ? row.macd : null;
+    out.macd.signal[index] = row ? row.macd_signal : null;
+    out.macd.histogram[index] = row ? row.macd_hist : null;
+  }
+  const last = count - 1;
+  if (formingAt !== null && last > 0 && bars[last]!.t === formingAt && out.vwap[last] === null && rows.has(ms(bars[last]!.t))) out.vwap[last] = out.vwap[last - 1] ?? null;
+  return out;
 }

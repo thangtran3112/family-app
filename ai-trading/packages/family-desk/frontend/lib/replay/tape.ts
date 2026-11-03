@@ -45,7 +45,7 @@ export function formatNotional(usd: number): string {
 export type TapeDisplayRow = { key: string; t: string; price: string; size: string; tone: TickTone; big: boolean; bigText: string };
 
 /** Newest first, as a tape reads. At most `limit` rows are drawn so a fast tape stays cheap to paint. */
-export function tapeRows(view: Pick<ReplayView, "tape" | "tapeMeta">, limit = 120): TapeDisplayRow[] {
+export function tapeRows(view: { tape: ReplayView["tape"]; tapeMeta: Pick<NonNullable<ReplayView["tapeMeta"]>, "bigPrintUsd"> | null }, limit = 120): TapeDisplayRow[] {
   const big = view.tapeMeta?.bigPrintUsd ?? null;
   const rows: TapeDisplayRow[] = [];
   for (let index = view.tape.length - 1; index >= 0 && rows.length < limit; index -= 1) {
