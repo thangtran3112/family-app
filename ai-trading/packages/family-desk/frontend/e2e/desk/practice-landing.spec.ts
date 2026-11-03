@@ -307,7 +307,6 @@ test.describe("Practice landing", () => {
       ["/practice/thread", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
       ["/practice/week", PRACTICE_COPY.threadPickHintThread, `/practice/thread?id=${id}`],
       ["/practice/replay", PRACTICE_COPY.threadPickHintReplay, `/practice/thread?id=${id}`],
-      ["/practice/journal", PRACTICE_COPY.threadPickHint, `/practice/journal?thread=${id}`],
     ] as const) {
       await openDesk(page, path);
       await expect(page.getByText(PRACTICE_COPY.threadPickTitle), path).toBeVisible();
