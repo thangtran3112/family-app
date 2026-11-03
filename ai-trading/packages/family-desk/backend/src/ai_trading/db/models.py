@@ -761,8 +761,10 @@ class PracticeThread(Base):
     # where the thread began; `clock_pause` is `{"kind": "horizon"}` when the data ran out. Nothing reads them yet.
     start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     clock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    clock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
-    clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default=text("1"))
+    # No Python-side default on the two NOT NULL ones: the database fills them, so an insert into a schema that is
+    # below 0021 (the migration tests downgrade) never names a column that is not there.
+    clock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    clock_speed: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("1"))
     clock_anchor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     clock_pause: Mapped[Any | None] = mapped_column(JSONB)
 
