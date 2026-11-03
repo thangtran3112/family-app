@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { FilterStrategySpecV1Schema } from "../src/filter-strategy-spec-v1.ts";
 import { PracticeBlockV1Schema } from "../src/practice-block-v1.ts";
+import { PracticeSetupV2Schema } from "../src/practice-setup-v2.ts";
 import {
   PracticeLedgerEntryV1Schema,
   PracticeThreadCreateV1Schema,
@@ -36,7 +37,7 @@ function toJsonSchema(schema: z.ZodType): JsonSchema {
 
 // One bundle, so datamodel-codegen emits one module and the shared operand classes exist once.
 // The root is StrategySpecV1; FilterStrategySpecV1 and PresetCatalogV1 ride along as extra
-// `$defs`, and so do ReplaySessionV1 and PracticeMarkV1 (02o) and PracticeBlockV1 (02o-b), and the practice-thread family (02r). A def shared by several schemas (Condition, SeriesOperand, ...) must be identical.
+// `$defs`, and so do ReplaySessionV1 and PracticeMarkV1 (02o) and PracticeBlockV1 (02o-b), and PracticeSetupV2 (ADR-0025), and the practice-thread family (02r). A def shared by several schemas (Condition, SeriesOperand, ...) must be identical.
 export function renderJsonSchema(): string {
   const bundle = toJsonSchema(StrategySpecV1Schema);
   for (const schema of [
@@ -45,6 +46,7 @@ export function renderJsonSchema(): string {
     ReplaySessionV1Schema,
     PracticeMarkV1Schema,
     PracticeBlockV1Schema,
+    PracticeSetupV2Schema,
     PracticeThreadCreateV1Schema,
     PracticeThreadPatchV1Schema,
     PracticeThreadV1Schema,

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "startAt": "2026-10-23T09:30:00-04:00",
+  "setup": {
+    "interval": "5m",
+    "session": "regular",
+    "armed": []
+  }
+}
