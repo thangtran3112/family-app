@@ -1,8 +1,9 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
+import { formatEtDay } from "../../lib/desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../../lib/desk/freshness.ts";
 import { stepBar } from "./clock-helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
-import { REPLAY_URL, THREAD_URL, expectNoDayLanguage, get, openLaneByApi, placeOrder, replayRail, saveFilter, send, startThread } from "./hub-helpers";
+import { DAY, REPLAY_URL, THREAD_URL, expectNoDayLanguage, get, openLaneByApi, placeOrder, replayRail, saveFilter, send, startThread } from "./hub-helpers";
 import { EVERY_NAME, backToScreen, openScreen } from "./lane-helpers";
 import { positionCells, positionRow } from "./position-table";
 
@@ -418,10 +419,10 @@ test.describe("Practice: switching names", () => {
 
     // The scan IS the Screen: its label sits with the counts, and there is no second table beside it.
     const label = page.getByTestId("rescan-label");
-    await expect(label).toHaveText(practiceText("screenRescanLabel", { seq: 1, clock: "9:35 AM ET", through: "9:20 AM" }));
+    await expect(label).toHaveText(practiceText("screenRescanLabel", { seq: 1, clock: `${formatEtDay(DAY)} 9:35 AM ET`, through: "9:20 AM" }));
     // One scan time: the note and the status line say the scan's clock.
     await expect(page.getByTestId("live-note")).toContainText("9:35 AM ET scan");
-    await expect(page.getByLabel("Status")).toContainText("Scanned 9:35 AM ET");
+    await expect(page.getByLabel("Status")).toContainText(/Scanned \w{3} \d{4}-\d{2}-\d{2} 9:35 AM ET/);
     await expect(page.getByLabel("Status")).not.toContainText(PRACTICE_COPY.screenNotScanned);
     await expect(page.getByTestId("rescan-counts")).toHaveText(/^\d+ of \d+ matched · \d+ new in this scan$/);
     await expect(page.getByRole("table", { name: "Re-scan" })).toHaveCount(0);
@@ -444,7 +445,7 @@ test.describe("Practice: switching names", () => {
     await expect(page.getByTestId("rescan-stale")).toContainText(practiceText("screenRescanStale", { clock: "9:37 AM ET" }));
     await expect(rescan).toBeEnabled();
     await rescan.click();
-    await expect(label).toHaveText(practiceText("screenRescanLabel", { seq: 2, clock: "9:37 AM ET", through: "9:22 AM" }));
+    await expect(label).toHaveText(practiceText("screenRescanLabel", { seq: 2, clock: `${formatEtDay(DAY)} 9:37 AM ET`, through: "9:22 AM" }));
     await expect(page.getByTestId("rescan-stale")).toHaveCount(0);
     await expect(page.getByRole("table", { name: "Re-scan" })).toHaveCount(0);
     await expect(list.getByRole("row"), "still the header and the same names, not twice as many").toHaveCount(names);
@@ -455,7 +456,7 @@ test.describe("Practice: switching names", () => {
     await openDesk(page, screenPage);
     await expect(page.getByRole("button", { name: PRACTICE_COPY.screenRescanNow })).toBeDisabled();
     await expect(page.getByTestId("rescan-hint")).toHaveText(PRACTICE_COPY.screenRescanClosed);
-    await expect(label).toHaveText(practiceText("screenRescanLabel", { seq: 2, clock: "9:37 AM ET", through: "9:22 AM" }));
+    await expect(label).toHaveText(practiceText("screenRescanLabel", { seq: 2, clock: `${formatEtDay(DAY)} 9:37 AM ET`, through: "9:22 AM" }));
     await expectCleanScreen(page);
   });
 });
