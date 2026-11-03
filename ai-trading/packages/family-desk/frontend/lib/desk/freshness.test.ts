@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   alertsBanner,
   asOfLine,
+  badgeText,
   BANNED_TERMS,
   containsBannedTerm,
   COPY,
@@ -249,6 +250,35 @@ test("the quote badge's short form: four sentences shorten, the other six stay w
   }
   // No age to print: the short form says so the way the whole one does.
   assert.equal(resolveFreshness({ stamp: stamp("paused", "delayed-15m", null), session: "regular", now }).short, "Quotes paused · —");
+});
+
+// D-238: the badge's text box is 238 px at 1440 too, so the three sentences wider than it show their short form there as well; D-237: the status bar
+// takes the 1180 short form (its Feedback page leaves the sentence 214 px). The whole sentence is always `label`.
+test("which band shows which wording: 1180 shortens four sentences, 1440 the three wider than the badge, a page badge none", () => {
+  const at = (band?: "1180" | "1440") => Object.fromEntries(rows.map(([state, input]) => [state, badgeText(resolveFreshness(input), band)]));
+  const whole = Object.fromEntries(rows.map(([state, input]) => [state, resolveFreshness(input).label]));
+  assert.deepEqual(at(undefined), whole);
+  assert.deepEqual(at("1180"), Object.fromEntries(rows.map(([state, input]) => [state, resolveFreshness(input).short])));
+  const shortened = (band: "1180" | "1440") => rows.filter(([state, input]) => badgeText(resolveFreshness(input), band) !== whole[state]).map(([state]) => state);
+  assert.deepEqual(shortened("1180"), ["reconnecting", "paused", "backup", "unavailable"]);
+  assert.deepEqual(shortened("1440"), ["reconnecting", "backup", "unavailable"]);
+});
+
+test("the status bar's quote sentence is short at 1180 only; live, delayed and closed stay whole", () => {
+  for (const [state, input] of rows) assert.equal(statusBarText(input, "1440"), statusBarText(input), `${state} at 1440`);
+  const at1180 = Object.fromEntries(rows.map(([state, input]) => [state, statusBarText(input, "1180")]));
+  assert.deepEqual(at1180, {
+    live: "Quotes live · Alpaca",
+    delayed: "Quotes: Alpaca · Delayed 15 min",
+    updating: "Updating quotes…",
+    reconnecting: "Reconnecting…",
+    paused: "Quotes paused · 2 min ago",
+    backup: "Backup quotes · may differ",
+    closed: "Quotes: Alpaca · Market closed",
+    pre_market: "Pre-market · 8:12 AM ET",
+    after_hours: "After hours",
+    unavailable: "Quotes unavailable",
+  });
 });
 
 test("the wrong-lane interstitial copy is gone: a route from another mode opens in its own mode (ADR-0014)", () => {

@@ -58,9 +58,12 @@ test("fundamental top bar, quotes paused: the longest badge fits and the bar doe
 });
 
 // D-232: the Fundamental bar leaves 287 px at 1180 for the market pill and the quote badge together. Every sentence the two can print
-// (lib/desk/freshness.ts: the ten freshness states, the first-load wording and "Status unavailable") must leave the page 1180 wide, the
-// account button whole inside the window, and its menu reachable. At 1180 the long sentences show their short form; the whole sentence
-// stays in the badge's title and aria-label (D-232). "Market closed · showing last close" stays whole (D-211).
+// (lib/desk/freshness.ts: the ten freshness states, the first-load wording and "Status unavailable") must leave the page exactly as wide
+// as the window, the account button whole inside it, and its menu reachable. At 1180 the long sentences show their short form; the whole
+// sentence stays in the badge's title and aria-label (D-232). "Market closed · showing last close" stays whole (D-211).
+// D-238: the badge's text box is 238 px at 1440 too, so the three sentences wider than that (backup, unavailable, reconnecting) show their
+// short form there as well, and no label is ever cut with an ellipsis.
+// D-237: the bottom status bar follows the same rule (Feedback is its widest case: a fixed privacy line sits beside the quote sentence).
 const NOW = MIDDAY; // Thu 2026-10-15 11:30 ET
 const NEXT_OPEN = "2026-10-16T13:30:00Z";
 type Session = "regular" | "pre" | "after" | "closed";
@@ -74,6 +77,8 @@ type Sentence = {
   full: string;
   /** What the badge shows at 1180, when it is not the whole sentence. */
   short?: string;
+  /** The whole sentence is wider than the badge's 238 px text box at 1440 as well: the short form shows at both bands (D-238). */
+  wide?: true;
   /** The whole sentence overflows the 1440 bar, so only the 1180 band is held to it. */
   only1180?: true;
   /** The market pill's title and its text at 1180, for the two states that have no session. */
@@ -90,13 +95,13 @@ const SENTENCES: Sentence[] = [
   { name: "paused 3 days, closed", session: "closed", quotes: live("paused", "realtime", 3 * 24 * 60), full: "Quotes paused · last update 3 days ago", short: "Quotes paused · 3 days ago" },
   // A feed dead for weeks: two digits of days. At 1440 the whole sentence is 2 px too wide for the Fundamental bar (7 px at 100 days), a defect this fix leaves alone.
   { name: "paused 99 days, pre-market", session: "pre", quotes: live("paused", "realtime", 99 * 24 * 60), full: "Quotes paused · last update 99 days ago", short: "Quotes paused · 99 days ago", only1180: true },
-  { name: "backup source", session: "regular", quotes: live("live", "fallback"), full: "Using backup quotes · may differ slightly from IBKR", short: "Backup quotes · may differ" },
+  { name: "backup source", session: "regular", quotes: live("live", "fallback"), full: "Using backup quotes · may differ slightly from IBKR", short: "Backup quotes · may differ", wide: true },
   { name: "closed", session: "closed", quotes: live("closed", "eod", 15 * 60), full: "Market closed · showing last close" },
   { name: "pre-market", session: "pre", quotes: live("live"), full: "Pre-market · 11:30 AM ET" },
   { name: "after hours", session: "after", quotes: live("live"), full: "After hours" },
-  { name: "unavailable", session: "regular", quotes: live("unavailable", "unavailable"), full: "Quotes unavailable right now · trying again", short: "Quotes unavailable" },
+  { name: "unavailable", session: "regular", quotes: live("unavailable", "unavailable"), full: "Quotes unavailable right now · trying again", short: "Quotes unavailable", wide: true },
   { name: "refresh running", session: "regular", quotes: live("live", "realtime", 3), status: "updating", full: "Updating quotes…" },
-  { name: "reconnecting", session: "regular", quotes: live("live", "realtime", 3), status: "reconnecting", full: "Reconnecting… · last update 11:27:00 AM ET", short: "Reconnecting…" },
+  { name: "reconnecting", session: "regular", quotes: live("live", "realtime", 3), status: "reconnecting", full: "Reconnecting… · last update 11:27:00 AM ET", short: "Reconnecting…", wide: true },
   { name: "first load", session: "regular", status: "none", full: "Updating quotes…", pill: ["Checking the market…", "Checking…"] },
   { name: "status failed", session: "regular", status: "failed", full: "Status unavailable right now", short: "Status unavailable", pill: ["Market status unavailable", "Unavailable"] },
 ];
@@ -117,9 +122,31 @@ async function stubStatus(page: Page, sentence: Sentence) {
   });
 }
 
+const HOME = { fundamental: "/stocks", technical: "/" } as const;
+/** Feedback carries a fixed line in the status bar (02s), so it is the bar's widest page; every other route shows the quote sentence, the last update and the alerts state. */
+const PATHS = { fundamental: [HOME.fundamental, "/feedback"], technical: [HOME.technical, "/feedback"] } as const;
+const STATUS = "footer[aria-label='Status']";
+
+/** How the shell's chrome sits in the window: the page's width, the account button, and whether either bar spills past its own box. */
+async function chromeFit(page: Page) {
+  return page.evaluate((statusBar) => {
+    const avatar = document.querySelector("button[aria-label='Account menu']")!.getBoundingClientRect();
+    const bar = document.querySelector(".dk-top")!;
+    const status = document.querySelector(statusBar)!;
+    const report = [...status.querySelectorAll("a")].find((link) => link.textContent === "Report a problem")!.getBoundingClientRect();
+    return {
+      docWidth: document.documentElement.scrollWidth,
+      avatarRight: Math.round(avatar.right),
+      barOver: bar.scrollWidth - bar.clientWidth,
+      statusOver: status.scrollWidth - status.clientWidth,
+      reportRight: Math.round(report.right),
+    };
+  }, STATUS);
+}
+
 for (const mode of ["fundamental", "technical"] as const) {
-  for (const sentence of SENTENCES) {
-    test(`D-232 ${mode} top bar, ${sentence.name}: the page is not wider than the window, the account button is whole and its menu opens`, async ({ page }) => {
+  for (const sentence of SENTENCES) for (const path of PATHS[mode]) {
+    test(`D-232 ${mode} ${path}, ${sentence.name}: the page is not wider than the window, the chrome is whole and the account menu opens`, async ({ page }) => {
       const width = page.viewportSize()!.width;
       const compact = width < 1440;
       test.skip(!compact && sentence.only1180 === true, "the 1440 bar does not fit this sentence whole (a separate, older defect)");
@@ -129,7 +156,6 @@ for (const mode of ["fundamental", "technical"] as const) {
         await mockFundamental(page);
       }
       await stubStatus(page, sentence);
-      const path = mode === "fundamental" ? "/stocks" : "/";
       if (sentence.status === "updating" || sentence.status === "reconnecting") {
         // The refresh is the page's own 30 s timer: install the clock, let the first answer land, then run it.
         await page.clock.install({ time: new Date(NOW) });
@@ -147,19 +173,19 @@ for (const mode of ["fundamental", "technical"] as const) {
       if (sentence.pill) await expect(top.getByTitle(sentence.pill[0], { exact: true })).toBeVisible();
 
       // The page is exactly as wide as the window, and the account button sits whole inside it (no sideways scroll to reach it).
-      const fit = await page.evaluate(() => {
-        const avatar = document.querySelector("button[aria-label='Account menu']")!.getBoundingClientRect();
-        const bar = document.querySelector(".dk-top")!;
-        return { docWidth: document.documentElement.scrollWidth, avatarLeft: Math.round(avatar.left), avatarRight: Math.round(avatar.right), barOver: bar.scrollWidth - bar.clientWidth };
-      });
+      const fit = await chromeFit(page);
       expect(fit.docWidth, "the page scrolls sideways").toBe(width);
       expect(fit.avatarRight, "the account button is pushed off the window").toBeLessThanOrEqual(width);
       expect(fit.barOver, "the top bar overflows").toBeLessThanOrEqual(0);
-      // At 1180 no sentence is cut either: a label whose text passes its box ends in an ellipsis.
-      if (compact) for (const pill of await pillBoxes(page)) expect(pill.ellipsis, `"${pill.text}" is cut: box ${pill.box} < text ${pill.textWidth}`).toBe(false);
+      expect(fit.statusOver, "the status bar overflows").toBeLessThanOrEqual(0);
+      expect(fit.reportRight, "\"Report a problem\" is pushed off the window").toBeLessThanOrEqual(width);
+      // At both bands no sentence is cut either: a label whose text passes its box ends in an ellipsis.
+      for (const pill of await pillBoxes(page)) expect(pill.ellipsis, `"${pill.text}" is cut: box ${pill.box} < text ${pill.textWidth}`).toBe(false);
 
-      // The sentence on screen: whole at 1440 (and where it fits), short at 1180; the title and aria-label always carry the whole one.
-      const shown = compact ? (sentence.short ?? sentence.full) : sentence.full;
+      // The sentence on screen: whole where it fits, short where it does not (1180, and 1440 for the three that pass the badge's box); the title
+      // and aria-label always carry the whole one.
+      const short = compact || sentence.wide === true;
+      const shown = short ? (sentence.short ?? sentence.full) : sentence.full;
       await expect(badge).toHaveText(shown);
       if (shown === sentence.full) await expect(badge).not.toHaveAttribute("aria-label", /./);
       else await expect(badge).toHaveAttribute("aria-label", sentence.full);
@@ -167,12 +193,57 @@ for (const mode of ["fundamental", "technical"] as const) {
         const pill = top.getByTitle(sentence.pill[0], { exact: true });
         await expect(pill).toHaveText(compact ? sentence.pill[1] : sentence.pill[0]);
       }
+      // The status bar says the same sentence, short at 1180 only (it has room for the whole one at 1440): the whole sentence is its title and
+      // is read in full by assistive technology.
+      if (sentence.short) {
+        const status = page.locator(STATUS);
+        if (compact) {
+          const line = status.getByTitle(sentence.full, { exact: true });
+          await expect(line).toBeVisible();
+          await expect(line.locator("[aria-hidden='true']")).toHaveText(sentence.short);
+          await expect(line.locator(".sr-only")).toHaveText(sentence.full);
+        } else {
+          await expect(status.getByText(sentence.full, { exact: true })).toBeVisible();
+          await expect(status.getByTitle(sentence.full, { exact: true })).toHaveCount(0);
+        }
+      }
 
       await top.getByRole("button", { name: "Account menu" }).click();
       const menu = page.getByRole("menu", { name: "Account" });
       await expect(menu).toBeVisible();
       for (const label of ["Settings", "More", "Feedback"]) await expect(menu.getByRole("menuitem", { name: label })).toBeInViewport({ ratio: 1 });
       expect(await page.evaluate(() => [window.scrollX, document.documentElement.scrollWidth]), "opening the menu scrolled the page").toEqual([0, width]);
+    });
+  }
+}
+
+// D-237 / D-232: the top bar and the status bar sit on every route, and a route's own content must not change how they fit. The two
+// widest pairs (backup quotes beside "Market open"; the closed sentence, which stays whole, beside "Closed") on every route of the mode.
+const ROUTES = {
+  fundamental: ["/", "/today", "/stocks", "/holdings", "/covered-calls", "/ask", "/settings", "/more", "/feedback", "/feedback/new", "/futures/read"],
+  technical: ["/", "/screener", "/screener/filters", "/watchlists", "/alerts", "/alerts/new", "/technicals", "/strategies", "/strategies/library", "/futures/specs", "/settings", "/more", "/feedback", "/feedback/new"],
+} as const;
+for (const mode of ["fundamental", "technical"] as const) {
+  for (const name of ["backup source", "closed"]) {
+    test(`D-237 ${mode}, ${name}: on every route the page is as wide as the window and both bars fit`, async ({ page }) => {
+      const width = page.viewportSize()!.width;
+      const sentence = SENTENCES.find((candidate) => candidate.name === name)!;
+      if (mode === "fundamental") {
+        await startInFundamental(page);
+        await mockFundamental(page);
+      }
+      await stubStatus(page, sentence);
+      for (const route of ROUTES[mode]) {
+        await openDesk(page, route, NOW);
+        await expect(page.locator(".dk-top").getByRole("status")).toHaveAttribute("title", sentence.full);
+        const fit = await chromeFit(page);
+        expect(fit.docWidth, `${route} scrolls sideways`).toBe(width);
+        expect(fit.avatarRight, `${route}: the account button is pushed off the window`).toBeLessThanOrEqual(width);
+        expect(fit.barOver, `${route}: the top bar overflows`).toBeLessThanOrEqual(0);
+        expect(fit.statusOver, `${route}: the status bar overflows`).toBeLessThanOrEqual(0);
+        expect(fit.reportRight, `${route}: "Report a problem" is pushed off the window`).toBeLessThanOrEqual(width);
+        for (const pill of await pillBoxes(page)) expect(pill.ellipsis, `${route}: "${pill.text}" is cut: box ${pill.box} < text ${pill.textWidth}`).toBe(false);
+      }
     });
   }
 }
