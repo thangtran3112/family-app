@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { UTCTimestamp } from "lightweight-charts";
-import { ChunkedSeries } from "./chart-chunks.ts";
+import { ChunkedSeries, runInSlices } from "./chart-chunks.ts";
 
 // The library series the chunks stand on, as far as `ChunkedSeries` drives one: it keeps its points by time, refuses a point older than its newest (as
 // the library's `update` does) and remembers the options it was given.
@@ -154,4 +154,81 @@ test("cull hides the older runs that lie outside the view and keeps the newest s
   const calls = chart.added.map((series) => series.options.visible);
   group.cull(30, 40);
   assert.deepEqual(chart.added.map((series) => series.options.visible), calls, "no change, no call");
+});
+
+test("runInSlices without a schedule runs every step now, as one function would", () => {
+  const seen: number[] = [];
+  runInSlices(
+    (function* () {
+      seen.push(1);
+      yield;
+      seen.push(2);
+      yield;
+      seen.push(3);
+    })(),
+    null,
+  );
+  assert.deepEqual(seen, [1, 2, 3]);
+});
+
+test("runInSlices with a schedule runs one slice per task, the first one in a task of its own", () => {
+  const seen: number[] = [];
+  const tasks: Array<() => void> = [];
+  runInSlices(
+    (function* () {
+      seen.push(1);
+      yield;
+      seen.push(2);
+      yield;
+      seen.push(3);
+    })(),
+    (run) => tasks.push(run),
+  );
+  assert.deepEqual(seen, [], "nothing runs in the caller's task");
+  for (const expected of [[1], [1, 2], [1, 2, 3]]) {
+    tasks.shift()!();
+    assert.deepEqual(seen, expected);
+  }
+  assert.equal(tasks.length, 0, "the last slice schedules nothing");
+});
+
+test("runInSlices stops: the slice that was scheduled does not run", () => {
+  const seen: number[] = [];
+  const tasks: Array<() => void> = [];
+  const stop = runInSlices(
+    (function* () {
+      seen.push(1);
+      yield;
+      seen.push(2);
+    })(),
+    (run) => tasks.push(run),
+  );
+  tasks.shift()!();
+  stop();
+  tasks.shift()!();
+  assert.deepEqual(seen, [1]);
+});
+
+test("setDataSteps sets one run between two steps and leaves what setData leaves", () => {
+  const stepped = make(true);
+  const whole = make(true);
+  const all = points(12);
+  const steps = stepped.group.setDataSteps(all);
+  let yields = 0;
+  for (let next = steps.next(); !next.done; next = steps.next()) yields += 1;
+  whole.group.setData(all);
+  assert.equal(yields, 3, "one step per run of five points");
+  assert.deepEqual(stepped.chart.added.map((series) => run(series)), whole.chart.added.map((series) => run(series)));
+  assert.equal(stepped.group.stamp.split(".")[1], whole.group.stamp.split(".")[1]);
+});
+
+test("setDataSteps with a window hides each run outside it as soon as it is set", () => {
+  const { chart, group } = make(false);
+  const steps = group.setDataSteps(points(20), [16, 20]);
+  steps.next();
+  steps.next();
+  const shown = () => chart.added.map((series) => series.options.visible !== false);
+  assert.deepEqual(shown(), [false, true], "the first run lies outside the window; the newest so far stays shown");
+  while (!steps.next().done);
+  assert.deepEqual(shown(), [false, false, false, true]);
 });
