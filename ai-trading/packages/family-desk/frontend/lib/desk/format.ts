@@ -16,7 +16,7 @@ const cleanSpaces = (text: string) => text.replace(/[  ]/g, " ");
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
-// A New York `Intl.DateTimeFormat` costs far more to build than to use, and every poll of the replay screen formats several times of day: one per option set (D-217).
+// `new Intl.DateTimeFormat` costs far more than formatting with one, and a Screen formats a time in every row: build each format once (D-235).
 const etFormats = new Map<string, Intl.DateTimeFormat>();
 function etFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
   const key = JSON.stringify(options);
@@ -168,10 +168,13 @@ export function formatSignedPct(value: number | null | undefined, digits = 2): s
   return `${value > 0 ? "+" : MINUS}${fixed}%`;
 }
 
+let compactFormat: Intl.NumberFormat | undefined;
+
 /** "12.9M" */
 export function formatCompact(value: number | null | undefined): string {
   if (!isFiniteNumber(value)) return EMPTY_VALUE;
-  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  compactFormat ??= new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  return compactFormat.format(value);
 }
 
 /** "0.98×" (relative volume and similar ratios) */

@@ -139,3 +139,16 @@ test("a chart's as-of names the date of its stamp and is empty without one (D-20
   assert.equal(formatChartAsOf("2026-10-23T19:45:00Z"), "as of Oct 23, 03:45 PM");
   assert.equal(formatChartAsOf("not a time"), "");
 });
+
+test("D-235: a format built once serves every call, and one option set never bleeds into another", () => {
+  const at = "2026-10-23T19:45:30Z";
+  for (let pass = 0; pass < 3; pass += 1) {
+    assert.equal(formatEtTime(at), "3:45 PM");
+    assert.equal(formatEtClock(at), "3:45:30 PM ET");
+    assert.equal(formatEtDateClock(at, { seconds: false }), "Fri 2026-10-23 · 3:45 PM ET");
+    assert.equal(formatEtDateClock(at), "Fri 2026-10-23 · 3:45:30 PM ET");
+    assert.equal(formatEtDay(at), "Fri 2026-10-23");
+    assert.equal(formatCompact(12_883_312), "12.9M");
+    assert.equal(formatCompact(950), "950");
+  }
+});
