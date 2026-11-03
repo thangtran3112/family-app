@@ -246,3 +246,12 @@ def test_the_screen_is_rescanned_at_the_threads_time(api, db_session) -> None:
     client.post(f"{BASE}/threads/{thread_id}/clock", json={"to": _iso(2, "10:30")}, headers=auth_headers())
     moved = client.post(f"{BASE}/threads/{thread_id}/screen/rescan", headers=auth_headers()).json()
     assert moved["rescan_job"]["state"] == "running" and moved["day"] == DAYS[2].isoformat()
+
+
+def test_a_thread_is_named_by_the_day_its_clock_starts_not_the_day_it_was_made(api) -> None:
+    # D-226: the world's now is Sat 2026-10-24; the thread's clock starts Mon 2026-09-28 at 10:00 ET.
+    client, _, gap_up = api
+    first = _thread(client, gap_up)
+    assert first["thread"]["name"] == "Freestyle · Sep 28"
+    second = _thread(client, gap_up)
+    assert second["thread"]["name"] == "Freestyle · Sep 28 (2)", "two threads that start one day still read apart"
