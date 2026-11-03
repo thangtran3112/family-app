@@ -33,12 +33,14 @@ import {
   rightOffsetOption,
   seriesMarkers,
   shadingData,
+  syncSeries,
   valueAtOrBefore,
   volumeData,
   wholeAxisLabel,
   type ChartBar,
   type ChartMarkerInput,
   type CrosshairPoint,
+  type SeriesFed,
 } from "@/lib/chart-data";
 import styles from "./MarketChart.module.css";
 
@@ -169,6 +171,9 @@ type Library = typeof import("lightweight-charts");
 type TickFormat = (time: Time, tickType: number) => string;
 type MainKind = "Candlestick" | "Bar" | "Line" | "Area";
 type MainSeries = ISeriesApi<MainKind, Time>;
+type Candle = ReturnType<typeof candlestickData>[number];
+/** The crosshair's bar lookup, shaped like a series so the same tail feed keeps it up to date. */
+type Lookup = { map: Map<string, Candle>; setData(points: Candle[]): void; update(point: Candle): void };
 
 const MAIN_KIND: Record<ChartType, MainKind> = { candles: "Candlestick", hollow: "Candlestick", bars: "Bar", line: "Line", area: "Area" };
 
@@ -220,22 +225,28 @@ function histogramData(
 /**
  * The chart's data table: every bar as a row, for screen readers and keyboard users. It depends on the bars alone, so it is memoised: a crosshair
  * move re-renders `MarketChart` (the level tooltip, the legend above it) many times a second, and 6,000 rows of formatted cells cost ~0.5 s a pass,
- * a main-thread stall on every move of the replay chart (D-201).
+ * a main-thread stall on every move of the replay chart (D-201). The rows exist only while the disclosure is open: a closed `<details>` shows and reads
+ * nothing, and React still walked all 6,000 row fibres in every commit (~25 ms) for each new bar of a followed chart (D-206). Open, each row is memoised
+ * on its bar (below), so a refresh patches the newest row only.
  */
 const ChartDataTable = memo(function ChartDataTable({ bars, rowLabels }: { bars: ChartBar[]; rowLabels?: readonly string[] }) {
+  const [open, setOpen] = useState(false);
   return (
-    <details className={styles.dataTable}>
+    <details className={styles.dataTable} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Chart data table · {bars.length} source bars</summary>
       <div className={styles.tableScroll}>
         <table>
           <thead><tr><th scope="col">Time (ET)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
-          <tbody>{bars.map((bar, index) => (
-            <tr key={`${bar.t}-${index}`}><th scope="row">{rowLabels?.[index] ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
-          ))}</tbody>
+          <tbody>{open && bars.map((bar, index) => <ChartDataRow key={`${bar.t}-${index}`} bar={bar} label={rowLabels?.[index]} />)}</tbody>
         </table>
       </div>
     </details>
   );
+});
+
+/** One row of the data table. A refresh hands over the same bar objects but the newest (the replay's merge keeps them), so only the newest row is formatted and patched: 6,000 rows of `sourceTimeLabel` and `formatValue` cost ~0.55 s a pass (D-206). */
+const ChartDataRow = memo(function ChartDataRow({ bar, label }: { bar: ChartBar; label?: string }) {
+  return <tr><th scope="row">{label ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>;
 });
 
 export function MarketChart({
@@ -273,7 +284,19 @@ export function MarketChart({
   const library = useRef<Library | null>(null);
   const main = useRef<MainSeries | null>(null);
   const mainKind = useRef<MainKind>("Candlestick");
-  const barAt = useRef(new Map<string, ReturnType<typeof candlestickData>[number]>());
+  // The crosshair's OHLC by bar time. It is fed like a series (`syncSeries`): from the first changed bar on, not 6,000 entries again for each new bar (D-206).
+  const barAt = useRef<Lookup>({
+    map: new Map(),
+    setData(points) {
+      this.map = new Map(points.map((point) => [timeId(point.time), point]));
+    },
+    update(point) {
+      this.map.set(timeId(point.time), point);
+    },
+  });
+  // What each series was last given (by series object), so a refresh sends only what changed.
+  const fed = useRef(new WeakMap<object, SeriesFed>());
+  const markersFed = useRef<{ bars: ChartBar[]; markers: ChartMarkerInput[]; plugin: ISeriesMarkersPluginApi<Time> } | null>(null);
   const overlaySeries = useRef(new Map<string, ISeriesApi<"Line", Time>>());
   const paneSeries = useRef(new Map<string, PaneSeriesApi>());
   const priceLines = useRef<IPriceLine[]>([]);
@@ -319,6 +342,7 @@ export function MarketChart({
     const overlayMap = overlaySeries.current;
     const paneMap = paneSeries.current;
     const paneLinesMap = panePriceLines.current;
+    const lookup = barAt.current;
     let resizeWatch: ResizeObserver | null = null;
     let detachPinch: (() => void) | null = null;
     let detachRelabel: (() => void) | null = null;
@@ -406,7 +430,7 @@ export function MarketChart({
         const volumeEntry = volumeSeries.current ? param.seriesData.get(volumeSeries.current) : undefined;
         callback(crosshairPoint(
           param.time,
-          barAt.current.get(timeId(param.time)) as Parameters<typeof crosshairPoint>[1],
+          barAt.current.map.get(timeId(param.time)) as Parameters<typeof crosshairPoint>[1],
           volumeEntry as Parameters<typeof crosshairPoint>[2],
           values,
         ));
@@ -436,7 +460,9 @@ export function MarketChart({
       chart.current?.remove();
       chart.current = null;
       main.current = null;
-      barAt.current.clear();
+      lookup.map.clear();
+      fed.current = new WeakMap();
+      markersFed.current = null;
       volumeSeries.current = null;
       shadeSeries.current = null;
       markerPlugin.current = null;
@@ -550,7 +576,7 @@ export function MarketChart({
         title: overlay.label,
         lineStyle: overlay.style === "dashed" ? chartLibrary.LineStyle.Dashed : chartLibrary.LineStyle.Solid,
       });
-      series.setData(lineData(bars, overlay.values));
+      syncSeries(series, fed.current, bars, overlay.values, "", lineData);
     });
 
     // When panes are added, removed or reordered the library renumbers them, so series that stay would sit in the
@@ -593,10 +619,11 @@ export function MarketChart({
         }
         if (!entry) continue;
         if (item.kind === "histogram" && entry.kind === "histogram") {
-          entry.series.setData(histogramData(bars, item.values, item.color, item.negativeColor ?? chartPalette.down));
+          const negative = item.negativeColor ?? chartPalette.down;
+          syncSeries(entry.series, fed.current, bars, item.values, `${item.color}|${negative}`, (b, v) => histogramData(b, v, item.color, negative));
           entry.series.applyOptions({ title: item.label, color: item.color });
         } else if (item.kind === "line" && entry.kind === "line") {
-          entry.series.setData(lineData(bars, item.values));
+          syncSeries(entry.series, fed.current, bars, item.values, "", lineData);
           entry.series.applyOptions({ title: item.label, color: item.color });
         }
       }
@@ -638,10 +665,10 @@ export function MarketChart({
     mainSeries.applyOptions({ lastValueVisible: lastPricePill, priceLineVisible: lastPricePill });
     // Before the data changes: where is the view? If it is parked at the newest bar (within a bar or two), it stays there.
     const visible = keepRange ?? currentChart.timeScale().getVisibleLogicalRange();
-    const candleData = candlestickData(bars);
-    barAt.current = new Map(candleData.map((point) => [timeId(point.time), point]));
-    if (wantKind === "Line" || wantKind === "Area") (mainSeries as ISeriesApi<"Line", Time>).setData(lineData(bars, bars.map((bar) => bar.c)));
-    else (mainSeries as ISeriesApi<"Candlestick", Time>).setData(candleData);
+    // The series are fed from the first bar that changed (`syncSeries`): a new bar of a 6,000-bar chart is one `update`, not 6,000 points built and sent again.
+    syncSeries(barAt.current, fed.current, bars, null, "", candlestickData);
+    if (wantKind === "Line" || wantKind === "Area") syncSeries(mainSeries as ISeriesApi<"Line", Time>, fed.current, bars, closes, "", lineData);
+    else syncSeries(mainSeries as ISeriesApi<"Candlestick", Time>, fed.current, bars, null, "", candlestickData);
 
     if (volume && !volumeSeries.current) {
       volumeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
@@ -655,7 +682,7 @@ export function MarketChart({
       currentChart.removeSeries(volumeSeries.current);
       volumeSeries.current = null;
     }
-    volumeSeries.current?.setData(volumeData(bars));
+    if (volumeSeries.current) syncSeries(volumeSeries.current, fed.current, bars, null, "", volumeData);
 
     if (sessionShading && !shadeSeries.current) {
       shadeSeries.current = currentChart.addSeries(chartLibrary.HistogramSeries, {
@@ -670,14 +697,18 @@ export function MarketChart({
       currentChart.removeSeries(shadeSeries.current);
       shadeSeries.current = null;
     }
-    shadeSeries.current?.setData(shadingData(bars));
+    if (shadeSeries.current) syncSeries(shadeSeries.current, fed.current, bars, null, "", shadingData);
 
     if (!markerPlugin.current) markerPlugin.current = chartLibrary.createSeriesMarkers(mainSeries, []);
-    markerPlugin.current.setMarkers(seriesMarkers(bars, markers));
+    const placed = markersFed.current;
+    if (!placed || placed.bars !== bars || placed.markers !== markers || placed.plugin !== markerPlugin.current) {
+      markerPlugin.current.setMarkers(seriesMarkers(bars, markers));
+      markersFed.current = { bars, markers, plugin: markerPlugin.current };
+    }
 
     // Fit on a new symbol or timeframe (or the first data), not on every refresh, so zoom survives a refetch.
     const key = `${symbol}:${interval}`;
-    const count = candleData.length;
+    const count = barAt.current.map.size;
     // Before the open the view waits at the session's first bar; from the first session bar on a followed chart shows the newest bars (D-186).
     const waiting = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1);
     if (bars.length && fitKey.current !== key) {

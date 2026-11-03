@@ -21229,7 +21229,7 @@
         ]
       },
       "post": {
-        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day\nthreads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each\nthread has its own plan and balance, and its own `name` (the server gives it one: \"Day thread \u00b7 Oct 15\", \"(2)\" when\nshe already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms\ncheck out (every rejection is a plain problem), and starts preparing its bars in the background.",
+        "description": "Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the\nrisk plan, and the mode (`day`; `swing` is closed: a 409 on `mode`, ADR-0025). Day threads share ten slots across\nall users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each thread has its own plan and\nbalance, and its own `name` (the server gives it one: \"Day thread \u00b7 Oct 15\", \"(2)\" when she already has it).",
         "operationId": "create_thread_api_desk_replay_threads_post",
         "requestBody": {
           "content": {
@@ -21496,7 +21496,7 @@
         ]
       },
       "post": {
-        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:\n`{\"to\": \"<ISO time with its UTC offset>\"}` sets the clock to that date and time. Forward only (a time already\npast leaves the clock where it is) and no later than `jump_limit` (422 on `to` beyond it). 409 without an open\nday. Time then runs on the server until she pauses it, through the close and the night; the day hands over at the\nnext trading day's open, and a jump across several opens hands over day by day.",
+        "description": "Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:\n`{\"to\": \"<ISO time with its UTC offset>\"}` sets the clock to that date and time. Forward only (422 on a `to`\nalready past; a `to` equal to the clock changes nothing) and no later than `jump_limit` (422 on `to` beyond it).\n409 without an open day. Time then runs on the server until she pauses it, through the close and the night; the\nday hands over at the next trading day's open, and a jump across several opens hands over day by day.",
         "operationId": "control_thread_clock_api_desk_replay_threads__thread_id__clock_post",
         "parameters": [
           {

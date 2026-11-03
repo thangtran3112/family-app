@@ -50,7 +50,7 @@ SIMULATED_LABEL = "Simulated money · practice only, never a real account"
 # not a setting: it changes with an owner decision, not at run time.
 MAX_ACTIVE_DAY_THREADS = 10
 DAY_SLOTS_FULL = "All {max} day-trade slots are in use · close a day thread to start another"
-SWING_CLOSED = "Swing threads are not open yet · start a day thread"
+SWING_CLOSED = "Swing threads are closed · start a day thread"
 SWING_SHARES = "A swing thread sizes each hold from its cash · the share count is for day threads"
 NO_THREAD = "Start a practice thread first · it holds your simulated balance and risk plan"
 CLOSED_THREAD = "Your practice thread is closed · start a new thread to keep practising"

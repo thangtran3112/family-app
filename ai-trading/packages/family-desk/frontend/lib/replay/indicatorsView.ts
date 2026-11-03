@@ -61,7 +61,8 @@ export function indicatorsFootnote(interval: string): string {
  * rows laid on `bars` (`serverSeries`); left out, the values are computed from `bars` (the Daily view).
  */
 export function indicatorGroups(bars: readonly ChartBar[], interval: string, server?: ServerSeries): IndicatorGroup[] {
-  const series = buildChartSeries(bars.map((bar) => ({ ...bar, v: bar.v ?? null, ext: bar.ext ?? false })), SET, interval, "stock", server);
+  // With the server's rows nothing is computed from the bars, so they are not copied (6,000 objects a new bar, D-206).
+  const series = buildChartSeries(server ? (bars as Parameters<typeof buildChartSeries>[0]) : bars.map((bar) => ({ ...bar, v: bar.v ?? null, ext: bar.ext ?? false })), SET, interval, "stock", server);
   const price = bars.at(-1)?.c ?? null;
   const overlay = (id: string) => currentValue(series.overlays.find((item) => item.id === id)?.values ?? []);
   const pane = (paneId: string, seriesId: string) => currentValue(series.panes.find((item) => item.id === paneId)?.series.find((item) => item.id === seriesId)?.values ?? []);

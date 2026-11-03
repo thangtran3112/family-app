@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY } from "@/lib/desk/freshness";
 import { isQuietTape, paceOf, type ReplayView } from "@/lib/replay/feedState";
@@ -44,7 +45,10 @@ const COLUMNS: DenseColumn<TapeDisplayRow>[] = [
 ];
 
 export function TapePanel({ view, filterId, onFilter, refreshing = false }: TapePanelProps) {
-  const rows = tapeRows(view);
+  // The rows are formatted (a price and a size each, 120 rows) only when the prints or the big-print line change, not on every poll that brings none (D-206).
+  const { tape } = view;
+  const bigPrintUsd = view.tapeMeta?.bigPrintUsd ?? null;
+  const rows = useMemo(() => tapeRows({ tape, tapeMeta: { bigPrintUsd } }), [tape, bigPrintUsd]);
   const fast = fastTapeText(view.tapeMeta);
   const halted = haltedTapeText(view.quietS);
   const quiet = halted === null && view.tape.length > 0 && isQuietTape(view);
