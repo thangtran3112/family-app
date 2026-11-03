@@ -1,4 +1,4 @@
-import { formatEtClock, formatEtTimeZone } from "../desk/format.ts";
+import { formatEtClock, formatEtDateTimeZone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Screen } from "./screen.ts";
 
@@ -11,7 +11,7 @@ export type PracticeStatusLine = { left: readonly string[]; right: readonly stri
 export function screenStatusLine(screen: Pick<Screen, "rescan">): PracticeStatusLine {
   return {
     left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusScanAtClock],
-    right: [screen.rescan === null ? PRACTICE_COPY.screenStatusNotScanned : practiceText("statusScanned", { time: formatEtTimeZone(screen.rescan.as_of) }), PRACTICE_COPY.statusSignals],
+    right: [screen.rescan === null ? PRACTICE_COPY.screenStatusNotScanned : practiceText("statusScanned", { time: formatEtDateTimeZone(screen.rescan.as_of) }), PRACTICE_COPY.statusSignals],
   };
 }
 

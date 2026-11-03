@@ -289,8 +289,13 @@ test.describe("Practice", () => {
     for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label, exact: true })).toBeVisible(); // exact: "vs prev close % now" is a column from the first paint (D-159)
     // D-136: no name reports before the open, so there is no Earnings column of dashes to scroll past.
     await expect(table.getByRole("columnheader", { name: "Earnings" })).toHaveCount(0);
+    // D-223: the names say why they are listed, so the Filters column is shown at both widths; D-222: a header sorts the rows.
+    await expect(table.getByRole("columnheader", { name: "Filters", exact: true })).toBeVisible();
+    const symbolHead = table.getByRole("columnheader", { name: "Symbol", exact: true });
+    await symbolHead.getByRole("button").click();
+    await expect(symbolHead).toHaveAttribute("aria-sort", /ascending|descending/);
     // D-043: the Screen's own status line. One scan time: the scan's clock.
-    await expect(page.getByLabel("Status")).toContainText("Scanned 9:30 AM ET");
+    await expect(page.getByLabel("Status")).toContainText(/Scanned \w{3} \d{4}-\d{2}-\d{2} 9:30 AM ET/);
     await expect(page.getByLabel("Status")).toContainText(PRACTICE_COPY.statusScanAtClock);
     await expect(page.locator("body")).toContainText(formatEtDay(DAY));
     await expectNoDayLanguage(page);

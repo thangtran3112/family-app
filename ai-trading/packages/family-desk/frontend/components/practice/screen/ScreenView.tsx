@@ -14,7 +14,7 @@ import { FactList } from "@/components/ui/FactList";
 import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { EmptyBlock, ErrorBlock, Skeleton } from "@/components/ui/StateBlocks";
 import { withPriorities } from "@/lib/desk/columns";
-import { formatEtDateClock, formatEtTimeZone } from "@/lib/desk/format";
+import { formatEtDateClock, formatEtDateTimeZone, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadScreen, loadThread, openLane, patchScreen, rescanScreen } from "@/lib/desk/replay";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -48,7 +48,7 @@ import {
   screenColumns,
   screenCountsText,
   screenTitle,
-  screenWarning,
+  screenWarnings,
   sourceNote,
   toggledStars,
   universeNote,
@@ -255,7 +255,6 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
     return () => clearInterval(timer);
   }, [scanRunning, onChanged]);
 
-  const warning = screenWarning(screen);
   const unscanned = neverScanned(screen);
   const current = rescanCurrent({ clock, rescan: screen.rescan });
   const stale = rescanStaleText({ clock, rescan: screen.rescan });
@@ -294,7 +293,9 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
           </ul>
           <span className={styles.filterNote}>{filtersNote(screen.screen.filters.length)}</span>
         </div>
-        {warning && <p className={styles.banner} role="status">{warning}</p>}
+        {screenWarnings(screen).map((text) => (
+          <p key={text} className={styles.banner} role="status">{text}</p>
+        ))}
         {message && (retry ? <ErrorBlock message={message} onRetry={retry} /> : <p className={styles.banner} role="alert">{message}</p>)}
 
         <section className={styles.section} aria-label="Candidates">
@@ -314,7 +315,7 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
                 <p className={styles.muted} data-testid="live-note">
                   {practiceText(live.today ? "screenLiveNote" : beforeOpen(clock) ? "screenLiveNotePre" : "screenLiveNoteOpen", {
                     clock: formatEtDateClock(clock, { seconds: false }),
-                    scan: screen.rescan ? formatEtTimeZone(screen.rescan.as_of) : formatEtTimeZone(screen.data_through),
+                    scan: screen.rescan ? formatEtDateTimeZone(screen.rescan.as_of) : formatEtTimeZone(screen.data_through),
                   })}
                 </p>
               )}
@@ -504,6 +505,7 @@ function columnsOf(screen: Screen, live: FollowState | null): DenseColumn<Candid
     {
       key: "symbol",
       label: "Symbol",
+      sortValue: (row) => row.symbol,
       render: (row) => (
         <span>
           <span className={styles.symbol}>{row.symbol}</span>
@@ -512,11 +514,12 @@ function columnsOf(screen: Screen, live: FollowState | null): DenseColumn<Candid
         </span>
       ),
     },
-    { key: "filters", label: "Filters", render: (row) => filtersText(row) },
+    { key: "filters", label: "Filters", sortValue: (row) => filtersText(row), render: (row) => filtersText(row) },
     ...screenColumns(screen, live).map((column): DenseColumn<Candidate> => ({
       key: column.key,
       label: column.label,
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",
+      sortValue: column.value,
       // No name was checked (every cell a dash): the column would be a row of dashes to scroll past (D-136).
       hideWhenEmpty: column.format === "earnings",
       render: (row) => {

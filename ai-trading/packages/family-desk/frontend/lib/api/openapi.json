@@ -6974,6 +6974,17 @@
             "title": "No Data",
             "type": "integer"
           },
+          "reads_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reads From"
+          },
           "scanned": {
             "title": "Scanned",
             "type": "integer"

@@ -47,6 +47,8 @@ const ListFilterCountsSchema = z.object({
   scanned: finite.int(),
   no_data: finite.int(),
   matches_total: finite.int(),
+  /** "HH:MM" ET: before it the filter has no bar of the day to read and lists no names. */
+  reads_from: z.string().nullable().optional(),
 }) satisfies z.ZodType<components["schemas"]["ListFilterCountsOut"]>;
 
 /** Where the scanned names came from: the Desk's recording of that morning, or today's Desk set (02o-b2). */

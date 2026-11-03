@@ -336,6 +336,7 @@ export const PRACTICE_COPY = {
   haltedTape: "No prints for {time} · the stock may be halted",
   noTrading: "No trading on {day} · pick a weekday",
   notFinished: "This session isn't finished yet · replay opens at 4:15 PM ET",
+  futureDay: "No replay for a date after today · pick {day} or earlier",
   beforeFloor: "Replay goes back to Jan 4, 2016",
   loadingReplay: "Preparing the replay…",
   ready: "Paused at {time}",
