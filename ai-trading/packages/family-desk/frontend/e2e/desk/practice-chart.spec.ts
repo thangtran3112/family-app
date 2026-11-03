@@ -501,7 +501,8 @@ test.describe("Practice replay chart in a swing session (the Daily view)", () =>
     await prepareDesk(context);
   });
 
-  test("the type applies to the Daily chart; the intraday groups are switched off and say why", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the type applies to the Daily chart; the intraday groups are switched off and say why", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await createSwingThread(context);
     const dayOne = await openNextDay(context, threadId);

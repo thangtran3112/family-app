@@ -9,7 +9,8 @@ const BOARD_URL = /\/practice\/day\?id=\d+/;
 const SESSION_URL = /\/practice\/replay\?id=\d+/;
 const playhead = (page: Page) => page.getByTestId("thread-clock-time"); // the thread's one clock, in the bar above every name
 
-test.describe("Swing practice", () => {
+// ADR-0025 step 1: swing is closed (POST /threads answers 409); this file goes with the swing removal step.
+test.describe.skip("Swing practice", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });

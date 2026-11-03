@@ -79,6 +79,7 @@ def world(client: TestClient, db_session, monkeypatch):
     """The signed-in owner (seeded watchlists and filters) and the swing services under the app. A test client has no
     background tasks: another test module may leave a session factory on `app.state`, which would run them for real."""
     monkeypatch.setattr(app.state, "session_factory", None, raising=False)
+    monkeypatch.setattr(replay_api, "_swing_closed", lambda: None)  # ADR-0025: the swing code stays until its removal
     services = swing_services()
     app.dependency_overrides[get_services] = lambda: services
     client.get(f"{BASE}/daily", headers=auth_headers())  # creates the user
