@@ -675,6 +675,7 @@ export const PRACTICE_COPY = {
   journalEmptyLine: "{balance} · no closed trade yet",
   journalEmpty: "The balance curve starts after you close your first position.",
   journalOpenPositions: "{positions} · not in this balance until you close them",
+  journalOpenPositionsOne: "1 open position · not in this balance until you close it",
   journalOpenPortfolio: "See the Portfolio",
   journalClosedBanner: "This thread is closed · realized balance {balance} · its journal stays here",
   journalStartedDate: "First trade {date}",

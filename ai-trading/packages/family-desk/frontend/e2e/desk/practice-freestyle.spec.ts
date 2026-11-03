@@ -143,7 +143,7 @@ test.describe("Practice: a freestyle thread keeps what she holds", () => {
     await openDesk(page, `/practice/screen?thread=${threadId}`);
     await expect(page.getByTestId("screen-lanes")).toContainText("TSLA");
     await openDesk(page, `/practice/journal?thread=${threadId}`);
-    await expect(page.getByTestId("journal-open-positions")).toContainText("1 open position");
+    await expect(page.getByTestId("journal-open-positions")).toContainText(PRACTICE_COPY.journalOpenPositionsOne);
     await expect(page.getByTestId("journal-open-positions").getByRole("link", { name: PRACTICE_COPY.journalOpenPortfolio })).toHaveAttribute("href", portfolioUrl(threadId));
   });
 
