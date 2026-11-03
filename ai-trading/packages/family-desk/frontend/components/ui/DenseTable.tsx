@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, fitColumns, type CellAlign, type ColumnFit, type ColumnKind, type ColumnWidth } from "@/lib/desk/denseTable";
+import { measureKey } from "@/lib/desk/denseMeasure";
 import { ariaSort, nextSort, sortRows, type SortState, type SortValue } from "@/lib/desk/sort";
 import styles from "./DenseTable.module.css";
 
@@ -87,22 +88,36 @@ export function DenseTable<R>({
   const [fit, setFit] = useState<ColumnFit>(FITS_ALL);
   const dropped = useMemo(() => new Set(fit.hidden), [fit.hidden]);
   const measured = useRef<{ columns: ColumnWidth[]; reserved: { max: number; min: number } } | null>(null);
+  const applied = useRef<ColumnFit>(FITS_ALL);
   const hasActions = Boolean(rowActions);
+  // The fit is set only when it differs from the one applied: a set to an equal value still renders the table, and `flushSync` of it lays the page out again (D-241).
+  const apply = useCallback((next: ColumnFit, sync: boolean) => {
+    if (sameFit(applied.current, next)) return;
+    applied.current = next;
+    if (sync) flushSync(() => setFit(next));
+    else setFit(next);
+  }, []);
   const settle = useCallback(() => {
     const wrap = wrapRef.current;
     if (!wrap || !measured.current) return;
-    const next = fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth);
-    setFit((previous) => (sameFit(previous, next) ? previous : next));
-  }, []);
+    apply(fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth), false);
+  }, [apply]);
+  // What the measure reads is the render's columns, but it runs again only when `measureKey` changes: the effect below cannot list them as a dependency.
+  const latest = useRef({ visible, hasActions });
+  useLayoutEffect(() => {
+    latest.current = { visible, hasActions };
+  });
+  const measureId = measureKey(visible, rows.length, hasActions, showEmpty);
   // Measure before paint, so a column that does not fit is never shown: each header cell's width with the table at its natural width (one-line
-  // headers, then wrapped headers), the dropped columns shown for the measure (CSS `data-measure`). Again when the columns or the number of rows change, not when
-  // a poll only changes the values: `visible` keeps its identity then (`dropEmptyColumns`), so a table that refreshes every 2 s is not laid out twice more each time (D-212).
+  // headers, then wrapped headers), the dropped columns shown for the measure (CSS `data-measure`). Again when the columns (by value) or the number of rows change, not when
+  // a poll only changes the values or a parent passes the same columns in a new array (D-212, D-241), so a table that refreshes every 2 s is not laid out twice more each time.
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     let live = true;
-    const measure = () => {
-      if (!live) return;
+    // Reads the widths; returns the fit when it differs from the one applied, so the caller sets it (in the frame, inside `flushSync`) only then.
+    const measure = (): ColumnFit | null => {
+      const { visible: columns, hasActions: actions } = latest.current;
       const heads = Array.from(wrap.querySelectorAll<HTMLElement>("thead th"));
       const widthsAt = (size: "max" | "min") => {
         wrap.dataset.measure = size;
@@ -112,25 +127,35 @@ export function DenseTable<R>({
       const min = widthsAt("min");
       delete wrap.dataset.measure;
       measured.current = {
-        columns: visible.map((column, index) => ({ key: column.key, ...(column.priority === undefined ? {} : { priority: column.priority }), max: max[index] ?? 0, min: min[index] ?? 0 })),
-        reserved: hasActions ? { max: max[visible.length] ?? 0, min: min[visible.length] ?? 0 } : { max: 0, min: 0 },
+        columns: columns.map((column, index) => ({ key: column.key, ...(column.priority === undefined ? {} : { priority: column.priority }), max: max[index] ?? 0, min: min[index] ?? 0 })),
+        reserved: actions ? { max: max[columns.length] ?? 0, min: min[columns.length] ?? 0 } : { max: 0, min: 0 },
       };
-      settle();
+      const next = fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth);
+      return sameFit(applied.current, next) ? null : next;
     };
     // The measure runs in the next frame's animation callback, which is still before that frame's paint, so a column that does not fit is still never
     // shown. Run inside the commit's layout effect it put the page's first layout, the measure's own two and React's render in one task: a long task
-    // when a 30-row table mounts (D-235). `flushSync` applies the fit before the paint, as the layout effect's own state update did.
+    // when a 30-row table mounts (D-235). `flushSync` applies the fit before the paint, as the layout effect's own state update did; with no change
+    // to apply there is no render and no second layout.
     const frame = requestAnimationFrame(() => {
-      if (live) flushSync(measure);
+      if (!live) return;
+      const next = measure();
+      if (next) apply(next, true);
+      // A letter's width is what is being summed, so a measure taken before the web font arrived is taken again once it is in. The status is read after the
+      // measure, when the layout it forced has started any font the table needs: with the fonts loaded (a returning visit) there is no second pass, which
+      // would only read the same widths in two more forced layouts (D-235, D-241).
+      if (document.fonts && document.fonts.status !== "loaded") {
+        void document.fonts.ready.then(() => {
+          const again = live ? measure() : null;
+          if (again) apply(again, false);
+        });
+      }
     });
-    // The first measure may run before the web font has: measure again once it is in, because a letter's width is what is being summed.
-    // With the fonts already loaded the second measure reads the same widths, so it only costs two more forced layouts (D-235).
-    if (document.fonts && document.fonts.status !== "loaded") void document.fonts.ready.then(measure);
     return () => {
       live = false;
       cancelAnimationFrame(frame);
     };
-  }, [visible, rows.length, hasActions, showEmpty, settle]);
+  }, [measureId, apply]);
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
