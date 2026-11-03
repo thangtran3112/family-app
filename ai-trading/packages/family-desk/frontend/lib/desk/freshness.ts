@@ -472,7 +472,7 @@ export const PRACTICE_COPY = {
   threadPickTitle: "No practice thread selected",
   // Each screen that lists the threads names its own next step (D-183); the rows go to the same place.
   threadPickHintThread: "Pick a thread to open its Summary.",
-  threadPickHintReplay: "Pick a thread, then open a name from its day.",
+  threadPickHintReplay: "Pick a thread, then open a name from its Screen.",
   threadPickNone: "No practice thread yet · start one on Practice to get a pretend balance",
   threadBalanceLine: "Thread balance {balance}",
   threadJournal: "Open journal",
