@@ -367,8 +367,9 @@
   border-color: var(--color-muted);
 }
 
-.topBadge { min-width: 0; max-width: 260px; flex-shrink: 1; }
-.bar[data-band="1180"] .topBadge { max-width: 260px; }
+/* The quote badge keeps its whole sentence in every mode and band (D-211): it never shrinks, so only the spacer and the search box give way.
+   Its 260 px cap is above the longest wording ("Market closed · showing last close", 195 px). */
+.topBadge { min-width: 0; max-width: 260px; flex-shrink: 0; }
 
 /* The replay note keeps its whole text (layout only; ui/Freshness owns the look): never Live or Delayed, never shrunk (02o §a1). */
 .replayBadge { flex-shrink: 0; max-width: none; }
