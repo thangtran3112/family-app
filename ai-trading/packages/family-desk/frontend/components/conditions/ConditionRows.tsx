@@ -4,16 +4,13 @@ import type { Condition } from "@ai-trading/contracts";
 import { Button } from "@/components/ui/Button";
 import { ChoiceGroup, FieldGroup, FieldRow, Radio } from "@/components/ui/Field";
 import type { Problem } from "@/lib/api/schemas";
-import { nodePath } from "@/lib/desk/conditionTree";
 import { addRow, removeRow, updateRow, type FilterForm } from "@/lib/desk/filterForm";
 import { OPERAND_CATALOG } from "@/lib/desk/operands";
 import { fieldError } from "@/lib/desk/problems";
 import { optionLabel } from "@/lib/spec/labels";
+import { rowPath } from "./conditionBoxes";
 import { ConditionLeaf } from "./ConditionLeaf";
 import styles from "./conditions.module.css";
-
-/** A row's place in the spec: a single row is the condition itself (`when`), several sit in the group (`when.all.1`). */
-const rowPath = (form: FilterForm, index: number) => (form.rows.length === 1 ? "when" : nodePath("when", form.mode, index));
 
 function ConditionRow({ condition, index, form, onChange, problems }: {
   condition: Condition;

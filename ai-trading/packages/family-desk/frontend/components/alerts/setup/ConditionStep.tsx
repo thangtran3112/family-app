@@ -3,6 +3,8 @@
 import type { Condition, Operand } from "@ai-trading/contracts";
 import type { Problem } from "@/lib/api/schemas";
 import { OperandPicker } from "@/components/conditions/OperandPicker";
+import { BoxLines } from "@/components/conditions/BoxLines";
+import { rowPath } from "@/components/conditions/conditionBoxes";
 import { PatternFields, type PatternCondition } from "@/components/conditions/PatternFields";
 import { ALERT_OPERATORS, operatorOf, withOperator, type AlertForm, type AlertOperatorId } from "@/lib/desk/alertForm";
 import { rowsBoxLabels } from "@/lib/desk/conditionLabels";
@@ -43,7 +45,7 @@ export function ConditionStep({ form, onChange, problems }: {
       {form.rows.map((row, index) => (
         <div key={index} className={styles.condition}>
           <FieldRow className={styles.controls}>
-            <ConditionFields row={row} index={index} onChange={(next) => setRow(index, next)} />
+            <ConditionFields row={row} index={index} path={rowPath(form, index)} problems={rowProblems[index]!} onChange={(next) => setRow(index, next)} />
             <Button
               aria-label={`Remove condition ${index + 1}`}
               disabled={form.rows.length === 1}
@@ -52,7 +54,7 @@ export function ConditionStep({ form, onChange, problems }: {
               Remove
             </Button>
           </FieldRow>
-          {rowProblems[index]!.map((problem, position) => <FieldError key={position}>{problemLine(problem, boxLabels)}</FieldError>)}
+          <BoxLines problems={rowProblems[index]!} line={(list) => list.map((problem) => problemLine(problem, boxLabels)).join(" ")} />
         </div>
       ))}
       {loose.map((problem, index) => <FieldError key={index}>{problemLine(problem, boxLabels)}</FieldError>)}
@@ -64,7 +66,7 @@ export function ConditionStep({ form, onChange, problems }: {
 }
 
 /** One row's fields. Patterns and comparisons the picker can express are editable; anything else reads as text. */
-function ConditionFields({ row, index, onChange }: { row: Condition; index: number; onChange: (next: Condition) => void }) {
+function ConditionFields({ row, index, path, problems, onChange }: { row: Condition; index: number; path: string; problems: readonly Problem[]; onChange: (next: Condition) => void }) {
   const fieldId = (name: string) => `alert-condition-${index}-${name}`;
   const operator = (
     <Field id={fieldId("operator")} label="Operator">
@@ -86,14 +88,14 @@ function ConditionFields({ row, index, onChange }: { row: Condition; index: numb
   if (isCompare(row) && choiceOf(row.left) !== null && choiceOf(row.right) !== null) {
     return (
       <>
-        <OperandPicker label="Metric" operand={row.left} defs={OPERAND_CATALOG} onChange={(left) => onChange({ ...row, left })} />
+        <OperandPicker label="Metric" path={`${path}.left`} problems={problems} operand={row.left} defs={OPERAND_CATALOG} onChange={(left) => onChange({ ...row, left })} />
         {operator}
         {"pct" in row && (
           <Field id={fieldId("pct")} label="Within %">
             <NumberInput min={0} max={100} step="any" value={Number.isFinite(row.pct) ? row.pct : ""} onChange={(event) => onChange({ ...row, pct: number(event.target.value) })} />
           </Field>
         )}
-        <OperandPicker label="Compared with" operand={row.right} defs={OPERAND_CATALOG} allowNumber onChange={(right) => onChange({ ...row, right })} />
+        <OperandPicker label="Compared with" path={`${path}.right`} problems={problems} operand={row.right} defs={OPERAND_CATALOG} allowNumber onChange={(right) => onChange({ ...row, right })} />
       </>
     );
   }

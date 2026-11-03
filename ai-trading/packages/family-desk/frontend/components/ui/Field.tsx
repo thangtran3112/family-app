@@ -29,6 +29,7 @@ export function Field({
   hint,
   note,
   error,
+  errorElsewhere = false,
   reserve = false,
   testId,
   aside,
@@ -45,6 +46,8 @@ export function Field({
   hint?: string;
   note?: string | null;
   error?: string | null;
+  /** The caller prints the `error` sentence as a line with the id `${id}-error` (a condition row's line): the control is still invalid and described by it, and the field prints no second copy. */
+  errorElsewhere?: boolean;
   /** Keep the message line's room when it is empty, so a note that comes and goes never moves the fields below. */
   reserve?: boolean;
   testId?: string;
@@ -66,7 +69,7 @@ export function Field({
           {aside}
         </div>
         {children}
-        {wiring.messageId !== null && (
+        {wiring.messageId !== null && !(errorElsewhere && wiring.alert) && (
           <p id={wiring.messageId} data-testid={testId} role={wiring.alert ? "alert" : undefined} data-error={wiring.alert ? "true" : undefined} data-reserve={reserve ? "true" : undefined} className={styles.message}>
             {wiring.message}
           </p>
