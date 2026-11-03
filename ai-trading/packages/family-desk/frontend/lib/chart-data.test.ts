@@ -258,23 +258,25 @@ test("a pinch on a chart with no visible range yet is swallowed without a zoom",
 });
 
 test("a followed replay chart waits at the session's first bar only before the open, and follows the newest bar from the first session bar on (D-099, D-186)", () => {
-  // 40 lookback bars, the session opens at index 40; the view is 35 slots (26 bars and a pad of 10) wide.
-  assert.deepEqual(pinnedRange(40, 40, 35), { from: 40, to: 75 }, "before the open: the view waits at the first session bar");
-  assert.equal(pinnedRange(41, 40, 35), null, "1 bar in: the chart follows the newest bar, with the lookback to its left");
+  // 40 lookback bars, the session opens at index 40; the view is 35 slots wide, with the last 10 lookback bars in view before the open.
+  assert.deepEqual(pinnedRange(40, 40, 35, 10), { from: 30, to: 65 }, "before the open: the view waits, the lookback in view to the left of the open (D-220)");
+  assert.equal(pinnedRange(41, 40, 35, 10), null, "1 bar in: the chart follows the newest bar, with the lookback to its left");
   // A few candles pinned at the left edge of a blank plot left the time axis with no label to print (D-186): 5 and 26 bars in follow too.
-  assert.equal(pinnedRange(45, 40, 35), null, "5 bars in: not bunched at the left edge");
-  assert.equal(pinnedRange(66, 40, 35), null, "26 bars in");
+  assert.equal(pinnedRange(45, 40, 35, 10), null, "5 bars in: not bunched at the left edge");
+  assert.equal(pinnedRange(66, 40, 35, 10), null, "26 bars in");
+  // A lookback shorter than the view: the range starts at the first bar.
+  assert.deepEqual(pinnedRange(3, 3, 35, 90), { from: 0, to: 35 }, "a short lookback: from the first bar");
 });
 
 test("an update moves a followed chart to its newest bar from the first session bar on, whatever the data came from (D-195)", () => {
   // 6000 lookback bars, the session opens at index 6000; the view is 100 slots wide with the newest bar 10 from its right edge.
-  const open = pinnedRange(6000, 6000, 99);
-  assert.deepEqual(open, { from: 6000, to: 6099 }, "before the open the view waits");
+  const open = pinnedRange(6000, 6000, 99, 90);
+  assert.deepEqual(open, { from: 5910, to: 6009 }, "before the open the view waits, with 90 lookback bars in view and the open 9 slots from its right edge (D-220)");
   assert.equal(followsNewest(true, { from: 5998, to: 6097 }, 5999, open), false, "no session bar yet: it keeps waiting");
   // The first session bar arrives (the clock moved: Step, Play, a Pause in another window, the clock route): `waiting` is gone and the
   // view was parked on the old newest bar, so it follows. Nothing of this depends on where the data came from.
-  assert.equal(followsNewest(true, { from: 5998, to: 6097 }, 5999, pinnedRange(6001, 6000, 99)), true, "the first session bar");
-  assert.equal(followsNewest(true, { from: 5911, to: 6010 }, 6003, pinnedRange(6005, 6000, 99)), true, "four bars on: the newest bar and its pad are in view, so it follows");
+  assert.equal(followsNewest(true, { from: 5998, to: 6097 }, 5999, pinnedRange(6001, 6000, 99, 90)), true, "the first session bar");
+  assert.equal(followsNewest(true, { from: 5911, to: 6010 }, 6003, pinnedRange(6005, 6000, 99, 90)), true, "four bars on: the newest bar and its pad are in view, so it follows");
   assert.equal(followsNewest(true, null, 6003, null), true, "no view yet");
   assert.equal(followsNewest(true, { from: 5905, to: 6001.5 }, 6003, null), true, "a bar and a half behind still counts as parked");
   assert.equal(followsNewest(true, { from: 5800, to: 5899 }, 6003, null), false, "she scrolled back to read the past: the view is hers");

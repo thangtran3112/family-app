@@ -710,7 +710,7 @@ export function MarketChart({
     const key = `${symbol}:${interval}`;
     const count = barAt.current.map.size;
     // Before the open the view waits at the session's first bar; from the first session bar on a followed chart shows the newest bars (D-186).
-    const waiting = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1);
+    const waiting = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1, firstDraw);
     if (bars.length && fitKey.current !== key) {
       if (follow) currentChart.timeScale().setVisibleLogicalRange(waiting ?? { from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
       else currentChart.timeScale().fitContent();
