@@ -112,7 +112,7 @@ test.describe("Practice thread tabs", () => {
     await expect(target).toHaveAttribute("title", PRACTICE_COPY.tabNoDay);
     await expect(target, "the reason is the tab's accessible description").toHaveAccessibleDescription(PRACTICE_COPY.tabNoDay);
     await expect(target, "the reason is not part of the tab's name").toHaveAccessibleName(name);
-    await target.click();
+    await target.click({ force: true }); // Playwright waits forever on an aria-disabled target otherwise
     await expectSelected(page, "Summary"); // a press is a no-op, not a silent navigation
   }
 
@@ -125,7 +125,7 @@ test.describe("Practice thread tabs", () => {
     await tab(page, "Portfolio").focus();
     await page.keyboard.press("ArrowRight");
     await expect(tab(page, "Day list")).toBeFocused();
-    await expectSelected(page, "Portfolio"); // focus is reachable, selection is not
+    await expectSelected(page, "Summary"); // focus is reachable, selection is not
     await expect(page).not.toHaveURL(/\/practice\/day/);
     expect(page.url()).toContain(summaryUrl);
   });
