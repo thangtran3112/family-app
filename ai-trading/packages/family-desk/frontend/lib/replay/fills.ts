@@ -50,7 +50,7 @@ export type FillRow = { key: string; date: string; time: string; symbol: string;
 export const fillRows = (fills: readonly Fill[]): FillRow[] =>
   fills.map((fill) => ({
     key: String(fill.id),
-    date: formatEtDay(fill.day),
+    date: formatEtDay(fill.at), // the ET date of the time shown beside it; `day` is the session's data day, not the fill's (D-219)
     time: formatEtClock(fill.at), // to the second, like the thread clock the fill was stamped by
     symbol: fill.symbol,
     action: fill.action === "buy" ? "Buy" : "Sell",
