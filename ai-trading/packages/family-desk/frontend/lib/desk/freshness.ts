@@ -438,6 +438,7 @@ export const PRACTICE_COPY = {
   screenRescanNew: "New in this scan",
   screenRescanHeld: "No longer matches",
   screenRescanError: "Couldn't scan · Try again",
+  screenRescanRefused: "{reason}. Move the clock on the Summary ({play}, {nextOpen} or {jump}), then scan.",
   screenRescanning: "Scanning…",
   screenRescanCounting: "Scanning at {clock} · counting the names to read…",
   screenRescanProgress: "Scanning at {clock} · read {done} of {total} names ({pct}%)",

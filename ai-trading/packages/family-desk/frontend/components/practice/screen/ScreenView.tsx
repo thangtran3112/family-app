@@ -7,6 +7,7 @@ import { backoffMs } from "@/lib/desk/backoff";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
@@ -35,10 +36,12 @@ import {
   heldFirst,
   isStarred,
   laneLine,
+  minuteOfClock,
   neverScanned,
   rescanCounts,
   rescanCurrent,
   rescanProgressText,
+  rescanRefusedText,
   rescanRunning,
   rescanStaleText,
   riskPlanText,
@@ -144,6 +147,8 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   const [scanning, setScanning] = useState(false);
   // This screen saw a scan run, so when the job reads "done" it can tell her it finished, not just show a new label.
   const [scanSeen, setScanSeen] = useState(false);
+  // The server refused a scan because every filter waits for its first bar (409): only the thread clock changes that (D-234). The minute it was refused in, and its reason.
+  const [refused, setRefused] = useState<{ minute: number; reason: string } | null>(null);
   // Keyboard focus follows the flow (D-092): the page heading on arrival.
   const titleRef = useRef<HTMLHeadingElement>(null);
   // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
@@ -225,8 +230,14 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
       async () => {
         setScanning(true);
         setScanSeen(false);
+        setRefused(null);
         try {
           await rescanScreen(threadId);
+        } catch (error) {
+          // 409: every filter waits for its first bar of the day. Asking again at the same time gets the same answer, so say where time moves instead of offering a retry (D-234).
+          if (!(error instanceof DeskApiError && error.status === 409)) throw error;
+          setRefused({ minute: minuteOfClock(clock), reason: problemMessage(error, PRACTICE_COPY.screenRescanError) });
+          return;
         } finally {
           setScanning(false);
         }
@@ -255,6 +266,8 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
     return () => clearInterval(timer);
   }, [scanRunning, onChanged]);
 
+  // The refusal stands for the clock minute it was made in; once the clock moves, a scan is worth asking for again. A closed thread is refused for its own reason, which its hint already gives.
+  const refusal = refused !== null && refused.minute === minuteOfClock(clock) && canRescan(screen) ? refused.reason : null;
   const unscanned = neverScanned(screen);
   const current = rescanCurrent({ clock, rescan: screen.rescan });
   const stale = rescanStaleText({ clock, rescan: screen.rescan });
@@ -404,15 +417,22 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
         <section className={styles.section} aria-label="Scan">
           <h2 className={styles.sectionTitle}>{PRACTICE_COPY.screenRescanTitle}</h2>
           <div className={styles.actions}>
-            <Button disabled={busy || scanning || scanRunning || !canRescan(screen) || current} onClick={() => void rescan()}>
+            <Button disabled={busy || scanning || scanRunning || !canRescan(screen) || current || refusal !== null} onClick={() => void rescan()}>
               {scanning || scanRunning ? PRACTICE_COPY.screenRescanning : unscanned ? PRACTICE_COPY.screenScanNow : PRACTICE_COPY.screenRescanNow}
             </Button>
-            {!scanRunning && (
+            {!scanRunning && refusal === null && (
               <span className={styles.muted} data-testid="rescan-hint">
                 {!canRescan(screen) ? PRACTICE_COPY.screenRescanClosed : current ? PRACTICE_COPY.screenRescanCurrent : PRACTICE_COPY.screenRescanHint}
               </span>
             )}
           </div>
+          {refusal !== null && (
+            <div data-testid="rescan-refused">
+              <Banner tone="warn" action={<Button client href={threadPageHref(threadId)}>{PRACTICE_COPY.screenToSummary}</Button>}>
+                {rescanRefusedText(refusal)}
+              </Banner>
+            </div>
+          )}
           {screen.rescan_job?.state === "running" && (
             <div className={styles.scanProgress} data-testid="rescan-progress">
               <progress

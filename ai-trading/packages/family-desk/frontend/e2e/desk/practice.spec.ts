@@ -18,6 +18,7 @@ import {
   expectNoDayLanguage,
   fillNewPlan,
   get,
+  jumpByApi,
   openLaneByApi,
   openNewPlan,
   openRow,
@@ -30,7 +31,7 @@ import {
   startThread,
   watchAnswers,
 } from "./hub-helpers";
-import { backToScreen, openScreen, startLane } from "./lane-helpers";
+import { EVERY_NAME, backToScreen, openScreen, startLane } from "./lane-helpers";
 
 // The Practice lane (02o §i, step 5; ADR-0025): the landing and its New thread modal start a freestyle thread; a name is a lane of it, opened from the Screen;
 // Buy, Set stop, Close position, the journal, and a reloaded lane follow the thread's one clock. Nothing ends: there is no day, no End day, no Skip day.
@@ -582,6 +583,41 @@ test.describe("Practice", () => {
       await expect(page.getByText(PRACTICE_COPY.threadPickTitle), bad).toHaveCount(0);
       await expect(page.getByRole("link", { name: PRACTICE_COPY.openPractice })).toBeVisible();
     }
+  });
+
+  test("a scan refused because every filter waits says where time moves, offers no Try again, and holds until the clock moves (D-234)", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    // A 15-minute filter has no bar to read at the 9:30 open: the server refuses the scan (409) until 10:00.
+    const waits = { ...EVERY_NAME, name: "Waits for a 15m bar", watch: { ...EVERY_NAME.watch, runOn: "bar_close_15m" } };
+    const threadId = await createThreadByApi(context, { filterId: await saveFilter(context, waits) });
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && /\/screen\/rescan$/.test(request.url())) posts.push(request.url());
+    });
+    await openDesk(page, `/practice/screen?thread=${threadId}`);
+    await expect(page.getByTestId("not-scanned")).toBeVisible();
+    const scan = page.getByRole("button", { name: PRACTICE_COPY.screenScanNow });
+    await scan.click();
+
+    // One sentence: the server's reason, then where time moves. No dangling separator, no Try again.
+    const refused = page.getByTestId("rescan-refused");
+    await expect(refused).toContainText("Waits for a 15m bar waits until 10:00 AM ET · no filter has a bar to read at 9:30 AM ET. Move the clock on the Summary (Play, Next open or Jump), then scan.");
+    await expect(refused).not.toContainText(/·\s*$/);
+    await expect(page.getByRole("button", { name: /try again/i })).toHaveCount(0);
+    await expect(scan, "the same scan at the same time would be refused again").toBeDisabled();
+    expect(posts, "one refusal, not a retry loop").toHaveLength(1);
+
+    // The link is the way to the Summary, where the clock moves.
+    await expect(refused.getByRole("link", { name: PRACTICE_COPY.screenToSummary })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
+
+    // The clock moves a minute (here by the API; on the Summary it is Play, Next open or Jump): the refusal is old news and a scan may be asked for again.
+    await jumpByApi(context, threadId, `${DAY}T09:35:00${ET_OFFSET}`);
+    await expect(refused).toHaveCount(0, { timeout: 30_000 });
+    await expect(scan).toBeEnabled();
+    await scan.click();
+    await expect(refused).toContainText("no filter has a bar to read at 9:35 AM ET");
+    expect(posts).toHaveLength(2);
+    await expectCleanScreen(page);
   });
 
   test("clicking a candidate row opens its lane, from the mouse and from the keyboard", async ({ page, context }) => {

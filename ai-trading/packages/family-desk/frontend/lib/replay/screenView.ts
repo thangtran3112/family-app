@@ -225,6 +225,16 @@ export function laneLine(lane: Pick<Lane, "position">): string {
 
 // ---- re-scan at the thread clock (02o-b2) ----------------------------------------------------------------------
 
+/**
+ * The server refused a scan (409) because every filter waits for its first bar of the day: only the thread clock can change that, and it moves on the
+ * Summary. The server's reason leads, then where time moves; no separator is left hanging for a retry button that cannot work (D-234).
+ */
+export const rescanRefusedText = (reason: string): string =>
+  practiceText("screenRescanRefused", { reason, play: PRACTICE_COPY.clockPlay, nextOpen: PRACTICE_COPY.clockNextOpen, jump: PRACTICE_COPY.clockJumpGo });
+
+/** The minute of the thread clock: a scan reads closed minute bars, so the same minute is the same refusal (D-234). */
+export const minuteOfClock = (clock: string): number => Math.floor(Date.parse(clock) / 60_000);
+
 /** A scan is offered on an active thread: it runs at T, whatever T is. A closed thread's Screen no longer scans (409). */
 export const canRescan = (screen: Pick<Screen, "thread">): boolean => screen.thread?.status !== "closed";
 

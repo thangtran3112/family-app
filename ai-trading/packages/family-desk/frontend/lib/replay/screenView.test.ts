@@ -14,12 +14,14 @@ import {
   isStarred,
   laneLine,
   liveState,
+  minuteOfClock,
   neverScanned,
   rescanCounts,
   rescanCurrent,
   rescanLabel,
   rescanPercent,
   rescanProgressText,
+  rescanRefusedText,
   rescanRunning,
   rescanStaleText,
   riskPlanText,
@@ -102,6 +104,18 @@ test("the risk plan reads as one sentence, its limits count per ET date; no limi
   assert.equal(riskPlanText({ tradeOnlyOnSignal: "yes", maxLossUsd: 600, maxTrades: 3 }), "Risk plan comes from the thread: trade only on a signal, max loss $600, up to 3 trades per ET date.");
   assert.equal(riskPlanText({ tradeOnlyOnSignal: "no" }), "Risk plan comes from the thread: no limits set");
   assert.equal(riskPlanText({ tradeOnlyOnSignal: "no", maxTrades: 1 }), "Risk plan comes from the thread: up to 1 trade per ET date.");
+});
+
+test("D-234: the refusal of a scan names where time moves, ends in a full stop and leaves no separator hanging", () => {
+  const text = rescanRefusedText("Abnormal volume waits until 10:00 AM ET · no filter has a bar to read at 9:30 AM ET");
+  assert.equal(text, "Abnormal volume waits until 10:00 AM ET · no filter has a bar to read at 9:30 AM ET. Move the clock on the Summary (Play, Next open or Jump), then scan.");
+  assert.equal(/·\s*$/.test(text), false);
+  assert.equal(text.includes("Try again"), false);
+});
+
+test("D-234: a refusal holds for the clock minute it was made in, no longer", () => {
+  assert.equal(minuteOfClock("2026-08-03T13:30:05Z"), minuteOfClock("2026-08-03T13:30:55Z"));
+  assert.notEqual(minuteOfClock("2026-08-03T13:30:55Z"), minuteOfClock("2026-08-03T13:31:00Z"));
 });
 
 test("warnings: the server's reason is shown as it is; a Screen it had no reason for shows the empty state, not a second banner", () => {
