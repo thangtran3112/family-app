@@ -236,13 +236,16 @@ const ChartDataTable = memo(function ChartDataTable({ bars, rowLabels }: { bars:
       <div className={styles.tableScroll}>
         <table>
           <thead><tr><th scope="col">Time (ET)</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th></tr></thead>
-          <tbody>{bars.map((bar, index) => (
-            <tr key={`${bar.t}-${index}`}><th scope="row">{rowLabels?.[index] ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>
-          ))}</tbody>
+          <tbody>{bars.map((bar, index) => <ChartDataRow key={`${bar.t}-${index}`} bar={bar} label={rowLabels?.[index]} />)}</tbody>
         </table>
       </div>
     </details>
   );
+});
+
+/** One row of the data table. A refresh hands over the same bar objects but the newest (the replay's merge keeps them), so only the newest row is formatted and patched: 6,000 rows of `sourceTimeLabel` and `formatValue` cost ~0.55 s a pass (D-206). */
+const ChartDataRow = memo(function ChartDataRow({ bar, label }: { bar: ChartBar; label?: string }) {
+  return <tr><th scope="row">{label ?? sourceTimeLabel(bar.t)}</th><td>{formatValue(bar.o)}</td><td>{formatValue(bar.h)}</td><td>{formatValue(bar.l)}</td><td>{formatValue(bar.c)}</td></tr>;
 });
 
 export function MarketChart({

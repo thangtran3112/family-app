@@ -197,8 +197,11 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   // The chart's bars and series are built once: the chart draws them, the header reads VWAP from the same series and the left rail reads the same rows.
   // EMA 9/21, VWAP, RSI and MACD are the server's, computed from the same cut as the price and the forming candle (ADR-0022): the browser computes none
   // of them and asks for no one-minute feed, so the header, the left rail and the chart cannot disagree on 1m, 5m and 15m.
-  const bars = useMemo(() => chartBars(view), [view]);
-  const server = useMemo(() => serverSeries(bars, view.indicators, view.interval, view.forming?.t ?? null), [bars, view.indicators, view.interval, view.forming]);
+  // They depend on the closed bars, the forming candle and the server's rows, not on the whole view: a poll that brings nothing new changes the view (the clock, the tape)
+  // but none of these, so the chart is handed the very same arrays and redraws nothing (D-206).
+  const { bars: closedBars, forming, indicators } = view;
+  const bars = useMemo(() => chartBars({ bars: closedBars, forming }), [closedBars, forming]);
+  const server = useMemo(() => serverSeries(bars, indicators, view.interval, forming?.t ?? null), [bars, indicators, view.interval, forming]);
   const series = useMemo(() => buildChartSeries(bars, REPLAY_INDICATORS, view.interval, "stock", server), [bars, view.interval, server]);
   const vwap = currentValue(series.overlays.find((overlay) => overlay.id === "vwap")?.values ?? []);
   // The left rail's indicators are read off what the chart shows: the intraday bars, or the rebased daily bars while a swing session is on Daily.
