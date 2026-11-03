@@ -38,7 +38,7 @@ export function currentValue(values: Array<number | null>): number | null {
   return value !== undefined && value !== null && Number.isFinite(value) ? value : null;
 }
 
-function timeKey(time: Time): number {
+export function timeKey(time: Time): number {
   if (typeof time === "number") return time;
   if (typeof time === "string") return Math.floor(Date.parse(time) / 1000);
   return Date.UTC(time.year, time.month - 1, time.day) / 1000;
@@ -75,14 +75,15 @@ export function lineData(bars: ChartBar[], values: Array<number | null>): Array<
 export function valueRuns(values: readonly (number | null)[]): Array<[number, number]> {
   const runs: Array<[number, number]> = [];
   let start = -1;
-  values.forEach((value, index) => {
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
     const held = value !== null && value !== undefined && Number.isFinite(value);
     if (held && start < 0) start = index;
     else if (!held && start >= 0) {
       runs.push([start, index]);
       start = -1;
     }
-  });
+  }
   if (start >= 0) runs.push([start, values.length]);
   return runs;
 }
@@ -235,18 +236,22 @@ export function crosshairPoint(
   };
 }
 
+// The library asks for a label of every tick on every redraw, and a new bar redraws: build each New York format once (D-217).
+const etClock = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" });
+const etMonthDay = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" });
+
 /** "10:05 AM" in New York; empty for a business-day time (daily bars have no clock). */
 export function formatChartClock(time: Time): string {
   if (typeof time === "object") return "";
   const date = new Date(typeof time === "number" ? time * 1000 : time);
-  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }).format(date);
+  return etClock.format(date);
 }
 
 /** Replay axes: time of day on time ticks, "Oct 22" on day ticks. `tickType` is the library's TickMarkType (3 and up are time ticks). */
 export function replayTickLabel(time: Time, tickType: number): string {
   if (tickType >= 3) return formatChartClock(time);
   if (typeof time === "object") return "";
-  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" }).format(new Date(typeof time === "number" ? time * 1000 : time));
+  return etMonthDay.format(new Date(typeof time === "number" ? time * 1000 : time));
 }
 
 /** The library's axis type size (`layout.fontSize`, 12 by default): the chart sets no other. */
