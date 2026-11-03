@@ -3,8 +3,10 @@
 import type { Operand } from "@ai-trading/contracts";
 import { useId } from "react";
 import { Field, NumberInput, Select } from "@/components/ui/Field";
+import type { Problem } from "@/lib/api/schemas";
 import { choiceOf, operandDef, operandFor, type OperandDef } from "@/lib/desk/operands";
 import { optionLabel, subLabel } from "@/lib/spec/labels";
+import { boxField } from "./conditionBoxes";
 
 const GROUPS = ["Price", "Indicators", "Levels"] as const;
 
@@ -17,9 +19,13 @@ export const parse = (text: string) => (text.trim() === "" ? Number.NaN : Number
  * The metric is looked up in `defs`, not the global catalog, so a picker given the strategy catalog offers all 43 metrics.
  * `scope` words each parameter after the picker ("Metric length", "Compared with fast length") for a row that holds two pickers;
  * off, a parameter reads "Length".
+ * `path` is where the operand sits in the spec (`when.all.1.left`, `rank.by`). A box whose own path has a problem in `problems` is invalid and
+ * described by the line the caller prints for it with `BoxLines` (one sentence, one place); the picker prints no line of its own.
  */
-export function OperandPicker({ label, operand, defs, allowNumber = false, scope = false, disabled = false, onChange }: {
+export function OperandPicker({ label, path, problems, operand, defs, allowNumber = false, scope = false, disabled = false, onChange }: {
   label: string;
+  path: string;
+  problems: readonly Problem[];
   operand: Operand;
   defs: readonly OperandDef[];
   allowNumber?: boolean;
@@ -46,7 +52,7 @@ export function OperandPicker({ label, operand, defs, allowNumber = false, scope
         </Select>
       </Field>
       {choice !== null && "value" in choice && (
-        <Field id={`${uid}-value`} label="Value">
+        <Field {...boxField(problems, path, "value")} errorElsewhere label="Value">
           <NumberInput disabled={disabled} step="any" value={shown(choice.value)} onChange={(event) => onChange(operandFor({ id: "value", value: parse(event.target.value) }, defs))} />
         </Field>
       )}
@@ -58,7 +64,7 @@ export function OperandPicker({ label, operand, defs, allowNumber = false, scope
         </Field>
       ))}
       {metric && def?.params.map((param) => (
-        <Field key={param.key} id={`${uid}-${param.key}`} label={scope ? subLabel(label, param.key) : param.label}>
+        <Field key={param.key} {...boxField(problems, path, param.key)} errorElsewhere label={scope ? subLabel(label, param.key) : param.label}>
           <NumberInput
             disabled={disabled}
             min={param.min}
