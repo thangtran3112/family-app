@@ -218,6 +218,37 @@ test("marketPillView: one place decides the pill's text, short form, dot and sta
   // Before /status answers, and when it failed.
   assert.deepEqual(marketPillView({ ...base, market: null, quotes: null }), { full: "Checking the market…", shown: "Checking the market…", open: false, stale: false });
   assert.equal(marketPillView({ ...base, market: null, quotes: null, failed: true }).full, "Market status unavailable");
+  // At 1180 those two sentences shorten too (D-232); the title keeps the whole one.
+  const wait = marketPillView({ ...base, market: null, quotes: null, band: "1180" });
+  assert.deepEqual([wait.full, wait.shown], ["Checking the market…", "Checking…"]);
+  const down = marketPillView({ ...base, market: null, quotes: null, failed: true, band: "1180" });
+  assert.deepEqual([down.full, down.shown], ["Market status unavailable", "Unavailable"]);
+});
+
+// D-232: the Fundamental bar at 1180 leaves 287 px for the market pill and the quote badge, so the four sentences that do not fit lose their
+// second clause; every other state keeps its whole sentence, "Market closed · showing last close" first of all (D-211). `e2e/desk/topbar-pills.spec.ts`
+// measures the result in the real bar.
+test("the quote badge's short form: four sentences shorten, the other six stay whole, and the age or caution stays in it", () => {
+  const short = Object.fromEntries(rows.map(([state, input]) => [state, resolveFreshness(input).short]));
+  assert.deepEqual(short, {
+    live: "Live",
+    delayed: "Delayed 15 min",
+    updating: "Updating quotes…",
+    reconnecting: "Reconnecting…",
+    paused: "Quotes paused · 2 min ago",
+    backup: "Backup quotes · may differ",
+    closed: "Market closed · showing last close",
+    pre_market: "Pre-market · 8:12 AM ET",
+    after_hours: "After hours",
+    unavailable: "Quotes unavailable",
+  });
+  for (const [, input] of rows) {
+    const view = resolveFreshness(input);
+    assert.equal(view.short.length <= view.label.length, true, `${view.short} is longer than ${view.label}`);
+    assert.equal(containsBannedTerm(view.short), false);
+  }
+  // No age to print: the short form says so the way the whole one does.
+  assert.equal(resolveFreshness({ stamp: stamp("paused", "delayed-15m", null), session: "regular", now }).short, "Quotes paused · —");
 });
 
 test("the wrong-lane interstitial copy is gone: a route from another mode opens in its own mode (ADR-0014)", () => {

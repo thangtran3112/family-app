@@ -23,6 +23,13 @@ export const COPY = {
   alertsNotStarted: "Alerts start when live quotes are connected",
   alertsRunning: "Alerts on",
   statusUnavailable: "Status unavailable right now",
+  // The top-bar quote badge at the 1180 band (D-232): the Fundamental bar leaves 287 px for the market pill and the badge together,
+  // so the sentences that do not fit lose their second clause. The whole sentence stays in the badge's title and aria-label.
+  reconnectingShort: "Reconnecting…",
+  pausedShort: "Quotes paused · {ago}",
+  backupShort: "Backup quotes · may differ",
+  unavailableShort: "Quotes unavailable",
+  statusUnavailableShort: "Status unavailable",
   /** The status bar in Backtest mode, where no route brings its own line (ADR-0014). */
   backtestStatus: "Practice · past market data",
   emptyScan: "No matches right now · next scan {time}",
@@ -129,6 +136,8 @@ export type FreshnessView = {
   stale: boolean;
   /** "Stale · 45 min ago" for a stale price, else null. */
   mark: string | null;
+  /** The badge text at the 1180 band: the label itself unless its sentence is too long for the Fundamental bar (D-232). "Market closed · showing last close" stays whole (D-211). */
+  short: string;
 };
 
 const TONE: Record<FreshnessState, Tone> = {
@@ -142,6 +151,14 @@ const TONE: Record<FreshnessState, Tone> = {
   pre_market: "neutral",
   after_hours: "neutral",
   unavailable: "down",
+};
+
+/** The states whose sentence does not fit beside the market pill at 1180; every other state shows its label whole. */
+const SHORT: Partial<Record<FreshnessState, string>> = {
+  reconnecting: COPY.reconnectingShort,
+  paused: COPY.pausedShort,
+  backup: COPY.backupShort,
+  unavailable: COPY.unavailableShort,
 };
 
 const fill = (template: string, values: Record<string, string>) =>
@@ -177,10 +194,8 @@ export function resolveFreshness(input: FreshnessInput): FreshnessView {
   const asOf = followFeed(input)?.as_of ?? null;
   const now = input.now ?? new Date();
   const ago = formatAgo(asOf, now);
-  const label = fill(COPY[state], {
-    time: state === "reconnecting" ? formatEtClock(asOf) : formatEtTimeZone(asOf),
-    ago,
-  });
+  const values = { time: state === "reconnecting" ? formatEtClock(asOf) : formatEtTimeZone(asOf), ago };
+  const label = fill(COPY[state], values);
   const stale = state === "paused" || state === "reconnecting";
   return {
     state,
@@ -190,6 +205,7 @@ export function resolveFreshness(input: FreshnessInput): FreshnessView {
     dim: stale || state === "unavailable",
     stale,
     mark: stale ? fill(COPY.staleMark, { ago }) : null,
+    short: SHORT[state] ? fill(SHORT[state], values) : label,
   };
 }
 
@@ -268,7 +284,10 @@ export type MarketPillInput = {
 export function marketPillView({ market, quotes, connection, failed, band, now }: MarketPillInput): { full: string; shown: string; open: boolean; stale: boolean } {
   const full = failed ? "Market status unavailable" : market ? marketPillText(market.session, market.next_open) : "Checking the market…";
   // The quote badge beside the pill already says "Market closed": the pill drops that prefix and keeps what is new, when it opens (D-107).
-  const shown = market && band === "1180" ? marketPillShort(market.session) : full.replace(/^Market closed · (.)/, (_, first: string) => first.toUpperCase());
+  // Before /status answers there is no session word: at 1180 the pill shortens those two sentences too, or they push the avatar off the bar (D-232).
+  const shown = band === "1180"
+    ? market ? marketPillShort(market.session) : failed ? "Unavailable" : "Checking…"
+    : full.replace(/^Market closed · (.)/, (_, first: string) => first.toUpperCase());
   // "Market open" is true of the market, not of the numbers: the dot goes green only while the quotes are current too (V-Today-01).
   const feed = resolveFreshness({ stamp: quotes, session: market?.session, connection, feed: true, now });
   return { full, shown, open: market !== null && marketPillOpen(market.session, feed), stale: market?.session === "regular" && feed.stale };
@@ -438,6 +457,7 @@ export const PRACTICE_COPY = {
   screenRescanNew: "New in this scan",
   screenRescanHeld: "No longer matches",
   screenRescanError: "Couldn't scan · Try again",
+  screenRescanRefused: "{reason}. Move the clock on the Summary ({play}, {nextOpen} or {jump}), then scan.",
   screenRescanning: "Scanning…",
   screenRescanCounting: "Scanning at {clock} · counting the names to read…",
   screenRescanProgress: "Scanning at {clock} · read {done} of {total} names ({pct}%)",
@@ -455,7 +475,7 @@ export const PRACTICE_COPY = {
   screenPeekEarningsFlagged: "Reported before the open",
   screenPeekEarningsNone: "None flagged before the open",
   screenReported: "Reported before the open",
-  screenEarningsNone: "None",
+  screenEarningsNone: "No report before the open",
   threadsLoading: "Loading your practice threads…",
   threadsLoadError: "Couldn't load your practice threads · Try again",
   threadSimulated: "Simulated",
