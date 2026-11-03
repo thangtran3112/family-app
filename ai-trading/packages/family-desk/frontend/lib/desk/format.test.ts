@@ -18,6 +18,7 @@ import {
   formatEtWeekdayTime,
   formatLastCloseLine,
   formatMetric,
+  formatNumber,
   formatPrice,
   formatRatio,
   formatSignedPct,
@@ -65,6 +66,17 @@ test("numbers format compactly and never leak null or NaN", () => {
   assert.equal(formatMetric("pct_signed", 49.642), "+49.64%");
   assert.equal(formatMetric("time", "2026-10-23T18:00:00Z"), "2:00 PM");
   assert.equal(formatMetric("time", 5), "—");
+});
+
+test("the cached number formats print what toLocaleString prints, for every digit count (D-212)", () => {
+  const values = [0, -0, 0.5, 0.12345, -0.9999, 1, 12.5, 188.045, 1234.567, -98765.4321, 12_883_312.999];
+  for (const value of values) {
+    const digits = Math.abs(value) < 1 ? 4 : 2;
+    assert.equal(formatPrice(value), value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: digits }), `price ${value}`);
+    for (const maximum of [0, 1, 2, 4]) assert.equal(formatNumber(value, maximum), value.toLocaleString("en-US", { maximumFractionDigits: maximum }), `number ${value} to ${maximum}`);
+  }
+  assert.equal(formatNumber(1234.5678), "1,234.57", "two digits by default");
+  assert.equal(formatNumber(1500, 0), "1,500");
 });
 
 test("a tone follows the number as printed: -0.01% at one decimal is flat, not red (D-148)", () => {
