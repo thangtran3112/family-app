@@ -697,7 +697,10 @@ def _marked(ctx: Ctx, found: tuple[float, pd.Timestamp] | None) -> float | None:
 
 def _open_trade(ctx: Ctx, price: float | None) -> dict[str, Any] | None:
     _, open_ = journal_mod.assemble(ctx.marks)
-    return journal_mod.open_trade_out(open_, price)
+    out = journal_mod.open_trade_out(open_, price)
+    if out is not None and ctx.row.stop_hit_at is not None:
+        out["stop_hit_at"] = ctx.row.stop_hit_at  # the stop line is an alert flag, never an exit (ADR-0025): the lane card shows it too
+    return out
 
 
 def _journal(ctx: Ctx, price: float | None) -> dict[str, Any]:

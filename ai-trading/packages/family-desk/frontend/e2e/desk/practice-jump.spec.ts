@@ -1,135 +1,142 @@
 import type { Page } from "@playwright/test";
 import { PRACTICE_COPY } from "../../lib/desk/freshness.ts";
 import { origin } from "../helpers";
-import { jumpFromSummary } from "./clock-helpers";
+import { jumpFromSummary, nextOpenFromSummary } from "./clock-helpers";
 import { expect, expectCleanScreen, openDesk, prepareDesk, test } from "./helpers";
-import { START_BUTTON, THREAD_URL, fillNewPlan, openFirstDay, openNewPlan, saveFilter, startThread, threadIdOf } from "./hub-helpers";
-import { openNextDay, railSection, send } from "./swing-helpers";
+import { DAY, createThreadByApi, expectNoDayLanguage, get, jumpByApi, playByApi, railSection } from "./hub-helpers";
 
-// ADR-0023: a day runs open to open, so there is no End day; the Summary's Jump moves the thread clock to a date and time (New York time),
-// forward only and no later than the plan's end; a day that opens at 9:30 before its list time shows when the list comes out, with nothing to
-// open; and closing or deleting a day thread mid-plan needs no "end the day first" step. The stub day is TSLA on Fri 2026-09-25 (bars 9:30 to
-// 9:40); a 5-day plan on it runs to the open of Fri 2026-10-02, 9:30 AM ET.
+// Jump and Next open (ADR-0025): the Summary moves the thread clock to a date and time (New York time) or to the next 9:30 open, forward only and no later than
+// the horizon (the latest time the data reaches). Nothing a move crosses ends, closes or resets anything, so there is no End day and no Skip day. The
+// stub day is TSLA on Fri 2026-09-25; the horizon on the E2E clock (Thu 2026-10-15, 8:00 PM ET) is the extended close of Wed 2026-10-14.
 
 const readout = (page: Page) => page.getByTestId("thread-clock-time");
 const jumpForm = (page: Page) => page.getByRole("group", { name: PRACTICE_COPY.clockJump });
 const clockUrl = (threadId: number) => `${origin}/api/desk/replay/threads/${threadId}/clock`;
 
-test.describe("Practice: Jump, the list that is not out yet, and closing mid-plan (ADR-0023)", () => {
+test.describe("Practice: Jump, Next open and the horizon (ADR-0025)", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });
 
-  test("Jump moves the clock to a date and time, forward only and no later than the plan's end, and there is no End day", async ({ page, context }) => {
+  test("Jump moves the clock to a date and time, forward only and no later than the horizon, and there is no End day or Skip day", async ({ page, context }) => {
     test.setTimeout(240_000);
-    const threadId = await startThread(page, context);
-    await openFirstDay(page);
+    const threadId = await createThreadByApi(context);
     await openDesk(page, `/practice/thread?id=${threadId}`);
-    await expect(page.getByRole("button", { name: /^End day/ }), "no End day (ADR-0023)").toHaveCount(0);
+    for (const gone of ["End day", "Skip day"]) await expect(page.getByRole("button", { name: new RegExp(`^${gone}`, "i") })).toHaveCount(0);
     const jump = jumpForm(page);
     const go = jump.getByRole("button", { name: PRACTICE_COPY.clockJumpGo, exact: true });
     const date = jump.getByLabel(PRACTICE_COPY.clockJumpDate);
     const time = jump.getByLabel(PRACTICE_COPY.clockJumpTime);
     await expect(go, "nothing typed: nothing to send").toBeDisabled();
     const before = await (await context.request.get(clockUrl(threadId))).json();
-    expect(before.jump_limit, "the plan's end is the latest time the clock can be jumped to").not.toBeNull();
+    expect(before.horizon, "the latest time the data reaches is the clock's upper bound").toBeTruthy();
+    expect(Date.parse(before.horizon)).toBeLessThanOrEqual(Date.parse("2026-10-16T00:00:00Z") - 15 * 60_000); // nothing the embargo has not released
     await expect(jump, "the hint names the latest time").toContainText("Forward only, up to");
 
     // A time that is not ahead of the clock cannot be sent, and the form says why.
-    await date.fill("2026-09-25");
+    await date.fill(DAY);
     await time.fill("08:00");
     await expect(jump.getByRole("alert")).toContainText(PRACTICE_COPY.clockJumpBack);
     await expect(go).toBeDisabled();
-    // Nor can one past the plan's end.
+    // Nor can one past the horizon.
     await date.fill("2026-12-31");
     await time.fill("10:00");
-    await expect(jump.getByRole("alert")).toContainText("The plan ends");
+    await expect(jump.getByRole("alert")).toContainText("The data reaches");
     await expect(go).toBeDisabled();
 
+    // The server says the same: a time already past is a 422, the clock's own time changes nothing, and a time past the horizon is a 422.
+    const past = await context.request.post(clockUrl(threadId), { data: { to: `${DAY}T13:00:00Z` } }); // 9:00 AM ET, before the 9:30 start
+    expect(past.status()).toBe(422);
+    expect(await past.text()).toMatch(/forward/i);
+    const same = await context.request.post(clockUrl(threadId), { data: { to: before.clock } });
+    expect(same.ok(), await same.text()).toBeTruthy();
+    expect(Date.parse((await same.json()).clock)).toBe(Date.parse(before.clock));
+    const over = await context.request.post(clockUrl(threadId), { data: { to: new Date(Date.parse(before.horizon) + 3_600_000).toISOString() } });
+    expect(over.status()).toBe(422);
+
     // Forward, the same day: the clock reads it, stays paused, and the form is clear again.
-    await jumpFromSummary(page, "2026-09-25", "11:00");
+    await jumpFromSummary(page, DAY, "11:00");
     await expect(readout(page)).toHaveText(/^Fri 2026-09-25 · 11:00:\d{2} AM ET$/, { timeout: 15_000 });
     const jumped = await (await context.request.get(clockUrl(threadId))).json();
     expect(jumped.state).toBe("paused");
-    expect(Date.parse(jumped.clock)).toBe(Date.parse("2026-09-25T15:00:00Z")); // 11:00 AM ET is 15:00 UTC in September
+    expect(Date.parse(jumped.clock)).toBe(Date.parse(`${DAY}T15:00:00Z`)); // 11:00 AM ET is 15:00 UTC in September
     await expect(date).toHaveValue("");
     await expect(time).toHaveValue("");
     await expect(jump.getByRole("status")).toContainText("Jumped to");
 
-    // Across a market open: Day 1 ends at the hand-over, and the clock stands on the new day.
+    // Across a market open: nothing happens at the open. The clock stands on Monday, still paused, and no day was handed over.
     await jumpFromSummary(page, "2026-09-28", "10:00");
-    await expect(page.getByTestId("thread-clock-rolled")).toContainText(/^The clock reached the next session\. Day 1 ended/, { timeout: 60_000 });
-    await expect(readout(page)).toHaveText(/^Mon 2026-09-28 · 10:00:\d{2} AM ET$/);
-    expect((await (await context.request.get(clockUrl(threadId))).json()).day_no).toBe(2);
+    await expect(readout(page)).toHaveText(/^Mon 2026-09-28 · 10:00:\d{2} AM ET$/, { timeout: 15_000 });
+    const crossed = await (await context.request.get(clockUrl(threadId))).json();
+    expect(crossed.state).toBe("paused");
+    expect(Date.parse(crossed.clock)).toBe(Date.parse("2026-09-28T14:00:00Z"));
+    for (const gone of ["day_no", "day_list_id", "next_start", "jump_limit"]) expect(crossed, `the clock has no ${gone}: it has no day`).not.toHaveProperty(gone);
+    await expect(page.getByTestId("thread-clock-rolled")).toHaveCount(0);
+    await expectNoDayLanguage(page);
     await expectCleanScreen(page);
   });
 
-  test("a day that opens before its list time says when the list comes out: nothing to open, peek or star, and the list shows once the clock gets there", async ({ page, context }) => {
-    test.setTimeout(300_000);
-    await saveFilter(context);
-    const dialog = await openNewPlan(page);
-    await fillNewPlan(dialog, { listAt: "10:00" });
-    await dialog.getByRole("button", { name: START_BUTTON }).click();
-    await page.waitForURL(THREAD_URL, { timeout: 90_000 });
-    const threadId = threadIdOf(page);
-    await openFirstDay(page);
-
-    // Day 1 begins at the plan's Start at (10:00, with its list); Skip day opens Day 2 at the open, 9:30, half an hour before its list.
-    await send(context, "POST", `/threads/${threadId}/skip-day`);
-    const dayTwo = await openNextDay(context, threadId);
-    await openDesk(page, `/practice/day?id=${dayTwo}`);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Day 2 of 5");
-    const pending = page.getByTestId("list-pending");
-    await expect(pending).toContainText("The list comes out at Mon 2026-09-28 · 10:00 AM ET");
-    await expect(pending).toContainText(PRACTICE_COPY.dayListPendingHint);
-    await expect(pending.getByRole("link", { name: PRACTICE_COPY.dayListPendingSummary })).toHaveAttribute("href", `/practice/thread?id=${threadId}`);
-    await expect(page.getByRole("table", { name: "Candidates" }), "no table of names, so no empty one").toHaveCount(0);
-    await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle), "not an empty list: the list is not out").toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^(Open|Peek at) / })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /star/i })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: PRACTICE_COPY.dayRescan }), "no re-scan before there is a list").toHaveCount(0);
-    await expect(page.getByLabel("Status")).toContainText("List comes out 10:00 AM ET");
-    await expect(page.getByTestId("day-clock-time")).toContainText(/Mon 2026-09-28 · 9:3\d:\d{2} AM ET/);
-    await expectCleanScreen(page);
-
-    // The server refuses to open a name before the list is out.
-    const refused = await context.request.post(`${origin}/api/desk/replay/day-lists/${dayTwo}/sessions`, { data: { symbol: "TSLA" } });
-    expect(refused.status()).toBe(409);
-    expect(await refused.text()).toContain("The list comes out at");
-
-    // The clock gets to 10:00 while this screen is open: the screen reads the list again on its own.
-    const reached = await context.request.post(clockUrl(threadId), { data: { to: "2026-09-28T14:00:00Z" } }); // 10:00 AM ET (EDT)
-    expect(reached.ok(), await reached.text()).toBeTruthy();
-    await expect(pending).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByText(PRACTICE_COPY.dayNoMatchTitle), "the stub holds no bars for Day 2: its list is out, and empty").toBeVisible();
-    await expect(page.getByLabel("Status")).toContainText("List built 10:00 AM ET");
-  });
-
-  test("a day thread is closed mid-plan without ending its day first, and the open day ends with it", async ({ page, context }) => {
+  test("Next open is a Jump to the first 9:30 AM ET open after the clock: it names the open, goes there, and never goes back", async ({ page, context }) => {
     test.setTimeout(240_000);
-    const threadId = await startThread(page, context);
-    await openFirstDay(page);
+    const threadId = await createThreadByApi(context);
+    await openDesk(page, `/practice/thread?id=${threadId}`);
+    const chip = page.getByTestId("thread-clock-next-open");
+    await expect(chip).toHaveText("Next open · Mon 2026-09-28 · 9:30 AM ET");
+
+    const first = await nextOpenFromSummary(page);
+    expect(Date.parse(first.clock)).toBe(Date.parse("2026-09-28T13:30:00Z"));
+    await expect(readout(page)).toHaveText(/^Mon 2026-09-28 · 9:30:\d{2} AM ET$/, { timeout: 15_000 });
+    await expect(chip, "the chip moves to the open after that one").toHaveText("Next open · Tue 2026-09-29 · 9:30 AM ET");
+    expect(Date.parse(first.next_open)).toBe(Date.parse("2026-09-29T13:30:00Z"));
+    await expect(page.getByTestId("thread-clock-state")).toHaveText(PRACTICE_COPY.clockStatePaused);
+
+    // From a Friday evening the next open is Monday's (a weekend has no open); from the open itself it is the next session's.
+    await jumpByApi(context, threadId, "2026-10-02T23:00:00Z"); // Fri 2026-10-02, 7:00 PM ET
+    await openDesk(page, `/practice/thread?id=${threadId}`);
+    await expect(chip).toHaveText("Next open · Mon 2026-10-05 · 9:30 AM ET");
+    await expectNoDayLanguage(page);
+  });
+
+  test("the clock stops by itself only at the horizon, where the data ends: it says so, Play and Next open wait, and a Jump past it is refused", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    const threadId = await createThreadByApi(context);
+    const { horizon } = await (await context.request.get(clockUrl(threadId))).json();
+    // Five minutes before the horizon at 10x: the clock gets there in about half a minute and pauses itself.
+    await jumpByApi(context, threadId, new Date(Date.parse(horizon) - 5 * 60_000).toISOString());
+    await playByApi(context, threadId, 10);
+    await expect.poll(async () => (await get(context, `/threads/${threadId}/clock`)).pause?.kind ?? null, { timeout: 90_000 }).toBe("horizon");
+    const stopped = await get(context, `/threads/${threadId}/clock`);
+    expect(stopped.running).toBe(false);
+    expect(Date.parse(stopped.clock), "never past the horizon").toBeLessThanOrEqual(Date.parse(horizon));
+
+    await openDesk(page, `/practice/thread?id=${threadId}`);
+    await expect(page.getByTestId("thread-clock-state")).toHaveText(PRACTICE_COPY.clockStateHorizon);
+    await expect(page.getByTestId("thread-clock-horizon")).toBeVisible();
+    await expect(page.getByRole("button", { name: PRACTICE_COPY.clockPlay, exact: true })).toBeDisabled();
+    await expect(page.getByTestId("thread-clock-next-open")).toBeDisabled();
+    await expect(page.getByTestId("thread-clock-next-none")).toHaveText(PRACTICE_COPY.clockNextOpenNone);
+    const past = await context.request.post(clockUrl(threadId), { data: { to: new Date(Date.parse(horizon) + 60_000).toISOString() } });
+    expect(past.status()).toBe(422);
+    await expectNoDayLanguage(page);
+    await expectCleanScreen(page);
+  });
+
+  test("a thread is closed without ending anything first: its clock stops where it is and the journal says its positions stay", async ({ page, context }) => {
+    test.setTimeout(240_000);
+    const threadId = await createThreadByApi(context);
+    await jumpByApi(context, threadId, `${DAY}T15:00:00Z`);
     await openDesk(page, `/practice/journal?thread=${threadId}`);
     const closing = await railSection(page, "Thread details", PRACTICE_COPY.threadClose);
-    await expect(closing).toContainText(PRACTICE_COPY.threadCloseEndsDay);
+    await expect(closing).toContainText(PRACTICE_COPY.journalCloseCaption);
+    await expect(closing).toContainText(PRACTICE_COPY.journalCloseKeeps);
     await closing.getByRole("button", { name: PRACTICE_COPY.threadClose, exact: true }).click();
     await closing.getByRole("group", { name: "Confirm closing the thread" }).getByRole("button", { name: PRACTICE_COPY.threadCloseConfirm }).click();
     await expect(page.getByRole("status").filter({ hasText: "This thread is closed" })).toBeVisible();
     await expect(closing.getByRole("alert")).toHaveCount(0);
     const thread = await (await context.request.get(`${origin}/api/desk/replay/threads/${threadId}`)).json();
     expect(thread.thread.status).toBe("closed");
-    expect(thread.daily.map((day: { n: number }) => day.n), "the open day ended with the thread, so it is in the journal").toEqual([1]);
-  });
-
-  test("Delete plan on a day thread with its day open needs no End day: it closes the thread and removes it", async ({ page, context }) => {
-    test.setTimeout(240_000);
-    const threadId = await startThread(page, context);
-    await openFirstDay(page);
-    await openDesk(page, `/practice/thread?id=${threadId}`);
-    const step = page.getByRole("region", { name: "Practice day" });
-    await step.getByRole("button", { name: PRACTICE_COPY.planDelete, exact: true }).click();
-    await page.getByRole("dialog", { name: /^Delete / }).getByRole("button", { name: PRACTICE_COPY.planDeleteConfirm }).click();
-    await page.waitForURL("**/practice");
-    expect((await context.request.get(`${origin}/api/desk/replay/threads/${threadId}`)).status()).toBe(404);
+    const clock = await (await context.request.get(clockUrl(threadId))).json();
+    expect(clock.running).toBe(false);
+    expect(Date.parse(clock.clock), "the clock froze at the time of the Jump").toBe(Date.parse(`${DAY}T15:00:00Z`));
   });
 });

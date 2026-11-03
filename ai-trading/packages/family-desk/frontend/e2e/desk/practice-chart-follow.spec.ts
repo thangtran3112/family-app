@@ -2,24 +2,15 @@ import type { Page } from "@playwright/test";
 import { chartPalette } from "../../lib/desk/chartPalette.ts";
 import { stepBar } from "./clock-helpers";
 import { expect, prepareDesk, test } from "./helpers";
-import { openFirstDay, saveFilter, startThread } from "./hub-helpers";
+import { openNameFromScreen } from "./lane-helpers";
 
-// D-195: a replay chart that is open while the thread's clock moves follows the newest bars, with its time-axis labels, on every update, as it
-// does on a load. The chart has no Step of its own on a day thread; the market moves through the thread's clock route (what Play, and Pause in
+// D-195: a lane's chart that is open while the thread's clock moves follows the newest bars, with its time-axis labels, on every update, as it
+// does on a load. The chart has no Step of its own; the market moves through the thread's clock route (what Play, and Pause in
 // another window, end up calling), and the chart on screen follows it. The stub day is TSLA on Fri 2026-09-25 from 09:30 ET at one-minute bars.
 
-const SESSION_URL = /\/practice\/replay\?id=\d+/;
 // The stub day replays TSLA's bars for three more names at a fraction of the price. XOM is opened by no other spec on its own, and the server keeps
-// the prepared bars of every name it has served: a thread opened on a name that an earlier spec's session had already drawn shows that session's.
+// the prepared bars of every name it has served: a lane opened on a name that an earlier spec's lane had already drawn shows that lane's.
 const SYMBOL = "XOM";
-const EVERY_NAME = {
-  schemaVersion: 1,
-  name: "Every name",
-  watch: { universe: { market: "us_equities" }, session: "regular", runOn: "daily_close" },
-  liquidity: { minPrice: 1, minAvgVolume: 1 },
-  when: { op: "gt", left: { series: "close" }, right: { value: 1 } },
-  maxResults: 50,
-};
 
 type Reading = { candleLeft: number; candleRight: number; axisInkRight: number };
 
@@ -64,15 +55,10 @@ async function readChart(page: Page): Promise<Reading> {
   }, [chartPalette.up, chartPalette.down]);
 }
 
-test("a replay chart open while the thread clock moves keeps its newest bars across the plot, with the time-axis labels, on every update (D-195)", async ({ page, context }) => {
+test("a lane's chart open while the thread clock moves keeps its newest bars across the plot, with the time-axis labels, on every update (D-195)", async ({ page, context }) => {
   test.setTimeout(240_000);
   await prepareDesk(context);
-  await saveFilter(context, EVERY_NAME);
-  await startThread(page, context, { filter: EVERY_NAME.name });
-  await openFirstDay(page);
-  await page.getByRole("table", { name: "Candidates" }).getByRole("row", { name: new RegExp(SYMBOL) }).getByText(SYMBOL, { exact: true }).click();
-  await page.waitForURL(SESSION_URL);
-  await expect(page.getByRole("heading", { name: SYMBOL, level: 1 })).toBeVisible();
+  await openNameFromScreen(page, context, SYMBOL);
 
   // 9:30, before the open: no session bar yet, so the chart waits at the session's first bar (D-099, D-186): the lookback is a sliver at the left edge.
   await expect.poll(async () => (await readChart(page)).candleRight, { message: "waits at the open: nothing but a sliver of lookback at the left edge", timeout: 20_000 }).toBeLessThan(0.1);
