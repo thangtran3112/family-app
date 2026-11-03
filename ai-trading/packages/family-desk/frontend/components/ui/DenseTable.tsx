@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, fitColumns, type CellAlign, type ColumnFit, type ColumnKind, type ColumnWidth } from "@/lib/desk/denseTable";
-import { measureKey } from "@/lib/desk/denseMeasure";
+import { fitsAsRendered, measureKey } from "@/lib/desk/denseMeasure";
 import { ariaSort, nextSort, sortRows, type SortState, type SortValue } from "@/lib/desk/sort";
 import styles from "./DenseTable.module.css";
 
@@ -97,42 +97,53 @@ export function DenseTable<R>({
     if (sync) flushSync(() => setFit(next));
     else setFit(next);
   }, []);
-  const settle = useCallback(() => {
-    const wrap = wrapRef.current;
-    if (!wrap || !measured.current) return;
-    apply(fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth), false);
-  }, [apply]);
   // What the measure reads is the render's columns, but it runs again only when `measureKey` changes: the effect below cannot list them as a dependency.
   const latest = useRef({ visible, hasActions });
   useLayoutEffect(() => {
     latest.current = { visible, hasActions };
   });
+  // Reads the widths; returns the fit when it differs from the one applied, so the caller sets it (in the frame, inside `flushSync`) only then.
+  const measure = useCallback((): ColumnFit | null => {
+    const wrap = wrapRef.current;
+    const table = wrap?.firstElementChild;
+    if (!wrap || !table) return null;
+    const { visible: columns, hasActions: actions } = latest.current;
+    // A table that fits as rendered has nothing to drop or wrap: no `data-measure` toggle, so the table is laid out once, not three times (D-241). `settle` measures it when it stops fitting.
+    if (fitsAsRendered(columns, applied.current, table.getBoundingClientRect().width, wrap.clientWidth)) {
+      measured.current = null;
+      return null;
+    }
+    const heads = Array.from(wrap.querySelectorAll<HTMLElement>("thead th"));
+    const widthsAt = (size: "max" | "min") => {
+      wrap.dataset.measure = size;
+      return heads.map((head) => head.getBoundingClientRect().width);
+    };
+    const max = widthsAt("max");
+    const min = widthsAt("min");
+    delete wrap.dataset.measure;
+    measured.current = {
+      columns: columns.map((column, index) => ({ key: column.key, ...(column.priority === undefined ? {} : { priority: column.priority }), max: max[index] ?? 0, min: min[index] ?? 0 })),
+      reserved: actions ? { max: max[columns.length] ?? 0, min: min[columns.length] ?? 0 } : { max: 0, min: 0 },
+    };
+    const next = fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth);
+    return sameFit(applied.current, next) ? null : next;
+  }, []);
+  const settle = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    if (measured.current) apply(fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth), false);
+    else {
+      const next = measure();
+      if (next) apply(next, false);
+    }
+  }, [apply, measure]);
   const measureId = measureKey(visible, rows.length, hasActions, showEmpty);
   // Measure before paint, so a column that does not fit is never shown: each header cell's width with the table at its natural width (one-line
   // headers, then wrapped headers), the dropped columns shown for the measure (CSS `data-measure`). Again when the columns (by value) or the number of rows change, not when
   // a poll only changes the values or a parent passes the same columns in a new array (D-212, D-241), so a table that refreshes every 2 s is not laid out twice more each time.
   useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
+    if (!wrapRef.current) return;
     let live = true;
-    // Reads the widths; returns the fit when it differs from the one applied, so the caller sets it (in the frame, inside `flushSync`) only then.
-    const measure = (): ColumnFit | null => {
-      const { visible: columns, hasActions: actions } = latest.current;
-      const heads = Array.from(wrap.querySelectorAll<HTMLElement>("thead th"));
-      const widthsAt = (size: "max" | "min") => {
-        wrap.dataset.measure = size;
-        return heads.map((head) => head.getBoundingClientRect().width);
-      };
-      const max = widthsAt("max");
-      const min = widthsAt("min");
-      delete wrap.dataset.measure;
-      measured.current = {
-        columns: columns.map((column, index) => ({ key: column.key, ...(column.priority === undefined ? {} : { priority: column.priority }), max: max[index] ?? 0, min: min[index] ?? 0 })),
-        reserved: actions ? { max: max[columns.length] ?? 0, min: min[columns.length] ?? 0 } : { max: 0, min: 0 },
-      };
-      const next = fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth);
-      return sameFit(applied.current, next) ? null : next;
-    };
     // The measure runs in the next frame's animation callback, which is still before that frame's paint, so a column that does not fit is still never
     // shown. Run inside the commit's layout effect it put the page's first layout, the measure's own two and React's render in one task: a long task
     // when a 30-row table mounts (D-235). `flushSync` applies the fit before the paint, as the layout effect's own state update did; with no change
@@ -155,7 +166,7 @@ export function DenseTable<R>({
       live = false;
       cancelAnimationFrame(frame);
     };
-  }, [measureId, apply]);
+  }, [measureId, apply, measure]);
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
