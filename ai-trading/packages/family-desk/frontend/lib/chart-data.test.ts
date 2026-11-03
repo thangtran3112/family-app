@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachPinchZoom, chartTime, candlestickData, changedFrom, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, syncSeries, valueRuns, zoomedRange, type ChartBar, type SeriesFed } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, changedFrom, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, syncSeries, syncSeriesSteps, valueRuns, zoomedRange, type ChartBar, type SeriesFed } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -488,4 +488,53 @@ test("volume points and markers still come out of the whole bar list", () => {
   const bars = Array.from({ length: 3 }, (_, minute) => minuteBar(minute));
   assert.equal(volumeData(bars).length, 3);
   assert.deepEqual(seriesMarkers(bars, []), [], "no markers: nothing to place");
+});
+
+test("bars in order are not copied or sorted, and give the points they gave before", () => {
+  const bars = Array.from({ length: 5 }, (_, minute) => minuteBar(minute));
+  assert.deepEqual(lineData(bars, closes(bars)), bars.map((bar) => ({ time: chartTime(bar.t), value: 1 })));
+  // the same start time twice, and out of order, still fold and sort
+  const odd = [bars[2]!, bars[0]!, minuteBar(2, 9)];
+  assert.deepEqual(lineData(odd, closes(odd)), [{ time: chartTime(bars[0]!.t), value: 1 }, { time: chartTime(bars[2]!.t), value: 9 }]);
+  assert.equal(chartTime(bars[3]!.t), chartTime(bars[3]!.t), "a start time read twice is the same time");
+  assert.equal(chartTime("2026-10-16T13:03:00Z"), Math.floor(Date.parse("2026-10-16T13:03:00Z") / 1000));
+});
+
+// A series that can be set in parts, as `ChunkedSeries` can: one step per part.
+function partedSeries() {
+  const series = { ...fakeSeries(), steps: 0, setDataSteps: undefined as unknown };
+  series.setDataSteps = function* (this: typeof series, data: Point[]) {
+    const half = Math.ceil(data.length / 2);
+    for (const part of [data.slice(0, half), data.slice(half)]) {
+      for (const point of part) this.held.set(point.time, point);
+      this.steps += 1;
+      yield;
+    }
+  }.bind(series);
+  return series as typeof series & { setDataSteps(data: Point[]): Generator<void> };
+}
+
+test("a series set in parts is fed in steps, and the same as syncSeries feeds it", () => {
+  const bars = Array.from({ length: 6 }, (_, minute) => minuteBar(minute));
+  const plain = fakeSeries();
+  syncSeries(plain, new WeakMap(), bars, closes(bars), "", points);
+  const parted = partedSeries();
+  const steps = syncSeriesSteps(parted, new WeakMap(), bars, closes(bars), "", points);
+  assert.equal(steps.next().done, false);
+  assert.equal(parted.held.size, 3, "half of it after the first step");
+  steps.next();
+  assert.deepEqual(steps.next(), { done: true, value: -1 });
+  assert.deepEqual(dataOf(parted), dataOf(plain));
+});
+
+test("a feed given up half way is not recorded as done: the next one sends everything", () => {
+  const bars = Array.from({ length: 6 }, (_, minute) => minuteBar(minute));
+  const fed = new WeakMap<object, SeriesFed>();
+  const series = partedSeries();
+  syncSeriesSteps(series, fed, bars, closes(bars), "", points).next(); // one part, then abandoned
+  assert.equal(series.held.size, 3);
+  const again = syncSeriesSteps(series, fed, bars, closes(bars), "", points);
+  while (!again.next().done);
+  assert.equal(series.held.size, 6, "the whole series is there");
+  assert.equal(series.steps, 3);
 });

@@ -620,6 +620,43 @@ test.describe("Practice", () => {
     await expectCleanScreen(page);
   });
 
+  test("a refused scan is the thread's clock minute, not the page's: leaving the Screen or reloading it keeps the sentence and the disabled button (D-239)", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const waits = { ...EVERY_NAME, name: "Waits for a 15m bar", watch: { ...EVERY_NAME.watch, runOn: "bar_close_15m" } };
+    const threadId = await createThreadByApi(context, { filterId: await saveFilter(context, waits) });
+    const posts: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && /\/screen\/rescan$/.test(request.url())) posts.push(request.url());
+    });
+    await openDesk(page, `/practice/screen?thread=${threadId}`);
+    const scan = page.getByRole("button", { name: PRACTICE_COPY.screenScanNow });
+    const refused = page.getByTestId("rescan-refused");
+    await scan.click();
+    await expect(refused).toContainText("Move the clock on the Summary");
+    await expect(scan).toBeDisabled();
+    expect(posts).toHaveLength(1);
+
+    // Go to the Summary by the banner's link and come back by the tab, the clock unmoved: still refused, nothing sent.
+    await refused.getByRole("link", { name: PRACTICE_COPY.screenToSummary }).click();
+    await page.waitForURL(/\/practice\/thread\?id=/);
+    await backToScreen(page);
+    await expect(refused).toContainText("Move the clock on the Summary");
+    await expect(scan, "the same minute is refused again, so the button stays off").toBeDisabled();
+    await expect(refused.getByRole("link", { name: PRACTICE_COPY.screenToSummary })).toBeVisible();
+
+    // A reload is the same page again: the refusal is the thread's, so it survives that too.
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(refused).toContainText("Move the clock on the Summary");
+    await expect(scan).toBeDisabled();
+    expect(posts, "no second POST for the refused minute, wherever she came back from").toHaveLength(1);
+
+    // A move of the clock still clears it.
+    await jumpByApi(context, threadId, `${DAY}T09:35:00${ET_OFFSET}`);
+    await expect(refused).toHaveCount(0, { timeout: 30_000 });
+    await expect(scan).toBeEnabled();
+  });
+
   test("clicking a candidate row opens its lane, from the mouse and from the keyboard", async ({ page, context }) => {
     test.setTimeout(180_000);
     await openScreenPage(page, context);

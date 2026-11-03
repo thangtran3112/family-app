@@ -23,14 +23,23 @@ export type ChartBar = {
   ext?: boolean;
 };
 
+// Every series of a chart is built from the same 6,000 start times, and a 1m replay chart builds six of them on its first draw: the regular expression and the date
+// parse run once per start time, not once per series (D-240).
+const seconds = new Map<string, UTCTimestamp>();
+const SECONDS_KEPT = 30_000;
+
 export function chartTime(value: string): Time {
+  const known = seconds.get(value);
+  if (known !== undefined) return known;
   const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (date) {
     return { year: Number(date[1]), month: Number(date[2]), day: Number(date[3]) } satisfies BusinessDay;
   }
-  const seconds = Math.floor(Date.parse(value) / 1000);
-  if (!Number.isFinite(seconds)) throw new TypeError("Invalid chart timestamp");
-  return seconds as UTCTimestamp;
+  const parsed = Math.floor(Date.parse(value) / 1000);
+  if (!Number.isFinite(parsed)) throw new TypeError("Invalid chart timestamp");
+  if (seconds.size >= SECONDS_KEPT) seconds.clear();
+  seconds.set(value, parsed as UTCTimestamp);
+  return parsed as UTCTimestamp;
 }
 
 export function currentValue(values: Array<number | null>): number | null {
@@ -45,6 +54,18 @@ export function timeKey(time: Time): number {
 }
 
 function sortedUnique<T extends { time: Time }>(points: T[]): T[] {
+  // Bars arrive in order, one per start: then there is nothing to sort or to fold, and no copy of 6,000 points to make (D-240).
+  let newest = Number.NEGATIVE_INFINITY;
+  let ascending = true;
+  for (const point of points) {
+    const key = timeKey(point.time);
+    if (!(key > newest)) {
+      ascending = false;
+      break;
+    }
+    newest = key;
+  }
+  if (ascending) return points;
   const byTime = new Map<number, T>();
   for (const point of points) byTime.set(timeKey(point.time), point);
   return [...byTime.entries()].sort(([left], [right]) => left - right).map(([, point]) => point);
@@ -53,8 +74,7 @@ function sortedUnique<T extends { time: Time }>(points: T[]): T[] {
 export function candlestickData(bars: ChartBar[]): Array<CandlestickData<Time> | WhitespaceData<Time>> {
   return sortedUnique(bars.map((bar) => {
     const time = chartTime(bar.t);
-    const values = [bar.o, bar.h, bar.l, bar.c];
-    if (values.some((value) => value === null || !Number.isFinite(value))) return { time };
+    if (!(Number.isFinite(bar.o) && Number.isFinite(bar.h) && Number.isFinite(bar.l) && Number.isFinite(bar.c))) return { time };
     return { time, open: bar.o!, high: bar.h!, low: bar.l!, close: bar.c! };
   }));
 }
@@ -113,7 +133,7 @@ export function shadingData(bars: ChartBar[]): Array<HistogramData<Time> | White
 /** What a series was last drawn from: the bars (and the values laid on them), and a key for anything else that shapes its points (a colour). */
 export type SeriesFed = { bars: readonly ChartBar[]; values: readonly (number | null)[] | null; key: string };
 /** The part of a library series the feed uses. */
-export type Feedable<P> = { setData(data: P[]): void; update(point: P): void };
+export type Feedable<P> = { setData(data: P[]): void; update(point: P): void; setDataSteps?(data: P[], window?: [number, number]): Generator<void> };
 
 /**
  * Where the data of a series starts to differ from what it was last given, or -1 when all of it has to be sent: the first draw, a different key, fewer
@@ -149,18 +169,39 @@ export function syncSeries<P>(
   key: string,
   build: (bars: ChartBar[], values: Array<number | null>) => P[],
 ): number {
+  const steps = syncSeriesSteps(series, fed, bars, values, key, build);
+  for (let step = steps.next(); ; step = steps.next()) if (step.done) return step.value;
+}
+
+/**
+ * `syncSeries` as steps, for a series that can be set in parts (`setDataSteps`): the caller lets the browser in between two steps. Run to the end it does what
+ * `syncSeries` does. A series set in parts is recorded as fed only once all of it is there, so a feed that is given up half way is done again in full, not skipped.
+ */
+export function* syncSeriesSteps<P>(
+  series: Feedable<P>,
+  fed: WeakMap<object, SeriesFed>,
+  bars: readonly ChartBar[],
+  values: readonly (number | null)[] | null,
+  key: string,
+  build: (bars: ChartBar[], values: Array<number | null>) => P[],
+  window?: [number, number],
+): Generator<void, number> {
   const from = changedFrom(fed.get(series), bars, values, key);
-  fed.set(series, { bars, values, key });
-  const all = () => {
-    series.setData(build(bars as ChartBar[], (values ?? []) as Array<number | null>));
+  const now: SeriesFed = { bars, values, key };
+  const all = function* (): Generator<void, number> {
+    const points = build(bars as ChartBar[], (values ?? []) as Array<number | null>);
+    if (series.setDataSteps) yield* series.setDataSteps(points, window);
+    else series.setData(points);
+    fed.set(series, now);
     return -1;
   };
-  if (from < 0) return all();
+  if (from < 0) return yield* all();
+  fed.set(series, now);
   if (from >= bars.length) return from;
   try {
     for (const point of build(bars.slice(from), values === null ? [] : values.slice(from))) series.update(point);
   } catch {
-    return all(); // the library refuses an older time than its newest: send everything instead
+    return yield* all(); // the library refuses an older time than its newest: send everything instead
   }
   return from;
 }
