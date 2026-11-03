@@ -558,7 +558,7 @@ function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowSta
       hideWhenEmpty: column.format === "earnings",
       render: (row) => {
         // The read at the clock has not landed: the column is here, its value is on its way (D-159).
-        if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} />;
+        if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} still />;
         const text = screenCellText(column, row);
         if (column.format === "earnings") {
           if (row.earnings_state === "reported") return <Badge tone="warn">{text}</Badge>;

@@ -17,9 +17,9 @@ export function LoadingBlock({ label, height = 160 }: { label: string; height?: 
   );
 }
 
-/** A grey bar in the shape of what is coming (a title, a line, a table). One pulse for every skeleton; hidden from assistive tech. Size in px or a CSS length. */
-export function Skeleton({ width, height = 12, className }: { width?: number | string; height?: number | string; className?: string }) {
-  return <span className={`${styles.skeleton} ${className ?? ""}`} style={{ width, height }} aria-hidden="true" />;
+/** A grey bar in the shape of what is coming (a title, a line, a table). One pulse for every skeleton; hidden from assistive tech. Size in px or a CSS length. `still`: no pulse, for a placeholder repeated in every row of a dense table, where each pulsing cell costs a compositor animation (D-235). */
+export function Skeleton({ width, height = 12, className, still = false }: { width?: number | string; height?: number | string; className?: string; still?: boolean }) {
+  return <span className={`${styles.skeleton} ${still ? styles.skeletonStill : ""} ${className ?? ""}`} style={{ width, height }} aria-hidden="true" />;
 }
 
 /**
