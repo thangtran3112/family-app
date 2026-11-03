@@ -102,7 +102,8 @@ test.describe("technical seed", () => {
     await openDesk(page, "/", MIDDAY);
     await expect(main(page).getByText(/^Quotes paused · last update /)).toBeVisible();
     // V-Today-01: the page badge states the age the top bar does, and the prices carry a stale mark.
-    const topBarAge = (await page.locator(".dk-top").getByRole("status").innerText()).trim();
+    // The title is the whole sentence at both bands; at 1180 the top bar's own text is the short form (D-232).
+    const topBarAge = (await page.locator(".dk-top").getByRole("status").getAttribute("title"))!;
     await expect(main(page).getByText(topBarAge, { exact: true })).toBeVisible();
     await expect(main(page).getByLabel("Market strip").getByText(/^Stale · /).first()).toBeVisible();
     await expectCleanScreen(page);

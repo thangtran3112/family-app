@@ -39,9 +39,9 @@ export function TopBar({ band }: { band: ShellBand }) {
       {replayBadge ? (
         <Freshness variant="note" className={`${styles.topBadge} ${styles.replayBadge}`} label={replayBadge} tone="warn" />
       ) : !shows(lane, "freshness") ? null : failed ? (
-        <Freshness variant="note" className={styles.topBadge} label={COPY.statusUnavailable} />
+        <Freshness variant="note" className={styles.topBadge} label={COPY.statusUnavailable} short={band === "1180" ? COPY.statusUnavailableShort : undefined} />
       ) : (
-        <Freshness className={styles.topBadge} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
+        <Freshness className={styles.topBadge} band={band} stamp={status?.quotes ?? null} session={status?.market.session} connection={connection} feed />
       )}
       {shows(lane, "alertsBell") && <AlertsBell />}
       <AvatarMenu />
