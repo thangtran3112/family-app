@@ -67,6 +67,26 @@ export function lineData(bars: ChartBar[], values: Array<number | null>): Array<
   }));
 }
 
+/**
+ * The runs of consecutive bars that hold a value, as [from, to) index pairs. A line series joins every two points it is given, across a gap of
+ * whitespace too, so one series drew VWAP as a straight segment from the prior session's last value across the pre-market to the open (D-231).
+ * One series per run keeps each session's stretch of a line on its own; VWAP resets at each session's open, so the runs are its sessions.
+ */
+export function valueRuns(values: readonly (number | null)[]): Array<[number, number]> {
+  const runs: Array<[number, number]> = [];
+  let start = -1;
+  values.forEach((value, index) => {
+    const held = value !== null && value !== undefined && Number.isFinite(value);
+    if (held && start < 0) start = index;
+    else if (!held && start >= 0) {
+      runs.push([start, index]);
+      start = -1;
+    }
+  });
+  if (start >= 0) runs.push([start, values.length]);
+  return runs;
+}
+
 const UP_VOLUME = "#30D15866";
 const DOWN_VOLUME = "#FF453A66";
 const SHADE = "#141416";
@@ -379,13 +399,16 @@ export function zoomedRange(range: LogicalRange, x: number, width: number, facto
 }
 
 /**
- * Where a followed replay chart waits before the open: from `anchor` (the session's first bar) over `span` slots, so the axis starts at the
- * open, not in the pre-open lookback (D-099). Null from the first session bar on: the chart then follows the newest bar with the lookback
- * to its left. A pinned chart with a few session bars drew them against the left edge of a blank plot, and a time axis has ticks only at
- * bars, so it printed no label at all (D-186).
+ * Where a followed replay chart waits before the open: a view of `span` slots that ends `span - lookback` slots past the open, so the last `lookback`
+ * bars of the pre-open lookback sit in view to the left of it, as a followed chart shows its newest bars (the same width, so the zoom carries on into
+ * the session). Null from the first session bar on: the chart then follows the newest bar with the lookback to its left. A range that starts at the
+ * newest bar put the library's clamp (it keeps two bars on screen) on the last two bars, pressed to the left edge of a blank plot with no tick to
+ * label them (D-220); a pinned chart with a few session bars did the same (D-186).
  */
-export function pinnedRange(count: number, anchor: number, span: number): LogicalRange | null {
-  return count <= anchor ? { from: anchor, to: anchor + span } : null;
+export function pinnedRange(count: number, anchor: number, span: number, lookback: number): LogicalRange | null {
+  if (count > anchor) return null;
+  const from = Math.max(0, anchor - lookback);
+  return { from, to: from + span };
 }
 
 /**
