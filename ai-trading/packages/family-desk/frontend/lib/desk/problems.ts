@@ -70,9 +70,9 @@ export const plainProblem = (problem: { path: string; message: string }): PlainP
 });
 
 /** "Symbols: Add at least 1 symbol." */
-export function problemLine(problem: { path: string; message: string }): string {
+export function problemLine(problem: { path: string; message: string }, labels: Readonly<Record<string, string>> = {}): string {
   const { field, text } = plainProblem(problem);
-  return `${field}: ${text}`;
+  return `${labels[problem.path] ?? field}: ${text}`;
 }
 
 export type ProblemSeverity = "error" | "warning";

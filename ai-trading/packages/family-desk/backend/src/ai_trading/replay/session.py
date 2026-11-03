@@ -699,7 +699,8 @@ def _open_trade(ctx: Ctx, price: float | None) -> dict[str, Any] | None:
     _, open_ = journal_mod.assemble(ctx.marks)
     out = journal_mod.open_trade_out(open_, price)
     if out is not None and ctx.row.stop_hit_at is not None:
-        out["stop_hit_at"] = ctx.row.stop_hit_at  # the stop line is an alert flag, never an exit (ADR-0025): the lane card shows it too
+        # the stop line is an alert flag, never an exit (ADR-0025): the lane card shows it too
+        out["stop_hit_at"] = ctx.row.stop_hit_at
     return out
 
 
