@@ -130,6 +130,17 @@ test("the summary tiles count dates and closed trades, name the best and worst d
   assert.equal(tiles.some((tile) => /pass|skip|adherence/i.test(`${tile.label} ${tile.sub}`)), false);
 });
 
+test("one closed trade reads singular in the win rate tile, and no tile says 1 days", () => {
+  for (const [wins, losses, sub] of [
+    [1, 0, "1 of 1 trade"],
+    [0, 1, "0 of 1 trade"],
+  ] as const) {
+    const tiles = threadTiles(threadWith({ wins, losses }));
+    assert.equal(tiles.find((tile) => tile.id === "win_rate")!.sub, sub);
+    assert.equal(tiles.some((tile) => /\b1 days\b/.test(`${tile.label} ${tile.value} ${tile.sub}`)), false);
+  }
+});
+
 test("a thread with no closed trade shows dashes; a worst date that is still a gain says no date lost", () => {
   const none = threadTiles({ thread: { stats: { balance: 50000, daysPracticed: 0, daysSkipped: 0, wins: 0, losses: 0 } }, daily: [] } as unknown as Pick<Thread, "thread" | "daily">);
   assert.deepEqual(none.map((tile) => tile.value), ["0", "0", "0", "—", "—", "—", "—", "—"]);
