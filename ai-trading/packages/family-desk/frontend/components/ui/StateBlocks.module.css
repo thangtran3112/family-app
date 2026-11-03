@@ -10,4 +10,5 @@
 .skeleton { display: block; border-radius: var(--radius-sm); background: var(--color-raised); animation: pulse 1.4s ease-in-out infinite; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes pulse { 50% { opacity: 0.45; } }
+.skeletonStill { animation: none; }
 @media (prefers-reduced-motion: reduce) { .shimmer, .skeleton { animation: none; } }

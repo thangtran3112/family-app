@@ -100,10 +100,19 @@ export class ChunkedSeries<P extends { time: Time }> {
   }
 
   setData(points: P[]): void {
+    const steps = this.setDataSteps(points);
+    while (!steps.next().done);
+  }
+
+  /**
+   * `setData` as steps: one run is set between two `yield`s, so a caller that wants the browser to have its turn on a long series can give it one (D-240). Run to the end, it
+   * leaves what `setData` leaves. `window` (time keys, as `cull` takes) hides each run outside it as soon as the run is set, so a paint between two steps draws the runs in view only.
+   */
+  *setDataSteps(points: P[], window?: [number, number]): Generator<void> {
     const count = Math.max(1, Math.ceil(points.length / this.size));
-    while (this.runs.length < count) this.addRun();
     while (this.runs.length > count) this.dropRun();
-    this.runs.forEach((run, index) => {
+    for (let index = 0; index < count; index += 1) {
+      const run = this.runs[index] ?? this.addRun();
       const from = index * this.size;
       const own = points.slice(from, from + this.size);
       const given = this.join && index > 0 ? [points[from - 1]!, ...own] : own;
@@ -112,7 +121,9 @@ export class ChunkedSeries<P extends { time: Time }> {
       run.first = own.length > 0 ? timeKey(own[0]!.time) : Number.POSITIVE_INFINITY;
       run.last = given.length > 0 ? timeKey(given[given.length - 1]!.time) : Number.NEGATIVE_INFINITY;
       run.lastPoint = given[given.length - 1] ?? null;
-    });
+      if (window) this.cull(window[0], window[1]);
+      yield;
+    }
   }
 
   /** Adds a point at the end, or replaces the newest one. A point older than the newest throws, as the library's own `update` does. */
@@ -182,4 +193,40 @@ export class ChunkedSeries<P extends { time: Time }> {
       run.shown = { ...want };
     });
   }
+}
+
+// A chart's first data is fed in slices (D-240): feeding 6,000 bars into the library series took 140 ms of one task on a machine at a quarter of this one's speed, and
+// the page cannot answer a click or paint while a task runs. The work is written as a generator that yields between series; `runInSlices` runs one slice per task.
+
+let slices: MessageChannel | null = null;
+const queued: Array<() => void> = [];
+
+/** Runs `run` in a task of its own, after the browser has had its turn. A message, not a timer: a timer in a hidden tab waits a second, and the load would stand still. */
+export function nextTask(run: () => void): void {
+  if (slices === null) {
+    slices = new MessageChannel();
+    slices.port1.onmessage = () => queued.shift()?.();
+  }
+  queued.push(run);
+  slices.port2.postMessage(null);
+}
+
+/**
+ * Drives `steps` to the end. With `schedule`, each slice (the steps up to the next `yield`) runs in a task of its own, the first one too, so whatever called this
+ * has finished its own task; without it all of them run now, as one function would. Returns the way to stop: a slice that was scheduled and not yet run does not run.
+ */
+export function runInSlices(steps: Iterator<void>, schedule: ((run: () => void) => void) | null): () => void {
+  if (schedule === null) {
+    while (!steps.next().done);
+    return () => {};
+  }
+  let stopped = false;
+  const advance = () => {
+    if (stopped) return;
+    if (!steps.next().done) schedule(advance);
+  };
+  schedule(advance);
+  return () => {
+    stopped = true;
+  };
 }
