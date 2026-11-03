@@ -22,7 +22,7 @@ test("the Practice lane may say order, position and fill; the desk-wide technica
 });
 
 test("the band names the day and the replay badge names the thread clock's own date and time", () => {
-  assert.equal(practiceBandText(null), "Practice · replay of past days · nothing here reaches a broker");
+  assert.equal(practiceBandText(null), "Practice · a pretend account with one clock · nothing here reaches a broker");
   assert.equal(practiceBandText("2026-10-23"), "Practice · replay of Fri 2026-10-23 · nothing here reaches a broker");
   assert.equal(replayBadgeText("2026-10-23T14:07:00Z"), "Replay · Fri 2026-10-23 · 10:07:00 AM ET");
   assert.equal(replayBadgeText("2026-10-23T05:22:24Z"), "Replay · Fri 2026-10-23 · 1:22:24 AM ET"); // the night after Thursday's list: Friday's date
