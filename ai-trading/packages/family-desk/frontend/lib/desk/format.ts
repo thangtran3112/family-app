@@ -16,12 +16,24 @@ const cleanSpaces = (text: string) => text.replace(/[  ]/g, " ");
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
+// `new Intl.DateTimeFormat` costs far more than formatting with one, and a Screen formats a time in every row: build each format once (D-235).
+const etFormats = new Map<string, Intl.DateTimeFormat>();
+function etFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = JSON.stringify(options);
+  let format = etFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone: ET, ...options });
+    etFormats.set(key, format);
+  }
+  return format;
+}
+
 function partsOf(iso: string, options: Intl.DateTimeFormatOptions): Record<string, string> {
   // A plain date (a daily bar's as-of) has no time of day: reading it as midnight UTC would print the evening before.
   if (DATE_ONLY.test(iso) && (options.hour || options.minute)) return {};
   const date = new Date(DATE_ONLY.test(iso) ? `${iso}T12:00:00Z` : iso);
   if (Number.isNaN(date.getTime())) return {};
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: ET, ...options }).formatToParts(date);
+  const parts = etFormat(options).formatToParts(date);
   return Object.fromEntries(parts.map(({ type, value }) => [type, cleanSpaces(value)]));
 }
 
@@ -156,10 +168,13 @@ export function formatSignedPct(value: number | null | undefined, digits = 2): s
   return `${value > 0 ? "+" : MINUS}${fixed}%`;
 }
 
+let compactFormat: Intl.NumberFormat | undefined;
+
 /** "12.9M" */
 export function formatCompact(value: number | null | undefined): string {
   if (!isFiniteNumber(value)) return EMPTY_VALUE;
-  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  compactFormat ??= new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  return compactFormat.format(value);
 }
 
 /** "0.98×" (relative volume and similar ratios) */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
 import { backoffMs } from "@/lib/desk/backoff";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
@@ -186,7 +186,14 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   const day = landed ? read.day : screen.day;
   // The table follows the clock from the first scan, so its columns are the settled set from the first paint; the cells the read fills wait as placeholders (D-159).
   const live = followState({ clock, thread: screen.thread }, { candidates: rows }, { landed, failed: atClock.error !== null });
-  const columns = columnsOf(screen, live);
+  // One list of columns while nothing it reads changes, so the table is measured when its columns change, not on every render the clock's poll causes (D-235).
+  const following = live !== null;
+  const today = live?.today ?? false;
+  const pending = live?.pending ?? false;
+  const columns = useMemo(
+    () => withPriorities(columnsOf({ columns: screen.columns, universe: screen.universe }, following ? { today, pending } : null), "practiceList"),
+    [screen.columns, screen.universe, following, today, pending],
+  );
   const liveAt = rows.find((row) => row.live)?.live?.at ?? clock;
   const market = (landed ? read.market : null) ?? screen.market ?? null;
   const last = lanes.filter((lane) => lane.status === "active").at(-1) ?? null;
@@ -337,7 +344,7 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
               {atClock.error !== null && !landed && <ErrorBlock message={PRACTICE_COPY.screenLiveError} onRetry={atClock.refresh} />}
               <DenseTable
                 caption="Candidates"
-                columns={withPriorities(columns, "practiceList")}
+                columns={columns}
                 rows={rows}
                 rowKey={(row) => row.symbol}
                 selectedKey={selected}
@@ -521,7 +528,7 @@ function ScreenClock({ day, shown, status, market }: { day: string; shown: strin
   );
 }
 
-function columnsOf(screen: Screen, live: FollowState | null): DenseColumn<Candidate>[] {
+function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowState | null): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
