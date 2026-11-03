@@ -316,9 +316,9 @@ export function notEnoughHistoryText(timeframe: string): string {
 
 export const PRACTICE_COPY = {
   band: "Practice · replay of {day} · nothing here reaches a broker",
-  bandHub: "Practice · replay of past days · nothing here reaches a broker",
-  bandMarks: "Practice trades are simulated on a finished day · nothing is sent to a broker",
-  statusPricesPast: "Prices: Alpaca SIP · past days",
+  bandHub: "Practice · a pretend account with one clock · nothing here reaches a broker",
+  bandMarks: "Practice trades are simulated at the thread clock · nothing is sent to a broker",
+  statusPricesPast: "Prices: Alpaca SIP · up to the thread clock",
   statusPricesReplay: "Prices: Alpaca SIP · replay",
   statusPricesReplayIex: "Prices: Alpaca IEX · replay",
   statusReplayClock: "Replay clock {time}",
@@ -336,6 +336,7 @@ export const PRACTICE_COPY = {
   haltedTape: "No prints for {time} · the stock may be halted",
   noTrading: "No trading on {day} · pick a weekday",
   notFinished: "This session isn't finished yet · replay opens at 4:15 PM ET",
+  futureDay: "No replay for a date after today · pick {day} or earlier",
   beforeFloor: "Replay goes back to Jan 4, 2016",
   loadingReplay: "Preparing the replay…",
   ready: "Paused at {time}",
@@ -472,7 +473,7 @@ export const PRACTICE_COPY = {
   threadPickTitle: "No practice thread selected",
   // Each screen that lists the threads names its own next step (D-183); the rows go to the same place.
   threadPickHintThread: "Pick a thread to open its Summary.",
-  threadPickHintReplay: "Pick a thread, then open a name from its day.",
+  threadPickHintReplay: "Pick a thread, then open a name from its Screen.",
   threadPickNone: "No practice thread yet · start one on Practice to get a pretend balance",
   threadBalanceLine: "Thread balance {balance}",
   threadJournal: "Open journal",
@@ -675,6 +676,7 @@ export const PRACTICE_COPY = {
   journalEmptyLine: "{balance} · no closed trade yet",
   journalEmpty: "The balance curve starts after you close your first position.",
   journalOpenPositions: "{positions} · not in this balance until you close them",
+  journalOpenPositionsOne: "1 open position · not in this balance until you close it",
   journalOpenPortfolio: "See the Portfolio",
   journalClosedBanner: "This thread is closed · realized balance {balance} · its journal stays here",
   journalStartedDate: "First trade {date}",

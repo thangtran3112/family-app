@@ -45,6 +45,12 @@ export function threadCard(summary: Pick<ThreadSummary, "clock" | "positions_ope
   };
 }
 
+/**
+ * The time the Summary's place line reads: the time its figure is priced at, the clock poll's account (`as_of`), so the equity and its "At"
+ * agree after a Jump or a Next open (D-218). Without a live account (a closed thread, no poll yet) it is the clock the Summary loaded.
+ */
+export const placeAt = (loaded: Pick<ThreadClockBrief, "clock"> | null, account: { as_of: string } | null): string | null => account?.as_of ?? loaded?.clock ?? null;
+
 // -- the stats -------------------------------------------------------------------------------------------------------------
 
 export type OverviewStat = { id: string; label: string; value: string };

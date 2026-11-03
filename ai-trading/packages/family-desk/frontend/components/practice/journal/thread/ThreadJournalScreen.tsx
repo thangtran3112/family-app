@@ -103,7 +103,7 @@ function ThreadJournal({ thread, onChanged }: { thread: Thread; onChanged: () =>
           {/* The balance is the ledger's: a position still open is not in it. It is in the Portfolio, priced at the clock. */}
           {thread.positions_open > 0 && (
             <p className={styles.hint} data-testid="journal-open-positions">
-              {practiceText("journalOpenPositions", { positions: openPositionsText(thread.positions_open) })}
+              {thread.positions_open === 1 ? PRACTICE_COPY.journalOpenPositionsOne : practiceText("journalOpenPositions", { positions: openPositionsText(thread.positions_open) })}
               {" · "}
               <Link href={threadPageHref(thread.thread.id, "portfolio")} className={styles.link}>{PRACTICE_COPY.journalOpenPortfolio}</Link>
             </p>

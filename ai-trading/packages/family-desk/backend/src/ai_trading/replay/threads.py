@@ -143,7 +143,9 @@ def _check_plan(plan: dict[str, Any], balance: int | Decimal) -> None:
         )
 
 
-def create_thread(db: Session, user_id: int, spec: PracticeThreadCreateV1, now: datetime) -> PracticeThread:
+def create_thread(
+    db: Session, user_id: int, spec: PracticeThreadCreateV1, now: datetime, started: datetime | None = None
+) -> PracticeThread:
     """A freestyle thread. The contract's mode stays `day` until the contract migration (ADR-0025); a swing body is
     refused."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
@@ -155,7 +157,7 @@ def create_thread(db: Session, user_id: int, spec: PracticeThreadCreateV1, now: 
     db.execute(text("select pg_advisory_xact_lock(hashtext('day-thread-cap'))"))
     if slots_used(db) >= MAX_ACTIVE_THREADS:
         raise ReplayProblem(SLOTS_FULL.format(max=MAX_ACTIVE_THREADS), path="mode", status=409)
-    return add_thread(db, user_id, dumped, now)
+    return add_thread(db, user_id, dumped, now, started)
 
 
 def slots_used(db: Session) -> int:
@@ -177,15 +179,16 @@ def check_new_thread(dumped: dict[str, Any]) -> None:
     _check_plan(dumped["plan"], dumped["startingBalance"])
 
 
-def thread_name(db: Session, user_id: int, mode: str, now: datetime) -> str:
-    """The new thread's own name (D-069): "Freestyle · Oct 15" after the ET day it starts, and "(2)", "(3)" ... on a
-    later thread of hers with that name, so no two of her threads read alike. Threads named before ADR-0025 keep their
-    "Day thread" and "Swing thread" names.
+def thread_name(db: Session, user_id: int, mode: str, now: datetime, started: datetime | None = None) -> str:
+    """The new thread's own name (D-069): "Freestyle · Oct 15" after the ET day its clock starts (`started`, the setup's
+    start instant; `now`, the moment it was made, when it has no setup yet), and "(2)", "(3)" ... on a later thread of
+    hers with that name, so no two of her threads read alike. The name is the thread's own time, not the wall clock's
+    day of creation (D-226). Threads named before ADR-0025 keep their "Day thread" and "Swing thread" names.
 
     ponytail: no lock, so two creates of one owner in the same instant could pick the same name; it is only a label,
     and a unique index plus a retry is the upgrade if that ever shows."""
-    started = now.astimezone(ET)
-    base = f"{'Swing thread' if mode == 'swing' else 'Freestyle'} · {started:%b} {started.day}"
+    day = (started or now).astimezone(ET)
+    base = f"{'Swing thread' if mode == 'swing' else 'Freestyle'} · {day:%b} {day.day}"
     taken = set(
         db.execute(
             select(PracticeThread.name).where(
@@ -197,12 +200,14 @@ def thread_name(db: Session, user_id: int, mode: str, now: datetime) -> str:
     return next(name for name in candidates if name not in taken)
 
 
-def add_thread(db: Session, user_id: int, dumped: dict[str, Any], now: datetime) -> PracticeThread:
+def add_thread(
+    db: Session, user_id: int, dumped: dict[str, Any], now: datetime, started: datetime | None = None
+) -> PracticeThread:
     """Write the thread row (`dumped` passed `check_new_thread`), under a name of its own."""
     plan = dumped["plan"]
     row = PracticeThread(
         owner_user_id=user_id,
-        name=thread_name(db, user_id, dumped["mode"], now),
+        name=thread_name(db, user_id, dumped["mode"], now, started),
         mode=dumped["mode"],
         starting_balance=Decimal(dumped["startingBalance"]),
         stop_note_on_entry=plan["stopNoteOnEntry"],

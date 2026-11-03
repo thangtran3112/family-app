@@ -289,8 +289,13 @@ test.describe("Practice", () => {
     for (const label of ["Prev close", "Prev RVOL", "Prev change %"]) await expect(table.getByRole("columnheader", { name: label, exact: true })).toBeVisible(); // exact: "vs prev close % now" is a column from the first paint (D-159)
     // D-136: no name reports before the open, so there is no Earnings column of dashes to scroll past.
     await expect(table.getByRole("columnheader", { name: "Earnings" })).toHaveCount(0);
+    // D-223: the names say why they are listed, so the Filters column is shown at both widths; D-222: a header sorts the rows.
+    await expect(table.getByRole("columnheader", { name: "Filters", exact: true })).toBeVisible();
+    const symbolHead = table.getByRole("columnheader", { name: "Symbol", exact: true });
+    await symbolHead.getByRole("button").click();
+    await expect(symbolHead).toHaveAttribute("aria-sort", /ascending|descending/);
     // D-043: the Screen's own status line. One scan time: the scan's clock.
-    await expect(page.getByLabel("Status")).toContainText("Scanned 9:30 AM ET");
+    await expect(page.getByLabel("Status")).toContainText(/Scanned \w{3} \d{4}-\d{2}-\d{2} 9:30 AM ET/);
     await expect(page.getByLabel("Status")).toContainText(PRACTICE_COPY.statusScanAtClock);
     await expect(page.locator("body")).toContainText(formatEtDay(DAY));
     await expectNoDayLanguage(page);
@@ -487,7 +492,7 @@ test.describe("Practice", () => {
     await expectCleanScreen(page);
   });
 
-  test("a new thread's journal says there are no trades yet, and a thread that does not exist says it could not load", async ({ page, context }) => {
+  test("a new thread's journal says there are no trades yet, a thread that does not exist says it was not found, and a failed read says it could not load", async ({ page, context }) => {
     const id = await createThreadByApi(context);
     await openDesk(page, "/practice");
     const card = threadRow(page);
@@ -504,8 +509,21 @@ test.describe("Practice", () => {
     await page.waitForURL(/\/practice$/);
     await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toHaveCount(0);
 
+    // A thread the server does not know (404) says "not found" with the way back; it is neither "not chosen" nor a failed read (D-164, D-193).
     await openDesk(page, "/practice/journal?thread=99999");
-    await expect(page.getByRole("alert").filter({ hasText: "Couldn't load this thread" })).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.threadPageNotFound)).toBeVisible();
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.openPractice })).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toHaveCount(0);
+    await expect(page.getByRole("alert").filter({ hasText: "Couldn't load this thread" })).toHaveCount(0);
+    await expectCleanScreen(page);
+
+    // A thread that exists but whose read fails (500) says it could not load, with a retry, and does not claim the thread is missing.
+    await page.route(new RegExp(`/api/desk/replay/threads/${id}(\\?|$)`), (route) => route.fulfill({ status: 500, json: { detail: "unavailable" } }));
+    await openDesk(page, `/practice/journal?thread=${id}`);
+    const failed = page.getByRole("alert").filter({ hasText: "Couldn't load this thread" });
+    await expect(failed).toBeVisible();
+    await expect(failed.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.threadPageNotFound)).toHaveCount(0);
     await expectCleanScreen(page);
   });
 
@@ -545,10 +563,19 @@ test.describe("Practice", () => {
     await page.waitForURL(/\/practice\/journal\?thread=\d+/);
   });
 
-  test("a thread that is not chosen and one that is not found say different things on the Screen (D-116, D-117)", async ({ page }) => {
+  test("a thread that is not chosen and one that is not found say different things on the Screen (D-116, D-117)", async ({ page, context }) => {
+    // With no thread at all there is one statement, not "no thread selected" over "no thread yet" (D-117), and the way to start one.
+    await openDesk(page, "/practice/screen");
+    await expect(page.getByText(PRACTICE_COPY.threadPickNone)).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toHaveCount(0);
+    await expect(page.getByRole("link", { name: PRACTICE_COPY.openPractice })).toBeVisible();
+    // With threads and none chosen, it says which to pick, and each row opens that thread's Screen (D-183).
+    const threadId = await createThreadByApi(context);
     await openDesk(page, "/practice/screen");
     await expect(page.getByText(PRACTICE_COPY.threadPickTitle)).toBeVisible();
     await expect(page.getByText(PRACTICE_COPY.screenPickHint)).toBeVisible();
+    await expect(page.getByText(PRACTICE_COPY.threadPickNone)).toHaveCount(0);
+    await expect(page.getByLabel("Your threads").getByRole("link").first()).toHaveAttribute("href", `/practice/screen?thread=${threadId}`);
     for (const bad of ["abc", "999999"]) {
       await openDesk(page, `/practice/screen?thread=${bad}`);
       await expect(page.getByText(PRACTICE_COPY.threadPageNotFound), bad).toBeVisible();
@@ -604,7 +631,7 @@ test.describe("Practice", () => {
     };
     await expect.poll(async () => (await cells())["Shares"] ?? "", { message: "TSLA is a long: unsigned shares" }).toMatch(/^\d[\d,]*$/);
     expect((await cells())["Avg cost"], "and the cost it was built at").toMatch(/^[\d,]+\.\d{2}$/);
-    expect((await cells())["Price at T"], "and the price at the thread's time").toMatch(/^[\d,]+\.\d{2}$/);
+    expect((await cells())["Price at thread time"], "and the price at the thread's time").toMatch(/^[\d,]+\.\d{2}$/);
     await expect(portfolioRegion.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.portfolioTotal);
     // The thread list counts it too.
     await openDesk(page, "/practice");

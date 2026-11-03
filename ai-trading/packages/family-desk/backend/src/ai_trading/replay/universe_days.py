@@ -102,7 +102,7 @@ def default_first_day(db: Session, now: datetime) -> tuple[date | None, str]:
     if finished < MIN_FINISHED_DAYS:
         return None, (
             f"The Desk has recorded {finished} finished {'day' if finished == 1 else 'days'} of its universe so far · "
-            f"the default start moves to the first recorded day once there are {MIN_FINISHED_DAYS}"
+            "the start is three months back"
         )
     first = next(d for d in finished_days_since(cover.first_day, now))
     return first, f"The first day the Desk recorded its universe · {finished} finished days of it exist"

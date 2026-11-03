@@ -21,7 +21,7 @@ test("each board declares which columns may drop and in what order (lowest first
     // The Trades fills table (D-157): the effect goes first, then the day.
     ["threadFills", ["day", "time", "symbol", "action", "shares", "price", "effect"].map((key) => ({ key })), ["effect", "day"]],
     // The day list (D-157): the match time, the filter names, volume, gap and vs VWAP, then prev close drop; price, prev RVOL, prev change, ATR % and RSI never do.
-    ["practiceList", ["symbol", "filters", "list_price", "price_now", "change_now", "prev_close", "prev_rvol", "prev_change_pct", "atr_pct_14", "rsi_14", "earnings", "volume", "gap_pct_open", "vs_vwap_pct", "matched_since"].map((key) => ({ key })), ["matched_since", "filters", "volume", "gap_pct_open", "vs_vwap_pct", "prev_close"]],
+    ["practiceList", ["symbol", "filters", "list_price", "price_now", "change_now", "prev_close", "prev_rvol", "prev_change_pct", "atr_pct_14", "rsi_14", "earnings", "volume", "gap_pct_open", "vs_vwap_pct", "matched_since"].map((key) => ({ key })), ["matched_since", "volume", "gap_pct_open", "vs_vwap_pct", "prev_close"]],
   ];
   for (const [board, columns, dropped] of cases) {
     const prioritized = withPriorities(columns, board);

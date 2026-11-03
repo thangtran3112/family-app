@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from ai_trading.contracts.practice_setup import PracticeSetupV2
 from ai_trading.contracts.replay_session import ReplaySessionV1
-from ai_trading.core.calendar import ET, et
+from ai_trading.core.calendar import ET
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.data.universe import SEED_SYMBOLS, ensure_universe, split_plain
 from ai_trading.db.models import (
@@ -610,7 +610,10 @@ def _check_start(start: pd.Timestamp, svc: Services) -> date:
     """The ET trading day of `start`, when the thread may begin there (ADR-0025 R4): a finished trading session on or
     after 2016-01-04, the instant inside that day's extended hours, and not past the horizon."""
     first = start.tz_convert(ET).date()
-    check_day(first, svc.now())
+    try:
+        check_day(first, svc.now())
+    except ReplayDayError as exc:  # a closed day is refused under the start date, where she pressed Start (D-230)
+        raise ReplayProblem(exc.message, path="startAt") from exc
     found = trading_session("stock", first)
     assert found is not None
     if not found.extended_open <= start < found.extended_close:
@@ -786,6 +789,24 @@ def _few_names_reason(db: Session, row: ReplayDayList, scan: ReplayDayScan) -> s
     )
 
 
+def _screen_warnings(db: Session, row: ReplayDayList, scan: ReplayDayScan | None) -> list[str]:
+    """What the Screen says about its scan: the filters still waiting for a bar of the day, and why it is short."""
+    if scan is None:
+        return []
+    out = []
+    waiting = [(item["name"], item["reads_from"]) for item in row.universe.get("filters", []) if item.get("reads_from")]
+    if waiting:
+        names = _join([name for name, _ in waiting])
+        at = clock12(_utc(scan.as_of).tz_convert(ET).strftime("%H:%M"))
+        out.append(
+            f"{names} lists no names until {clock12(max(need for _, need in waiting))} ET · at {at} ET its first bar "
+            "of the day cannot be read yet"
+        )
+    if len(row.candidates) < FEW_NAMES:
+        out.append(_few_names_reason(db, row, scan))
+    return out
+
+
 def _live_candidates(
     svc: Services,
     db: Session,
@@ -917,7 +938,7 @@ def screen_out(
         ],
         "watch_check": watch_check(db, row, lanes),
         "thread": threads_mod.brief(db, thread.id),
-        "warnings": [_few_names_reason(db, row, scan)] if scan is not None and len(row.candidates) < FEW_NAMES else [],
+        "warnings": _screen_warnings(db, row, scan),
         "rescan": None if scan is None else _scan_out(scan),
         "rescan_job": _job_out(row.rescan_job, svc.now()),
         "peek": None if peek is None else _peek(db, svc, row, peek),
@@ -969,8 +990,8 @@ def start_rescan(db: Session, user_id: int, thread_id: int, svc: Services) -> tu
     `run_rescan` with it on its own session once this one has committed. The token is None when there is nothing to
     start: a scan already in flight is joined, never doubled (a job that stopped reporting is taken over, and the old
     worker finds its token gone), and a Screen that already holds a scan at this T is current. The scan runs on the
-    data day of T. A 409 on a closed thread, and a 409 for a filter that reads bars of the day that cannot have closed
-    yet at T (`screen.earliest_list_at`): the look-ahead stays impossible."""
+    data day of T. A 409 on a closed thread, and a 409 when every filter reads bars of the day that cannot have closed
+    yet at T (`screen.reads_from`); a filter that waits is skipped by the scan, so the look-ahead stays impossible."""
     thread = threads_mod.get_thread(db, user_id, thread_id)
     session_mod.settle_thread(db, svc, thread.id)
     db.refresh(thread)
@@ -980,17 +1001,23 @@ def start_rescan(db: Session, user_id: int, thread_id: int, svc: Services) -> tu
     assert thread.clock_at is not None
     clock = _utc(thread.clock_at)
     day = positions_mod.data_day(clock)
-    if clock >= session_mod.market_open(day):  # the data day is today's: its own bars are only as old as T
-        for item in row.screen["filters"]:
-            version = db.get(FilterStrategyVersion, item["version_id"])
-            need = screen.earliest_list_at(version.spec) if version is not None else "00:00"
-            if clock < et(day, need):
-                raise ReplayProblem(
-                    f"{item['name']} reads bars of the day itself, and none has closed by "
-                    f"{clock.tz_convert(ET).strftime('%H:%M')} · re-scan at {clock12(need)} or later",
-                    path="rescan",
-                    status=409,
-                )
+    # A filter with no bar of the day to read yet lists nothing until it has one; the other filters still scan. Only a
+    # Screen whose every filter waits is refused: there is nothing to scan at T (the look-ahead stays impossible).
+    waiting: list[tuple[str, str]] = []
+    for item in row.screen["filters"]:
+        version = db.get(FilterStrategyVersion, item["version_id"])
+        need = screen.reads_from(version.spec, day, clock) if version is not None else None
+        if need is not None:
+            waiting.append((item["name"], need))
+    if waiting and len(waiting) == len(row.screen["filters"]):
+        names = _join([name for name, _ in waiting])
+        latest = clock12(max(need for _, need in waiting))
+        now = clock12(clock.tz_convert(ET).strftime("%H:%M"))
+        raise ReplayProblem(
+            f"{names} waits until {latest} ET · no filter has a bar to read at {now} ET",
+            path="rescan",
+            status=409,
+        )
     now = svc.now()
     job = row.rescan_job
     if job is not None and job["state"] == "running" and not _rescan_stale(job, now):

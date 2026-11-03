@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { containsPracticeBannedTerm } from "../desk/freshness.ts";
-import { clockLine, clockPill, lastActivityText, overviewDateRows, overviewStats, sinceStartText, threadCard } from "./overviewView.ts";
+import { clockLine, clockPill, lastActivityText, overviewDateRows, overviewStats, placeAt, sinceStartText, threadCard } from "./overviewView.ts";
 import { activeThread, closedThread, freshThread, threadClockBrief, threadDays } from "./threadFixtures.ts";
 
 test("the card reads the thread's time, its state, its open positions and its last activity: no day number, no progress", () => {
@@ -63,4 +63,12 @@ test("nothing the Summary or the card says carries a banned term, and a closed t
   ];
   for (const text of texts) assert.equal(containsPracticeBannedTerm(String(text)), false, String(text));
   assert.equal(threadCard(closedThread).positions, "2 open positions", "a closed thread still holds its positions, valued at the time it stopped");
+});
+
+// D-218: the place line's "At" is the time the figure is priced at (the clock poll's account), not the time the Summary loaded.
+test("the place line reads the time its equity is priced at, and the loaded clock only with no live account (D-218)", () => {
+  const loaded = threadClockBrief; // Mon 2026-03-10 9:41 AM ET, as the Summary loaded it
+  assert.equal(placeAt(loaded, { as_of: "2026-08-04T13:30:00Z" }), "2026-08-04T13:30:00Z", "after Next open the line moves with the equity");
+  assert.equal(placeAt(loaded, null), loaded.clock, "a closed thread has no poll: the time it stopped at");
+  assert.equal(placeAt(null, null), null, "no setup, no time");
 });

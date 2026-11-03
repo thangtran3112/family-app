@@ -47,6 +47,11 @@ def _setup(gap_up: int, day: int = 0, hhmm: str = "10:00") -> dict[str, Any]:
     }
 
 
+def _body(setup: dict[str, Any]) -> dict[str, Any]:
+    plan = {"stopNoteOnEntry": "no", "tradeOnlyOnSignal": "no"}
+    return {"schemaVersion": 1, "mode": "day", "startingBalance": 50000, "plan": plan, "setup": setup}
+
+
 def _thread(client: TestClient, gap_up: int, **setup) -> dict[str, Any]:
     body = {
         "schemaVersion": 1,
@@ -221,6 +226,65 @@ def test_the_day_model_routes_are_gone_and_a_stranger_sees_nothing(api) -> None:
     assert swing.status_code == 409 and "Swing threads are closed" in swing.text
 
 
+def _abnormal_volume(db_session) -> int:
+    return db_session.execute(
+        select(FilterStrategy.id)
+        .join(User, User.id == FilterStrategy.owner_user_id)
+        .where(User.email == "owner@example.com", FilterStrategy.name == "Abnormal volume")
+    ).scalar_one()
+
+
+def test_a_fresh_thread_scans_at_the_form_default_start_and_the_filter_that_waits_says_so(api, db_session) -> None:
+    """D-216: Abnormal volume reads 15-minute bars, so it has none to read at 09:30. The scan lists the other filter's
+    names, says when Abnormal volume starts to list, and does not refuse the scan."""
+    from ai_trading.replay import plan as plan_mod
+
+    client, services, gap_up = api
+    setup = _setup(gap_up, day=0, hhmm="09:30")
+    setup["screen"]["filters"].append({"id": _abnormal_volume(db_session)})
+    made = client.post(f"{BASE}/threads", json=_body(setup), headers=auth_headers())
+    assert made.status_code == 200, made.text
+    thread_id = made.json()["thread"]["id"]
+    started = client.post(f"{BASE}/threads/{thread_id}/screen/rescan", headers=auth_headers())
+    assert started.status_code == 200, started.text
+    screen = db_session.execute(
+        select(plan_mod.ReplayDayList).where(plan_mod.ReplayDayList.thread_id == thread_id)
+    ).scalar_one()
+    plan_mod.run_rescan(db_session, services, screen.id, screen.rescan_job["run"])
+    done = client.get(f"{BASE}/threads/{thread_id}/screen", headers=auth_headers()).json()
+    assert done["rescan_job"]["state"] == "done"
+    filters = {item["name"]: item for item in done["universe"]["filters"]}
+    assert filters["Abnormal volume"]["reads_from"] == "10:00" and filters["Abnormal volume"]["scanned"] == 0
+    assert filters["Gap up"]["reads_from"] is None and filters["Gap up"]["scanned"] > 0
+    assert [c["symbol"] for c in done["candidates"]] == ["GAPPER"]
+    assert done["warnings"][0] == (
+        "Abnormal volume lists no names until 10:00 AM ET · at 9:30 AM ET its first bar of the day cannot be read yet"
+    )
+
+
+def test_a_closed_day_is_refused_under_the_start_date_where_she_pressed_start(api) -> None:
+    """D-230: a market holiday is the start date's problem, so the form shows it under the date, not at the note."""
+    client, _, gap_up = api
+    setup = _setup(gap_up)
+    setup["startAt"] = "2026-07-03T10:00:00-04:00"  # Independence Day observed: the market was closed
+    refused = client.post(f"{BASE}/threads", json=_body(setup), headers=auth_headers())
+    assert refused.status_code == 422
+    assert refused.json()["detail"]["problems"] == [
+        {"path": "startAt", "message": "No trading on Fri 2026-07-03 · the market was closed"}
+    ]
+
+
+def test_a_screen_whose_every_filter_waits_is_refused_with_the_time_they_read_from(api, db_session) -> None:
+    client, _, _ = api
+    setup = _setup(_abnormal_volume(db_session), day=0, hhmm="09:30")
+    thread_id = client.post(f"{BASE}/threads", json=_body(setup), headers=auth_headers()).json()["thread"]["id"]
+    refused = client.post(f"{BASE}/threads/{thread_id}/screen/rescan", headers=auth_headers())
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["problems"][0]["message"] == (
+        "Abnormal volume waits until 10:00 AM ET · no filter has a bar to read at 9:30 AM ET"
+    )
+
+
 def test_the_screen_is_rescanned_at_the_threads_time(api, db_session) -> None:
     from ai_trading.replay import plan as plan_mod
 
@@ -246,3 +310,12 @@ def test_the_screen_is_rescanned_at_the_threads_time(api, db_session) -> None:
     client.post(f"{BASE}/threads/{thread_id}/clock", json={"to": _iso(2, "10:30")}, headers=auth_headers())
     moved = client.post(f"{BASE}/threads/{thread_id}/screen/rescan", headers=auth_headers()).json()
     assert moved["rescan_job"]["state"] == "running" and moved["day"] == DAYS[2].isoformat()
+
+
+def test_a_thread_is_named_by_the_day_its_clock_starts_not_the_day_it_was_made(api) -> None:
+    # D-226: the world's now is Sat 2026-10-24; the thread's clock starts Mon 2026-09-28 at 10:00 ET.
+    client, _, gap_up = api
+    first = _thread(client, gap_up)
+    assert first["thread"]["name"] == "Freestyle · Sep 28"
+    second = _thread(client, gap_up)
+    assert second["thread"]["name"] == "Freestyle · Sep 28 (2)", "two threads that start one day still read apart"

@@ -12,7 +12,7 @@ import { openNameFromScreen } from "./lane-helpers";
 // the prepared bars of every name it has served: a lane opened on a name that an earlier spec's lane had already drawn shows that lane's.
 const SYMBOL = "XOM";
 
-type Reading = { candleLeft: number; candleRight: number; axisInkRight: number };
+type Reading = { candleLeft: number; candleRight: number; axisInkRight: number; axisInk: number };
 
 /** Where the candles are on the plot (leftmost and rightmost column that holds a candle body or wick, as a share of the plot's width) and how much label ink the right half of the time axis carries. */
 async function readChart(page: Page): Promise<Reading> {
@@ -51,7 +51,14 @@ async function readChart(page: Page): Promise<Reading> {
         if (ink.data[i + 3]! > 0 && ink.data[i]! + ink.data[i + 1]! + ink.data[i + 2]! > 3 * 110) axisInkRight++;
       }
     }
-    return { candleLeft: left < 0 ? -1 : left / width, candleRight: right < 0 ? -1 : right / width, axisInkRight };
+    let axisInk = 0;
+    for (let y = 0; y < ink.height; y++) {
+      for (let x = 0; x < ink.width; x++) {
+        const i = (y * ink.width + x) * 4;
+        if (ink.data[i + 3]! > 0 && ink.data[i]! + ink.data[i + 1]! + ink.data[i + 2]! > 3 * 110) axisInk++;
+      }
+    }
+    return { candleLeft: left < 0 ? -1 : left / width, candleRight: right < 0 ? -1 : right / width, axisInkRight, axisInk };
   }, [chartPalette.up, chartPalette.down]);
 }
 
@@ -60,8 +67,12 @@ test("a lane's chart open while the thread clock moves keeps its newest bars acr
   await prepareDesk(context);
   await openNameFromScreen(page, context, SYMBOL);
 
-  // 9:30, before the open: no session bar yet, so the chart waits at the session's first bar (D-099, D-186): the lookback is a sliver at the left edge.
-  await expect.poll(async () => (await readChart(page)).candleRight, { message: "waits at the open: nothing but a sliver of lookback at the left edge", timeout: 20_000 }).toBeLessThan(0.1);
+  // 9:30, before the open: no session bar yet, so the chart waits at the open. The pre-open lookback is in view as a followed chart shows its
+  // newest bars: from the left edge, the newest bar near the right edge, the time axis labelled. It was a sliver at the left edge with no label (D-220).
+  await expect.poll(async () => (await readChart(page)).candleRight, { message: "waits at the open: the lookback runs in from the left edge to near the right edge", timeout: 20_000 }).toBeGreaterThan(0.8);
+  const waiting = await readChart(page);
+  expect(waiting.candleLeft, "waits at the open: the lookback starts at the left edge").toBeLessThan(0.2);
+  expect(waiting.axisInk, "waits at the open: the time axis carries labels").toBeGreaterThan(50);
 
   // 9:31 to 9:34: each bar the clock reveals moves the view to it at once. The newest bar sits near the right edge with the lookback to its left
   // (it read 30 to 40 % of the plot, bunched on the left, with the labels behind it, before the fix).

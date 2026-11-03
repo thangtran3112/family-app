@@ -36,7 +36,10 @@ export function dayProblem(day: string, now: Date): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T12:00:00Z`))) return DAY_PLEASE;
   if (day < EARLIEST_DAY) return PRACTICE_COPY.beforeFloor;
   if (isWeekend(day)) return practiceText("noTrading", { day: formatEtDay(day) });
-  if (day > latestReplayDay(now)) return PRACTICE_COPY.notFinished;
+  // Only today can be unfinished (its replay opens at 4:15 PM ET); a later date is not traded yet and gets the last finished day.
+  if (day > latestReplayDay(now)) {
+    return day > etDayOf(now.toISOString()) ? practiceText("futureDay", { day: formatEtDay(latestReplayDay(now)) }) : PRACTICE_COPY.notFinished;
+  }
   return null;
 }
 
