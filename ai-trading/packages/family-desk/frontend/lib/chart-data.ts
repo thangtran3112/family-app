@@ -89,6 +89,61 @@ export function shadingData(bars: ChartBar[]): Array<HistogramData<Time> | White
   }));
 }
 
+/** What a series was last drawn from: the bars (and the values laid on them), and a key for anything else that shapes its points (a colour). */
+export type SeriesFed = { bars: readonly ChartBar[]; values: readonly (number | null)[] | null; key: string };
+/** The part of a library series the feed uses. */
+export type Feedable<P> = { setData(data: P[]): void; update(point: P): void };
+
+/**
+ * Where the data of a series starts to differ from what it was last given, or -1 when all of it has to be sent: the first draw, a different key, fewer
+ * bars, or a change anywhere before the newest bar held. A refresh of a followed chart changes the newest bar (the forming candle closes) and appends
+ * the ones after it, and the bars before are the same objects (the replay's merge keeps them), so this is a scan of references, microseconds for 6,000 bars.
+ * A result equal to `bars.length` means there is nothing to send.
+ */
+export function changedFrom(fed: SeriesFed | undefined, bars: readonly ChartBar[], values: readonly (number | null)[] | null, key: string): number {
+  if (!fed || fed.key !== key || fed.bars.length === 0 || bars.length < fed.bars.length || (values === null) !== (fed.values === null)) return -1;
+  const held = fed.bars.length;
+  let from = 0;
+  while (from < held && fed.bars[from] === bars[from]) from += 1;
+  if (values !== null && fed.values !== null) {
+    if (values.length < held) return -1;
+    let at = 0;
+    while (at < held && fed.values[at] === values[at]) at += 1;
+    from = Math.min(from, at);
+  }
+  return from < held - 1 ? -1 : from;
+}
+
+/**
+ * Brings a library series up to `bars`: all of the data on a first draw or after a change behind the newest bar, otherwise only the bars from the first
+ * change on (`update` replaces the newest point and appends the rest). The library's `setData` and the point builders cost as much as the series is long,
+ * and a followed chart did them for 6,000 bars on every new bar (D-206). `build` makes the points of the bars and values it is given. Returns the first
+ * bar sent, or -1 for all of them.
+ */
+export function syncSeries<P>(
+  series: Feedable<P>,
+  fed: WeakMap<object, SeriesFed>,
+  bars: readonly ChartBar[],
+  values: readonly (number | null)[] | null,
+  key: string,
+  build: (bars: ChartBar[], values: Array<number | null>) => P[],
+): number {
+  const from = changedFrom(fed.get(series), bars, values, key);
+  fed.set(series, { bars, values, key });
+  const all = () => {
+    series.setData(build(bars as ChartBar[], (values ?? []) as Array<number | null>));
+    return -1;
+  };
+  if (from < 0) return all();
+  if (from >= bars.length) return from;
+  try {
+    for (const point of build(bars.slice(from), values === null ? [] : values.slice(from))) series.update(point);
+  } catch {
+    return all(); // the library refuses an older time than its newest: send everything instead
+  }
+  return from;
+}
+
 export type ChartMarkerInput = {
   /** UTC bar start. Patterns use `bar_start`, fired alerts `bar_time`; Practice marks are snapped to the bar they fall in. */
   time: string;
@@ -116,7 +171,7 @@ function markerStyle(marker: ChartMarkerInput): Pick<SeriesMarkerBar<Time>, "pos
  * (02o §d). A marker that matches no loaded bar is dropped; the library needs them sorted by time.
  */
 export function seriesMarkers(bars: ChartBar[], markers: ChartMarkerInput[]): SeriesMarker<Time>[] {
-  if (bars.length === 0) return [];
+  if (bars.length === 0 || markers.length === 0) return [];
   const daily = /^\d{4}-\d{2}-\d{2}$/.test(bars[0]!.t);
   const have = new Set(bars.map((bar) => timeKey(chartTime(bar.t))));
   const placed = markers.flatMap((marker): Array<{ key: number; marker: SeriesMarker<Time> }> => {
