@@ -160,7 +160,8 @@ test("an open market with a delayed feed says so, and before the open the pill r
   await setScenario(context, { now: PRE_MARKET, feedAgeMinutes: 5 });
   await openDesk(page, "/", PRE_MARKET);
   await expect(top.getByTitle("Pre-market", { exact: true })).toBeVisible();
-  await expect(top.getByRole("status")).toContainText("Pre-market · ");
+  // The pill owns the session word; the badge names the quote (D-245).
+  await expect(top.getByRole("status")).toHaveText(COPY.delayed);
   await expectCleanScreen(page);
 });
 

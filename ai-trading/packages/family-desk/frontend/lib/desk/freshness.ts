@@ -15,8 +15,6 @@ export const COPY = {
   staleMark: "Stale · {ago}",
   backup: "Using backup quotes · may differ slightly from IBKR",
   closed: "Market closed · showing last close",
-  pre_market: "Pre-market · {time}",
-  after_hours: "After hours",
   unavailable: "Quotes unavailable right now · trying again",
   alertsPaused: "Alerts paused until quotes return",
   alertsPausedByUser: "Alerts paused · all strategies are paused",
@@ -108,7 +106,7 @@ export function containsBannedTerm(text: string): boolean {
 
 export type FreshnessState =
   | "live" | "delayed" | "updating" | "reconnecting" | "paused" | "backup"
-  | "closed" | "pre_market" | "after_hours" | "unavailable";
+  | "closed" | "unavailable";
 /** Client-side connection state: a request in flight, or the quote connection down (02m §a1). */
 export type Connection = "ok" | "updating" | "reconnecting";
 export type MarketSession = "pre" | "regular" | "after" | "closed";
@@ -148,8 +146,6 @@ const TONE: Record<FreshnessState, Tone> = {
   paused: "warn",
   backup: "warn",
   closed: "neutral",
-  pre_market: "neutral",
-  after_hours: "neutral",
   unavailable: "down",
 };
 
@@ -182,6 +178,8 @@ function followFeed({ stamp, feedStamp }: Pick<FreshnessInput, "stamp" | "feedSt
   return { ...stamp, freshness: "paused", as_of: feedStamp.as_of };
 }
 
+/** The state of the quotes: their age, delay or fault. The session word ("Pre-market", "After hours") is the market pill's alone, so a badge beside it
+ * names the quote, not the session, and the two never repeat each other (D-245). Only a closed market changes the quote sentence ("showing last close"). */
 export function freshnessState(input: FreshnessInput): FreshnessState {
   const { session, connection = "ok", feed = false } = input;
   const stamp = followFeed(input);
@@ -193,8 +191,6 @@ export function freshnessState(input: FreshnessInput): FreshnessState {
   if (stamp.freshness === "paused") return "paused";
   if (connection === "updating") return "updating";
   if (stamp.quality === "fallback") return "backup";
-  if (session === "pre") return "pre_market";
-  if (session === "after") return "after_hours";
   if (stamp.freshness === "closed" || session === "closed") return "closed";
   return stamp.freshness === "live" ? "live" : "delayed";
 }
