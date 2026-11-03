@@ -60,7 +60,7 @@ function ShellFrame({ band, children }: { band: ShellBand; children: ReactNode }
         </main>
         <Suspense fallback={null}><MainFocus /></Suspense>
         <aside className="dk-right" ref={setSlot} aria-label="Context" />
-        <div className="dk-status"><StatusBar /></div>
+        <div className="dk-status"><StatusBar band={band} /></div>
       </div>
       </LeftSlotContext.Provider>
     </RailSlotContext.Provider>
