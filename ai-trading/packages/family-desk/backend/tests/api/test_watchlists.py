@@ -1,7 +1,18 @@
-from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers
+import pytest
+from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers, wait_for
+from sqlalchemy.orm import sessionmaker
 
 import ai_trading.api.watchlists as watchlists_module
+from ai_trading.api.app import app
 from ai_trading.data.backfill import BackfillResult
+
+
+@pytest.fixture(autouse=True)
+def backfill_thread(db_engine):
+    """A process without a session factory skips the add's backfill thread; give it one, as the app has."""
+    app.state.session_factory = sessionmaker(db_engine, expire_on_commit=False)
+    yield
+    del app.state.session_factory
 
 
 def test_create_and_list_watchlist(client):
@@ -36,7 +47,7 @@ def test_add_item_calls_backfill_on_join_with_the_right_arguments(client, monkey
 
     assert response.status_code == 201
     assert response.json() == {"watchlist_id": watchlist_id, "symbol": "AAPL", "asset_type": "stock"}
-    assert calls == [("AAPL", "stock")]
+    assert wait_for(lambda: calls == [("AAPL", "stock")])
 
 
 def test_adding_a_future_symbol_still_creates_the_item_even_though_backfill_writes_nothing(client):
@@ -139,7 +150,7 @@ def test_duplicate_item_returns_conflict_without_second_backfill(client, monkeyp
 
     assert first.status_code == 201
     assert duplicate.status_code == 409
-    assert calls == [("AAPL", "stock")]
+    assert wait_for(lambda: calls == [("AAPL", "stock")])
 
 
 def test_encoded_future_symbol_round_trips_through_add_and_owner_delete(client, monkeypatch):
@@ -161,7 +172,7 @@ def test_encoded_future_symbol_round_trips_through_add_and_owner_delete(client, 
 
     assert added.status_code == 201
     assert added.json() == {"watchlist_id": watchlist_id, "symbol": "/ES", "asset_type": "future"}
-    assert calls == [("/ES", "future")]
+    assert wait_for(lambda: calls == [("/ES", "future")])
     assert client.get(f"/api/desk/watchlists/{watchlist_id}/items", headers=auth_headers()).json()[0]["symbol"] == "/ES"
 
     removed = client.delete(f"/api/desk/watchlists/{watchlist_id}/items/%2FES", headers=auth_headers())
@@ -209,7 +220,7 @@ def test_plain_stock_ticker_and_prefixed_future_root_remain_distinct(client, mon
 
     assert stock.status_code == 201
     assert future.status_code == 201
-    assert calls == [("CL", "stock"), ("/CL", "future")]
+    assert wait_for(lambda: sorted(calls) == [("/CL", "future"), ("CL", "stock")])
     assert {
         row["symbol"]: row["asset_type"]
         for row in client.get(f"/api/desk/watchlists/{watchlist_id}/items", headers=auth_headers()).json()

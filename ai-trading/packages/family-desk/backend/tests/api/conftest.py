@@ -4,7 +4,8 @@ per-test-truncated `db_session` fixture (`tests/conftest.py`, real Postgres via
 network call anywhere in this directory.
 """
 
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 
 import pytest
 from daily_world import SYMBOLS
@@ -21,6 +22,16 @@ OTHER_EMAIL = "spouse@example.com"
 
 def auth_headers(email: str = OWNER_EMAIL) -> dict[str, str]:
     return {IDENTITY_HEADER: email}
+
+
+def wait_for(condition: Callable[[], bool], timeout: float = 10.0) -> bool:
+    """Poll until `condition()` holds: for work a route hands to a detached thread (the watchlist add's backfill)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.02)
+    return False
 
 
 @pytest.fixture(autouse=True)
