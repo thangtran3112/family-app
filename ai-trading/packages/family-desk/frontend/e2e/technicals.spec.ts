@@ -48,3 +48,16 @@ test("Futures ignores stale contract responses and shows root-specific roll rows
   await expect(cl.getByRole("cell").nth(3)).toHaveText("2026-11-13 · 2026-12-14 · 2027-01-13 · 2027-02-15");
   await expect(page.getByRole("heading", { name: /Upcoming roll dates/ })).toBeVisible();
 });
+
+test("a futures chart with no stamp says Unavailable and names no as-of part (D-209)", async ({ page }) => {
+  // No broker: the MES bars come back with no as-of and no bars (BarsSchema, StampSchema).
+  await page.route("**/api/desk/bars/%2FMES**", async (route) => {
+    const response = await route.fetch();
+    const bars = await response.json();
+    await route.fulfill({ response, json: { ...bars, quality: "unavailable", as_of: null, bars: [], stamp: { ...bars.stamp, quality: "unavailable", as_of: null } } });
+  });
+  await openDesk(page, "/futures");
+  const chart = page.getByRole("region", { name: "/MES 1d market chart" });
+  await expect(chart.locator("header")).toContainText("Unavailable");
+  await expect(chart.locator("header")).not.toContainText("as of");
+});
