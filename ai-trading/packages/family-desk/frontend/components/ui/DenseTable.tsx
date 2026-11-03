@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, fitColumns, type CellAlign, type ColumnFit, type ColumnKind, type ColumnWidth } from "@/lib/desk/denseTable";
 import { ariaSort, nextSort, sortRows, type SortState, type SortValue } from "@/lib/desk/sort";
 import styles from "./DenseTable.module.css";
@@ -116,12 +117,18 @@ export function DenseTable<R>({
       };
       settle();
     };
-    measure();
+    // The measure runs in the next frame's animation callback, which is still before that frame's paint, so a column that does not fit is still never
+    // shown. Run inside the commit's layout effect it put the page's first layout, the measure's own two and React's render in one task: a long task
+    // when a 30-row table mounts (D-235). `flushSync` applies the fit before the paint, as the layout effect's own state update did.
+    const frame = requestAnimationFrame(() => {
+      if (live) flushSync(measure);
+    });
     // The first measure may run before the web font has: measure again once it is in, because a letter's width is what is being summed.
     // With the fonts already loaded the second measure reads the same widths, so it only costs two more forced layouts (D-235).
     if (document.fonts && document.fonts.status !== "loaded") void document.fonts.ready.then(measure);
     return () => {
       live = false;
+      cancelAnimationFrame(frame);
     };
   }, [visible, rows.length, hasActions, showEmpty, settle]);
   useEffect(() => {
@@ -139,7 +146,8 @@ export function DenseTable<R>({
       wrap.dataset.scrolled = String(wrap.scrollLeft > 0);
       wrap.dataset.more = String(wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
     };
-    update();
+    // No read here: `update` forced the first layout of a table that was just mounted, inside the commit's task (D-235). The observer reports the wrapper's and
+    // the table's size once they are laid out, before the first paint, and calls `update` then.
     wrap.addEventListener("scroll", update, { passive: true });
     const observer = new ResizeObserver(update);
     observer.observe(wrap);
