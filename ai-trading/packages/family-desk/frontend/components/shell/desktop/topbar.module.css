@@ -369,7 +369,10 @@
 
 /* The quote badge never shrinks (D-211): only the spacer and the search box give way, so "Market closed · showing last close" stays whole.
    What makes the bar fit is the wording, not this rule: at the 1180 band the sentences that do not fit show their short form (D-232,
-   `short` in lib/desk/freshness.ts), so the market pill and the badge together stay within the 287 px the Fundamental bar leaves them. */
+   `short` in lib/desk/freshness.ts), so the market pill and the badge together stay within the 287 px the Fundamental bar leaves them.
+   The cap is the 238 px text box at 1440: the three sentences wider than it (backup, reconnecting, unavailable) show their short form there
+   too (D-238, `badgeText`), so no label is ever cut. Not widening the cap instead: beside the open pill the Fundamental bar has 29 px to spare
+   at 1440 and the backup sentence needs 53 more. */
 .topBadge { min-width: 0; max-width: 260px; flex-shrink: 0; }
 
 /* The replay note keeps its whole text (layout only; ui/Freshness owns the look): never Live or Delayed, never shrunk (02o §a1). */
