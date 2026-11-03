@@ -67,6 +67,26 @@ export function lineData(bars: ChartBar[], values: Array<number | null>): Array<
   }));
 }
 
+/**
+ * The runs of consecutive bars that hold a value, as [from, to) index pairs. A line series joins every two points it is given, across a gap of
+ * whitespace too, so one series drew VWAP as a straight segment from the prior session's last value across the pre-market to the open (D-231).
+ * One series per run keeps each session's stretch of a line on its own; VWAP resets at each session's open, so the runs are its sessions.
+ */
+export function valueRuns(values: readonly (number | null)[]): Array<[number, number]> {
+  const runs: Array<[number, number]> = [];
+  let start = -1;
+  values.forEach((value, index) => {
+    const held = value !== null && value !== undefined && Number.isFinite(value);
+    if (held && start < 0) start = index;
+    else if (!held && start >= 0) {
+      runs.push([start, index]);
+      start = -1;
+    }
+  });
+  if (start >= 0) runs.push([start, values.length]);
+  return runs;
+}
+
 const UP_VOLUME = "#30D15866";
 const DOWN_VOLUME = "#FF453A66";
 const SHADE = "#141416";

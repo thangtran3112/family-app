@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachPinchZoom, chartTime, candlestickData, changedFrom, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, syncSeries, zoomedRange, type ChartBar, type SeriesFed } from "./chart-data.ts";
+import { attachPinchZoom, chartTime, candlestickData, changedFrom, currentValue, followsNewest, lineData, pinchFactor, pinnedRange, rightOffsetOption, syncSeries, valueRuns, zoomedRange, type ChartBar, type SeriesFed } from "./chart-data.ts";
 
 test("date-only chart times stay business days without an ET date shift", () => {
   assert.deepEqual(chartTime("2026-10-16"), { year: 2026, month: 10, day: 16 });
@@ -281,6 +281,13 @@ test("an update moves a followed chart to its newest bar from the first session 
   assert.equal(followsNewest(true, { from: 5905, to: 6001.5 }, 6003, null), true, "a bar and a half behind still counts as parked");
   assert.equal(followsNewest(true, { from: 5800, to: 5899 }, 6003, null), false, "she scrolled back to read the past: the view is hers");
   assert.equal(followsNewest(false, { from: 5911, to: 6010 }, 6003, null), false, "a chart that does not follow stays where it is");
+});
+
+test("a value line is one run per stretch of values: a gap of no value is never joined across (D-231)", () => {
+  assert.deepEqual(valueRuns([1, 2, null, null, 3, 4]), [[0, 2], [4, 6]], "a session, the pre-market, the next session");
+  assert.deepEqual(valueRuns([null, 1, 2, null, NaN]), [[1, 3]], "a leading gap, and a gap at the end is not a run");
+  assert.deepEqual(valueRuns([5, 6, 7]), [[0, 3]], "one run when nothing is missing");
+  assert.deepEqual(valueRuns([]), [], "no bars, no runs");
 });
 
 test("the right offset is sent to the time scale once, not on every data update (the library scrolls to it each time it is set)", () => {
