@@ -37,8 +37,6 @@ const rows: Array<[FreshnessState, FreshnessInput, string]> = [
   ["paused", { stamp: stamp("paused", "delayed-15m", "2026-10-23T20:08:00Z"), session: "regular", now }, "Quotes paused · last update 2 min ago"],
   ["backup", { stamp: stamp("delayed", "fallback"), session: "regular", now }, "Using backup quotes · may differ slightly from IBKR"],
   ["closed", { stamp: stamp("closed"), session: "closed", now }, "Market closed · showing last close"],
-  ["pre_market", { stamp: stamp("delayed", "delayed-15m", "2026-10-23T12:12:00Z"), session: "pre", now }, "Pre-market · 8:12 AM ET"],
-  ["after_hours", { stamp: stamp("delayed"), session: "after", now }, "After hours"],
   ["unavailable", { stamp: stamp("unavailable", "unavailable", null), session: "regular", now }, "Quotes unavailable right now · trying again"],
 ];
 
@@ -48,7 +46,25 @@ test("every 02l §c3 freshness state resolves to its exact wording", () => {
     assert.equal(view.state, state);
     assert.equal(view.label, label);
   }
-  assert.deepEqual(rows.map(([state]) => state).sort(), Object.keys(COPY).filter((key) => ["live", "delayed", "updating", "reconnecting", "paused", "backup", "closed", "pre_market", "after_hours", "unavailable"].includes(key)).sort());
+  assert.deepEqual(rows.map(([state]) => state).sort(), Object.keys(COPY).filter((key) => ["live", "delayed", "updating", "reconnecting", "paused", "backup", "closed", "unavailable"].includes(key)).sort());
+});
+
+// D-245: after the close the market pill said "After hours" and the quote badge beside it said it again. The pill owns the session word; the badge
+// (and the status bar line) names the quote, so the same stamp reads the same in and out of the regular session.
+test("before the open and after the close the quote badge names the quote, never the session the market pill names", () => {
+  for (const session of ["pre", "after"] as const) {
+    for (const [fresh, quality, label, bar] of [
+      ["delayed", "delayed-15m", "Delayed 15 min", "Quotes: Alpaca · Delayed 15 min"],
+      ["live", "realtime", "Live", "Quotes live · Alpaca"],
+    ] as const) {
+      const input: FreshnessInput = { stamp: stamp(fresh, quality), session, feed: true, now };
+      const view = resolveFreshness(input);
+      assert.equal(view.label, label, `${session} ${fresh}`);
+      assert.equal(statusBarText(input), bar, `${session} ${fresh} status bar`);
+      assert.equal(view.label.includes(marketPillText(session, null)), false, `${session}: the badge repeats the pill`);
+      assert.equal(resolveFreshness({ ...input, session: "regular" }).label, view.label, `${session}: the same quote reads the same in session`);
+    }
+  }
 });
 
 test("the as-of line is dated and names its source", () => {
@@ -79,10 +95,10 @@ test("only live shows a dot and only paused, dropped or unavailable quotes dim",
   assert.equal(resolveFreshness(rows[0][1]).dot, true);
   assert.equal(resolveFreshness(rows[1][1]).dot, false);
   assert.equal(resolveFreshness(rows[3][1]).dim, true);
-  assert.equal(resolveFreshness(rows[9][1]).dim, true);
+  assert.equal(resolveFreshness(rows[7][1]).dim, true);
   assert.equal(resolveFreshness(rows[6][1]).dim, false);
   assert.equal(resolveFreshness(rows[0][1]).tone, "up");
-  assert.equal(resolveFreshness(rows[9][1]).tone, "down");
+  assert.equal(resolveFreshness(rows[7][1]).tone, "down");
 });
 
 test("status bar, market data rows and the market pill use plain wording", () => {
@@ -190,7 +206,7 @@ test("paused quotes dim the price and carry a plain stale mark; live and closed 
     const view = resolveFreshness(rows[index]![1]);
     assert.deepEqual([view.stale, view.mark], [false, null]);
   }
-  assert.deepEqual([resolveFreshness(rows[9][1]).stale, resolveFreshness(rows[9][1]).mark], [false, null]); // nothing to mark: there is no price
+  assert.deepEqual([resolveFreshness(rows[7][1]).stale, resolveFreshness(rows[7][1]).mark], [false, null]); // nothing to mark: there is no price
 });
 
 test("the market pill is green only while the session is open and the quotes are not stale", () => {
@@ -229,7 +245,7 @@ test("marketPillView: one place decides the pill's text, short form, dot and sta
 // D-232: the Fundamental bar at 1180 leaves 287 px for the market pill and the quote badge, so the four sentences that do not fit lose their
 // second clause; every other state keeps its whole sentence, "Market closed · showing last close" first of all (D-211). `e2e/desk/topbar-pills.spec.ts`
 // measures the result in the real bar.
-test("the quote badge's short form: four sentences shorten, the other six stay whole, and the age or caution stays in it", () => {
+test("the quote badge's short form: four sentences shorten, the other four stay whole, and the age or caution stays in it", () => {
   const short = Object.fromEntries(rows.map(([state, input]) => [state, resolveFreshness(input).short]));
   assert.deepEqual(short, {
     live: "Live",
@@ -239,8 +255,6 @@ test("the quote badge's short form: four sentences shorten, the other six stay w
     paused: "Quotes paused · 2 min ago",
     backup: "Backup quotes · may differ",
     closed: "Market closed · showing last close",
-    pre_market: "Pre-market · 8:12 AM ET",
-    after_hours: "After hours",
     unavailable: "Quotes unavailable",
   });
   for (const [, input] of rows) {
@@ -275,8 +289,6 @@ test("the status bar's quote sentence is short at 1180 only; live, delayed and c
     paused: "Quotes paused · 2 min ago",
     backup: "Backup quotes · may differ",
     closed: "Quotes: Alpaca · Market closed",
-    pre_market: "Pre-market · 8:12 AM ET",
-    after_hours: "After hours",
     unavailable: "Quotes unavailable",
   });
 });
