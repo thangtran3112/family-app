@@ -491,6 +491,7 @@ export const PRACTICE_COPY = {
   threadTileTrades: "practice trades",
   threadTileNoTrades: "no wins or losses yet",
   threadTileOfTrades: "{wins} of {trades} trades",
+  threadTileOfTrade: "{wins} of {trades} trade",
   threadTilePerWin: "per winning trade",
   threadTilePerLoss: "per losing trade",
   journalThreadLoading: "Loading your thread…",

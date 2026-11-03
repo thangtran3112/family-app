@@ -122,7 +122,7 @@ export function threadTiles(thread: Pick<Thread, "thread" | "daily">): ThreadTil
     { id: "dates", label: "ET dates traded", value: String(stats.daysPracticed), sub: PRACTICE_COPY.journalTileDates, tone: "flat" },
     { id: "wins", label: "Wins", value: String(stats.wins), sub: PRACTICE_COPY.threadTileTrades, tone: "flat" },
     { id: "losses", label: "Losses", value: String(stats.losses), sub: PRACTICE_COPY.threadTileTrades, tone: "flat" },
-    { id: "win_rate", label: "Win rate", value: winRate(stats.winRate), sub: closedTrades === 0 ? PRACTICE_COPY.threadTileNoTrades : practiceText("threadTileOfTrades", { wins: stats.wins, trades: closedTrades }), tone: "flat" },
+    { id: "win_rate", label: "Win rate", value: winRate(stats.winRate), sub: closedTrades === 0 ? PRACTICE_COPY.threadTileNoTrades : practiceText(closedTrades === 1 ? "threadTileOfTrade" : "threadTileOfTrades", { wins: stats.wins, trades: closedTrades }), tone: "flat" },
     { id: "avg_win", label: "Avg win", value: money(stats.avgWinUsd), sub: PRACTICE_COPY.threadTilePerWin, tone: moneyTone(stats.avgWinUsd) },
     { id: "avg_loss", label: "Avg loss", value: money(stats.avgLossUsd), sub: PRACTICE_COPY.threadTilePerLoss, tone: moneyTone(stats.avgLossUsd) },
     { id: "best", label: "Best date", value: money(stats.bestDayUsd), sub: dateOf(thread.daily, stats.bestDayUsd), tone: moneyTone(stats.bestDayUsd) },
