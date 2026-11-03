@@ -128,9 +128,8 @@ const nowLabel = (label: string): string => {
 
 const EARNINGS_FORMAT = "earnings";
 
-/** The earnings cell: a report before the open, "None" for a name whose report history was read and holds none, and nothing (a dash) for a name that was not checked (D-018). */
-const earningsText = (state: Candidate["earnings_state"]): string | null =>
-  state === "reported" ? PRACTICE_COPY.screenReported : state === "none" ? PRACTICE_COPY.screenEarningsNone : null;
+/** The earnings cell: a report before the open, else a dash. A name whose report history was read and holds none is a dash too, one spelling of no value (D-236); `screenCellTitle` keeps that it was checked (D-018). */
+const earningsText = (state: Candidate["earnings_state"]): string | null => (state === "reported" ? PRACTICE_COPY.screenReported : null);
 
 /**
  * The table's columns in the order of P7: scan price, prev close, prev RVOL, prev change %, ATR %, RSI, earnings, then the rest of the
@@ -192,6 +191,10 @@ export function screenCellText(column: ScreenColumn, row: Candidate): string {
   return formatMetric(format, typeof value === "number" ? value : null);
 }
 
+/** A cell's tooltip: the earnings dash of a name that was checked says so, so "no report" and "not checked" stay apart without a second spelling (D-236). */
+export const screenCellTitle = (column: Pick<ScreenColumn, "format">, row: Pick<Candidate, "earnings_state">): string | undefined =>
+  column.format === EARNINGS_FORMAT && row.earnings_state === "none" ? PRACTICE_COPY.screenEarningsNone : undefined;
+
 export function screenCellTone(column: ScreenColumn, row: Candidate): Tone | null {
   const value = column.value(row);
   return column.format === "pct_signed" && typeof value === "number" ? changeToneAt(value, 2) : null;
@@ -224,6 +227,16 @@ export function laneLine(lane: Pick<Lane, "position">): string {
 }
 
 // ---- re-scan at the thread clock (02o-b2) ----------------------------------------------------------------------
+
+/**
+ * The server refused a scan (409) because every filter waits for its first bar of the day: only the thread clock can change that, and it moves on the
+ * Summary. The server's reason leads, then where time moves; no separator is left hanging for a retry button that cannot work (D-234).
+ */
+export const rescanRefusedText = (reason: string): string =>
+  practiceText("screenRescanRefused", { reason, play: PRACTICE_COPY.clockPlay, nextOpen: PRACTICE_COPY.clockNextOpen, jump: PRACTICE_COPY.clockJumpGo });
+
+/** The minute of the thread clock: a scan reads closed minute bars, so the same minute is the same refusal (D-234). */
+export const minuteOfClock = (clock: string): number => Math.floor(Date.parse(clock) / 60_000);
 
 /** A scan is offered on an active thread: it runs at T, whatever T is. A closed thread's Screen no longer scans (409). */
 export const canRescan = (screen: Pick<Screen, "thread">): boolean => screen.thread?.status !== "closed";
