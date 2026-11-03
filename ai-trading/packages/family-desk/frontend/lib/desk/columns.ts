@@ -13,9 +13,10 @@ export const BOARD_PRIORITIES = {
   // Practice (02o §a2, §a4): the notable-days table drops weekday, then attempts; signals versus trades drops the 15-minute change.
   practiceDays: { weekday: 1, attempts: 2 },
   practiceSignals: { chg_15m: 1 },
-  // Daily-list practice (02o-b v1, D-157): the candidate table drops the time the match began, then the filter names, then volume, gap and vs VWAP,
-  // then prev close. It keeps price at list, price now, vs prev close, prev RVOL, prev change, ATR %, RSI and earnings, whatever the pane.
-  practiceList: { matched_since: 1, filters: 2, volume: 3, gap_pct_open: 4, vs_vwap_pct: 5, prev_close: 6 },
+  // Daily-list practice (02o-b v1, D-157): the candidate table drops the time the match began, then volume, gap and vs VWAP, then prev close. It keeps price
+  // at list, price now, vs prev close, prev RVOL, prev change, ATR %, RSI and earnings, whatever the pane. The filter names have no priority: they say why
+  // each name is on the Screen, so they never drop (D-223).
+  practiceList: { matched_since: 1, volume: 2, gap_pct_open: 3, vs_vwap_pct: 4, prev_close: 5 },
   practiceReview: { range_pct: 1, close_move_pct: 2 },
   // The Trades fills table (D-157): what a fill did to the position goes first (the action says Buy or Sell), then the day; the time, name, size and price stay.
   threadFills: { effect: 1, day: 2 },
