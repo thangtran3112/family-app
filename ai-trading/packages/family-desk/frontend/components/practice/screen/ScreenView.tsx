@@ -58,6 +58,7 @@ import {
   universeNote,
   type FollowState,
 } from "@/lib/replay/screenView";
+import { readScreenRefusal, writeScreenRefusal, type ScreenRefusal } from "@/lib/replay/screenRefusal";
 import { problemMessage } from "@/lib/replay/setup";
 import { screenStatusLine, type PracticeStatusLine } from "@/lib/replay/statusLine";
 import { formatBalance } from "@/lib/replay/threadView";
@@ -149,7 +150,12 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   // This screen saw a scan run, so when the job reads "done" it can tell her it finished, not just show a new label.
   const [scanSeen, setScanSeen] = useState(false);
   // The server refused a scan because every filter waits for its first bar (409): only the thread clock changes that (D-234). The minute it was refused in, and its reason.
-  const [refused, setRefused] = useState<{ minute: number; reason: string } | null>(null);
+  // It is the thread's, not this page's: read from the tab's session storage so a return to the Screen or a reload at the same minute still has it (D-239).
+  const [refused, setRefusedState] = useState<ScreenRefusal | null>(() => readScreenRefusal(window.sessionStorage, threadId));
+  const setRefused = (next: ScreenRefusal | null) => {
+    setRefusedState(next);
+    writeScreenRefusal(window.sessionStorage, threadId, next);
+  };
   // Keyboard focus follows the flow (D-092): the page heading on arrival.
   const titleRef = useRef<HTMLHeadingElement>(null);
   // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
@@ -552,7 +558,7 @@ function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowSta
       hideWhenEmpty: column.format === "earnings",
       render: (row) => {
         // The read at the clock has not landed: the column is here, its value is on its way (D-159).
-        if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} />;
+        if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} still />;
         const text = screenCellText(column, row);
         if (column.format === "earnings") {
           if (row.earnings_state === "reported") return <Badge tone="warn">{text}</Badge>;

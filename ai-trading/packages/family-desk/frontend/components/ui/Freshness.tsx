@@ -2,7 +2,7 @@
 
 import { useDeskFeedStamp, useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { formatEtTimeZone } from "@/lib/desk/format";
-import { COPY, marketPillView, resolveFreshness, statusBarText, type FreshnessInput, type FreshnessView } from "@/lib/desk/freshness";
+import { badgeText, COPY, marketPillView, resolveFreshness, statusBarText, type FreshnessInput, type FreshnessView } from "@/lib/desk/freshness";
 import type { ShellBand } from "@/lib/desk/viewport";
 import styles from "./Freshness.module.css";
 import type { Tone } from "./tone";
@@ -16,12 +16,12 @@ export function useFreshness(input: FreshnessInput): FreshnessView {
 type Layout = { /** Layout only (flex, margin, max-width); never colour, size or type. */ className?: string };
 
 export type FreshnessProps =
-  /** The badge for one stamp: Live, Delayed 15 min, Quotes paused · 2 min ago… (02l §c3). At the 1180 band a long sentence shows its short wording; the whole one stays in the title and aria-label. */
+  /** The badge for one stamp: Live, Delayed 15 min, Quotes paused · 2 min ago… (02l §c3). A sentence that does not fit its `band` shows its short wording (`badgeText`); the whole one stays in the title and aria-label. */
   | (FreshnessInput & Layout & { variant?: "badge"; band?: ShellBand })
   /** The top-bar market pill: open or closed, and when it opens. Reads /status itself. */
   | (Layout & { variant: "pill"; band: ShellBand })
-  /** The status-bar phrasing: "Quotes live · IBKR" and the last-update time. Reads /status itself; renders spans for the bar's flex row. */
-  | { variant: "statusBar" }
+  /** The status-bar phrasing: "Quotes live · IBKR" and the last-update time. Reads /status itself; renders spans for the bar's flex row. At the 1180 band a long sentence shows its short wording; the whole one is its title and is read in full (D-237). */
+  | { variant: "statusBar"; band?: ShellBand }
   /** A fixed message in the same chrome (the replay badge, "Status unavailable"). `short` is the text on screen when the caller is at the 1180 band; `label` stays the title and aria-label. */
   | (Layout & { variant: "note"; label: string; short?: string; tone?: Tone });
 
@@ -29,7 +29,7 @@ export type FreshnessProps =
 export function Freshness(props: FreshnessProps) {
   switch (props.variant) {
     case "pill": return <MarketPill band={props.band} className={props.className} />;
-    case "statusBar": return <StatusBarLine />;
+    case "statusBar": return <StatusBarLine band={props.band} />;
     case "note": return <Chip className={props.className} variant="note" tone={props.tone} title={props.label} text={props.short ?? props.label} />;
     default: return <Badge {...props} />;
   }
@@ -59,7 +59,7 @@ function Chip({ className, variant, tone, title, text, dot, state, open, stale }
 function Badge(props: FreshnessInput & Layout & { band?: ShellBand }) {
   const { className, band, ...input } = props;
   const view = useFreshness(input);
-  return <Chip className={className} variant="badge" state={view.state} tone={view.tone} title={view.label} text={band === "1180" ? view.short : view.label} dot={view.dot} />;
+  return <Chip className={className} variant="badge" state={view.state} tone={view.tone} title={view.label} text={badgeText(view, band)} dot={view.dot} />;
 }
 
 function MarketPill({ band, className }: { band: ShellBand; className?: string }) {
@@ -68,13 +68,21 @@ function MarketPill({ band, className }: { band: ShellBand; className?: string }
   return <Chip className={className} variant="pill" title={pill.full} text={pill.shown} open={pill.open} stale={pill.stale} />;
 }
 
-function StatusBarLine() {
+function StatusBarLine({ band }: { band?: ShellBand }) {
   const { status, failed, connection } = useDeskStatus();
   const quotes = status?.quotes ?? null;
-  const text = failed ? COPY.statusUnavailable : statusBarText({ stamp: quotes, session: status?.market.session, connection, feed: true });
+  const input = { stamp: quotes, session: status?.market.session, connection, feed: true };
+  const full = failed ? COPY.statusUnavailable : statusBarText(input);
+  const shown = failed ? (band === "1180" ? COPY.statusUnavailableShort : full) : statusBarText(input, band);
   return (
     <>
-      <span>{text}</span>
+      {/* A bar line that shows less than its sentence names the whole one in its title and to assistive technology (the badge's contract, D-232). */}
+      {shown === full ? <span>{full}</span> : (
+        <span title={full}>
+          <span aria-hidden="true">{shown}</span>
+          <span className="sr-only">{full}</span>
+        </span>
+      )}
       {quotes?.as_of && <span>Last update {formatEtTimeZone(quotes.as_of)}</span>}
     </>
   );
