@@ -15,6 +15,9 @@ the order fills: the session nets it against the position, `session._place`):
   it), the order fills on that bar at the trigger price. Otherwise it becomes a plain limit that is read from the NEXT
   bar on, because one bar does not say whether the price came back before or after the trigger.
 
+Orders live across days (ADR-0025): `first_fill_across` reads a span of data days, a Day order expires at the extended
+close of the session it was placed in (`day_expiry`), and a closing order is reduce-only (`reduce_shares`).
+
 A fill is stamped at the close of its bar and priced in whole cents. A limit or stop price is itself whole cents
 (`check_new` refuses a fraction of a cent), so rounding a print can never carry a limit fill past its limit. There is
 no spread, slippage or fees. Bracket (a stop and a target that cancel each other) is not simulated; the Desk offers no
@@ -22,12 +25,16 @@ way to place one.
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 
+from ai_trading.core.calendar import ET, next_session, previous_session
+from ai_trading.core.calendar import session as trading_session
 from ai_trading.replay.journal import CENT, fill_price
 
 MINUTE = pd.Timedelta(minutes=1)
@@ -147,3 +154,87 @@ def first_fill(
     if (limit >= at_trigger) if buy else (limit <= at_trigger):  # the limit accepts the trigger price: filled there
         return Fill(fired, fill_price(at_trigger)), fired
     return _limit_leg(side, limit, window[window.index + MINUTE > fired]), fired
+
+
+# -- orders across days (ADR-0025) -----------------------------------------------------------------------------------
+
+CHUNK_SESSIONS = 10  # one day's inputs carry its 10 prior sessions of minutes: this many sessions are one read
+
+
+def day_expiry(placed_at: pd.Timestamp) -> pd.Timestamp:
+    """When a Day order placed at `placed_at` expires: the extended close (20:00 ET) of the session it was placed in; an
+    order placed before the session's extended open, overnight, on a weekend or a holiday belongs to the next session
+    that opens. It is the market's rule, shown on the ticket, not a practice rule."""
+    local = placed_at.tz_convert(ET).date()
+    found = trading_session("stock", local)
+    if found is None or placed_at >= found.extended_close:
+        found = trading_session("stock", next_session("stock", local))
+    assert found is not None
+    return found.extended_close
+
+
+def reduce_shares(order_shares: int, order_side: str, held_side: str | None, held_shares: int) -> int:
+    """How many shares a reduce-only order may fill now: `min(order, position)` against the position it reduces, and 0
+    when the position is gone (or is on the order's own side, so the order would no longer reduce anything)."""
+    if held_side is None or held_side == order_side:
+        return 0
+    return min(order_shares, held_shares)
+
+
+def _sessions(first: date, last: date) -> list[date]:
+    days: list[date] = []
+    day = first
+    while day <= last:
+        if trading_session("stock", day) is not None:
+            days.append(day)
+        day = next_session("stock", day)
+    return days
+
+
+def chunk_ends(since: pd.Timestamp, target: pd.Timestamp) -> list[date]:
+    """The last session of each `CHUNK_SESSIONS`-session chunk that covers the bars closing in `(since, target]`, oldest
+    first. `DayInputs.bars_1m` of a chunk's last session holds the whole chunk (it carries 10 prior sessions)."""
+    if target <= since:
+        return []
+    local = since.tz_convert(ET).date()
+    first = trading_session("stock", local)
+    start = first.day if first is not None else next_session("stock", local)
+    last = previous_session("stock", (target.tz_convert(ET) + pd.Timedelta(days=1)).date())
+    days = _sessions(start, max(last, start))
+    return [days[at : at + CHUNK_SESSIONS][-1] for at in range(0, len(days), CHUNK_SESSIONS)]
+
+
+def first_fill_across(
+    *,
+    side: str,
+    type_: str,
+    limit: float | None,
+    trigger: float | None,
+    triggered_at: pd.Timestamp | None,
+    minutes_of: Callable[[date], pd.DataFrame],
+    since: pd.Timestamp,
+    target: pd.Timestamp,
+) -> tuple[Fill | None, pd.Timestamp | None]:
+    """`first_fill` over bars that CLOSE in `(since, target]` however many data days that spans. `minutes_of(day)` is
+    the one-minute frame of a data day with its lookback sessions (`DayInputs.bars_1m`); the span is read in chunks of
+    `CHUNK_SESSIONS` sessions, one read each, and the first fill wins (a stop-limit whose stop fired in one chunk
+    carries its trigger time to the next, so only its limit leg is left). A gap fills at the open of the first bar
+    after it (`first_fill`), so a stop crossed overnight fills at the next session's open, not at the stop.
+    ponytail: no daily-range prefilter; a chunk is one vectorised pass over its frame, and a frame is read once."""
+    fired = triggered_at
+    for end_day in chunk_ends(since, target):
+        end = trading_session("stock", end_day)
+        assert end is not None
+        fill, fired = first_fill(
+            side=side,
+            type_=type_,
+            limit=limit,
+            trigger=trigger,
+            triggered_at=fired,
+            bars_1m=minutes_of(end_day),
+            since=since,
+            target=min(target, end.extended_close),
+        )
+        if fill is not None:
+            return fill, fired
+    return None, fired

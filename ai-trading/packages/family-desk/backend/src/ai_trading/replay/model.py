@@ -5,7 +5,7 @@ from typing import Literal
 
 import pandas as pd
 
-MarkKind = Literal["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note"]
+MarkKind = Literal["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note", "split"]
 ENTRY_KINDS = ("long_entry", "short_entry")
 EXIT_KINDS = ("long_exit", "short_exit")
 INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15}
@@ -27,6 +27,8 @@ class Mark:
     id: int | None = None
     # an entry's snapshot of the day's P/L (realized + open at the clock); null: unknown
     day_pnl_usd: float | None = None
+    # a `split` mark's ratio k (ADR-0025 P7): shares x k, average cost / k, no P/L. 10.0 for a 10-for-1 split.
+    ratio: float | None = None
 
 
 @dataclass(frozen=True)

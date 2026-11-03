@@ -1,39 +1,34 @@
-"""The replay session store and playhead (02o decisions 1 and 6): create, advance, feed, marks, end, patch.
+"""The lane store and playhead (02o decisions 1 and 6, ADR-0025): open, feed, marks, orders, patch.
 
-**The no-lookahead guarantee lives here.** A session row carries `revealed_through`, a timestamp that only moves
-forward; every read below is cut at it: bars whose period has closed, prints with `time <= revealed_through`,
-signals whose bar close is at or before it. The would-fire list is stored on the row and never serialized while
-the session is active (only `fires_so_far`). `advance` is the only writer of a session's `revealed_through`, under a
-row lock, so two requests cannot reveal out of order. The day clock (`replay_day_lists.revealed_through`) is written by
-`advance` and by `move_clock`, which a running thread clock settles lazily (`settle_locked`, ADR-0018): wall time moves
-the clock, never a session's playhead, and a name is lifted to the clock only when she is on it. The playhead never
-moves backward: "Replay again" is a new attempt.
+**A lane is a thread's book for one name** (`replay_sessions`, one active row per (thread, symbol) for the thread's
+life). The thread owns the clock (`practice_threads.clock_at`, `replay/clock.py`); a lane's position is
+`journal.assemble` over its marks, never cut at a day, and nothing the clock crosses (the close, a night, a weekend,
+an open, a Jump) closes, ends or flattens it: it changes only by her trade, a resting order of hers filling, or a
+split (`clock.advance_thread`).
 
-**Marks are practice records on a finished past day**: the server stamps each at the playhead and prices it at the
-last print at or before it, a stop note never exits, and nothing here touches a broker, an account or a live data path.
-A market entry fills at that print; a working limit, stop or stop-limit entry (`orders.py`) fills only on a later
-one-minute bar of the tape, from `advance`, at a price that bar proves.
+**The no-lookahead guarantee lives here.** A lane carries `revealed_through`, a timestamp that only moves forward;
+every read below is cut at it (or at the thread's time T for the live view of an open lane): bars whose period has
+closed, prints with `time <= through`, signals whose bar close is at or before it. The would-fire list is stored on the
+row and never serialized while the lane is active (only `fires_so_far`). A lane is lifted to the thread's time only
+when she is on it (`advance(sync)`); wall time moves the thread's clock, never a lane's playhead. The playhead never
+moves backward.
 
-**A swing session** (02p, `ctx.swing`) keeps the same playhead but its marks go through the thread's practice holds
-(`holds.py`, `hold_rows.py`), its prices are regular-session only, `advance` pauses at a crossed stop, and the reads
-carry a strip and a daily block (`swing_play.py`). Every swing branch below is guarded by `ctx.swing`; the day-trade
-paths are unchanged.
+**Marks are practice records on a finished past**: the server stamps each at the playhead and prices it at the last
+print at or before it, a stop note never exits, and nothing here touches a broker, an account or a live data path. A
+market entry fills at that print; a working limit, stop or stop-limit entry (`orders.py`) fills when the thread's clock
+crosses a bar that proves it, however many data days that takes (`clock.advance_thread`, `apply_fill`).
 
-**A day holds several open positions** (N names, one average-cost position each, no cap on how many names or fills). A
-Buy or Sell mark is a fill against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the walk
-is `journal.assemble`). The one size rule is the cash check (`positions_mod.check_buying_power`), applied to the shares
-a fill OPENS against the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). A resting
-order the tape reached while she was on another name fills like any other: at the bar that proved it, never past the day
-clock, booked when the name is next lifted to the clock (`advance`, `fill_away_orders`) or when the day ends (`end`),
-never cancelled for having been out of sight. The positions share the day clock: `positions` prices each at the clock,
-never at its own name's stale playhead (the name's own card is marked there too, `_marked`), `advance` pauses at the
-first stop crossed on ANY open name, and ending the day flattens every one of them at the clock.
+**A thread holds several open positions** (N names, one average-cost position each). A Buy or Sell mark is a fill
+against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the walk is `journal.assemble`).
+The one size rule is the cash check (`positions_mod.check_buying_power`), applied to the shares a fill OPENS against
+the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). Every position is marked by one
+function (`positions_mod.mark_at`, ADR-0025 R8).
 """
 
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -47,22 +42,15 @@ from ai_trading.contracts.practice_thread import DEFAULT_STARTING_BALANCE
 from ai_trading.contracts.replay_session import ReplaySessionV1
 from ai_trading.core.calendar import ET
 from ai_trading.core.calendar import session as trading_session
-from ai_trading.db.models import PracticeHold, PracticeMark, PracticeThread, ReplayDayList, ReplaySession
-from ai_trading.replay import frames, hold_rows, swing_play
-from ai_trading.replay import holds as holds_mod
+from ai_trading.db.models import PracticeMark, PracticeThread, ReplaySession
+from ai_trading.replay import frames
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import orders as orders_mod
 from ai_trading.replay import positions as positions_mod
 from ai_trading.replay import signals as signals_mod
 from ai_trading.replay.cache import BlobStore, DbBlobStore
-from ai_trading.replay.data import (
-    DayInputs,
-    History,
-    check_day,
-    check_window,
-    window_bounds,
-)
+from ai_trading.replay.data import DayInputs, History
 from ai_trading.replay.model import (
     ENTRY_KINDS,
     EXIT_KINDS,
@@ -86,6 +74,15 @@ def _threads() -> Any:
 
     return threads
 
+
+
+def _clock() -> Any:
+    """The clock module (it settles and advances the thread), imported on first use: it imports this module."""
+    from ai_trading.replay import clock
+
+    return clock
+
+
 MINUTE = pd.Timedelta(minutes=1)
 JUMP_TAPE_WINDOW = pd.Timedelta(minutes=30)  # a longer jump shows (and counts) only its last 30 minutes of prints
 FEED_TAPE_WINDOW = pd.Timedelta(seconds=60)
@@ -93,10 +90,15 @@ FEED_PRINTS = 200
 LOOKBACK_BARS_MAX = 6000  # the feed's warm-up bars (1-minute interval would otherwise carry about 9,600)
 RATING_RANGE = (1, 5)
 STAMP_SOURCE = "alpaca"
-BEHIND_CLOCK = "This name is behind the day clock · catch up before you {verb}"  # "Catch up" is the button's word
+BEHIND_CLOCK = "This name is behind the thread clock · catch up before you {verb}"  # "Catch up" is the button's word
+POSITION_CLOSED = "Position already closed"
+THREAD_CLOSED = "Thread closed"
+ORDER_EXPIRED = "Expired"
+MAX_HELD_NAMES = 49  # a thread tracks at most this many names with a position or a working order (ADR-0025 P6)
+HELD_CAP = f"A thread tracks at most {MAX_HELD_NAMES} names with a position or an order"
 STALE_PRINT_S = 30  # a mark priced off a print older than this carries a warning
 QUIET_PRINT_S = 60  # no eligible print for this long marks the tape quiet (a halt looks the same from here)
-ATTENTION_S = 20  # a name left this many seconds of thread time (x speed) behind a running clock is still being watched
+ATTENTION_S = 20  # a name left this many seconds of thread time (x speed) behind a running clock is still watched
 
 
 class ReplayProblem(Exception):
@@ -119,7 +121,7 @@ class Services:
     tape: Tape
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     # The wall clock the thread clock runs on (ADR-0018). In production it is `now`; a test or the E2E rig that pins
-    # `now` (so a past day stays "finished") leaves this one real, or moves it by hand, so time can pass.
+    # `now` (so a past day stays "finished", and `clock.horizon` stays put) leaves this one real, or moves it by hand.
     wall: Callable[[], datetime] = lambda: datetime.now(UTC)
     store_factory: Callable[[Session], BlobStore] = DbBlobStore
     sources: Any = None  # the `DataSources` behind `history` (the day list's earnings flag reads `earnings` from it)
@@ -127,7 +129,8 @@ class Services:
 
 @dataclass
 class Ctx:
-    """A session row with everything computed from it, for one request."""
+    """A lane row with everything computed from it, for one request. `inputs` are the bars of the lane's data day: the
+    day of the thread's time T for an open lane (`positions_mod.data_day`), the row's own day for a legacy row."""
 
     row: ReplaySession
     svc: Services
@@ -140,15 +143,13 @@ class Ctx:
     window_start: pd.Timestamp
     window_end: pd.Timestamp
     through: pd.Timestamp
-    day_trades: list[journal_mod.Trade] = field(default_factory=list)  # the day list's other sessions, for day rules
-    swing: bool = (
-        False  # a session of a swing thread (02p): its holds carry overnight, so the day never auto-exits them
-    )
-    db: Session | None = field(default=None, repr=False)  # the request's session: a swing session reads its holds
-    day_clock: pd.Timestamp | None = None  # the day list's shared clock; None for a standalone session
-    # The thread's one instant T: the day list's clock after it was settled, NOT capped at this name's tape end. A
-    # day-thread session only (None for a standalone or swing session).
-    thread_time: pd.Timestamp | None = None
+    day_trades: list[journal_mod.Trade] = field(default_factory=list)  # the thread's other lanes, for the day rules
+    db: Session | None = field(default=None, repr=False)  # the request's session
+    thread: PracticeThread | None = field(default=None, repr=False)
+    # The thread's time T capped at the end of this data day's tape (the night and the weekend add no bars); None for
+    # a row that is not an open lane. A lane whose playhead trails it is "behind".
+    day_clock: pd.Timestamp | None = None
+    thread_time: pd.Timestamp | None = None  # the thread's one instant T, uncapped (None: not an open lane)
     away: list[Span] = field(default_factory=list)  # the spans she was on another name (02o-b2)
     filling: int | None = None  # the working order being filled right now: its cash reserve is released as it fills
     _cache: dict[str, Any] = field(default_factory=dict)
@@ -167,8 +168,8 @@ class Ctx:
 
     @property
     def behind_clock(self) -> bool:
-        """This name's playhead is behind the day's shared clock: it is revealed up to the playhead only, and it cannot
-        be marked until an advance catches it up."""
+        """This name's playhead is behind the thread's clock: it is revealed up to the playhead only, and it cannot be
+        marked until a sync catches it up."""
         return self.day_clock is not None and self.through < self.day_clock
 
 
@@ -181,8 +182,7 @@ def _ts(value: datetime | pd.Timestamp) -> pd.Timestamp:
 
 
 def market_open(day: date) -> pd.Timestamp:
-    """The exchange's regular open (09:30 ET) of `day`: where a day begins for the thread clock, whatever time the plan
-    starts practice at."""
+    """The exchange's regular open (09:30 ET) of `day`: where a data day's chart begins."""
     found = trading_session("stock", day)
     assert found is not None
     return found.regular_open
@@ -194,19 +194,6 @@ def market_close(day: date, kind: str) -> pd.Timestamp:
     found = trading_session("stock", day)
     assert found is not None
     return found.regular_close if kind == "regular" else found.extended_close
-
-
-def window_end_of(row: ReplaySession, *, day_thread: bool) -> pd.Timestamp:
-    """Where this session's tape ends. An ended session keeps the time it was ended at (its exits and journal were
-    booked there). An open session of a day thread ends at the extended close of its day, derived here and never read
-    from the stored column: every name of a day shares one tape end (the Summary's), whatever end the row was saved
-    with (a row saved before the extended-tape rule stored 16:00 or her old focus mark). A swing or standalone session
-    runs to the later of its stored end and the close of its own session kind, as it always did."""
-    if row.status == "ended":
-        return _ts(row.window_end)
-    if day_thread:
-        return market_close(row.day, "extended")
-    return max(_ts(row.window_end), market_close(row.day, row.spec["session"]))
 
 
 def jsonable(value: Any) -> Any:
@@ -242,6 +229,7 @@ def _marks_of(rows: list[PracticeMark]) -> list[Mark]:
             trade_no=r.trade_no,
             source=r.source,  # type: ignore[arg-type]
             day_pnl_usd=None if r.day_pnl_usd is None else float(r.day_pnl_usd),
+            ratio=float(r.position_before["ratio"]) if r.kind == "split" and r.position_before else None,
         )
         for r in rows
     ]
@@ -283,66 +271,238 @@ def get_row(db: Session, user_id: int, session_id: int, *, lock: bool = False) -
     return row
 
 
-def day_books(db: Session, day_list_id: int) -> dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]]:
-    """`{session id: (closed trades, open trade)}` for every session of the day list, in the order she opened them: the
-    day's portfolio. One marks load per session."""
-    ids = db.execute(
-        select(ReplaySession.id).where(ReplaySession.day_list_id == day_list_id).order_by(ReplaySession.id)
-    ).scalars()
-    return {session_id: journal_mod.assemble(_marks_of(_load_marks(db, session_id))) for session_id in list(ids)}
+# -- the thread's lock and clock ------------------------------------------------------------------------------
+
+
+def _lock_thread(db: Session, session_id: int) -> PracticeThread | None:
+    """The lane's thread, locked, or None for a row with no thread (a legacy standalone one). Every writer of a lane
+    takes this lock before the lane row, so two writers of one thread cannot deadlock (ADR-0025 R1)."""
+    thread_id = db.execute(select(ReplaySession.thread_id).where(ReplaySession.id == session_id)).scalar_one_or_none()
+    if thread_id is None:
+        return None
+    return db.execute(select(PracticeThread).where(PracticeThread.id == thread_id).with_for_update()).scalar_one()
+
+
+def _lock_and_settle(db: Session, svc: Services, user_id: int, session_id: int) -> PracticeThread | None:
+    """`_lock_thread`, then bring a running thread clock to now (ADR-0018). A stranger gets the 404 before any lock or
+    write, so it cannot move another user's clock."""
+    get_row(db, user_id, session_id)
+    thread = _lock_thread(db, session_id)
+    if thread is not None:
+        _clock().settle(db, svc, thread)
+    return thread
+
+
+def settle_thread(db: Session, svc: Services, thread_id: int | None) -> None:
+    """`clock.settle` for a read: a cheap look first, so a paused clock (the usual case) takes no lock and writes
+    nothing; a running one is locked, brought to now and committed with the request."""
+    if thread_id is None:
+        return
+    running = db.execute(
+        select(PracticeThread.clock_running).where(PracticeThread.id == thread_id)
+    ).scalar_one_or_none()
+    if running:
+        thread = db.execute(select(PracticeThread).where(PracticeThread.id == thread_id).with_for_update()).scalar_one()
+        _clock().settle(db, svc, thread)
+        db.flush()  # a caller that refreshes the thread next must find what the settle wrote
+
+
+def _watching(ctx: Ctx, previous: pd.Timestamp, clock: pd.Timestamp, *, needs_running: bool = False) -> bool:
+    """She is on this name, not returning to it: its playhead trails the thread's clock by no more than `ATTENTION_S`
+    of thread time (the screen syncs every couple of seconds, so a name on screen is never further behind than that;
+    one she left falls further behind with every second the clock runs). Such a lift is the same minutes she was
+    already watching, so it adds no away span. `needs_running`: the lift is not a screen's own `sync` but a mark or
+    order on a name behind the clock, whose catch-up rules stay as they were unless the clock is running."""
+    thread = ctx.thread
+    return (
+        thread is not None
+        and (thread.clock_running or not needs_running)
+        and (clock - previous).total_seconds() <= ATTENTION_S * thread.clock_speed
+    )
+
+
+def _follow_clock(db: Session, ctx: Ctx) -> bool:
+    """A name she is on that a running clock left a few seconds behind is lifted quietly before she marks or orders on
+    it, so a click never fails with "behind the thread clock" because the clock ran between two syncs."""
+    clock = ctx.day_clock
+    if clock is None or not ctx.behind_clock or not _watching(ctx, ctx.through, clock, needs_running=True):
+        return False
+    ctx.row.revealed_through = ctx.day_clock.to_pydatetime()
+    ctx.through = ctx.day_clock
+    ctx.row.updated_at = ctx.svc.now()
+    db.flush()
+    return True
+
+
+def _clock_state(ctx: Ctx) -> dict[str, Any] | None:
+    """The thread clock as a lane's frame reports it: `{running, speed}` while it runs, else None (and left out of the
+    JSON). A chart that follows the clock shows a hint when it is not running; it has no controls (ADR-0018)."""
+    thread = ctx.thread
+    if thread is None or ctx.thread_time is None:
+        return None
+    return {"running": True, "speed": thread.clock_speed} if thread.clock_running else None
+
+
+def _market_of(ctx: Ctx, series: frames.PreparedSeries, data_through: pd.Timestamp) -> dict[str, Any] | None:
+    """`market` of a lane frame (None for a row that is not an open lane): the phase at the thread's time T, the tape
+    end of the data day, the close of this name's last bar and when the next regular session opens."""
+    if ctx.thread_time is None:
+        return None
+    return frames.market_block(
+        positions_mod.data_day(ctx.thread_time),
+        ctx.thread_time,
+        series.last_bar_close(data_through),
+        positions_mod.next_open(ctx.thread_time),
+    )
+
+
+# -- the cash ---------------------------------------------------------------------------------------------------------
+
+
+def buying_power(
+    db: Session,
+    thread: PracticeThread,
+    skipped: tuple[int, int] | None = None,
+    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]] | None = None,
+) -> float:
+    """A thread's buying power: its balance less the entry notional of every open position and less the cash its
+    working orders hold back. The one figure the cash check enforces (`_lane_free_cash`) and the Portfolio shows
+    (`account`). `skipped`: `(lane id, order id)` of the order that is filling now (its reserve is released)."""
+    books = book(db, thread.id) if books is None else books
+    opens = {lane_id: open_ for lane_id, (_, open_) in books.items() if open_ is not None}
+    held = sum(t.entry_price * t.shares for t in opens.values())
+    reserved = _reserved_cash(
+        lanes(db, thread.id, active=True),
+        lambda s: (None, 0) if s.id not in opens else (opens[s.id].side, opens[s.id].shares),
+        skipped,
+    )
+    return round(_threads().balance(db, thread) - held - reserved, 2)
+
+
+def _lane_free_cash(db: Session, row: ReplaySession, skip: int | None = None) -> float:
+    """A lane's buying power: its thread's. A row with no thread (a legacy standalone one) has an account of its own,
+    the default starting balance of a thread plus its own closed trades, so the same cash rule is the only size rule on
+    every path; nothing is booked from it."""
+    skipped = None if skip is None else (row.id, skip)
+    thread = None if row.thread_id is None else db.get(PracticeThread, row.thread_id)
+    if thread is None:
+        closed, open_ = journal_mod.assemble(_marks_of(_load_marks(db, row.id)))
+        held = 0.0 if open_ is None else open_.entry_price * open_.shares
+        realized = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed])
+        reserved = _reserved_cash([row], lambda _: (None, 0) if open_ is None else (open_.side, open_.shares), skipped)
+        return round(DEFAULT_STARTING_BALANCE + realized - held - reserved, 2)
+    return buying_power(db, thread, skipped)
+
+
+def _check_buying_power(
+    db: Session,
+    row: ReplaySession,
+    shares: int,
+    price: float,
+    *,
+    closing: journal_mod.Trade | None = None,
+    take: int = 0,
+    skip: int | None = None,
+) -> None:
+    """The cash rule for the `shares` a fill opens or adds. A flip (`closing`, `take` shares of it closed first) closes
+    the whole position before it opens the other way, so that notional comes back to the cash along with the closed
+    shares' P/L. `skip`: the working order of this lane that is filling now (its reserve is released)."""
+    free = _lane_free_cash(db, row, skip)
+    if closing is not None and take:
+        gain = journal_mod.pnl_usd(closing.sign, closing.entry_price, price, take)
+        free = round(free + closing.entry_price * closing.shares + gain, 2)
+    try:
+        positions_mod.check_buying_power(shares=shares, price=price, free_cash_usd=free)
+    except positions_mod.HoldProblem as exc:
+        raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
+
+
+# -- the thread's book -----------------------------------------------------------------------------------------
+
+
+def lanes(db: Session, thread_id: int, *, active: bool = False) -> list[ReplaySession]:
+    """The thread's lanes in the order she opened them. `active`: the open ones only (an ended row is legacy history
+    from before the freestyle thread: its marks are final and it holds no position)."""
+    query = select(ReplaySession).where(ReplaySession.thread_id == thread_id)
+    if active:
+        query = query.where(ReplaySession.status == "active")
+    return list(db.execute(query.order_by(ReplaySession.id)).scalars())
+
+
+def book(db: Session, thread_id: int) -> dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]]:
+    """`{lane id: (closed trades, open trade)}` for every lane of the thread: the whole book, however many days old.
+    One marks query for the thread."""
+    rows = lanes(db, thread_id)
+    by_lane: dict[int, list[PracticeMark]] = {row.id: [] for row in rows}
+    for mark in db.execute(
+        select(PracticeMark)
+        .where(PracticeMark.session_id.in_(list(by_lane)))
+        .order_by(PracticeMark.session_id, PracticeMark.seq)
+    ).scalars():
+        by_lane[mark.session_id].append(mark)
+    return {lane_id: journal_mod.assemble(_marks_of(marks)) for lane_id, marks in by_lane.items()}
 
 
 @dataclass(frozen=True)
 class Position:
-    """An open practice position of the day (a name's average-cost aggregate), with its session and its price at the day
-    clock."""
+    """An open practice position of the thread (a name's average-cost aggregate), with its lane and its mark at the
+    thread's time."""
 
     row: ReplaySession
     trade: journal_mod.Trade
-    price: float  # the last price AT THE DAY CLOCK, not at the name's own playhead
+    price: float  # `positions_mod.mark_at`: the price AT THE THREAD'S TIME, never carried at cost unless there is none
+    price_at: pd.Timestamp | None  # when that price printed; None: the name has no price at all (carried at cost)
 
 
-def open_positions(db: Session, day_list_id: int) -> list[tuple[ReplaySession, journal_mod.Trade]]:
-    """`(session, open position)` of every session of the day list that holds one, in the order she opened the names. A
-    name holds one average-cost position, however many fills built it."""
-    by_id = {r.id: r for r in _sessions_of_day(db, day_list_id)}
-    return [(by_id[sid], open_) for sid, (_, open_) in day_books(db, day_list_id).items() if open_ is not None]
+def open_positions(db: Session, thread_id: int) -> list[tuple[ReplaySession, journal_mod.Trade]]:
+    """`(lane, open position)` of every lane that holds one, in the order she opened the names."""
+    by_id = {r.id: r for r in lanes(db, thread_id)}
+    return [(by_id[lane_id], open_) for lane_id, (_, open_) in book(db, thread_id).items() if open_ is not None]
+
+
+def lane_mark(db: Session, svc: Services, row: ReplaySession, at: pd.Timestamp) -> positions_mod.MarkPrice | None:
+    """The lane's name priced at thread time `at` (`positions_mod.mark_at`), on the lane's own feed and interval."""
+    return positions_mod.mark_at(
+        svc,
+        svc.store_factory(db),
+        row.symbol,
+        at,
+        feed=row.tape_feed,
+        minutes=INTERVAL_MINUTES[row.spec["interval"]],
+    )
 
 
 def positions(
     db: Session,
     svc: Services,
-    day_list_id: int,
+    thread_id: int,
     clock: pd.Timestamp,
     books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]] | None = None,
 ) -> list[Position]:
-    """Every open trade of the day priced at the shared day clock. A name behind the clock is priced at the clock too:
-    the clock never runs past what the day has revealed, so this is not lookahead. A name with no price yet is carried
-    at its entry (no P/L). The price is `frames.PreparedSeries.quote`, the one function every surface prices with."""
-    rows = {r.id: r for r in _sessions_of_day(db, day_list_id)}
+    """Every open trade of the thread priced at the thread's time. A name with no price at all is carried at its entry
+    (no P/L); every other is marked by `mark_at`, the one function every surface prices with."""
+    rows = {r.id: r for r in lanes(db, thread_id)}
     out = []
-    for session_id, (_, open_) in (books if books is not None else day_books(db, day_list_id)).items():
+    for lane_id, (_, open_) in (books if books is not None else book(db, thread_id)).items():
         if open_ is None:
             continue
-        found = _price_of_row(db, svc, rows[session_id], clock)
-        out.append(Position(rows[session_id], open_, open_.entry_price if found is None else found[0]))
+        found = lane_mark(db, svc, rows[lane_id], clock)
+        out.append(
+            Position(
+                rows[lane_id],
+                open_,
+                open_.entry_price if found is None else found.price,
+                None if found is None else found.at,
+            )
+        )
     return out
 
 
-def _sessions_of_day(db: Session, day_list_id: int) -> list[ReplaySession]:
-    return list(
-        db.execute(
-            select(ReplaySession).where(ReplaySession.day_list_id == day_list_id).order_by(ReplaySession.id)
-        ).scalars()
-    )
-
-
-def day_pnl(
-    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]],
-    held: list[Position],
-    as_of: Any,
+def thread_pnl(
+    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]], held: list[Position], as_of: Any
 ) -> dict[str, Any]:
-    """The day's live P/L: the closed trades of every name plus every open trade marked at the clock (cent-exact)."""
+    """The thread's live P/L: the closed trades of every lane plus every open trade marked at the thread's time
+    (cent-exact)."""
     realized = journal_mod.usd_sum([journal_mod.trade_pnl(t) for closed, _ in books.values() for t in closed])
     open_ = journal_mod.usd_sum([p.trade.unrealized(p.price) for p in held])
     return {
@@ -354,27 +514,98 @@ def day_pnl(
     }
 
 
-def _day_trades(db: Session, row: ReplaySession) -> list[journal_mod.Trade]:
-    """The closed trades of the other sessions of this session's day list: the max loss and the trade limit count
-    every name practised that day (02o-b2)."""
-    if row.day_list_id is None:
+def _date_pnl(
+    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]], held: list[Position], at: pd.Timestamp
+) -> float:
+    """The ET date's P/L at `at`, the basis of the max-loss rule: what exited on that date plus the positions opened on
+    it, marked at `at`. The date is a key, never an end (ADR-0025); a position carried in from an earlier date is not
+    part of "today's" loss. ponytail: an add to a carried position still counts as carried."""
+    day = at.tz_convert(ET).date()
+    realized = [
+        journal_mod.trade_pnl(t)
+        for closed, _ in books.values()
+        for t in closed
+        if t.exit_at is not None and t.exit_at.tz_convert(ET).date() == day
+    ]
+    open_ = [p.trade.unrealized(p.price) for p in held if p.trade.entry_at.tz_convert(ET).date() == day]
+    return journal_mod.usd_sum([*realized, *open_])
+
+
+def account(
+    db: Session,
+    svc: Services,
+    thread: PracticeThread,
+    clock: pd.Timestamp,
+    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]] | None = None,
+    held: list[Position] | None = None,
+) -> dict[str, Any]:
+    """The simulated account at the thread's time: the ledger's balance (realized, to the cent), what every open
+    position is worth over its cost at that time, and the two together. One function of (ledger, each lane's open
+    trade, `mark_at`): the header, the Portfolio and the Screen all read it (ADR-0025 R8)."""
+    books = book(db, thread.id) if books is None else books
+    held = positions(db, svc, thread.id, clock, books) if held is None else held
+    pnl = thread_pnl(books, held, clock)
+    cash = _threads().balance(db, thread)
+    equity = journal_mod.usd_sum([cash, pnl["open_usd"]])
+    return {
+        "balance": cash,
+        "open_pnl_usd": pnl["open_usd"],
+        "equity_usd": equity,
+        "buying_power_usd": buying_power(db, thread, books=books),
+        "since_start_usd": journal_mod.usd_sum([equity, -float(thread.starting_balance)]),
+        "positions": pnl["open_count"],
+        "as_of": clock,
+    }
+
+
+def held_names(db: Session, thread_id: int) -> int:
+    """How many names the thread tracks with a position or a working order (ADR-0025 P6): flat lanes are history."""
+    books = book(db, thread_id)
+    holding = {lane_id for lane_id, (_, open_) in books.items() if open_ is not None}
+    holding |= {
+        r.id for r in lanes(db, thread_id, active=True) if any(o["status"] == "working" for o in r.orders or [])
+    }
+    return len(holding)
+
+
+def _check_held_cap(db: Session, row: ReplaySession) -> None:
+    """A flat lane with no working order that is about to take its first position or order: the 50th name is a 409."""
+    if row.thread_id is None or any(o["status"] == "working" for o in row.orders or []):
+        return
+    if journal_mod.assemble(_marks_of(_load_marks(db, row.id)))[1] is not None:
+        return
+    if held_names(db, row.thread_id) >= MAX_HELD_NAMES:
+        raise ReplayProblem(HELD_CAP, path="symbol", status=409)
+
+
+def _lane_trades(db: Session, row: ReplaySession) -> list[journal_mod.Trade]:
+    """The closed trades of the thread's other lanes: the max loss and the trade limit count every name practised on a
+    date (02o-b2)."""
+    if row.thread_id is None:
         return []
-    others = db.execute(
-        select(ReplaySession.id).where(ReplaySession.day_list_id == row.day_list_id, ReplaySession.id != row.id)
-    ).scalars()
     trades: list[journal_mod.Trade] = []
-    for session_id in list(others):
-        closed, _ = journal_mod.assemble(_marks_of(_load_marks(db, session_id)))
-        trades.extend(closed)
+    for other in lanes(db, row.thread_id):
+        if other.id != row.id:
+            trades.extend(journal_mod.assemble(_marks_of(_load_marks(db, other.id)))[0])
     return trades
 
 
 def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
+    """The lane's inputs for a request. An open lane of a thread reads the bars of the data day of the thread's time T
+    (`positions_mod.data_day`) and follows T as far as that day's tape goes; an ended legacy row keeps its own day."""
+    thread = db.get(PracticeThread, row.thread_id) if row.thread_id is not None else None
+    live = thread is not None and thread.clock_at is not None and row.status == "active"
+    clock = _ts(thread.clock_at) if live and thread is not None and thread.clock_at is not None else None
+    day = positions_mod.data_day(clock) if clock is not None else row.day
     store = svc.store_factory(db)
-    inputs = svc.history.day_inputs(store, row.symbol, row.day)
-    swing = _is_swing(db, row)
-    day_list = db.get(ReplayDayList, row.day_list_id) if row.day_list_id is not None else None
-    window_end = window_end_of(row, day_thread=row.thread_id is not None and not swing)
+    inputs = svc.history.day_inputs(store, row.symbol, day)
+    if clock is not None:
+        window_start, window_end = market_open(day), market_close(day, "extended")
+    elif row.status == "ended" or row.thread_id is not None:
+        window_start, window_end = _ts(row.window_start), _ts(row.window_end)
+    else:  # a standalone row from before the freestyle thread: it runs to the later of its end and its session's close
+        window_start = _ts(row.window_start)
+        window_end = max(_ts(row.window_end), market_close(row.day, row.spec["session"]))
     return Ctx(
         row=row,
         svc=svc,
@@ -384,36 +615,18 @@ def context(db: Session, svc: Services, row: ReplaySession) -> Ctx:
         fires=signals_mod.load_fires(row.signals),
         plan=_plan_of(row.spec),
         interval=row.spec["interval"],
-        window_start=_ts(row.window_start),
+        window_start=window_start,
         window_end=window_end,
         through=_ts(row.revealed_through),
-        day_trades=[] if swing else _day_trades(db, row),  # a swing journal is scored weekly, not by day rules
-        swing=swing,
+        day_trades=_lane_trades(db, row),
         db=db,
-        # The thread clock runs on past a name's tape (the night, the weekend): the name follows it only as far as it
+        thread=thread,
+        # The thread's clock runs on past a name's tape (the night, the weekend): the name follows it only as far as it
         # has bars, so it is never "behind" a clock it cannot reach.
-        day_clock=None
-        if day_list is None or day_list.revealed_through is None
-        else min(_ts(day_list.revealed_through), window_end),
-        thread_time=None
-        if day_list is None or day_list.revealed_through is None or swing
-        else _ts(day_list.revealed_through),
+        day_clock=None if clock is None else min(clock, window_end),
+        thread_time=clock,
         away=spans_of(row.away or []),
     )
-
-
-def _is_day_thread(db: Session, row: ReplaySession) -> bool:
-    """A session of a day thread (not a swing thread's, not a standalone replay)."""
-    return row.thread_id is not None and not _is_swing(db, row)
-
-
-def _is_swing(db: Session, row: ReplaySession) -> bool:
-    if row.thread_id is None:
-        return False
-    # `db.get` answers from the identity map once the thread is loaded (a thread's mode never changes), so a list of
-    # sessions that share a thread asks the database once.
-    thread = db.get(PracticeThread, row.thread_id)
-    return thread is not None and thread.mode == "swing"
 
 
 # -- views over the revealed history --------------------------------------------------------------------------
@@ -441,10 +654,7 @@ def _bar_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _levels_of(ctx: Ctx, series: frames.PreparedSeries, through: pd.Timestamp) -> dict[str, Any]:
-    out = series.levels(through)
-    if ctx.swing:  # the raw prior close is on the old share basis after a split
-        out["prior_close"] = swing_play.prior_close(ctx, ctx.symbol) or ctx.inputs.prior_close
-    return out
+    return series.levels(through)
 
 
 def _tape_lookup(svc: Services, store: BlobStore, symbol: str, feed: str) -> frames.LastPrint:
@@ -460,26 +670,10 @@ def _tape_lookup(svc: Services, store: BlobStore, symbol: str, feed: str) -> fra
     return last
 
 
-def _price_of_row(
-    db: Session, svc: Services, row: ReplaySession, through: pd.Timestamp
-) -> tuple[float, pd.Timestamp] | None:
-    """`last_price` for a session row without building its context: the day thread's price at `through` (a swing
-    session still prices from its holds)."""
-    if _is_swing(db, row):
-        return last_price(context(db, svc, row), through)
-    store = svc.store_factory(db)
-    inputs = svc.history.day_inputs(store, row.symbol, row.day)
-    series = svc.history.series.get(inputs, INTERVAL_MINUTES[row.spec["interval"]])
-    found = series.quote(through, _tape_lookup(svc, store, row.symbol, row.tape_feed))
-    return None if found is None else (found.price, found.at)
-
-
 def last_price(ctx: Ctx, through: pd.Timestamp) -> tuple[float, pd.Timestamp] | None:
-    """The mark price at `through` (`frames.PreparedSeries.quote`): the last eligible print at or before it, else the
-    last revealed 1-minute close, in whole cents (D-033) so what she sees is what the P/L runs on. A swing session
-    prices from the regular session only (`swing_play.last_price`)."""
-    if ctx.swing:
-        return swing_play.last_price(ctx, through)
+    """The price at `through` on the lane's data day (`frames.PreparedSeries.quote`): the last eligible print at or
+    before it, else the last revealed 1-minute close, in whole cents (D-033) so what she sees is what the P/L runs on.
+    A position is marked across days by `positions_mod.mark_at`, which falls back to the previous session."""
     found = _series(ctx).quote(through, _tape_lookup(ctx.svc, ctx.store, ctx.symbol, ctx.feed))
     return None if found is None else (found.price, found.at)
 
@@ -490,27 +684,26 @@ def _age_s(found: tuple[float, pd.Timestamp] | None, through: pd.Timestamp) -> i
 
 
 def _marked(ctx: Ctx, found: tuple[float, pd.Timestamp] | None) -> float | None:
-    """The price an open DAY trade is marked at: the name's last price at its playhead, except a name behind the day
-    clock, which is marked where the clock is. That is the price End day books for it and the Portfolio shows
-    (`positions`), so the number on the name's card is the number it exits at. The clock is the thread's revealed
-    boundary, so this reads nothing the day has not shown; a swing hold is marked by `swing_play`."""
-    if not ctx.swing and ctx.behind_clock:
-        assert ctx.day_clock is not None
-        found = last_price(ctx, ctx.day_clock) or found
+    """The price an open trade is marked at: the name's last price at its playhead, except a name behind the thread's
+    clock, which is marked where the clock is (`positions_mod.mark_at`: the previous session's last print before the
+    day's first bar). That is the price the Portfolio shows, so the number on the name's card is the number the
+    thread's account runs on. The clock is the thread's revealed boundary, so this reads nothing it has not shown."""
+    if ctx.thread_time is not None and ctx.behind_clock:
+        assert ctx.thread is not None
+        mark = lane_mark(ctx.db, ctx.svc, ctx.row, ctx.thread_time)  # type: ignore[arg-type]
+        found = found if mark is None else (mark.price, mark.at)
     return None if found is None else found[0]
 
 
 def _open_trade(ctx: Ctx, price: float | None) -> dict[str, Any] | None:
-    if ctx.swing:  # the name's practice hold, not the marks of this one session
-        return swing_play.open_trade(ctx, price)
     _, open_ = journal_mod.assemble(ctx.marks)
     return journal_mod.open_trade_out(open_, price)
 
 
-def _journal(ctx: Ctx, price: float | None, *, final: bool) -> dict[str, Any]:
-    if ctx.swing:
-        return swing_play.journal(ctx)
-    fires = ctx.fires if final else signals_mod.released(ctx.fires, ctx.through)
+def _journal(ctx: Ctx, price: float | None) -> dict[str, Any]:
+    """The lane's journal, read live and never final (ADR-0025): the trades of its whole life, the day rules counted on
+    the ET date of its playhead."""
+    fires = signals_mod.released(ctx.fires, ctx.through)
     return journal_mod.compute_journal(
         ctx.marks,
         bars=ctx.inputs.bars_1m,
@@ -521,9 +714,10 @@ def _journal(ctx: Ctx, price: float | None, *, final: bool) -> dict[str, Any]:
         window_end=ctx.window_end,
         as_of=ctx.through,
         last_price=price,
-        final=final,
+        final=False,
         day_trades=ctx.day_trades,
         away=ctx.away,
+        day=ctx.through.tz_convert(ET).date(),
     )
 
 
@@ -538,7 +732,7 @@ def session_out(ctx: Ctx) -> dict[str, Any]:
     counts: dict[tuple[str, int], int] = {}
     for fire in released:
         counts[(fire.source, fire.id)] = counts.get((fire.source, fire.id), 0) + 1
-    journal = row.journal if ended and row.journal is not None else _journal(ctx, price, final=False)
+    journal = row.journal if ended and row.journal is not None else _journal(ctx, price)
     return {
         "id": row.id,
         "day_list_id": row.day_list_id,
@@ -565,110 +759,48 @@ def session_out(ctx: Ctx) -> dict[str, Any]:
     }
 
 
-def summary_out(db: Session, row: ReplaySession, marks: list[PracticeMark] | None = None) -> dict[str, Any]:
-    """A hub row: realized trades and P/L only (cheap; no bars needed for active sessions). `marks` is the session's
-    marks in `seq` order when the caller already has them (`list_sessions` loads a whole page at once)."""
-    if row.status == "ended" and row.journal is not None:
-        totals = row.journal["totals"]
-        trades, pnl, adherence = totals["trades"], totals["pnl_usd"], row.journal["adherence"]["score_pct"]
-    elif _is_swing(db, row):  # the holds that closed in it; its marks alone miss a carried hold's exit
-        (trades, pnl), adherence = swing_play.summary_totals(db, row.id), None
-    else:
-        closed, _ = journal_mod.assemble(_marks_of(_load_marks(db, row.id) if marks is None else marks))
-        trades = len(closed)
-        pnl = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed]) if closed else None
-        adherence = None
-    return {
-        "id": row.id,
-        "day_list_id": row.day_list_id,
-        "thread_id": row.thread_id,
-        "symbol": row.symbol,
-        "day": row.day,
-        "attempt": row.attempt,
-        "status": row.status,
-        "revealed_through": row.revealed_through,
-        "window_end": window_end_of(row, day_thread=_is_day_thread(db, row)),
-        "trades": trades,
-        "pnl_usd": pnl,
-        "adherence_pct": adherence,
-        "updated_at": row.updated_at,
-    }
-
-
-def list_sessions(db: Session, user_id: int, *, status: str | None, limit: int) -> list[dict[str, Any]]:
-    query = select(ReplaySession).where(ReplaySession.owner_user_id == user_id)
-    if status:
-        query = query.where(ReplaySession.status == status)
-    rows = list(
-        db.execute(query.order_by(ReplaySession.updated_at.desc(), ReplaySession.id.desc()).limit(limit)).scalars()
-    )
-    # One query each for the page's threads and marks instead of two per row (was an N+1 over up to 100 rows). The
-    # threads land in the identity map, where `summary_out`'s `_is_swing` finds them; a row whose journal is already
-    # written needs neither its marks nor, usually, its thread.
-    thread_ids = {row.thread_id for row in rows if row.thread_id is not None}
-    if thread_ids:
-        db.execute(select(PracticeThread).where(PracticeThread.id.in_(thread_ids))).scalars().all()
-    marks: dict[int, list[PracticeMark]] = {}
-    need_marks = [row.id for row in rows if not (row.status == "ended" and row.journal is not None)]
-    if need_marks:
-        for mark in db.execute(
-            select(PracticeMark).where(PracticeMark.session_id.in_(need_marks)).order_by(PracticeMark.seq)
-        ).scalars():
-            marks.setdefault(mark.session_id, []).append(mark)
-    return [summary_out(db, row, marks.get(row.id, [])) for row in rows]
-
-
 # -- create --------------------------------------------------------------------------------------------------
 
 
-def create(
+def open_lane(
     db: Session,
     user_id: int,
     spec: ReplaySessionV1,
     svc: Services,
-    day_list: ReplayDayList | None = None,
-    thread_id: int | None = None,
+    thread: PracticeThread,
+    *,
+    day_list_id: int | None = None,
     tape_feed: str | None = None,
-    extended_tape: bool = False,
 ) -> ReplaySession:
-    """A new active session at the window start (idempotent per active symbol and day), or the existing one.
-
-    With a `day_list` the session belongs to that day: it starts at the day clock when the clock is past the window
-    start (the shared clock never goes backward), and a standalone session on the same symbol and day is a 409.
-    `tape_feed` fixes the session's feed without asking the provider (`"off"`: a swing thread with the tape off, 02p
-    decision 4; the default probes SIP, then IEX)."""
+    """The thread's lane for a name: its open one (resume), else a new one at the thread's time T (ADR-0025). One active
+    row per (thread, symbol) for the life of the thread, so a position is never cut at a day: the lane's marks are the
+    whole book of the name. `spec.day` and its window are labels of the data day it opened on and are never read as
+    bounds. A name with no trades on that data day is a `ReplayDayError`. `day_list_id`: the thread's Screen."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
-    symbol, day = dumped["symbol"], date.fromisoformat(dumped["day"])
-    now = svc.now()
-    check_day(day, now)
-    # Her `window.to` is a focus mark kept in the spec; the session itself runs to the exchange close.
-    start, _focus = window_bounds(day, dumped["window"]["from"], dumped["window"]["to"])
-    if day_list is not None and day_list.revealed_through:
-        # The thread clock does not wait for her window: a name opened before the plan's "Start at" starts at the clock.
-        # It never lifts the clock to the window start (a hidden jump of time that only she may make).
-        start = min(start, _ts(day_list.revealed_through))
-    asked_end = market_close(day, dumped["session"])
-    check_window(day, asked_end, now)
-    end = market_close(day, "extended") if extended_tape else asked_end
-
-    existing = _active_for(db, user_id, symbol, day, day_list)
+    symbol = dumped["symbol"]
+    existing = db.execute(
+        select(ReplaySession).where(
+            ReplaySession.thread_id == thread.id, ReplaySession.symbol == symbol, ReplaySession.status == "active"
+        )
+    ).scalar_one_or_none()
     if existing is not None:
         return existing
-
+    if thread.clock_at is None:
+        raise ReplayProblem("Start the thread's plan first · it has no clock yet", path="clock", status=409)
+    clock = _ts(thread.clock_at)
+    day = positions_mod.data_day(clock)
+    now = svc.now()
+    start, end = market_open(day), market_close(day, "extended")
     store = svc.store_factory(db)
     inputs = svc.history.day_inputs(store, symbol, day)  # raises ReplayDayError("No trades for ...")
     try:
         armed = signals_mod.resolve(db, user_id, dumped["armed"], symbol)
     except signals_mod.ArmProblem as exc:
         raise ReplayProblem(exc.message, path=f"armed.{exc.index}.id") from None
+    # ponytail: the would-fire list is evaluated for the data day the lane opens on; a lane that lives on keeps that
+    # list (the signals of its later days are not scored). Evaluate per data day when signal scoring matters there.
     fires = signals_mod.evaluate_window(
-        armed,
-        symbol,
-        day,
-        bars_1m=inputs.bars_1m,
-        daily=inputs.daily,
-        window_start=start,
-        window_end=end,
+        armed, symbol, day, bars_1m=inputs.bars_1m, daily=inputs.daily, window_start=start, window_end=end
     )
     feed = tape_feed
     if feed is None:
@@ -677,7 +809,6 @@ def create(
         except ProviderError as exc:  # a tape outage must not block the chart; prints retry on advance
             log.warning("tape probe failed for %s %s: %s", symbol, day, exc)
             feed = "sip"
-
     attempt = (
         db.execute(
             select(func.coalesce(func.max(ReplaySession.attempt), 0)).where(
@@ -686,13 +817,9 @@ def create(
         ).scalar_one()
         + 1
     )
-    # Joined mid-day: the session opens at the shared clock, so a would-fire signal that fired before it never
-    # reached her on this name. The signal list keeps it (the chart shows it as history); the journal does not score it.
-    joined = (
-        min(max(start, _ts(day_list.revealed_through)), end)
-        if day_list is not None and day_list.revealed_through
-        else start
-    )
+    # Opened mid-way: the lane starts at the thread's time, so a would-fire signal that fired before it never reached
+    # her on this name. The signal list keeps it (the chart shows it as history); the journal does not score it.
+    joined = min(clock, end)
     row = ReplaySession(
         owner_user_id=user_id,
         symbol=symbol,
@@ -714,98 +841,24 @@ def create(
         created_at=now,
         updated_at=now,
         ended_at=None,
-        day_list_id=day_list.id if day_list is not None else None,
-        thread_id=thread_id if day_list is not None else None,  # only a day-list session books into a thread
+        day_list_id=day_list_id,
+        thread_id=thread.id,
     )
     db.add(row)
     try:
         db.flush()
-    except IntegrityError:  # a concurrent create of the same active session: that one, if it is this day list's own
+    except IntegrityError:  # a concurrent open of the same lane: that one
         db.rollback()
-        found = _active_for(db, user_id, symbol, day, day_list)  # another list's winner is the same 409, never adopted
-        assert found is not None
+        found = db.execute(
+            select(ReplaySession).where(
+                ReplaySession.thread_id == thread.id, ReplaySession.symbol == symbol, ReplaySession.status == "active"
+            )
+        ).scalar_one()
         return found
     return row
 
 
-def _active_for(
-    db: Session, user_id: int, symbol: str, day: date, day_list: ReplayDayList | None
-) -> ReplaySession | None:
-    """The user's active session on a name and day, or None. There is one per name and day whichever day list holds it
-    (the partial unique index), so a hit that is not `day_list`'s own is a 409 that says where it is open. The day list
-    shows the same rows as `held_elsewhere`, so a name it offers never meets this refusal."""
-    existing = db.execute(
-        select(ReplaySession).where(
-            ReplaySession.owner_user_id == user_id,
-            ReplaySession.symbol == symbol,
-            ReplaySession.day == day,
-            ReplaySession.status == "active",
-        )
-    ).scalar_one_or_none()
-    if existing is None:
-        return None
-    if day_list is not None and existing.day_list_id != day_list.id:
-        thread = db.get(PracticeThread, existing.thread_id) if existing.thread_id is not None else None
-        where = f"in {thread.name}" if thread is not None else "as a standalone session"
-        raise ReplayProblem(
-            f"You already have an open {symbol} practice session for this day {where} · end it first",
-            path="symbol",
-            status=409,
-        )
-    if day_list is None and existing.day_list_id is not None:
-        raise ReplayProblem("This day is part of your daily list · open it from the list", path="symbol", status=409)
-    return existing
-
-
-def held_elsewhere(db: Session, user_id: int, day: date, day_list_id: int) -> list[dict[str, Any]]:
-    """The user's active sessions on `day` that belong to another day list or to none: the names `_active_for` refuses
-    to open in this one (one active session per name and day, across every thread and swing day). The day list read
-    reports them so a name is never shown as "not opened" while the open refuses it; each names where to end it."""
-    rows = db.execute(
-        select(
-            ReplaySession.id,
-            ReplaySession.symbol,
-            ReplaySession.day_list_id,
-            ReplaySession.thread_id,
-            PracticeThread.name,
-        )
-        .outerjoin(PracticeThread, PracticeThread.id == ReplaySession.thread_id)
-        .where(
-            ReplaySession.owner_user_id == user_id,
-            ReplaySession.day == day,
-            ReplaySession.status == "active",
-            ReplaySession.day_list_id.is_distinct_from(day_list_id),
-        )
-        .order_by(ReplaySession.id)
-    )
-    return [
-        {"session_id": sid, "symbol": symbol, "day_list_id": dlid, "thread_id": tid, "thread_name": tname}
-        for sid, symbol, dlid, tid, tname in rows
-    ]
-
-
 # -- advance and feed ----------------------------------------------------------------------------------------
-
-
-def _lock_day_list(db: Session, session_id: int) -> ReplayDayList | None:
-    """The session's day list, locked, or None for a standalone session. Every writer of a day-list session takes
-    this lock before the session row, so two advances of one day cannot deadlock."""
-    day_list_id = db.execute(
-        select(ReplaySession.day_list_id).where(ReplaySession.id == session_id)
-    ).scalar_one_or_none()
-    if day_list_id is None:
-        return None
-    return db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
-
-
-def _lock_and_settle(db: Session, svc: Services, user_id: int, session_id: int) -> ReplayDayList | None:
-    """`_lock_day_list`, then bring a running thread clock to now (ADR-0018). None for a standalone session. A stranger
-    gets the 404 before any lock or write, so it cannot move another user's clock."""
-    get_row(db, user_id, session_id)
-    day_list = _lock_day_list(db, session_id)
-    if day_list is not None:
-        settle_locked(db, svc, day_list)
-    return day_list
 
 
 def next_bar_boundary(after: pd.Timestamp, minutes: int) -> pd.Timestamp:
@@ -828,7 +881,7 @@ def _prints_block(
     max_prints: int,
     pace_too: bool,
 ) -> dict[str, Any]:
-    if ctx.feed == "off":  # a swing thread with the tape off fetches no prints at all
+    if ctx.feed == "off":  # a lane with the tape off fetches no prints at all
         return {
             "feed": ctx.feed,
             "rows": [],
@@ -865,34 +918,6 @@ def _prints_block(
     }
 
 
-def _clock_state(ctx: Ctx) -> dict[str, Any] | None:
-    """The thread clock as a day session's frame reports it: `{running, speed}` while it runs, else None (and left out
-    of the JSON). A chart that follows the clock shows a hint when it is not running; it has no controls (ADR-0018)."""
-    if ctx.db is None or ctx.row.day_list_id is None or ctx.swing:
-        return None
-    day_list = ctx.db.get(ReplayDayList, ctx.row.day_list_id)
-    return {"running": True, "speed": day_list.clock_speed} if day_list is not None and day_list.clock_running else None
-
-
-def _next_start(ctx: Ctx) -> pd.Timestamp | None:  # None only without a day list (a standalone session)
-    """When the thread's next trading day opens (the day hands over there): the exchange's open, also after the plan's
-    last day (that day ends there)."""
-    if "next_start" not in ctx._cache:
-        from ai_trading.replay import plan as plan_mod  # plan imports this module: the lookup lives there
-
-        day_list = ctx.db.get(ReplayDayList, ctx.row.day_list_id) if ctx.db is not None else None
-        ctx._cache["next_start"] = None if day_list is None else plan_mod.next_day_start(ctx.db, day_list)
-    return ctx._cache["next_start"]
-
-
-def _market_of(ctx: Ctx, series: frames.PreparedSeries, data_through: pd.Timestamp) -> dict[str, Any] | None:
-    """`market` of a day-thread frame (None for a standalone or swing session): the phase at the thread's time T, the
-    tape end, the close of this name's last bar and when the next day's data starts."""
-    if ctx.thread_time is None:
-        return None
-    return frames.market_block(ctx.row.day, ctx.thread_time, series.last_bar_close(data_through), _next_start(ctx))
-
-
 def _frame(
     ctx: Ctx,
     *,
@@ -906,7 +931,7 @@ def _frame(
     series = _series(ctx, width)
     price = last_price(ctx, through)
     # A day-thread session's forming candle closes at the price the header shows, so the candle, the header and the
-    # indicators read one number; a swing or standalone session keeps its candle as the minutes built it.
+    # indicators read one number; a legacy row keeps its candle as the minutes built it.
     quote = None if price is None or ctx.thread_time is None else frames.Quote(price[0], price[1])
     forming = series.forming(through, quote)
     live = ctx.thread_time is not None and ctx.row.status != "ended"  # an open day-thread session follows the thread
@@ -949,110 +974,6 @@ def _frame(
     }
 
 
-def _flag_stops(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp) -> None:
-    """Mark `stop_hit_at` on every open trade of the day list (not just this name) whose stop the one-minute bars
-    closing in `(previous, target]` crossed, each at the bar it crossed on. It is information for the Portfolio and the
-    journal, never a control: the clock does not stop for a stop and a stop never exits. `previous` is the later of
-    the playhead and the day clock: minutes already revealed were scanned by the advance that revealed them.
-    ponytail: one bars load per open trade."""
-    if previous >= target:
-        return
-    live = [
-        (row, trade) for row, trade in open_positions(db, ctx.row.day_list_id) if trade.stops and not row.stop_hit_at
-    ]
-    if not live:
-        return
-    minutes = {
-        row.symbol: ctx.inputs.bars_1m
-        if row.id == ctx.row.id
-        else ctx.svc.history.day_inputs(ctx.store, row.symbol, row.day).bars_1m
-        for row, _ in live
-    }
-    while live:
-        crossing = positions_mod.first_stop_crossing(
-            [
-                positions_mod.Hold(
-                    id=None,
-                    symbol=row.symbol,
-                    side=trade.side,  # type: ignore[arg-type]
-                    shares=trade.shares,
-                    entry_day=row.day,
-                    entry_at=trade.entry_at,
-                    entry_price=trade.entry_price,
-                    stop_at_entry=trade.stop_price,
-                    stop_price=trade.stops[-1][1],
-                    stop_hit_at=None,
-                )
-                for row, trade in live
-            ],
-            minutes,
-            previous,
-            target,
-        )
-        if crossing is None:
-            break
-        hit = {crossing.symbol, *crossing.also}
-        for row, _ in live:
-            if row.symbol in hit:
-                row.stop_hit_at, row.updated_at = crossing.at.to_pydatetime(), ctx.svc.now()
-        live = [(row, trade) for row, trade in live if row.symbol not in hit]
-        previous = crossing.at
-    db.flush()
-
-
-def move_clock(db: Session, svc: Services, day_list: ReplayDayList, target: pd.Timestamp) -> pd.Timestamp:
-    """Move the thread's clock forward to `target` (the caller holds the day-list lock). The clock is real time shifted:
-    it has no end of its own. It runs on through the close, after-hours, overnight and the weekend; the day list hands
-    over to the next day only when the clock reaches that day's start (`clock.roll`), and nothing here stops it. A
-    crossed stop is flagged on its position (`_flag_stops`) and the clock goes on. No session's playhead moves here: a
-    name is lifted to the clock when she is on it (`advance`), never written while she is not."""
-    if day_list.revealed_through is None or day_list.status == "ended":
-        return _ts(day_list.revealed_through) if day_list.revealed_through is not None else _ts(svc.now())
-    previous = _ts(day_list.revealed_through)
-    target = max(_ts(target), previous)
-    sessions = _sessions_of_day(db, day_list.id)
-    if sessions and target > previous:
-        ctx = context(db, svc, sessions[0])
-        _flag_stops(db, ctx, previous, min(target, ctx.window_end))  # bars exist up to the name's tape end
-    target = target.floor("us")  # a settled clock is a float of seconds: drop the nanoseconds Postgres cannot hold
-    day_list.revealed_through, day_list.updated_at = target.to_pydatetime(), svc.now()
-    db.flush()
-    return target
-
-
-def settle_locked(db: Session, svc: Services, day_list: ReplayDayList) -> None:
-    """Bring a running thread clock to now (ADR-0018): `clock + speed x (now - anchor)`, through `move_clock`, then a
-    fresh anchor. Called with the day-list lock held, by every request that reads or acts on the clock, so the clock is
-    a function of wall time and survives a closed screen, a logout and a restart. A paused clock, an ended day, or a
-    request that arrives with the anchor in the future (clock skew) changes nothing."""
-    if (
-        not day_list.clock_running
-        or day_list.status == "ended"
-        or day_list.revealed_through is None
-        or day_list.clock_anchor_at is None
-    ):
-        return
-    now = svc.wall()
-    elapsed = (_ts(now) - _ts(day_list.clock_anchor_at)).total_seconds()
-    if elapsed <= 0:
-        return
-    day_list.clock_anchor_at = now
-    move_clock(db, svc, day_list, _ts(day_list.revealed_through) + pd.Timedelta(seconds=elapsed * day_list.clock_speed))
-
-
-def settle_day(db: Session, svc: Services, day_list_id: int | None) -> None:
-    """`settle_locked` for a read: a cheap look first, so a paused clock (the usual case) takes no lock and writes
-    nothing; a running one is locked, brought to now and committed with the request."""
-    if day_list_id is None:
-        return
-    running = db.execute(
-        select(ReplayDayList.clock_running).where(ReplayDayList.id == day_list_id)
-    ).scalar_one_or_none()
-    if running:
-        row = db.execute(select(ReplayDayList).where(ReplayDayList.id == day_list_id).with_for_update()).scalar_one()
-        settle_locked(db, svc, row)
-
-
 def advance(
     db: Session,
     user_id: int,
@@ -1068,69 +989,42 @@ def advance(
     sync: bool = False,
     since: datetime | None = None,
 ) -> dict[str, Any]:
-    if [to is not None, step is not None, sync].count(True) != 1:
-        raise ReplayProblem("Send exactly one of to, step and sync", path="to")
-    if since is not None and (not sync or pd.Timestamp(since).tzinfo is None):
+    """Follow the thread's clock and answer the frame. This is the only thing a lane's `advance` does now (ADR-0025
+    R2): `to` and `step` are 422, because a name must not move the thread's time (the thread's clock does, forward
+    only). A lane behind the clock is lifted to it, and the span it was away is recorded unless she was on the name
+    (`_watching`). Resting orders are not touched here: the thread's clock fills them as it crosses them."""
+    if to is not None or step is not None or not sync:
+        raise ReplayProblem(
+            "Time moves at the thread · set it from the thread's clock", path="to" if to is not None else "step"
+        )
+    if since is not None and pd.Timestamp(since).tzinfo is None:
         raise ReplayProblem("`since` is a time with its UTC offset, sent with sync", path="since")
-    day_list = _lock_and_settle(db, svc, user_id, session_id)  # the day list row first, then the session row
-    if day_list is None and sync:
-        raise ReplayProblem("Only a session of a practice day follows the thread clock", path="sync")
+    _lock_and_settle(db, svc, user_id, session_id)  # the thread row first, then the lane row
     row = get_row(db, user_id, session_id, lock=True)
     ctx = context(db, svc, row)
     width = INTERVAL_MINUTES[interval or ctx.interval]
     previous = ctx.through
-    # A step is a step of the day's one clock, not of this name's playhead: from a name behind the shared clock it goes
-    # one bar (or one signal) past the clock, so the thread's time moves the same whichever name is on screen.
-    base = previous if ctx.day_clock is None or row.status == "ended" else max(previous, ctx.day_clock)
+    clock = ctx.day_clock
     if row.status == "ended":
         target = ctx.window_end
-    elif sync:  # the screen follows the thread's clock: wherever it is now, never past it
-        target = base
-    elif to is not None:
-        if pd.Timestamp(to).tzinfo is None:
-            raise ReplayProblem("Send the time with its UTC offset", path="to")
-        target = _ts(to)
-    elif step == "bar":
-        target = next_bar_boundary(base, width)
+    elif clock is None:
+        target = previous
     else:
-        upcoming = signals_mod.next_after(ctx.fires, base)
-        if upcoming is None:
-            raise ReplayProblem("No more signals in this session", path="step")
-        target = upcoming.bar_close
-    target = min(max(target, previous), ctx.window_end)  # forward only; clamped to the window end
-    scan_from, paused = previous, None
-    if day_list is not None and row.status != "ended":
-        clock = ctx.day_clock
-        if clock is not None:
-            # A name behind the shared day clock catches up to it: what lies between is revealed on the chart but was
-            # never in front of her, and the journal does not score a signal that fired inside it (02o-b2). A resting
-            # order the tape reached inside it still fills: the fill pass below reads `(previous, target]`.
-            if previous < clock and not (sync and _watching(ctx, day_list, previous, clock)):
-                row.away = add_span(list(row.away or []), previous, clock)
-                ctx.away = spans_of(row.away)
-            target = min(max(target, clock), ctx.window_end)
-            scan_from = max(previous, clock)
-        if ctx.swing:  # play stops at the first crossed stop (02p b5): never earlier, never later
-            paused, target = swing_play.stop_pause(ctx, scan_from, target)
-        else:  # a day's clock never stops for a stop: every open name's crossing is flagged, the time goes on
-            _flag_stops(db, ctx, scan_from, target)
-        if clock is None or target > clock:
-            day_list.revealed_through = target.to_pydatetime()
-            ctx.day_clock = target
-            if ctx.thread_time is not None:
-                ctx.thread_time = target
-
-    fills: list[Mark] = []
+        # A name behind the thread's clock catches up to it: what lies between is revealed on the chart but was never
+        # in front of her, and the journal does not score a signal that fired inside it (02o-b2).
+        if previous < clock and not _watching(ctx, previous, clock):
+            row.away = add_span(list(row.away or []), previous, clock)
+            ctx.away = spans_of(row.away)
+        target = max(previous, clock)
+    target = min(max(target, previous), ctx.window_end)  # forward only; clamped to the data day's tape end
     if target > previous:
         row.revealed_through = target.to_pydatetime()
         row.updated_at = svc.now()
         db.flush()
         ctx.through = target
-        if row.status != "ended":
-            fills = _fill_working_orders(db, ctx, previous, target)
 
-    # The answer starts where the caller's view ends, not only where the session's one playhead was: a second window on
-    # this name has a playhead the first one already moved (D-198). Never before the session's window, never past it.
+    # The answer starts where the caller's view ends, not only where the lane's one playhead was: a second window on
+    # this name has a playhead the first one already moved (D-198). Never before the window, never past it.
     shown_from = previous if since is None else min(previous, max(_ts(since), ctx.window_start))
     new_bars = _series(ctx, width).bars_between(shown_from, target)
     prints = _prints_block(
@@ -1146,47 +1040,9 @@ def advance(
         prints=prints,
         signals=fresh,
     )
-    frame["paused"] = paused  # a swing day only (play stops at its first crossed stop); the response leaves None out
-    frame["fills"] = [mark_out(m) for m in fills] or None  # working orders the tape filled inside this advance
-    if ctx.swing:
-        frame |= {"strip": swing_play.strip(ctx, target), "daily_forming": swing_play.forming_daily(ctx, target)}
+    frame["paused"] = None  # the clock never stops for a stop (a crossed stop is a flag); the response leaves None out
+    frame["fills"] = None  # a resting order fills when the thread's clock crosses it, not on a sync
     return frame
-
-
-def _watching(
-    ctx: Ctx, day_list: ReplayDayList, previous: pd.Timestamp, clock: pd.Timestamp, *, needs_running: bool = False
-) -> bool:
-    """She is on this name, not returning to it: its playhead trails the day clock by no more than `ATTENTION_S` of
-    thread time (the screen syncs every couple of seconds, so a name on screen is never further behind than that; one
-    she left falls further behind with every second the clock runs). Such a lift is the same minutes she was already
-    watching, so it adds no away span (the fill pass over `(previous, clock]` runs either way).
-    `needs_running`: the lift is not a screen's own `sync` but a mark or order on a name behind the clock, an old path
-    whose catch-up rules stay as they were unless the clock is running."""
-    return (
-        not ctx.swing
-        and (day_list.clock_running or not needs_running)
-        and (clock - previous).total_seconds() <= ATTENTION_S * day_list.clock_speed
-    )
-
-
-def _follow_clock(db: Session, ctx: Ctx) -> bool:
-    """A name she is on that a running clock left a few seconds behind is lifted quietly before she marks or orders on
-    it, so a click never fails with "behind the day clock" because the clock ran between two syncs. True when lifted."""
-    day_list = db.get(ReplayDayList, ctx.row.day_list_id) if ctx.row.day_list_id is not None else None
-    if (
-        day_list is None
-        or ctx.day_clock is None
-        or not ctx.behind_clock
-        or not _watching(ctx, day_list, ctx.through, ctx.day_clock, needs_running=True)
-    ):
-        return False
-    previous = ctx.through
-    ctx.row.revealed_through = ctx.day_clock.to_pydatetime()
-    ctx.through = ctx.day_clock
-    ctx.row.updated_at = ctx.svc.now()
-    db.flush()
-    _fill_working_orders(db, ctx, previous, ctx.through)
-    return True
 
 
 def feed(
@@ -1200,10 +1056,10 @@ def feed(
     min_notional: int = 0,
 ) -> dict[str, Any]:
     """Everything revealed so far at `interval`: the lookback for warm-up, the revealed window, the last minute of
-    prints, the released signals (all of them once the session has ended). Never past `revealed_through`, except that an
-    open day-thread session is read at the thread's time T (cut at its tape end): see the comment below."""
+    prints, the released signals (all of them once a legacy session has ended). Never past `revealed_through`, except
+    that an open lane is read at the thread's time T (cut at its data day's tape end): see the comment below."""
     row = get_row(db, user_id, session_id)
-    settle_day(db, svc, row.day_list_id)
+    settle_thread(db, svc, row.thread_id)
     ctx = context(db, svc, row)
     name = interval or ctx.interval
     width = INTERVAL_MINUTES[name]
@@ -1235,11 +1091,7 @@ def feed(
     frame = _frame(
         ctx, bars=_bar_rows(display), through=through, width=width, interval=name, prints=prints, signals=shown
     )
-    out = {**frame, "interval": name, "window_start": ctx.window_start}
-    if ctx.swing:  # the strip reads the shared day clock; the daily block never reads the day's own daily bar
-        clock = swing_play.day_clock(ctx)
-        out |= {"strip": swing_play.strip(ctx, clock), "daily": swing_play.daily_block(ctx, through)}
-    return out
+    return {**frame, "interval": name, "window_start": ctx.window_start}
 
 
 # -- marks ---------------------------------------------------------------------------------------------------
@@ -1249,15 +1101,15 @@ def place_mark(db: Session, user_id: int, session_id: int, svc: Services, body: 
     """Stamp a practice mark at the playhead. State rules answer 422 with `path: "kind"` or `"stopPrice"`. An entry
     needs no stop: the thread's "stop on every entry" plan is scored, never a reason to refuse. A Buy or Sell is a fill
     against the name's position (adds, sells part, or flips); only the shares it opens must fit the cash."""
-    _lock_and_settle(db, svc, user_id, session_id)  # the day list row first, then the session row: one lock order
+    _lock_and_settle(db, svc, user_id, session_id)  # the thread row first, then the lane row: one lock order
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
-        raise ReplayProblem("This session is over · start a new attempt", path="kind")
+        raise ReplayProblem("This session is over · its thread no longer takes marks", path="kind")
     ctx = context(db, svc, row)
     if ctx.behind_clock and not _follow_clock(db, ctx):
-        # Revealed but not markable: the shared day clock is ahead of this name's playhead, so a mark here would be
-        # stamped at a time the day has already passed. A catch-up (the screen's "Catch up") moves the name to the
-        # clock first. A note is refused too: it would be stamped before the clock the day is already past.
+        # Revealed but not markable: the thread's clock is ahead of this name's playhead, so a mark here would be
+        # stamped at a time the thread has already passed. A catch-up (the screen's "Catch up") moves the name to the
+        # clock first. A note is refused too: it would be stamped before the clock the thread is already past.
         raise ReplayProblem(BEHIND_CLOCK.format(verb="mark"), path="kind")
     return _place(db, ctx, body, svc)
 
@@ -1267,8 +1119,6 @@ def _place(
 ) -> dict[str, Any]:
     """The mark itself, for a locked, current session. `fill` is a working order the tape just proved: the entry is
     stamped at the fill's time and price instead of at the playhead's last print."""
-    if ctx.swing:
-        return _place_swing_mark(db, ctx, body, svc, fill=fill)
     row = ctx.row
     kind = body["kind"]
     closed, open_ = journal_mod.assemble(ctx.marks)
@@ -1306,7 +1156,9 @@ def _place(
         if stop_price is not None and stays is not None:
             _check_stop_side(stays == "long", stop_price, price)
         if rest:
-            _check_day_buying_power(db, row, rest, price, closing=open_ if take else None, take=take, skip=ctx.filling)
+            if open_ is None and fill is None:
+                _check_held_cap(db, row)
+            _check_buying_power(db, row, rest, price, closing=open_ if take else None, take=take, skip=ctx.filling)
     elif kind in EXIT_KINDS:
         wanted = "long" if kind == "long_exit" else "short"
         if open_ is None or open_.side != wanted:
@@ -1319,10 +1171,11 @@ def _place(
         trade_no = open_.no
 
     day_pnl_usd = None
-    if rest and row.day_list_id is not None:
-        # The max-loss rule's basis: the day's P/L when she entered (realized plus every open trade at the clock).
-        books = day_books(db, row.day_list_id)
-        day_pnl_usd = day_pnl(books, positions(db, svc, row.day_list_id, ctx.through, books), ctx.through)["total_usd"]
+    if rest and row.thread_id is not None:
+        # The max-loss rule's basis: the ET date's P/L when she entered (what exited that date plus the positions
+        # opened on it, every one marked at the entry's time).
+        books = book(db, row.thread_id)
+        day_pnl_usd = _date_pnl(books, positions(db, svc, row.thread_id, at, books), at)
     mark = PracticeMark(
         session_id=row.id,
         seq=(ctx.marks[-1].seq if ctx.marks else 0) + 1,
@@ -1347,18 +1200,23 @@ def _place(
         closed, _ = journal_mod.assemble(ctx.marks)
         ledger_mod.book(db, row, closed, svc.now())
     placed = next(m for m in ctx.marks if m.seq == mark.seq)
+    if fill is not None:  # a resting order's fill: the booking is all the caller needs, not a journal
+        return {"mark": mark_out(placed)}
     return {
         "mark": mark_out(placed),
         "open_trade": _open_trade(ctx, price if price is not None else _price_or_none(ctx)),
-        "journal": _journal(ctx, price if price is not None else _price_or_none(ctx), final=False),
+        "journal": _journal(ctx, price if price is not None else _price_or_none(ctx)),
         "warning": warning,
     }
 
 
 # -- working orders -------------------------------------------------------------------------------------------
-# A limit, stop or stop-limit entry that is not marketable waits in `replay_sessions.orders` and fills from `advance`
-# (replay/orders.py has the rules). A market entry is `place_mark`. A fill is a Buy or Sell against the name's position
+# A limit, stop or stop-limit entry that is not marketable waits in `replay_sessions.orders` and fills when the thread's
+# clock crosses a bar that proves it (`clock.advance_thread`, which may cross several days in one move;
+# replay/orders.py has the rules). A market entry is `place_mark`. A fill is a Buy or Sell against the name's position
 # whatever it is when the order fills (it can add, sell part, or flip); only the cash can cancel it, with the reason.
+# An order is GTC (default) or Day (cancelled "Expired" at the extended close of its session); a closing order is
+# reduce-only (`min(order, position)` at the fill, cancelled "Position already closed" when the position is gone).
 
 
 def _side_of(order: dict[str, Any]) -> str:
@@ -1381,86 +1239,16 @@ def _close_order(
     order.update(status=status, closed_at=at.isoformat(), reason=reason, fill_price=price, mark_id=mark_id)
 
 
-def _tape_fill(
-    ctx: Ctx, order: dict[str, Any], since: pd.Timestamp, target: pd.Timestamp
-) -> tuple[orders_mod.Fill | None, pd.Timestamp | None]:
-    """`orders_mod.first_fill` for a stored order over the one-minute bars that close in `(since, target]`."""
-    return orders_mod.first_fill(
-        side=_side_of(order),
-        type_=order["type"],
-        limit=order["limit_price"],
-        trigger=order["stop_price"],
-        triggered_at=None if order["triggered_at"] is None else _ts(order["triggered_at"]),
-        bars_1m=ctx.inputs.bars_1m,
-        since=since,
-        target=target,
-    )
-
-
-def fill_away_orders(
-    db: Session, svc: Services, row: ReplaySession, previous: pd.Timestamp, clock: pd.Timestamp
-) -> list[Mark]:
-    """Lift a resumed name's playhead from `previous` to the day clock and fill its working orders over `(previous,
-    clock]`. The thread's clock runs with nobody on this name, so a limit or stop the tape reached there fills like a
-    watched one (ADR-0019): stamped at the bar that proved it, in time order, against the cash the account has now.
-    Nothing past `clock` is read. (An `advance` needs no call here: its own fill pass reads the same span.)"""
-    if not any(o["status"] == "working" for o in row.orders or []):
-        return []
-    ctx = context(db, svc, row)
-    row.revealed_through, row.updated_at = clock.to_pydatetime(), svc.now()
-    ctx.through = clock
-    db.flush()
-    return _fill_working_orders(db, ctx, previous, clock)
-
-
-def _fill_working_orders(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timestamp) -> list[Mark]:
-    """Fill the session's working orders from the one-minute bars that closed in `(previous, target]` (an order is
-    read only from the moment it was placed). Each fill is an ordinary Buy or Sell mark stamped at its bar's close, in
-    time order. An order whose opening shares the account cannot afford is cancelled with that reason. The caller has
-    moved the playhead to `target`, so nothing here reaches past what is revealed."""
-    row = ctx.row
-    if not any(o["status"] == "working" for o in row.orders or []):
-        return []
-    orders = [dict(o) for o in row.orders]
-    hits: list[tuple[orders_mod.Fill, dict[str, Any]]] = []
-    for order in orders:
-        if order["status"] != "working":
-            continue
-        fill, fired = _tape_fill(ctx, order, max(previous, _ts(order["placed_at"])), target)
-        if fired is not None:
-            order["triggered_at"] = fired.isoformat()
-        if fill is not None:
-            hits.append((fill, order))
-    placed: list[Mark] = []
-    for fill, order in sorted(hits, key=lambda hit: (hit[0].at, hit[1]["id"])):
-        ctx.filling = order["id"]  # its reserve is released as it fills; the other working orders still hold cash back
-        try:
-            with db.begin_nested():
-                out = _place(db, ctx, {"kind": _entry_kind_of(order), "shares": order["shares"]}, ctx.svc, fill=fill)
-        except ReplayProblem as exc:
-            _close_order(order, "cancelled", fill.at, reason=exc.message)
-            row.orders = [dict(o) for o in orders]  # a settled order no longer reserves cash for the next fill
-            continue
-        finally:
-            ctx.filling = None
-        mark = next(m for m in ctx.marks if m.id == out["mark"]["id"])
-        _close_order(order, "filled", fill.at, price=fill.price, mark_id=mark.id)
-        row.orders = [dict(o) for o in orders]
-        placed.append(mark)
-    row.orders = orders
-    row.updated_at = ctx.svc.now()
-    db.flush()
-    return placed
-
-
 def place_order(db: Session, user_id: int, session_id: int, svc: Services, body: dict[str, Any]) -> dict[str, Any]:
-    """Place a limit, stop or stop-limit entry at the playhead. A limit that already accepts the last price is
-    marketable and fills at once at that price; anything else waits for the tape. State rules answer 422 with a path
-    (`limitPrice`, `stopPrice`, `shares`, `kind`). Affordability is checked now and again at the fill."""
+    """Place a limit, stop or stop-limit order at the playhead, GTC (default) or Day (`timeInForce`). A limit that
+    already accepts the last price is marketable and fills at once at that price; anything else waits for the thread's
+    clock to cross it. An order against an open position that is on the other side and no larger than it is
+    reduce-only (derived, no toggle). State rules answer 422 with a path (`limitPrice`, `stopPrice`, `shares`, `kind`).
+    Affordability is checked now and again at the fill."""
     _lock_and_settle(db, svc, user_id, session_id)
     row = get_row(db, user_id, session_id, lock=True)
     if row.status != "active":
-        raise ReplayProblem("This session is over · start a new attempt", path="kind")
+        raise ReplayProblem("This session is over · its thread no longer takes orders", path="kind")
     ctx = context(db, svc, row)
     if ctx.behind_clock and not _follow_clock(db, ctx):
         raise ReplayProblem(BEHIND_CLOCK.format(verb="order"), path="kind")
@@ -1468,9 +1256,7 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
     shares = body.get("shares") or row.spec["shares"]
     found = last_price(ctx, ctx.through)
     if found is None:
-        raise ReplayProblem(
-            swing_play.NOT_OPEN if ctx.swing else "No price yet · advance the replay first", path="kind"
-        )
+        raise ReplayProblem("No price yet · advance the replay first", path="kind")
     try:
         limit, trigger = orders_mod.check_new(
             side=side,
@@ -1482,6 +1268,8 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
     except orders_mod.OrderProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path) from None
     entry = "long_entry" if side == "long" else "short_entry"
+    tif = body.get("timeInForce", "gtc")
+    open_ = journal_mod.assemble(ctx.marks)[1]
     record = {
         "id": 1 + max((o["id"] for o in row.orders or []), default=0),
         "side": body["side"],
@@ -1489,6 +1277,9 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
         "shares": shares,
         "limit_price": limit,
         "stop_price": trigger,
+        "tif": tif,
+        "expires_at": orders_mod.day_expiry(ctx.through).isoformat() if tif == "day" else None,
+        "reduce_only": open_ is not None and open_.side != side and shares <= open_.shares,
         "status": "working",
         "placed_at": ctx.through.isoformat(),
         "triggered_at": None,
@@ -1501,11 +1292,12 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
         out = _place(db, ctx, {"kind": entry, "shares": shares}, svc)
         _close_order(record, "filled", ctx.through, price=out["mark"]["price"], mark_id=out["mark"]["id"])
     else:
+        _check_held_cap(db, row)
         _check_can_work(db, ctx, side, shares, limit if limit is not None else trigger)
         out = {
             "mark": None,
             "open_trade": _open_trade(ctx, found[0]),
-            "journal": _journal(ctx, found[0], final=False),
+            "journal": _journal(ctx, found[0]),
             "warning": None,
         }
     row.orders = [*(row.orders or []), record]
@@ -1517,37 +1309,19 @@ def place_order(db: Session, user_id: int, session_id: int, svc: Services, body:
 def _check_can_work(db: Session, ctx: Ctx, side: str, shares: int, reference: float | None) -> None:
     """The rule a working order must pass now: the shares it would open, at its own price (a stop is priced at its
     trigger), fit the free cash as the position stands. The same rule runs again when it fills."""
-    row = ctx.row
     assert reference is not None
-    if ctx.swing:
-        thread = swing_play.lock_thread(db, row.thread_id)
-        rows = hold_rows.load(db, thread.id, lock=True)
-        mine = next((r for r in rows if r.symbol == row.symbol and r.status == "open"), None)
-        take, rest = journal_mod.fill_split(
-            None if mine is None else mine.side, 0 if mine is None else mine.shares, side, shares
-        )
-        if rest:
-            try:
-                positions_mod.check_buying_power(
-                    shares=rest,
-                    price=reference,
-                    free_cash_usd=_swing_free_cash(db, row, thread, rows, mine, take, reference),
-                )
-            except positions_mod.HoldProblem as exc:
-                raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
-        return
     open_ = journal_mod.assemble(ctx.marks)[1]
     take, rest = journal_mod.fill_split(
         None if open_ is None else open_.side, 0 if open_ is None else open_.shares, side, shares
     )
     if rest:
-        _check_day_buying_power(db, row, rest, reference, closing=open_ if take else None, take=take)
+        _check_buying_power(db, ctx.row, rest, reference, closing=open_ if take else None, take=take)
 
 
 def cancel_order(db: Session, user_id: int, session_id: int, order_id: int, svc: Services) -> dict[str, Any]:
     """Cancel a working order. 404 for an unknown order, 409 for one that is no longer working."""
     get_row(db, user_id, session_id)  # 404 before any lock for a stranger
-    _lock_day_list(db, session_id)
+    thread = _lock_thread(db, session_id)
     row = get_row(db, user_id, session_id, lock=True)
     orders = [dict(o) for o in row.orders or []]
     target = next((o for o in orders if o["id"] == order_id), None)
@@ -1555,20 +1329,80 @@ def cancel_order(db: Session, user_id: int, session_id: int, order_id: int, svc:
         raise SessionNotFound(order_id)
     if target["status"] != "working":
         raise ReplayProblem("That order is no longer working", path="kind", status=409)
-    _close_order(target, "cancelled", _ts(row.revealed_through))
+    at = _ts(thread.clock_at) if thread is not None and thread.clock_at is not None else _ts(row.revealed_through)
+    _close_order(target, "cancelled", at)
     row.orders, row.updated_at = orders, svc.now()
     db.flush()
     return {"order": target, "orders": orders}
 
 
-def _expire_orders(row: ReplaySession, at: pd.Timestamp) -> None:
-    """A day order lives for the day: when the session ends, what still waits is cancelled."""
-    if any(o["status"] == "working" for o in row.orders or []):
-        orders = [dict(o) for o in row.orders]
+def apply_fill(db: Session, svc: Services, lane_id: int, order_id: int, fill: orders_mod.Fill) -> Mark | None:
+    """Book a working order the thread's clock proved (`clock.advance_thread`): an ordinary Buy or Sell mark stamped at
+    the fill's bar close and priced at the fill, in the lane's one book, at the account's cash as it is NOW (two fills
+    of one move compete for one balance: the earlier wins, the later is cancelled with the cash reason). A reduce-only
+    order fills `min(order, position)` and is cancelled "Position already closed" when the position is gone. The caller
+    holds the thread lock; this takes the lane's. None when the order was cancelled instead of filled."""
+    row = db.execute(select(ReplaySession).where(ReplaySession.id == lane_id).with_for_update()).scalar_one()
+    orders = [dict(o) for o in row.orders or []]
+    order = next((o for o in orders if o["id"] == order_id and o["status"] == "working"), None)
+    if order is None:
+        return None
+    ctx = context(db, svc, row)
+    open_ = journal_mod.assemble(ctx.marks)[1]
+    shares = order["shares"]
+    if order.get("reduce_only"):
+        shares = orders_mod.reduce_shares(
+            shares, _side_of(order), None if open_ is None else open_.side, 0 if open_ is None else open_.shares
+        )
+        if shares == 0:
+            _close_order(order, "cancelled", fill.at, reason=POSITION_CLOSED)
+            row.orders, row.updated_at = orders, svc.now()
+            db.flush()
+            return None
+    ctx.filling = order_id  # its cash reserve is released as it fills; the other working orders still hold cash back
+    try:
+        with db.begin_nested():
+            out = _place(db, ctx, {"kind": _entry_kind_of(order), "shares": shares}, svc, fill=fill)
+    except ReplayProblem as exc:
+        _close_order(order, "cancelled", fill.at, reason=exc.message)
+        row.orders, row.updated_at = orders, svc.now()
+        db.flush()
+        return None
+    finally:
+        ctx.filling = None
+    _close_order(order, "filled", fill.at, price=fill.price, mark_id=out["mark"]["id"])
+    row.orders, row.updated_at = orders, svc.now()
+    db.flush()
+    return next(m for m in ctx.marks if m.id == out["mark"]["id"])
+
+
+def expire_orders(row: ReplaySession, until: pd.Timestamp, now: datetime) -> None:
+    """Cancel the lane's working Day orders whose session ended at or before `until`: "Expired", stamped at the
+    session's extended close. The market's rule, not a practice rule: a GTC order never expires, and a Day order a
+    fill reached first is already filled."""
+    orders = [dict(o) for o in row.orders or []]
+    changed = False
+    for order in orders:
+        if order["status"] == "working" and order.get("tif") == "day" and _ts(order["expires_at"]) <= until:
+            _close_order(order, "cancelled", _ts(order["expires_at"]), reason=ORDER_EXPIRED)
+            changed = True
+    if changed:
+        row.orders, row.updated_at = orders, now
+
+
+def cancel_working(db: Session, thread_id: int, at: pd.Timestamp, reason: str, now: datetime) -> int:
+    """Cancel every working order of every lane of the thread, stamped at `at` (closing a thread). Returns how many."""
+    count = 0
+    for row in lanes(db, thread_id, active=True):
+        orders = [dict(o) for o in row.orders or []]
         for order in orders:
             if order["status"] == "working":
-                _close_order(order, "cancelled", at, reason="The day ended")
-        row.orders = orders
+                _close_order(order, "cancelled", at, reason=reason)
+                count += 1
+        if count:
+            row.orders, row.updated_at = orders, now
+    db.flush()
+    return count
 
 
 def _order_price(order: dict[str, Any]) -> float:
@@ -1597,298 +1431,6 @@ def _reserved_cash(
     return total
 
 
-def _day_free_cash(db: Session, row: ReplaySession, skip: int | None = None) -> float:
-    """A day session's buying power: its account's balance (the starting balance plus every booked trade; a day trade is
-    booked when it exits) less the entry notional of the open positions, this name's included (what she already holds
-    in it is cash spent), less the cash its working orders hold back (`_reserved_cash`; `skip` is the order of this
-    session that is filling now). Like the swing rule, a short's notional counts as a long's.
-
-    A thread session's account is the thread's. A standalone session (no thread) has an account of its own, the default
-    starting balance of a thread plus the session's own closed trades, so the same cash rule is the only size rule on
-    every path; nothing is booked from it and each attempt starts from the same balance."""
-    skipped = None if skip is None else (row.id, skip)
-    thread = None if row.thread_id is None or row.day_list_id is None else db.get(PracticeThread, row.thread_id)
-    if thread is None:
-        closed, open_ = journal_mod.assemble(_marks_of(_load_marks(db, row.id)))
-        held = 0.0 if open_ is None else open_.entry_price * open_.shares
-        realized = journal_mod.usd_sum([journal_mod.trade_pnl(t) for t in closed])
-        reserved = _reserved_cash([row], lambda _: (None, 0) if open_ is None else (open_.side, open_.shares), skipped)
-        return round(DEFAULT_STARTING_BALANCE + realized - held - reserved, 2)
-    return day_buying_power(db, thread, row.day_list_id, skipped)
-
-
-def day_buying_power(
-    db: Session,
-    thread: PracticeThread,
-    day_list_id: int,
-    skipped: tuple[int, int] | None = None,
-    books: dict[int, tuple[list[journal_mod.Trade], journal_mod.Trade | None]] | None = None,
-) -> float:
-    """A day thread's buying power on one of its days: the thread's balance less the entry notional of the day's open
-    positions and less the cash its working orders hold back. The one figure the cash check enforces (`_day_free_cash`)
-    and the Summary shows (`clock._account`, which passes the `books` it already read)."""
-    books = day_books(db, day_list_id) if books is None else books
-    opens = {sid: open_ for sid, (_, open_) in books.items() if open_ is not None}
-    held = sum(t.entry_price * t.shares for t in opens.values())
-    reserved = _reserved_cash(
-        _sessions_of_day(db, day_list_id),
-        lambda s: (None, 0) if s.id not in opens else (opens[s.id].side, opens[s.id].shares),
-        skipped,
-    )
-    return round(_threads().balance(db, thread) - held - reserved, 2)
-
-
-def _check_day_buying_power(
-    db: Session,
-    row: ReplaySession,
-    shares: int,
-    price: float,
-    *,
-    closing: journal_mod.Trade | None = None,
-    take: int = 0,
-    skip: int | None = None,
-) -> None:
-    """The cash rule for the `shares` a fill opens or adds. A flip (`closing`, `take` shares of it closed first) closes
-    the whole position before it opens the other way, so that notional comes back to the cash along with the closed
-    shares' P/L. `skip`: the working order of this session that is filling now (its reserve is released)."""
-    free = _day_free_cash(db, row, skip)
-    if closing is not None and take:
-        gain = journal_mod.pnl_usd(closing.sign, closing.entry_price, price, take)
-        free = round(free + closing.entry_price * closing.shares + gain, 2)
-    try:
-        positions_mod.check_buying_power(shares=shares, price=price, free_cash_usd=free)
-    except positions_mod.HoldProblem as exc:
-        raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
-
-
-def _swing_free_cash(
-    db: Session,
-    row: ReplaySession,
-    thread: PracticeThread,
-    rows: list[PracticeHold],
-    mine: PracticeHold | None,
-    take: int,
-    price: float,
-    skip: int | None = None,
-) -> float:
-    """A swing fill's free cash for the shares it opens: the thread's free cash with this name's hold still open, less
-    the cash the day's working orders hold back (`_reserved_cash`; `skip` is the order of this session filling now),
-    plus, when the fill flips the hold (`take` shares close the whole hold first), the hold's notional and the closed
-    P/L."""
-    free = _threads().free_cash(db, thread, rows, row.day)
-
-    def held_of(session: ReplaySession) -> tuple[str | None, int]:
-        hold = next((r for r in rows if r.symbol == session.symbol and r.status == "open"), None)
-        return (None, 0) if hold is None else (hold.side, hold.shares)
-
-    free = round(
-        free
-        - _reserved_cash(
-            [row] if row.day_list_id is None else _sessions_of_day(db, row.day_list_id),
-            held_of,
-            None if skip is None else (row.id, skip),
-        ),
-        2,
-    )
-    if mine is not None and take:
-        gain = journal_mod.pnl_usd(1 if mine.side == "long" else -1, float(mine.entry_price), price, take)
-        free = round(free + float(mine.entry_price) * mine.shares + gain, 2)
-    return free
-
-
-def _place_swing_mark(
-    db: Session, ctx: Ctx, body: dict[str, Any], svc: Services, *, fill: orders_mod.Fill | None = None
-) -> dict[str, Any]:
-    """`place_mark` for a swing session (02p b2): the mark stays a per-session annotation, the practice HOLD is the
-    record. The name's open hold is its average-cost position (ADR-0016): a Buy or Sell adds to it
-    (`hold_rows.scale_in`), sells part of it (`split_off`: the slice closes at the hold's cost, the rest stays open), or
-    closes it and opens the other way (a flip); Close position closes the whole hold at the revealed price. A stop
-    moves the position's line (and clears the pause flag). No ledger row is written here: the day's end credits the
-    holds that exited on it (R9). Lock order: the day list and the session (the caller), then the thread, then its
-    holds."""
-    row, kind, now = ctx.row, body["kind"], svc.now()
-    price = warning = None
-    at = ctx.through if fill is None else fill.at
-    if fill is not None:
-        price = fill.price
-    elif kind != "note":
-        found = last_price(ctx, ctx.through)
-        if found is None:
-            raise ReplayProblem(swing_play.NOT_OPEN, path="kind")
-        price = found[0]
-        age = _age_s(found, ctx.through)
-        if ctx.feed != "off" and age is not None and age >= STALE_PRINT_S:  # a one-minute close is not a print
-            warning = f"Priced off a print {age} s old · the tape has been quiet"
-    thread = swing_play.lock_thread(db, row.thread_id)
-    rows = hold_rows.load(db, thread.id, lock=True)
-    mine = next((r for r in rows if r.symbol == row.symbol and r.status == "open"), None)
-    stop_price = body.get("stopPrice")
-    shares = None
-    position_before = closed_row = target = None
-    take = rest = 0
-    try:
-        if kind in ENTRY_KINDS:
-            side = "long" if kind == "long_entry" else "short"
-            shares = body.get("shares") or row.spec["shares"]
-            take, rest = journal_mod.fill_split(
-                None if mine is None else mine.side, 0 if mine is None else mine.shares, side, shares
-            )
-            if rest:
-                positions_mod.check_buying_power(
-                    shares=rest,
-                    price=price,
-                    free_cash_usd=_swing_free_cash(db, row, thread, rows, mine, take, price, ctx.filling),
-                )
-            stays = side if rest else (mine.side if mine is not None and take < mine.shares else None)
-            if stop_price is not None and stays is not None:
-                holds_mod.check_stop(stays, stop_price, price)
-        elif kind in EXIT_KINDS:
-            if mine is None or mine.side != ("long" if kind == "long_exit" else "short"):
-                raise positions_mod.HoldProblem("No open practice hold to exit")
-            take = mine.shares
-        elif kind == "stop":
-            if mine is None:
-                raise positions_mod.HoldProblem("Open a practice hold before setting a stop")
-            holds_mod.check_stop(mine.side, stop_price, price)
-        mark = PracticeMark(
-            session_id=row.id,
-            seq=(ctx.marks[-1].seq if ctx.marks else 0) + 1,
-            kind=kind,
-            at=at.to_pydatetime(),
-            price=price,
-            shares=shares,
-            stop_price=stop_price,
-            note=body.get("note"),
-            trade_no=None,
-            source="her",
-            created_at=now,
-        )
-        db.add(mark)
-        row.updated_at = now
-        db.flush()
-        if take:  # the shares a fill (or Close position) closes: the whole hold, or a slice of it
-            if take == mine.shares:
-                hold_rows.apply(
-                    mine, holds_mod.exit_hold(hold_rows.to_hold(mine), day=row.day, at=at, price=price, source="her")
-                )
-                mine.exit_session_id, mine.exit_mark_id = row.id, mark.id
-                closed_row, mine = mine, None
-                db.flush()  # the name has no open hold now: a flip may open the next
-            else:
-                closed_row = hold_rows.split_off(
-                    db, mine, shares=take, day=row.day, at=at, price=price, session_id=row.id, mark_id=mark.id, now=now
-                )
-        if rest:
-            if mine is None:
-                mine = hold_rows.add_entry(
-                    db,
-                    thread,
-                    symbol=row.symbol,
-                    side="long" if kind == "long_entry" else "short",
-                    shares=rest,
-                    day=row.day,
-                    at=at,
-                    price=price,
-                    stop=stop_price,
-                    session_id=row.id,
-                    mark_id=mark.id,
-                    now=now,
-                )
-            else:
-                position_before = hold_rows.scale_in(mine, shares=rest, price=price, stop=stop_price, now=now)
-        elif kind == "stop":
-            hold_rows.apply(mine, holds_mod.set_stop(hold_rows.to_hold(mine), stop_price))
-        elif kind in ENTRY_KINDS and stop_price is not None and mine is not None:  # a sale that left the hold open
-            # Taken after the slice came off: the undo restores this, then puts the slice back.
-            position_before = hold_rows.snapshot(mine)
-            hold_rows.apply(mine, holds_mod.set_stop(hold_rows.to_hold(mine), stop_price))
-        target = mine if mine is not None else (closed_row if take else None)
-        if target is not None and kind != "note":
-            mark.trade_no, mark.position_before = target.id, position_before
-            if mine is not None:
-                mine.updated_at = now
-        db.flush()
-    except positions_mod.HoldProblem as exc:
-        raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
-    ctx.marks = _marks_of(_load_marks(db, row.id))
-    shown = price if price is not None else _price_or_none(ctx)
-    return {
-        "mark": mark_out(next(m for m in ctx.marks if m.seq == mark.seq)),
-        "open_trade": _open_trade(ctx, shown),
-        "journal": _journal(ctx, shown, final=False),
-        "warning": warning,
-        "hold": None if target is None else swing_play.hold_out(ctx, target, shown),
-    }
-
-
-def _check_reopen(
-    db: Session, thread: PracticeThread, rows: list[PracticeHold], reopened: PracticeHold, day: date
-) -> None:
-    """Undoing an exit puts its shares back among the open ones (as a hold of their own, or as shares of the name's open
-    hold), so they have to pass the cash rule again against the thread's other holds: another name may have spent the
-    cash since the exit (the shared day clock lets a second name mark at the same moment). 409, nothing is written."""
-    others = [r for r in rows if r is not reopened]
-    try:
-        positions_mod.check_buying_power(
-            shares=reopened.shares,
-            price=float(reopened.entry_price),
-            free_cash_usd=_threads().free_cash(db, thread, others, day),
-        )
-    except positions_mod.HoldProblem:
-        raise ReplayProblem(
-            "Can't undo that exit · it would leave you without enough practice cash", path="kind", status=409
-        ) from None
-
-
-def _undo_swing_mark(db: Session, ctx: Ctx, target: Mark) -> dict[str, Any]:
-    """`undo_mark` for a swing session (02p b2): undo the last mark's two halves in reverse. What it OPENED goes first:
-    a hold it created is deleted, a scale-in is restored from the hold the mark recorded (`position_before`). What it
-    CLOSED comes back second: a hold it closed whole is reopened, a slice it closed (a partial exit) rejoins the open
-    hold, and either must still fit the cash rule (nothing was credited yet). Undoing a stop puts the previous stop
-    back and recomputes whether that stop was already crossed."""
-    row, now = ctx.row, ctx.svc.now()
-    thread = swing_play.lock_thread(db, row.thread_id)
-    rows = hold_rows.load(db, thread.id, lock=True)
-    mine = next((r for r in rows if r.symbol == row.symbol and r.status == "open"), None)
-    try:
-        if target.kind in ENTRY_KINDS or target.kind in EXIT_KINDS:
-            if (entered := next((r for r in rows if r.entry_mark_id == target.id), None)) is not None:
-                hold_rows.delete(db, entered)  # a hold this mark opened
-                rows, mine = [r for r in rows if r is not entered], None
-            elif (before := db.get(PracticeMark, target.id).position_before) is not None and mine is not None:
-                hold_rows.restore(mine, before, now)  # a scale-in
-            if (
-                closed := next((r for r in rows if r.exit_mark_id == target.id and r.status == "closed"), None)
-            ) is not None:
-                _check_reopen(db, thread, rows, closed, row.day)
-                if mine is not None and closed.part_exit:
-                    hold_rows.merge_back(db, mine, closed, now)  # a slice of a partial exit
-                else:
-                    hold_rows.reopen(db, closed)
-                    mine = closed
-        elif target.kind == "stop" and mine is not None:
-            stop, set_at = swing_play.previous_stop(db, mine, target.id)
-            restored = replace(hold_rows.to_hold(mine), stop_price=stop, stop_hit_at=None)
-            if stop is not None:  # play may already have paused on the old stop: it must not pause on it twice
-                restored = replace(restored, stop_hit_at=swing_play.crossing_since(ctx, restored, set_at))
-            hold_rows.apply(mine, restored)
-    except positions_mod.HoldProblem as exc:
-        raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
-    if mine is not None:
-        mine.updated_at = row.updated_at = now
-    db.delete(db.get(PracticeMark, target.id))
-    row.updated_at = now
-    db.flush()
-    ctx.marks = [m for m in ctx.marks if m.id != target.id]
-    price = _price_or_none(ctx)
-    return {
-        "removed_mark_id": target.id,
-        "open_trade": _open_trade(ctx, price),
-        "journal": _journal(ctx, price, final=False),
-        "hold": None if mine is None else swing_play.hold_out(ctx, mine, price),
-    }
-
-
 def _price_or_none(ctx: Ctx) -> float | None:
     found = last_price(ctx, ctx.through)
     return None if found is None else found[0]
@@ -1906,7 +1448,7 @@ def _check_stop_side(is_long: bool, stop_price: float, price: float | None) -> N
 def undo_mark(db: Session, user_id: int, session_id: int, mark_id: int, svc: Services) -> dict[str, Any]:
     """Remove the last mark, only while the playhead has not moved since it was placed (else 409)."""
     get_row(db, user_id, session_id)  # 404 before any lock for a stranger
-    day_list = _lock_day_list(db, session_id)  # the lock order: day list, session (, thread)
+    thread = _lock_thread(db, session_id)  # the lock order: thread, lane
     row = get_row(db, user_id, session_id, lock=True)
     ctx = context(db, svc, row)
     target = next((m for m in ctx.marks if m.id == mark_id), None)
@@ -1918,12 +1460,10 @@ def undo_mark(db: Session, user_id: int, session_id: int, mark_id: int, svc: Ser
         raise ReplayProblem("Only the last mark can be undone, before the replay moves on", path="kind", status=409)
     # The shared day clock is the playhead too: another name's advance past this mark seals it (no peeking at the open
     # position's P/L on the Portfolio, then undoing the entry).
-    clock = None if day_list is None or day_list.revealed_through is None else _ts(day_list.revealed_through)
+    clock = None if thread is None or thread.clock_at is None else _ts(thread.clock_at)
     if clock is not None and clock > target.at:
         raise ReplayProblem("Only the last mark can be undone, before the replay moves on", path="kind", status=409)
-    if ctx.swing:
-        return _undo_swing_mark(db, ctx, target)
-    free_before = _day_free_cash(db, row)
+    free_before = _lane_free_cash(db, row)
     db.delete(db.get(PracticeMark, mark_id))
     row.updated_at = svc.now()
     row.stop_hit_at = None
@@ -1931,7 +1471,7 @@ def undo_mark(db: Session, user_id: int, session_id: int, mark_id: int, svc: Ser
     # Undoing an exit or a sale puts its shares back among the open ones (and its ledger row goes), so they pass the
     # cash rule again as the other names stand: another name may have spent the cash since (the shared day clock lets
     # a second name mark at the same moment). 409, and the request's transaction rolls the delete back.
-    free_after = _day_free_cash(db, row)
+    free_after = _lane_free_cash(db, row)
     if free_after < 0 and free_after < free_before:
         raise ReplayProblem(
             "Can't undo that · it would leave you without enough practice cash", path="kind", status=409
@@ -1941,85 +1481,59 @@ def undo_mark(db: Session, user_id: int, session_id: int, mark_id: int, svc: Ser
     return {
         "removed_mark_id": mark_id,
         "open_trade": _open_trade(ctx, price),
-        "journal": _journal(ctx, price, final=False),
+        "journal": _journal(ctx, price),
+    }
+
+
+# -- the Portfolio ---------------------------------------------------------------------------------------------
+
+
+def portfolio(db: Session, svc: Services, thread: PracticeThread) -> dict[str, Any]:
+    """The thread's Portfolio at its time T (`GET /threads/{id}/portfolio`): every open position across the lanes at its
+    `mark_at` price, the working orders, and the account. One read of the book, one price function (ADR-0025 R8): what
+    a position was worth a month ago or a Jump ago is not stored anywhere, it is this read at the new T."""
+    from ai_trading.replay import threads as threads_mod
+
+    base = {"thread_id": thread.id, "label": threads_mod.SIMULATED_LABEL}
+    if thread.clock_at is None:
+        return {**base, "as_of": None, "positions": [], "orders": [], "account": None}
+    clock = _ts(thread.clock_at)
+    books = book(db, thread.id)
+    held = positions(db, svc, thread.id, clock, books)
+    rows = [
+        {
+            "session_id": p.row.id,
+            "symbol": p.row.symbol,
+            "side": p.trade.side,
+            "shares": p.trade.shares,
+            "avg_cost": p.trade.entry_price,
+            "price": p.price,
+            "price_at": p.price_at,
+            "price_age_s": None if p.price_at is None else max(0, int((clock - p.price_at).total_seconds())),
+            "unrealized_usd": p.trade.unrealized(p.price),
+            "stop_price": p.trade.stops[-1][1] if p.trade.stops else None,
+            "stop_hit_at": p.row.stop_hit_at,
+            "entry_at": p.trade.entry_at,
+            "held_for_s": max(0, int((clock - p.trade.entry_at).total_seconds())),
+        }
+        for p in held
+    ]
+    working = [
+        {"session_id": lane.id, "symbol": lane.symbol, **order}
+        for lane in lanes(db, thread.id, active=True)
+        for order in lane.orders or []
+        if order["status"] == "working"
+    ]
+    return {
+        **base,
+        "as_of": clock,
+        "positions": rows,
+        "orders": working,
+        "account": account(db, svc, thread, clock, books, held),
     }
 
 
 # -- end and patch -------------------------------------------------------------------------------------------
-
-
-def end(db: Session, user_id: int, session_id: int, svc: Services, *, via_day: bool = False) -> dict[str, Any]:
-    """Auto-exit an open trade at the price at the DAY CLOCK (the window end for a standalone session), reveal the whole
-    window, store the final journal. Idempotent. Every open trade of the day is flattened this way, each at the same
-    clock, so an early End day books the price she sees, not the close.
-
-    A day-list session ends only with its day (`via_day`): unsealing one name's window would show the market's
-    direction to every other name practised that day."""
-    row = get_row(db, user_id, session_id, lock=True)
-    ctx = context(db, svc, row)
-    if row.status == "ended":
-        return session_out(ctx)
-    if row.day_list_id is not None and not via_day:
-        raise ReplayProblem("End the day to score this session", path="kind", status=409)
-    if row.day_list_id is not None and not ctx.swing and ctx.day_clock is not None:
-        # A resting order the tape reached while she was on another name (the thread's clock runs without her) fills at
-        # its bar before the day ends, never past the day clock; only what the clock never reached is cancelled below.
-        clock = min(ctx.day_clock, ctx.window_end)
-        if ctx.through < clock:
-            previous, ctx.through = ctx.through, clock
-            row.revealed_through = clock.to_pydatetime()
-            _fill_working_orders(db, ctx, previous, clock)
-    ctx.through = ctx.window_end
-    # An ended session keeps the end it revealed to (a session saved before the close rule had her old mark stored).
-    row.revealed_through = row.window_end = ctx.window_end.to_pydatetime()
-    _expire_orders(row, ctx.window_end)
-    # A swing day never auto-exits (a hold rides overnight) and books nothing here: the day's end credits the holds
-    # that exited on it (02p b3), and a swing session may have no tape to price an exit from.
-    exit_at = ctx.window_end if ctx.day_clock is None else min(ctx.day_clock, ctx.window_end)
-    found = None if ctx.swing else last_price(ctx, exit_at)
-    _, open_ = journal_mod.assemble(ctx.marks)
-    if open_ is not None and not ctx.swing:
-        # No price at the clock (a provider outage with no revealed bar) must not leave the trade unbooked: the day's
-        # P/L would silently lose it. It exits flat at its entry, the way `positions` carries a name with no price.
-        exit_price = open_.entry_price if found is None else found[0]
-        db.add(
-            PracticeMark(
-                session_id=row.id,
-                seq=(ctx.marks[-1].seq if ctx.marks else 0) + 1,
-                kind="long_exit" if open_.side == "long" else "short_exit",
-                at=exit_at.to_pydatetime(),
-                price=exit_price,
-                trade_no=open_.no,
-                source="auto",
-                created_at=svc.now(),
-            )
-        )
-        db.flush()
-        ctx.marks = _marks_of(_load_marks(db, row.id))
-    if not ctx.swing:
-        ledger_mod.book(db, row, journal_mod.assemble(ctx.marks)[0], svc.now())
-    price = None if found is None else found[0]
-    row.journal = jsonable(_journal(ctx, price, final=True))
-    row.stop_hit_at = None
-    row.status = "ended"
-    row.ended_at = row.updated_at = svc.now()
-    db.flush()
-    return session_out(ctx)
-
-
-def refresh_journal(db: Session, user_id: int, session_id: int, svc: Services) -> None:
-    """Rescore an ended session's final journal. Ending a day ends its sessions one after another, so a session ended
-    first scored the day rules (max loss, trade limit) before its siblings' last exits existed; the day does this
-    once they have all ended."""
-    row = get_row(db, user_id, session_id, lock=True)
-    if row.status != "ended":
-        return
-    ctx = context(db, svc, row)
-    if ctx.swing:  # the holds that closed in it are final once it has ended; the adherence is scored weekly
-        return
-    ctx.through = ctx.window_end
-    row.journal = jsonable(_journal(ctx, None, final=True))
-    db.flush()
 
 
 def patch(

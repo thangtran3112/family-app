@@ -14,8 +14,9 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_serializer, model_validator
 
 from ai_trading.api.schemas.common import MarketOut, Stamp, SwingOptional
-from ai_trading.api.schemas.threads import ThreadBriefOut, ThreadSummaryOut
+from ai_trading.api.schemas.threads import ClockAccountOut, ThreadBriefOut
 from ai_trading.contracts.practice_block import PracticeBlockV1
+from ai_trading.contracts.practice_setup import PracticeSetupV2
 from ai_trading.contracts.replay_session import ReplaySessionV1
 
 Interval = Literal["1m", "5m", "15m"]
@@ -25,36 +26,16 @@ ArmedSource = Literal["alert_strategy", "filter"]
 Bias = Literal["bullish", "bearish", "neutral"]
 NotableTag = Literal["gap_up", "gap_down", "heavy_volume", "earnings"]
 Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri"]
-MarkKind = Literal["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note"]
+MarkKind = Literal["long_entry", "short_entry", "long_exit", "short_exit", "stop", "note", "split"]
 Side = Literal["long", "short"]
 OrderSide = Literal["buy", "sell"]  # a buy is a long entry, a sell is a short entry
 WorkingOrderType = Literal["limit", "stop", "stop_limit"]  # a market entry is a mark (`POST .../marks`)
 OrderStatus = Literal["working", "filled", "cancelled"]
+TimeInForce = Literal["gtc", "day"]  # good till cancelled (the default) or Day: expires at its session's extended close
 PaceBand = Literal["quiet", "steady", "busy", "frantic"]
 
 
 # -- days ---------------------------------------------------------------------------------------------------
-
-
-class ReplayDayOut(BaseModel):
-    """One notable day. Spoiler-free: only what a trader knows at the open (the gap) plus non-directional heat
-    (volatility rank, heavy volume). Never the day's change, range, close, or close location."""
-
-    symbol: str
-    day: date
-    weekday: Weekday
-    rank: int  # 1 = the symbol's most volatile session of the last year
-    rv_pct_rank: FiniteFloat  # 100 * (N - rank) / N over the symbol's last 252 sessions
-    gap_pct: FiniteFloat | None
-    tags: list[NotableTag]
-    attempts: int  # her sessions on this symbol and day
-
-
-class ReplayDaysOut(BaseModel):
-    days: list[ReplayDayOut]
-    symbols: list[str]  # the symbols notable days are listed for (her watchlist symbols)
-    lookback_sessions: int
-    stamp: Stamp
 
 
 # -- marks, trades, journal ----------------------------------------------------------------------------------
@@ -84,6 +65,9 @@ class OrderOut(BaseModel):
     limit_price: FiniteFloat | None
     stop_price: FiniteFloat | None  # the stop leg's trigger
     status: OrderStatus
+    tif: TimeInForce = "day"  # an order stored before ADR-0025 was a Day order
+    expires_at: datetime | None = None  # a Day order's session end (20:00 ET, the extended close); null for GTC
+    reduce_only: bool = False  # derived at placement: closes (part of) the position it was placed against
     placed_at: datetime  # the playhead when it was placed
     triggered_at: datetime | None  # stop-limit: when the stop leg triggered
     closed_at: datetime | None  # when it filled or was cancelled, on the tape's clock
@@ -341,24 +325,6 @@ class ReplaySessionOut(BaseModel):
         return spec.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
-class ReplaySessionSummaryOut(BaseModel):
-    """A row of the hub's Resume card and Recent sessions table."""
-
-    id: int
-    day_list_id: int | None
-    thread_id: int | None
-    symbol: str
-    day: date
-    attempt: int
-    status: SessionStatus
-    revealed_through: datetime
-    window_end: datetime
-    trades: int
-    pnl_usd: FiniteFloat | None
-    adherence_pct: int | None
-    updated_at: datetime
-
-
 class ReplaySessionPatch(BaseModel):
     """PATCH body: notes and the self-rating only."""
 
@@ -570,6 +536,7 @@ class OrderIn(BaseModel):
     shares: int | None = Field(default=None, ge=1)
     limitPrice: float | None = None
     stopPrice: float | None = None
+    timeInForce: TimeInForce = "gtc"
 
 
 class OrderResultOut(SwingOptional):
@@ -602,69 +569,18 @@ class PlanFilterOut(BaseModel):
     name: str
 
 
-class PlanCurrentOut(BaseModel):
-    id: int
-    day_no: int
-    status: DayListStatus
-
-
-class PlanPrepOut(BaseModel):
-    state: Literal["running", "done"]
-    done: int
-    total: int
-    failed: int  # symbols whose bars could not be fetched; they read as no data on the lists
-
-
 class PracticePlanOut(BaseModel):
-    """The saved daily-list plan and its cursor. `next_*` is the day Continue opens (the current one while it is
-    not over); `finished` is true once every day has ended. Dates are returned and hidden by a render rule."""
+    """The thread's saved plan: a `PracticeSetupV2` (a plan saved before ADR-0025 is a `PracticeBlockV1`, served as it
+    was stored without its legacy plan fields) and her filters by name."""
 
     id: int
-    thread_id: int | None  # the practice thread this plan's days book into
-    spec: PracticeBlockV1
-    sessions: int
-    days_opened: int
-    day_offset: int  # ended days the thread had before this plan: a day's number in the thread is `day_no + day_offset`
+    thread_id: int | None  # the practice thread this plan belongs to
+    spec: PracticeSetupV2 | PracticeBlockV1
     filters: list[PlanFilterOut]
-    current: PlanCurrentOut | None
-    next_day: date | None
-    next_weekday: Weekday | None
-    next_day_no: int | None
-    # Every block day's weekday, day_no 1 first: the block ladder labels each of its rows with it.
-    weekdays: list[Weekday]
-    finished: bool
-    prep: PlanPrepOut
 
     @field_serializer("spec")
-    def _spec_as_authored(self, spec: PracticeBlockV1):  # no return annotation: the schema stays `PracticeBlockV1`
+    def _spec_as_authored(self, spec: PracticeSetupV2 | PracticeBlockV1):  # no return annotation: schema unchanged
         return spec.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-
-class DailyOut(BaseModel):
-    """The hub's daily-list card: her plan and cursor, and her active day thread (balance and stats)."""
-
-    plan: PracticePlanOut | None
-    thread: ThreadSummaryOut | None
-
-
-class OpenNextOut(BaseModel):
-    """`day_list_id` is null while the plan's data is still being prepared (poll `GET /replay/daily`) and once every
-    day is done."""
-
-    plan: PracticePlanOut
-    day_list_id: int | None
-
-
-class DayFilterOut(BaseModel):
-    id: int
-    version_id: int  # frozen on the day: editing the filter later never rewrites an old list
-    name: str
-
-
-class DayScreenOut(BaseModel):
-    filters: list[DayFilterOut]
-    list_at: str  # "HH:MM" ET
-    max_list: int
 
 
 class ListFilterCountsOut(BaseModel):
@@ -794,39 +710,18 @@ class StarOut(BaseModel):
     starred_clock: datetime  # the day clock when she starred it (the list time before the day starts)
 
 
-class DaySessionOut(BaseModel):
-    """A name she has opened today: a row of the day's portfolio. Flat unless `position` is set."""
+class LaneBriefOut(BaseModel):
+    """A name in the thread's book: a row of the Screen's lanes. Flat unless `position` is set."""
 
     id: int
     symbol: str
     status: SessionStatus
     revealed_through: datetime
-    behind_clock: bool  # behind the day clock: its next advance catches it up, and it cannot be marked until then
+    behind_clock: bool  # behind the thread's clock: its next sync catches it up, and it cannot be marked until then
     has_open_trade: bool  # the name holds an open position (one average-cost position per name, however many fills)
-    trades: int  # closed trades on this name today
-    realized_usd: FiniteFloat  # the closed trades' P/L (swing sessions report none here: their holds are scored weekly)
-    position: OpenTradeOut | None  # the open trade marked at the DAY CLOCK, not the name's playhead; null when flat
-
-
-class HeldElsewhereOut(BaseModel):
-    """A name open in another day list (another thread's day, a swing day) or in a standalone session, on this day. The
-    one-open-session-per-name-and-day rule refuses it here, so the day list shows it open there, not "not opened"."""
-
-    session_id: int
-    symbol: str
-    day_list_id: int | None  # null: a standalone session (it ends on its own page)
-    thread_id: int | None
-    thread_name: str | None
-
-
-class DayPnlOut(BaseModel):
-    """The day's live P/L, SIMULATED: every name's closed trades plus every open trade marked at the one day clock."""
-
-    realized_usd: FiniteFloat
-    open_usd: FiniteFloat
-    total_usd: FiniteFloat  # realized + open
-    open_count: int  # open trades right now, at most five
-    as_of: datetime  # the day clock (the list time before the day starts)
+    trades: int  # closed trades on this name
+    realized_usd: FiniteFloat  # the closed trades' P/L
+    position: OpenTradeOut | None  # the open trade marked at the THREAD'S TIME, not the name's playhead; null when flat
 
 
 class PeekDailyBarOut(BaseModel):
@@ -867,76 +762,6 @@ class PeekOut(BaseModel):
     levels: PeekLevelsOut
 
 
-class DayJournalSessionOut(BaseModel):
-    id: int
-    symbol: str
-    trades: int
-    pnl_usd: FiniteFloat
-    adherence_pct: int | None
-
-
-class DayTradeLineOut(JournalTradeOut):
-    """One closed practice trade of the day, with the name it was on."""
-
-    symbol: str
-
-
-class DayJournalOut(BaseModel):
-    """The day's practice result, SIMULATED dollars to the cent: one line per closed trade, the win and loss counts
-    (a scratch is neither), and the thread's balance before and after the day (null for a day with no thread)."""
-
-    sessions: list[DayJournalSessionOut]
-    trades: int
-    pnl_usd: FiniteFloat
-    wins: int
-    losses: int
-    scratches: int
-    lines: list[DayTradeLineOut]
-    balance_before: FiniteFloat | None
-    balance_after: FiniteFloat | None
-
-
-class ReviewRowOut(BaseModel):
-    symbol: str
-    list_price: FiniteFloat
-    move_pct: FiniteFloat | None  # from the list price to the yardstick (the regular close: `window_end`)
-    close_price: FiniteFloat | None
-    close_move_pct: FiniteFloat | None
-    high_pct: FiniteFloat | None
-    low_pct: FiniteFloat | None
-    range_pct: FiniteFloat | None
-    rank: int | None  # 1 = the biggest gain from the list price to the regular close; a loss ranks below every gain
-    picked: StarKind | None
-
-
-class SelectionPickOut(BaseModel):
-    symbol: str
-    kind: StarKind
-    move_pct: FiniteFloat
-    rank: int
-
-
-class SelectionOut(BaseModel):
-    """Signed: a loss pulls the median and the average down (D-031 ranked and averaged by size before)."""
-
-    picks: list[SelectionPickOut]
-    median_move_pct: FiniteFloat | None
-    picks_avg_move_pct: FiniteFloat | None
-
-
-class ReviewOut(BaseModel):
-    """Every candidate's move from its list price to the regular close, ranked by the signed move, biggest gain
-    first. `window_end` is the yardstick the moves were measured to (the regular close; a day ended earlier keeps its
-    own). Only present once the day ended. `day` is the finished day's date, always shown
-    (a plan's `hideDates` is accepted and ignored)."""
-
-    day: date
-    window_end: datetime
-    of: int  # candidates with a move
-    rows: list[ReviewRowOut]
-    selection: SelectionOut
-
-
 class WatchCheckOut(BaseModel):
     """ "Traded only names on your watch": data for the screen to render. `traded` is the names she entered a trade on;
     `off_watch` the ones she had not starred. Nothing scores it."""
@@ -948,58 +773,50 @@ class WatchCheckOut(BaseModel):
     label: str
 
 
-class RelistOfferOut(BaseModel):
-    """The in-screen remedy for a list built too early for its filters (D-012): re-list at `list_at` (HH:MM ET), which
-    moves the plan's list time, and the practice window's start with it when `window_from` is set."""
-
-    list_at: str
-    label: str
-    window_from: str | None
+class DayFilterOut(BaseModel):
+    id: int
+    version_id: int  # frozen on the Screen: editing the filter later never rewrites an old scan
+    name: str
 
 
-class DayListOut(BaseModel):
-    """One practice day. Before `status` is `ended` nothing here is later than `data_through` (the list, the stars,
-    Peek) or the day clock; `review` and `journal` are null until then."""
+class ScreenFiltersOut(BaseModel):
+    filters: list[DayFilterOut]
+    max_list: int
+
+
+class ScreenOut(BaseModel):
+    """The thread's Screen (ADR-0025): her filters evaluated at the thread's time `as_of`, her stars, and the names she
+    holds. Nothing here is later than `data_through` (the list, the stars, Peek) or the clock."""
 
     id: int
+    thread_id: int
     plan: PracticePlanOut
-    day: date
+    day: date  # the data day of `as_of`: a label of the bars the scan read
     weekday: Weekday
-    day_no: int
-    of: int
-    status: DayListStatus
-    list_at: datetime
+    as_of: datetime
     data_through: datetime
-    screen: DayScreenOut
+    screen: ScreenFiltersOut
     universe: ListUniverseOut
     columns: list[ListColumnOut]
     candidates: list[CandidateOut]
-    list_pending: bool = False  # the clock is before `list_at`: the list is not out (no names or counts), none opens
     watch: list[StarOut]
-    clock: datetime | None
-    thread_time: datetime | None = None  # the thread's one instant T (the clock, after it was settled); null once ended
-    market: MarketOut | None = None  # the phase at `thread_time`; `last_bar_at` is null here (a name's frame names it)
-    sessions: list[DaySessionOut]
-    held_elsewhere: list[HeldElsewhereOut]
-    day_pnl: DayPnlOut
+    clock: datetime
+    market: MarketOut | None = None  # the phase at `clock`; `last_bar_at` is null here (a name's frame names it)
+    lanes: list[LaneBriefOut]
     watch_check: WatchCheckOut
-    thread: ThreadBriefOut | None  # the SIMULATED balance and today's realized P/L of the thread this day books into
+    thread: ThreadBriefOut | None
     warnings: list[str]
-    relist: RelistOfferOut | None
-    rescan: RescanOut | None  # the latest re-scan at the day clock (it repopulated this list); null until she runs one
+    rescan: RescanOut | None  # the latest re-scan (it repopulated the Screen); null until she runs one
     rescan_job: RescanJobOut | None  # the re-scan in flight or last run: the screen polls it while it is running
     peek: PeekOut | None
-    journal: DayJournalOut | None
-    review: ReviewOut | None
     notes: str | None
     rating: int | None
     created_at: datetime
-    ended_at: datetime | None
     stamp: Stamp
 
 
-class DayListPatch(BaseModel):
-    """PATCH body: the stars (at most 20 names from the list), notes, and the self-rating. A key left out is left
+class ScreenPatch(BaseModel):
+    """PATCH body: the stars (at most 20 names from the Screen), notes, and the self-rating. A key left out is left
     alone; `null` clears notes and rating."""
 
     watch: list[str] | None = Field(default=None, max_length=20)
@@ -1007,14 +824,44 @@ class DayListPatch(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=5)
 
 
-class DayRelistIn(BaseModel):
-    """POST body: the list time to re-list at, "HH:MM" ET. The plan's rules apply (422)."""
-
-    listAt: str = Field(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
-
-
-class DaySessionIn(BaseModel):
+class LaneIn(BaseModel):
     symbol: str = Field(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")
+
+
+class PortfolioPositionOut(BaseModel):
+    """An open position at the thread's time: its average cost, its price AT THAT TIME (`mark_at`, never the cost
+    unless the name has no price at all: then `price_at` is null), the gain or loss, and how long it has been held."""
+
+    session_id: int
+    symbol: str
+    side: Side
+    shares: int
+    avg_cost: FiniteFloat
+    price: FiniteFloat
+    price_at: datetime | None
+    price_age_s: int | None  # seconds from that print to the thread's time (a name that did not trade for days)
+    unrealized_usd: FiniteFloat
+    stop_price: FiniteFloat | None
+    stop_hit_at: datetime | None  # the stop line is an alert, never an exit
+    entry_at: datetime
+    held_for_s: int
+
+
+class PortfolioOrderOut(OrderOut):
+    session_id: int
+    symbol: str
+
+
+class PortfolioOut(BaseModel):
+    """`GET /threads/{id}/portfolio`: every open position across the thread's lanes at its time, the working orders and
+    the account. Jump a month ahead and the first read prices every holding at the new time."""
+
+    thread_id: int
+    as_of: datetime | None
+    positions: list[PortfolioPositionOut]
+    orders: list[PortfolioOrderOut]
+    account: ClockAccountOut | None
+    label: str
 
 
 # -- the recorded universe (02o-b2) ----------------------------------------------------------------------------
