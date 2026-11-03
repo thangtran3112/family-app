@@ -435,3 +435,28 @@ def test_two_threads_of_one_owner_can_hold_the_same_name_on_the_same_data_day(db
         text("select indexdef from pg_indexes where indexname = 'uq_replay_sessions_owner_user_id_symbol_day_active'")
     ).scalar_one()
     assert "thread_id IS NULL" in definition
+
+
+def test_a_lane_left_behind_by_a_jump_reads_at_the_threads_time_and_catches_up_on_sync(
+    db_session, user_id, svc
+) -> None:
+    thread = start(db_session, user_id, svc)
+    gapper = lane(db_session, user_id, svc, thread, "GAPPER")
+    mark(db_session, user_id, svc, gapper, "long_entry", shares=100)
+    jump(db_session, user_id, svc, thread, at(2, "12:00"))
+
+    seen = session_mod.feed(
+        db_session, user_id, gapper.id, svc, interval="5m"
+    )  # the lane's own playhead is still Monday
+    assert seen["thread_time"] == at(2, "12:00") and seen["behind_clock"] is True
+    assert (
+        seen["last"]["price"] == 100.0 and seen["open_trade"]["unrealized_usd"] == -1000.0
+    )  # marked at T, not at cost
+    state = session_mod.session_out(session_mod.context(db_session, svc, gapper))
+    assert state["behind_clock"] is True and state["open_trade"]["last_price"] == 100.0
+
+    frame = sync(db_session, user_id, svc, gapper)
+    assert frame["behind_clock"] is False and frame["revealed_through"] == at(2, "12:00")
+    db_session.refresh(gapper)
+    start_, end_ = session_mod.spans_of(gapper.away)[-1]  # joins the span before it (the lane opened at 10:00)
+    assert start_ <= at(0, "10:00") and end_ == at(2, "12:00")
