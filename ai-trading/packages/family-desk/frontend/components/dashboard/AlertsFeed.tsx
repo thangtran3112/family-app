@@ -3,7 +3,7 @@
 import { useDeskStatus } from "@/components/shell/desktop/DeskContext";
 import { Button } from "@/components/ui/Button";
 import { EmptyBlock, QueryBoundary } from "@/components/ui/StateBlocks";
-import { formatEtTime } from "@/lib/desk/format";
+import { formatAlertStamp } from "@/lib/desk/format";
 import { symbolHref } from "@/lib/desk/listNav";
 import { loadAlertInbox, markAlertRead, markAllAlertsRead } from "@/lib/desk/status";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
@@ -26,6 +26,7 @@ export function AlertsFeed() {
     alerts.refresh();
   }
 
+  const now = new Date();
   return (
     <QueryBoundary query={alerts} loading="Loading alerts…" height={120} subject="alert list" isEmpty={(rows) => rows.length === 0} empty={<EmptyBlock title="No alerts yet" />}>
       {(rows) => (
@@ -42,7 +43,7 @@ export function AlertsFeed() {
                 <span className={styles.dot} data-unread={unread ? "true" : undefined} aria-hidden="true" />
                 {unread && <span className="sr-only">Unread</span>}
                 <span className={styles.itemTitle}>{alert.title}</span>
-                <span className={styles.muted}>{formatEtTime(alert.created_at)}</span>
+                <span className={styles.muted}>{formatAlertStamp(alert.created_at, now)}</span>
               </div>
               <p className={styles.itemBody}>{alert.body}</p>
               <div className={styles.itemFoot}>
