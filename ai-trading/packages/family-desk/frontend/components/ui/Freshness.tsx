@@ -16,26 +16,28 @@ export function useFreshness(input: FreshnessInput): FreshnessView {
 type Layout = { /** Layout only (flex, margin, max-width); never colour, size or type. */ className?: string };
 
 export type FreshnessProps =
-  /** The badge for one stamp: Live, Delayed 15 min, Quotes paused · 2 min ago… (02l §c3). */
-  | (FreshnessInput & Layout & { variant?: "badge" })
+  /** The badge for one stamp: Live, Delayed 15 min, Quotes paused · 2 min ago… (02l §c3). At the 1180 band a long sentence shows its short wording; the whole one stays in the title and aria-label. */
+  | (FreshnessInput & Layout & { variant?: "badge"; band?: ShellBand })
   /** The top-bar market pill: open or closed, and when it opens. Reads /status itself. */
   | (Layout & { variant: "pill"; band: ShellBand })
   /** The status-bar phrasing: "Quotes live · IBKR" and the last-update time. Reads /status itself; renders spans for the bar's flex row. */
   | { variant: "statusBar" }
-  /** A fixed message in the same chrome (the replay badge, "Status unavailable"). */
-  | (Layout & { variant: "note"; label: string; tone?: Tone });
+  /** A fixed message in the same chrome (the replay badge, "Status unavailable"). `short` is the text on screen when the caller is at the 1180 band; `label` stays the title and aria-label. */
+  | (Layout & { variant: "note"; label: string; short?: string; tone?: Tone });
 
 /** The one freshness primitive. Wording comes from lib/desk/freshness.ts only. */
 export function Freshness(props: FreshnessProps) {
   switch (props.variant) {
     case "pill": return <MarketPill band={props.band} className={props.className} />;
     case "statusBar": return <StatusBarLine />;
-    case "note": return <Chip className={props.className} variant="note" tone={props.tone} title={props.label} text={props.label} />;
+    case "note": return <Chip className={props.className} variant="note" tone={props.tone} title={props.label} text={props.short ?? props.label} />;
     default: return <Badge {...props} />;
   }
 }
 
 function Chip({ className, variant, tone, title, text, dot, state, open, stale }: { className?: string; variant: string; tone?: Tone; title?: string; text: string; dot?: boolean; state?: string; open?: boolean; stale?: boolean }) {
+  // A status chip that shows less than its title names the whole sentence for assistive technology too (D-232).
+  const name = variant !== "pill" && title !== undefined && title !== text ? title : undefined;
   return (
     <span
       className={`${styles.root} ${className ?? ""}`}
@@ -45,6 +47,7 @@ function Chip({ className, variant, tone, title, text, dot, state, open, stale }
       data-open={open ? "true" : undefined}
       data-stale={stale ? "true" : undefined}
       role={variant === "pill" ? undefined : "status"}
+      aria-label={name}
       title={title}
     >
       {(dot || variant === "pill") && <span className={styles.dot} aria-hidden="true" />}
@@ -53,10 +56,10 @@ function Chip({ className, variant, tone, title, text, dot, state, open, stale }
   );
 }
 
-function Badge(props: FreshnessInput & Layout) {
-  const { className, ...input } = props;
+function Badge(props: FreshnessInput & Layout & { band?: ShellBand }) {
+  const { className, band, ...input } = props;
   const view = useFreshness(input);
-  return <Chip className={className} variant="badge" state={view.state} tone={view.tone} title={view.label} text={view.label} dot={view.dot} />;
+  return <Chip className={className} variant="badge" state={view.state} tone={view.tone} title={view.label} text={band === "1180" ? view.short : view.label} dot={view.dot} />;
 }
 
 function MarketPill({ band, className }: { band: ShellBand; className?: string }) {
