@@ -119,10 +119,21 @@ export function formatLastCloseLine(iso: string | null, source?: string | null):
   return source ? `${line} · ${source}` : line;
 }
 
+// `toLocaleString(locale, options)` builds a new Intl.NumberFormat on every call, and the tape formats 240 numbers a poll (D-212): build each format once.
+const numberFormats = new Map<string, Intl.NumberFormat>();
+function formatFixed(value: number, minimumFractionDigits: number | undefined, maximumFractionDigits: number): string {
+  const key = `${minimumFractionDigits ?? ""}:${maximumFractionDigits}`;
+  let format = numberFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat("en-US", { minimumFractionDigits, maximumFractionDigits });
+    numberFormats.set(key, format);
+  }
+  return format.format(value);
+}
+
 export function formatPrice(value: number | null | undefined): string {
   if (!isFiniteNumber(value)) return EMPTY_VALUE;
-  const digits = Math.abs(value) < 1 ? 4 : 2;
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: digits });
+  return formatFixed(value, 2, Math.abs(value) < 1 ? 4 : 2);
 }
 
 /** "12.34%" */
@@ -153,7 +164,7 @@ export function formatRatio(value: number | null | undefined): string {
 
 export function formatNumber(value: number | null | undefined, digits = 2): string {
   if (!isFiniteNumber(value)) return EMPTY_VALUE;
-  return value.toLocaleString("en-US", { maximumFractionDigits: digits });
+  return formatFixed(value, undefined, digits);
 }
 
 export function formatMetric(format: MetricFormat, value: number | string | null | undefined): string {

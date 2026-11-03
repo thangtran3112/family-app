@@ -29,7 +29,7 @@ import type { ReplaySession } from "@/lib/replay/schemas";
 import { routeId } from "@/lib/replay/routeId";
 import { replayStatusLine } from "@/lib/replay/statusLine";
 import { chartOrderDraft } from "@/lib/replay/chartOrder";
-import { buildTicket, buyingPowerMessage, initialTicket, type PowerBasis, type TicketDraft, type TicketField } from "@/lib/replay/ticket";
+import { buildTicket, buyingPowerMessage, initialTicket, type PowerBasis, type TicketDraft, type TicketField, type TicketSide } from "@/lib/replay/ticket";
 import { etDayOf } from "@/lib/replay/time";
 import { useReplaySession, type ReplaySessionApi } from "@/lib/replay/useReplaySession";
 import { useShownClock } from "@/lib/replay/useShownClock";
@@ -88,7 +88,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
   const [placing, setPlacing] = useState(false);
   // What the ticket can tell of the buying power before it sends: the thread's balance and this name's position (the server holds the exact cash).
   const powerBasis: PowerBasis | null = session.thread ? { balance: session.thread.balance, trade: view.openTrade, last: view.last?.price ?? null } : null;
-  const buyingPower = buyingPowerMessage(ticket, powerBasis);
+  // The cost-vs-buying-power check, once per render and per side: the Practice column's Buy/Sell shows the ticket's side, the strip under the chart (1180) has both.
+  const power: Record<TicketSide, string | null> = { buy: buyingPowerMessage({ ...ticket, side: "buy" }, powerBasis), sell: buyingPowerMessage({ ...ticket, side: "sell" }, powerBasis) };
+  const buyingPower = power[ticket.side];
   const editTicket = (next: TicketDraft) => {
     setTicket(next);
     setTicketError(null);
@@ -277,8 +279,9 @@ function ReplayLoaded({ api, session, view }: { api: ReplaySessionApi; session: 
 
   const quick = band === "1180" ? (
     <span className={styles.quick} role="group" aria-label="Practice buttons">
-      <Button variant="up" size="md" disabled={locked || behind} onClick={() => order("buy")}>Buy</Button>
-      <Button variant="down" size="md" disabled={locked || behind} onClick={() => order("sell")}>Sell</Button>
+      {/* Over the buying power the button is off and says why in its title (its accessible description); the sentence itself shows once, in the Practice column (D-214). */}
+      <Button variant="up" size="md" disabled={locked || behind || power.buy !== null} title={power.buy ?? undefined} onClick={() => order("buy")}>Buy</Button>
+      <Button variant="down" size="md" disabled={locked || behind || power.sell !== null} title={power.sell ?? undefined} onClick={() => order("sell")}>Sell</Button>
       <Button size="md" disabled={locked || behind || side === "flat"} onClick={() => order("close")}>Close position</Button>
     </span>
   ) : null;
