@@ -38,7 +38,7 @@ async function expectPosition(
   symbol: string,
   expected: { side?: RegExp | string; shares?: RegExp | string; price?: RegExp | string; avg?: RegExp | string; unrealized?: RegExp | string },
 ) {
-  const columns = { side: "Side", shares: "Shares", price: "Price at T", avg: "Avg cost", unrealized: "Gain/loss" } as const;
+  const columns = { side: "Side", shares: "Shares", price: "Price at thread time", avg: "Avg cost", unrealized: "Gain/loss" } as const;
   for (const [key, header] of Object.entries(columns) as [keyof typeof columns, string][]) {
     const want = expected[key];
     if (want === undefined) continue;

@@ -604,7 +604,7 @@ test.describe("Practice", () => {
     };
     await expect.poll(async () => (await cells())["Shares"] ?? "", { message: "TSLA is a long: unsigned shares" }).toMatch(/^\d[\d,]*$/);
     expect((await cells())["Avg cost"], "and the cost it was built at").toMatch(/^[\d,]+\.\d{2}$/);
-    expect((await cells())["Price at T"], "and the price at the thread's time").toMatch(/^[\d,]+\.\d{2}$/);
+    expect((await cells())["Price at thread time"], "and the price at the thread's time").toMatch(/^[\d,]+\.\d{2}$/);
     await expect(portfolioRegion.getByTestId("portfolio-total")).toContainText(PRACTICE_COPY.portfolioTotal);
     // The thread list counts it too.
     await openDesk(page, "/practice");
