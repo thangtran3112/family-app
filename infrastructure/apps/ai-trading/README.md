@@ -195,6 +195,15 @@ itself (`web`/`gateway`/`auth`/`cloudflared`/`market-data`), the Family Desk's
   MiroFish off); adopting an existing host's compose project detects any
   already-running app (including MiroFish) and seeds the preference file
   from what is actually running, never from the defaults.
+- **"lifecycle lock is held by another operation":** `install.sh` waits up to
+  `AI_TRADING_LOCK_WAIT_SECONDS` (default 60, the same bound `deploy.sh` uses)
+  for `$STATE_DIR/.control.lock`, then fails with that message, the pid of the
+  process holding it (via `fuser`/`lsof`, else "holder unknown"), and the exact
+  command to retry. It almost always means an earlier deploy or install was
+  interrupted (for example an SSH drop mid image pull) but its process is still
+  running on the host. The lock is released when that process exits, so wait for
+  it, or stop that process if it is truly abandoned, then re-run the printed
+  command. Never delete the lock file: the running holder still owns it.
 - **Helper unavailable / drift recovery:** if the private control helper is
   unreachable, Caddy's own generic `no-store` 503 is returned (never the
   helper's own app-specific body), and Settings reports the same
