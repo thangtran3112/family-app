@@ -491,19 +491,21 @@ def test_no_existing_thread_changes_mode_and_the_mode_check_allows_freestyle(at_
         conn.execute(text("UPDATE practice_threads SET clock_speed = 3 WHERE id = :t"), {"t": ids["b"]})
 
 
-def test_a_lane_is_one_active_row_per_thread_and_name_and_the_standalone_rule_is_kept(at_0020) -> None:
+def test_a_lane_is_one_active_row_per_thread_and_name_and_the_owner_name_day_rule_is_kept(at_0020) -> None:
+    """The new index is additive. The owner-name-day one stays, because the live code still refuses a second thread
+    the same name on the same day and relies on it to turn a lost create race into a 409."""
     engine, config = at_0020
     with engine.begin() as conn:
         ids = _seed(conn)
         second = _thread(conn, ids["owner"], name="A2")
-    with pytest.raises(IntegrityError), engine.begin() as conn:  # before: one active row per owner, name and DAY
-        _session(conn, ids["owner"], "AAPL", TUE, thread=second, attempt=2)
     command.upgrade(config, "0021")
-    with engine.begin() as conn:  # after: another thread of the same owner may hold the same name on the same day
+    with pytest.raises(IntegrityError) as clash, engine.begin() as conn:  # another thread, same name, same day
         _session(conn, ids["owner"], "AAPL", TUE, thread=second, attempt=2)
-    with pytest.raises(IntegrityError), engine.begin() as conn:  # but a thread has one lane per name, on any day
+    assert clash.value.orig.diag.constraint_name == "uq_replay_sessions_owner_user_id_symbol_day_active"
+    with pytest.raises(IntegrityError) as lane, engine.begin() as conn:  # the same thread, same name, another day
         _session(conn, ids["owner"], "AAPL", WINTER, thread=ids["a"])
-    with engine.begin() as conn:  # an ended attempt is not a lane
+    assert lane.value.orig.diag.constraint_name == "uq_replay_sessions_thread_id_symbol_active"
+    with engine.begin() as conn:  # an ended attempt is not a lane, and a standalone session has no thread
         _session(conn, ids["owner"], "AAPL", WINTER, thread=ids["a"], status="ended")
         _session(conn, ids["owner"], "ZM", WINTER)
     with pytest.raises(IntegrityError), engine.begin() as conn:  # a standalone session keeps its own-day rule

@@ -14,9 +14,9 @@ Schema:
   `clock_speed` (smallint NOT NULL, 1; 1, 2, 5 or 10), `clock_anchor_at` (timestamptz, null), `clock_pause` (jsonb,
   null: `{"kind": "horizon"}` only). The thread's time `T` is `clock_at`, settled lazily like the day-list clock of
   0019, which moves here. `ck_practice_threads_mode` also allows `'freestyle'`.
-- `replay_sessions`: a thread's book for one name is ONE row for the life of the thread (a lane), so the unique index
-  that allowed one active row per owner, symbol and DAY now covers standalone rows only (`thread_id IS NULL`), and a new
-  one allows one active row per thread and symbol. `attempt` and its unique index stay as they were.
+- `replay_sessions`: a thread's book for one name is ONE row for the life of the thread (a lane), so a new unique
+  index allows one active row per thread and symbol. The existing one (one active row per owner, symbol and DAY) and
+  `attempt`'s stay as they are, see below.
 - `practice_marks`: `ck_practice_marks_kind` also allows `'split'` (a corporate-action mark, written by the code that
   lands with the clock; nothing writes one yet).
 - `replay_day_lists`: `thread_id` (nullable FK, cascade) with a unique constraint, so the row IS the thread's Screen.
@@ -41,15 +41,23 @@ Data step, for every day thread (`mode = 'day'`), in this one transaction:
    (20:00 ET is the extended close; an early-close day's 17:00 is not special-cased. Only a working order of a day that
    is still open when this runs reads it.) An order that already carries a key keeps its value.
 
-Left to the revision that lands the code which reads them, because the code of THIS revision still branches on
-`practice_threads.mode` (`'day'` lists, clocks and caps a thread; `'swing'` selects the hold model) and validates every
-stored `practice_plans.spec` as a v1 block: backfilling `mode = 'freestyle'` and rewriting each `spec` to
-`practice-setup-v2` here would hide every existing day thread and strip every swing thread of its holds.
+Left to the revision that lands the code which depends on them, because the code of THIS revision still branches on
+`practice_threads.mode` (`'day'` lists, clocks and caps a thread; `'swing'` selects the hold model), validates every
+stored `practice_plans.spec` as a v1 block, and refuses a second thread of one owner the same name on the same day
+(`session._active_for`, backed by the one-active-row-per-owner-symbol-day index, whose lost race it turns into a 409):
+
+- backfilling `mode = 'freestyle'` and rewriting each `spec` to `practice-setup-v2` would hide every existing day
+  thread and strip every swing thread of its holds;
+- narrowing the owner-symbol-day index to standalone rows (`thread_id IS NULL`) would open that race and leave the
+  database allowing what the code still forbids. It narrows when two threads may hold one name.
+
+Pre-flight for the new `(thread_id, symbol)` index, which fails the upgrade (and rolls it back) on a duplicate:
+`SELECT thread_id, symbol, count(*) FROM replay_sessions WHERE status = 'active' AND thread_id IS NOT NULL GROUP BY 1, 2
+HAVING count(*) > 1`. A day ends every session of its list and a thread has one open day, so there should be none.
 
 `downgrade()` drops everything the schema step adds and strips the three order keys again, so an up/down round trip
 restores the JSON it found. It cannot un-pause a clock. It refuses (a check constraint, loud) when a `'freestyle'`
-thread, a `'split'` mark, or two active sessions of one owner, name and day exist, since the older constraints
-cannot hold them.
+thread or a `'split'` mark exists, since the older constraints cannot hold them.
 """
 
 from collections.abc import Sequence
@@ -168,14 +176,6 @@ def upgrade() -> None:
     op.create_check_constraint("ck_practice_threads_mode", "practice_threads", "mode IN ('day', 'swing', 'freestyle')")
 
     # -- replay_sessions: a lane is one row per thread and name -----------------------------------------------
-    op.drop_index("uq_replay_sessions_owner_user_id_symbol_day_active", table_name="replay_sessions")
-    op.create_index(
-        "uq_replay_sessions_owner_user_id_symbol_day_active",
-        "replay_sessions",
-        ["owner_user_id", "symbol", "day"],
-        unique=True,
-        postgresql_where=sa.text("status = 'active' AND thread_id IS NULL"),
-    )
     op.create_index(
         "uq_replay_sessions_thread_id_symbol_active",
         "replay_sessions",
@@ -218,14 +218,6 @@ def downgrade() -> None:
     op.create_check_constraint("ck_practice_marks_kind", "practice_marks", f"kind IN ({_MARK_KINDS})")
 
     op.drop_index("uq_replay_sessions_thread_id_symbol_active", table_name="replay_sessions")
-    op.drop_index("uq_replay_sessions_owner_user_id_symbol_day_active", table_name="replay_sessions")
-    op.create_index(
-        "uq_replay_sessions_owner_user_id_symbol_day_active",
-        "replay_sessions",
-        ["owner_user_id", "symbol", "day"],
-        unique=True,
-        postgresql_where=sa.text("status = 'active'"),
-    )
 
     op.drop_constraint("ck_practice_threads_mode", "practice_threads", type_="check")
     op.create_check_constraint("ck_practice_threads_mode", "practice_threads", "mode IN ('day', 'swing')")
