@@ -140,6 +140,28 @@ Each set is one encrypted tar: `manifest.json`, `globals.sql`, `role-settings.sq
 - `role-settings.sql`: per-database and database-level settings (`ALTER ROLE ... IN DATABASE ... SET`, `ALTER DATABASE ... SET`) from `pg_db_role_setting`. No `pg_dump` carries these, and `pg_dumpall --globals-only` drops them. Replayed after each set's databases exist. Archives written before this file existed restore with a `WARNING` and must not be used for disaster recovery.
 - `dumps/<db>.dump`: `pg_dump --format=custom --exclude-table-data='*.replay_blobs'`, keeping owners and grants. The Desk's `replay_blobs` table is a history cache that refills from Alpaca, so its rows are not backed up (its schema is); a restored Desk starts with an empty cache. `pg_restore` replays them, so restored schemas keep their owners and runtime-role grants. `--no-owner --no-acl` had dropped both, leaving the Desk runtime locked out of its own schema (found 2026-10-12).
 
+### The ai-trading market-data archive database
+
+The market-data bridge's H1 archive (`ai_trading_market_archive_db`, schema `market_archive`, role
+`market_archive`; provisioned by `infrastructure/apps/ai-trading/postgres/ai-trading-market-archive.conf`,
+see `infrastructure/apps/ai-trading/README.md`) is write-once history that cannot be rebuilt on demand
+after a vendor revises it, so unlike `replay_blobs` it is backed up whole. There is no per-database
+list to extend: `backup.sh` dumps every non-template database, so the archive database is in every run
+as soon as it exists, its role and password hash are in `globals.sql`, and `restore.sh` restores both.
+What is pinned, so that stays true:
+
+- `test-backup.sh` fails if `backup.sh` ever excludes table data other than `*.replay_blobs`, or stops
+  discovering every non-template database.
+- `test-restore.sh` provisions a source archive database with the real role script and the bridge's
+  real `schema.sql`, backs it up with the real pipeline, restores it onto an empty cluster, and checks
+  the rows, the schema and object owners, that a second vendor still cannot overwrite a session
+  (write-once keys), that the role can re-apply `schema.sql` (the bridge's boot step) and log in with
+  its password. `test-backup-docker.sh` has the database in its dump inventory.
+- `recovery-drill.sh` takes `RECOVERY_REQUIRED_DATABASES` (space-separated names). After the restore
+  the drill fails, naming it, if any is missing from the destination (`required_databases_passed` in
+  the report). Run production drills with `RECOVERY_REQUIRED_DATABASES=ai_trading_market_archive_db`
+  once the archive is on; leave it unset for a backup that predates the archive.
+
 Restore needs a writable `/tmp` (it uses `mktemp`): run the container with `--tmpfs /tmp` when the root filesystem is read-only. Preflight retries `pg_isready` five times, five seconds apart, and logs each attempt's exit status.
 
 ## Running the tests

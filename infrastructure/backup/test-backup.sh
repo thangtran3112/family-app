@@ -261,6 +261,17 @@ empty_selection=$(select_receipt_files "$receipts_dir" daily "$current_cutoff" "
 [[ -z "$empty_selection" ]] || fail "unchanged-receipts window should select nothing"
 ok "daily mode on an unchanged window selects zero files"
 
+# The bridge's write-once H1 archive (database ai_trading_market_archive_db, schema market_archive)
+# is irreplaceable history, unlike the re-fetchable replay_blobs cache: backup.sh must dump every
+# non-template database whole, and the one table-data exclusion must stay replay_blobs alone.
+[[ "$(grep -c -e '--exclude-table-data' "$BACKUP_DIR/backup.sh")" == 1 ]] \
+  || fail "backup.sh excludes table data other than replay_blobs: that would silently drop archive history"
+grep -q -e "--exclude-table-data='\*\.replay_blobs'" "$BACKUP_DIR/backup.sh" \
+  || fail "backup.sh's one table-data exclusion is no longer replay_blobs"
+grep -q 'WHERE NOT datistemplate' "$BACKUP_DIR/backup.sh" \
+  || fail "backup.sh no longer discovers every non-template database (the archive database would be missed)"
+ok "backup.sh dumps every non-template database whole; only replay_blobs rows are excluded"
+
 printf '\n%d checks passed (Part A+B+C)\n' "$PASS"
 
 # ---------------------------------------------------------------------------

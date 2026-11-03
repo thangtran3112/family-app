@@ -101,8 +101,7 @@ test.describe("Practice landing", () => {
     const badge = dialog.getByText(PRACTICE_COPY.threadSimulated, { exact: true }).first();
     await expect(badge).toBeVisible();
     expect(await badge.evaluate((node) => node.closest("input, [class*=moneyBox]") === null), "SIMULATED sits outside the money box").toBe(true);
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0); // no Day/Swing choice (ADR-0025)
 
     // Filters: one column. Every checkbox shares a left edge and sits below the one before.
     const filters = dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
@@ -220,15 +219,13 @@ test.describe("Practice landing", () => {
     await expect(page.getByRole("region", { name: "Practice day" }).getByRole("link", { name: /^Start Trading$/ })).toBeVisible();
   });
 
-  test("with a day thread active the modal still offers Day; the thread page has Delete plan and no Replace plan, and deleting returns to Practice", async ({ page, context }) => {
+  test("with a day thread active the modal still opens, with no Swing choice; the thread page has Delete plan and no Replace plan, and deleting returns to Practice", async ({ page, context }) => {
     test.setTimeout(180_000);
     await startThread(page, context);
     const id = threadIdOf(page);
     await openDesk(page, "/practice");
     const dialog = await clickNewPlan(page);
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
-    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0); // no Day/Swing choice (ADR-0025)
     await expect(dialog.getByText("is already active")).toHaveCount(0);
     await page.keyboard.press("Escape");
 
@@ -373,7 +370,8 @@ test.describe("New plan modal redesign", () => {
   // D-152: the swing settings sit on the same two-column grid, so each segmented control is as wide as its column and starts at
   // that column's edge. The grid fills row by row (First day | Sessions, Interval | Risk per hold, Tape), so the first
   // column's edge is the First day box and the second's is the Sessions box.
-  test("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the swing settings' segmented controls are as wide as their column", async ({ page }) => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     const left = (await dialog.getByLabel(PRACTICE_COPY.swingFirstDay, { exact: true }).boundingBox())!;
@@ -405,7 +403,8 @@ test.describe("New plan modal redesign", () => {
   });
 
   // M-02: the disabled list time explains itself in view, the footer is a live region, a blocked button still takes focus.
-  test("a held list time says why in view, and the blocked Start button is focusable with its reason in a status line", async ({ page }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("a held list time says why in view, and the blocked Start button is focusable with its reason in a status line", async ({ page }) => {
     const dialog = await openNewPlan(page);
     const filters = dialog.getByRole("group", { name: PRACTICE_COPY.planFilters, exact: true });
     const premarket = dialog.getByRole("radiogroup", { name: PRACTICE_COPY.planListAt, exact: true }).getByRole("radio", { name: /^8:30/ });
@@ -456,7 +455,8 @@ test.describe("New plan modal redesign", () => {
   });
 
   // M-04: the swing universe says its minimum in its header, a name left out can be removed, and the default first day is a recorded one.
-  test("the swing universe states its minimum, lets a left-out name go, and starts on the first recorded morning", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the swing universe states its minimum, lets a left-out name go, and starts on the first recorded morning", async ({ page, context }) => {
     expect((await context.request.post(`${origin}/api/desk/__e2e/universe-days`, { data: { days: [{ day: "2026-09-18", symbols: ["TSLA"] }] } })).ok()).toBeTruthy();
     await page.route("**/replay/threads/swing-universe", async (route) => {
       const answer = await route.fetch();
@@ -479,7 +479,8 @@ test.describe("New plan modal redesign", () => {
 
   // D-103, D-104: a name in the universe table can always be removed (its button is inside the table's visible box), and a table that no
   // setting can refresh says so instead of looking current.
-  test("the swing universe's Remove buttons sit inside the table, and a wrong Sessions says the list is not refreshed", async ({ page }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the swing universe's Remove buttons sit inside the table, and a wrong Sessions says the list is not refreshed", async ({ page }) => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await dialog.getByRole("checkbox", { name: /Day movers/ }).check();
@@ -501,7 +502,8 @@ test.describe("New plan modal redesign", () => {
   });
 
   // M-05: Escape on a form she has edited asks before it throws the form away.
-  test("Escape on an edited swing form asks first, Keep editing keeps it, Discard closes it", async ({ page }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("Escape on an edited swing form asks first, Keep editing keeps it, Discard closes it", async ({ page }) => {
     const dialog = await openNewPlan(page);
     await dialog.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true }).click();
     await dialog.getByLabel("Sessions").fill("17");

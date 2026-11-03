@@ -43,7 +43,8 @@ test.describe("Practice thread overview", () => {
     await prepareDesk(context);
   });
 
-  test("a swing thread owing its Week 1 review: the review is the one primary step, the week list, days, holds and curve are on the page, and the row has no review button", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("a swing thread owing its Week 1 review: the review is the one primary step, the week list, days, holds and curve are on the page, and the row has no review button", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);
 
@@ -132,7 +133,8 @@ test.describe("Practice thread overview", () => {
     await expect(rows(weeks).nth(1)).toContainText(PRACTICE_COPY.overviewWeekCurrent);
   });
 
-  test("a fresh swing thread: Start Day 1 is the step, every week is still ahead, and the empty sections say so", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("a fresh swing thread: Start Day 1 is the step, every week is still ahead, and the empty sections say so", async ({ page, context }) => {
     test.setTimeout(120_000);
     const threadId = await createSwingThread(context);
     await openDesk(page, overviewUrl(threadId));
@@ -176,7 +178,8 @@ test.describe("Practice thread overview", () => {
     await expectCleanScreen(page);
   });
 
-  test("the grid: two columns with a 320 px side at 1440 and one column at 1180, the page using its whole region, nothing clipped", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the grid: two columns with a 320 px side at 1440 and one column at 1180, the page using its whole region, nothing clipped", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);
     await openDesk(page, overviewUrl(threadId));
@@ -285,7 +288,8 @@ test.describe("Practice thread overview · fix wave 5S", () => {
     await prepareDesk(context);
   });
 
-  test("a swing thread with open holds: the week gate is said once, the weeks table has Equity change, the balance line counts the holds, and the plan reads per week (D-080..D-085)", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("a swing thread with open holds: the week gate is said once, the weeks table has Equity change, the balance line counts the holds, and the plan reads per week (D-080..D-085)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);
     await openDesk(page, overviewUrl(threadId));
@@ -377,7 +381,8 @@ test.describe("Practice thread page · fix wave 5S", () => {
     await expect(card.getByRole("link", { name: PRACTICE_COPY.threadStartNew })).toHaveAttribute("href", "/practice");
   });
 
-  test("the swing curve's axis is labelled at one regular step over the whole span, and no label prints over another (D-123)", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the swing curve's axis is labelled at one regular step over the whole span, and no label prints over another (D-123)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);
     await openDesk(page, overviewUrl(threadId));
@@ -393,7 +398,8 @@ test.describe("Practice thread page · fix wave 5S", () => {
     expect(label.y + label.height, "the end label is clear of the day labels").toBeLessThanOrEqual(axis.y);
   });
 
-  test("a week's link in the overview is stretched over its row, like the landing's (D-122)", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("a week's link in the overview is stretched over its row, like the landing's (D-122)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);
     await openDesk(page, overviewUrl(threadId));
@@ -408,7 +414,8 @@ test.describe("Practice week review · fix wave 5S", () => {
     await prepareDesk(context);
   });
 
-  test("a swing thread opened on the week route with no week offers the last week that has started, not the next one (D-183, D-192)", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("a swing thread opened on the week route with no week offers the last week that has started, not the next one (D-183, D-192)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context); // Days 1 to 5 ended: the thread now reads "Week 2", but only Week 1 has a review
     for (const path of [`/practice/week?thread=${threadId}`, `/practice/week?thread=${threadId}&week=0`]) {
@@ -423,7 +430,8 @@ test.describe("Practice week review · fix wave 5S", () => {
     await expect(page.getByText("has not started yet")).toHaveCount(0);
   });
 
-  test("the way on and a way back sit in the header, a tile's number never wraps, and the chart key names every mark (D-086, D-087, D-088)", async ({ page, context }) => {
+  // ADR-0025 step 1: swing is closed (POST /threads answers 409 and the modal has no Swing); this goes with the swing removal step.
+  test.skip("the way on and a way back sit in the header, a tile's number never wraps, and the chart key names every mark (D-086, D-087, D-088)", async ({ page, context }) => {
     test.setTimeout(180_000);
     const threadId = await gatedSwingThread(context);
     await openDesk(page, `/practice/week?thread=${threadId}&week=1`);

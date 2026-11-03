@@ -1098,11 +1098,9 @@ export interface paths {
         /**
          * Create Thread
          * @description Start a practice thread from a `PracticeThreadCreateV1`: a SIMULATED starting balance (default 50,000), the
-         *     risk plan, and the mode (`day`, or `swing` with its `swing` block). Any number of swing threads may be active; day
-         *     threads share ten slots across all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each
-         *     thread has its own plan and balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when
-         *     she already has it). A swing thread freezes its universe and calendar here, after the days, the data and the arms
-         *     check out (every rejection is a plain problem), and starts preparing its bars in the background.
+         *     risk plan, and the mode (`day`; `swing` is closed: a 409 on `mode`, ADR-0025). Day threads share ten slots across
+         *     all users (a full house is a 409 on `mode`, and closing a thread frees a slot). Each thread has its own plan and
+         *     balance, and its own `name` (the server gives it one: "Day thread · Oct 15", "(2)" when she already has it).
          */
         post: operations["create_thread_api_desk_replay_threads_post"];
         delete?: never;
@@ -1207,10 +1205,10 @@ export interface paths {
         /**
          * Control Thread Clock
          * @description Play or pause the thread's clock, set its speed (1, 2, 5, 10), step it a bar or to the next signal, or jump it:
-         *     `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (a time already
-         *     past leaves the clock where it is) and no later than `jump_limit` (422 on `to` beyond it). 409 without an open
-         *     day. Time then runs on the server until she pauses it, through the close and the night; the day hands over at the
-         *     next trading day's open, and a jump across several opens hands over day by day.
+         *     `{"to": "<ISO time with its UTC offset>"}` sets the clock to that date and time. Forward only (422 on a `to`
+         *     already past; a `to` equal to the clock changes nothing) and no later than `jump_limit` (422 on `to` beyond it).
+         *     409 without an open day. Time then runs on the server until she pauses it, through the close and the night; the
+         *     day hands over at the next trading day's open, and a jump across several opens hands over day by day.
          */
         post: operations["control_thread_clock_api_desk_replay_threads__thread_id__clock_post"];
         delete?: never;

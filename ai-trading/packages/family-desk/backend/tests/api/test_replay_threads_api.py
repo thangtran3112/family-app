@@ -144,10 +144,9 @@ def test_thread_requests_are_the_contracts_and_rejections_are_plain_problems(wor
     assert stray.status_code == 422 and _problems(stray)[0]["path"] == "threadId"
     bool_flag = _create(client, plan={**PLAN, "tradeOnlyOnSignal": True})
     assert bool_flag.status_code == 422
-    assert _create(client, mode="swing").status_code == 422  # the contract: swing needs its block
-    swing = _create(client, mode="swing", swing=SWING)  # a valid block, but the daily world holds none of its symbols
-    assert swing.status_code == 422 and _problems(swing)[0]["path"] == "swing.universe.0.symbol"
-    assert "not enough price history" in _problems(swing)[0]["message"]
+    for swing in (_create(client, mode="swing"), _create(client, mode="swing", swing=SWING)):
+        assert swing.status_code == 409  # swing is closed (ADR-0025): whatever the body holds, valid or not
+        assert _problems(swing) == [{"path": "mode", "message": "Swing threads are closed · start a day thread"}]
     rich = _create(client, startingBalance=1000, plan={**PLAN, "maxLossUsd": 5000})
     assert rich.status_code == 422 and "simulated starting balance ($1,000)" in _problems(rich)[0]["message"]
     not_json = client.post(f"{BASE}/threads", content="nope", headers=auth_headers())
@@ -540,7 +539,7 @@ def test_the_capacity_route_counts_the_slots_and_the_eleventh_create_is_a_409_on
     ]
     body = {"schemaVersion": 1, "mode": "swing", "plan": PLAN, "swing": SWING}
     swing = client.post(f"{BASE}/threads", json=body, headers=auth_headers())
-    assert swing.status_code != 409 or "day-trade slots" not in swing.text  # swing is uncapped: its own rules apply
+    assert swing.status_code == 409 and "day-trade slots" not in swing.text  # swing is closed, not capped
     first = client.get(f"{BASE}/threads", headers=auth_headers()).json()[0]["thread"]["id"]
     assert client.post(f"{BASE}/threads/{first}/close", headers=auth_headers()).status_code == 200
     assert client.get(f"{BASE}/threads/capacity", headers=auth_headers()).json()["day_active"] == 9
