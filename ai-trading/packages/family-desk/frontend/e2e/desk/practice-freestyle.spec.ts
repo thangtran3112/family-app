@@ -35,7 +35,7 @@ async function expectRowIsThePortfolio(page: Page, portfolio: Json) {
   const cells = await positionCells(region, "TSLA");
   expect(cells["Shares"]).toBe("100");
   expect(cells["Avg cost"]).toBe(formatPrice(held.avg_cost));
-  expect(cells["Price at T"], "the price at the thread's time").toContain(formatPrice(held.price));
+  expect(cells["Price at thread time"], "the price at the thread's time").toContain(formatPrice(held.price));
   expect(cells["Gain/loss"], "gain or loss is the price at T against the average cost").toBe(formatSignedUsd(held.unrealized_usd, { cents: true }));
   if ("Held for" in cells) expect(cells["Held for"]).toBe(heldForText(held.held_for_s));
 }
@@ -61,10 +61,10 @@ test.describe("Practice: a freestyle thread keeps what she holds", () => {
     const fills = async () => ((await get(context, `/threads/${threadId}/fills`)).fills as Json[]).map((fill) => [fill.action, fill.source]);
     expect(await ledger()).toBe(0);
 
-    // The Portfolio tab: one row, in the columns of ADR-0025 (Ticker, Side, Shares, Avg cost, Price at T, Gain/loss, Held for, Working orders).
+    // The Portfolio tab: one row, in the columns of ADR-0025 (Ticker, Side, Shares, Avg cost, Price at thread time, Gain/loss, Held for, Working orders).
     await openDesk(page, portfolioUrl(threadId));
     const region = portfolioRegion(page);
-    for (const name of ["Ticker", "Shares", "Avg cost", "Price at T", "Gain/loss"]) await expect(region.getByRole("columnheader", { name, exact: true })).toBeVisible();
+    for (const name of ["Ticker", "Shares", "Avg cost", "Price at thread time", "Gain/loss"]) await expect(region.getByRole("columnheader", { name, exact: true })).toBeVisible();
     for (const gone of ["Last", "Change", "Change %", "Position", "Value", "Days held"]) await expect(region.getByRole("columnheader", { name: gone, exact: true })).toHaveCount(0);
     await expectRowIsThePortfolio(page, first);
 
@@ -143,7 +143,7 @@ test.describe("Practice: a freestyle thread keeps what she holds", () => {
     await openDesk(page, `/practice/screen?thread=${threadId}`);
     await expect(page.getByTestId("screen-lanes")).toContainText("TSLA");
     await openDesk(page, `/practice/journal?thread=${threadId}`);
-    await expect(page.getByTestId("journal-open-positions")).toContainText("1 open position");
+    await expect(page.getByTestId("journal-open-positions")).toContainText(PRACTICE_COPY.journalOpenPositionsOne);
     await expect(page.getByTestId("journal-open-positions").getByRole("link", { name: PRACTICE_COPY.journalOpenPortfolio })).toHaveAttribute("href", portfolioUrl(threadId));
   });
 

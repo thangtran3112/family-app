@@ -34,6 +34,7 @@ from ai_trading_common.errors import ProviderError
 
 from ai_trading.core import evaluate as engine
 from ai_trading.core import indicators
+from ai_trading.core.calendar import et
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.data.metrics import AVG_VOLUME_DAYS, INTRADAY_LOOKBACK_DAYS, RVOL_DAYS, metric_row
 from ai_trading.data.universe import MIN_AVG_VOLUME, MIN_DAILY_BARS, MIN_PRICE
@@ -128,6 +129,16 @@ def earliest_list_at(spec: dict[str, Any]) -> str:
     opens = 9 * 60 + 30 if spec["watch"]["session"] == "regular" else 4 * 60
     minutes = opens + engine.CADENCE_MINUTES[run_on] + int(LIST_DATA_LAG.total_seconds() // 60)
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def reads_from(spec: dict[str, Any], day: date, list_at: pd.Timestamp) -> str | None:
+    """The ET time ("HH:MM") from which `spec` can read a bar of `day`, when `list_at` is still before it: until then
+    the filter lists no names. None when it can read now, and before the regular open of `day` (the data day is then
+    the session before, whose bars have all closed)."""
+    if list_at < trading_session("stock", day).regular_open:
+        return None
+    need = earliest_list_at(spec)
+    return None if list_at >= et(day, need) else need
 
 
 def passes_floor(daily: pd.DataFrame) -> bool:
@@ -323,6 +334,20 @@ def build_list(
     filter_rows: list[dict[str, Any]] = []
     extra_total = 0
     for item in filters:
+        wait = reads_from(item.spec, day, list_at)
+        if wait is not None:  # no bar of the day to read yet: the other filters still list their names (D-216)
+            filter_rows.append(
+                {
+                    "id": item.id,
+                    "version_id": item.version_id,
+                    "name": item.name,
+                    "scanned": 0,
+                    "no_data": 0,
+                    "matches_total": 0,
+                    "reads_from": wait,
+                }
+            )
+            continue
         result = scan(item.spec, _View(bars, item.symbols), list_at, frames_for=frames_for)
         filter_rows.append(
             {
@@ -332,6 +357,7 @@ def build_list(
                 "scanned": result.scanned,
                 "no_data": result.no_data,
                 "matches_total": result.matches_total,
+                "reads_from": None,
             }
         )
         extra_total += max(0, result.matches_total - len(result.matches))

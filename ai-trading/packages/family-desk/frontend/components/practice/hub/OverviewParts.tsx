@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { formatEtDateClock } from "@/lib/desk/format";
-import { overviewDateRows, overviewStats, sinceStartText, type OverviewDateRow } from "@/lib/replay/overviewView";
+import { overviewDateRows, overviewStats, placeAt, sinceStartText, type OverviewDateRow } from "@/lib/replay/overviewView";
 import { journalHref } from "@/lib/replay/practiceTabs";
 import type { Thread, ThreadSummary } from "@/lib/replay/threads";
 import type { ClockAccount } from "@/lib/replay/threadClock";
@@ -50,6 +50,7 @@ export function PlaceStrip({ summary, account = null }: { summary: ThreadSummary
   const live = account !== null && account.positions > 0;
   const headline = headlineFigure(thread.stats.balance, account);
   const positions = account === null ? summary.positions_open : account.positions;
+  const at = placeAt(clock, account);
   return (
     <section className={`${styles.panel} ${o.place}`} aria-label="Thread balance">
       <h2 className={styles.panelTitle}>{headline.label}</h2>
@@ -61,7 +62,7 @@ export function PlaceStrip({ summary, account = null }: { summary: ThreadSummary
       <p className={hub.muted}>{startedWithText(thread, account)}</p>
       {account !== null && <p className={hub.muted} data-testid="thread-since-start">{sinceStartText(account.since_start_usd)}</p>}
       <p className={o.placeLine}>
-        {clock === null ? PRACTICE_COPY.landingNoClock : `${practiceText("overviewAtClock", { time: formatEtDateClock(clock.clock, { seconds: false }) })} · ${positionsCountText(positions)}`}
+        {at === null ? PRACTICE_COPY.landingNoClock : `${practiceText("overviewAtClock", { time: formatEtDateClock(at, { seconds: false }) })} · ${positionsCountText(positions)}`}
       </p>
     </section>
   );

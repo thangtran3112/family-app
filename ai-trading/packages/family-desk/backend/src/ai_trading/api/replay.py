@@ -23,7 +23,7 @@ run unchanged.
 import logging
 import threading
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from ai_trading_common.errors import ProviderError
@@ -492,7 +492,8 @@ def create_thread(
     body = {key: value for key, value in raw.items() if key != "setup"} if isinstance(raw, dict) else raw
     spec = _validated(PracticeThreadCreateV1, body, "plan")
     setup_spec = None if setup is None else _validated(PracticeSetupV2, setup, "setup")
-    row = _call(threads_mod.create_thread, db, user.id, spec, services.now())
+    started = None if setup_spec is None else datetime.fromisoformat(setup_spec.startAt)
+    row = _call(threads_mod.create_thread, db, user.id, spec, services.now(), started)
     if setup_spec is not None:
         _call(plan_mod.create_plan, db, user.id, setup_spec, services, row)
     return threads_mod.detail(db, row)

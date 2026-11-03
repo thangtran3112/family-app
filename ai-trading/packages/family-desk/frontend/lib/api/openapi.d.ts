@@ -3993,6 +3993,8 @@ export interface components {
             name: string;
             /** No Data */
             no_data: number;
+            /** Reads From */
+            reads_from?: string | null;
             /** Scanned */
             scanned: number;
             /** Version Id */

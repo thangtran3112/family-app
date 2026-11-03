@@ -29,7 +29,7 @@ import {
   screenColumns,
   screenCountsText,
   screenTitle,
-  screenWarning,
+  screenWarnings,
   sourceNote,
   toggledStars,
   universeNote,
@@ -58,7 +58,7 @@ test("the title names the ET date of T as a label, and nothing numbers a day", (
 
 test("the counts line and the scan label are two lines", () => {
   assert.equal(screenCountsText(screen), "118 of 131 scanned · 34 matched · showing 2");
-  assert.equal(scanBuiltText(screen), "Scan 1 · run at 8:30 AM ET · data through 8:15 AM");
+  assert.equal(scanBuiltText(screen), "Scan 1 · run at Tue 2026-03-10 8:30 AM ET · data through 8:15 AM");
   assert.equal(scanBuiltText(emptyScreen), "Not scanned yet");
   assert.equal(neverScanned(emptyScreen), true);
   assert.equal(neverScanned(screen), false);
@@ -105,10 +105,10 @@ test("the risk plan reads as one sentence, its limits count per ET date; no limi
 });
 
 test("warnings: the server's reason is shown as it is; a Screen it had no reason for shows the empty state, not a second banner", () => {
-  assert.equal(screenWarning(screen), "Only 2 of the 131 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the Screen");
+  assert.deepEqual(screenWarnings(screen), ["Only 2 of the 131 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the Screen"]);
   const why = "None of the 17 scanned symbols met Gap up or Abnormal volume · loosen a filter in the Screener to widen the Screen";
-  assert.equal(screenWarning({ warnings: [why] }), why);
-  assert.equal(screenWarning({ warnings: [] }), null);
+  assert.deepEqual(screenWarnings({ warnings: [why] }), [why]);
+  assert.deepEqual(screenWarnings({ warnings: [] }), []);
   assert.equal(why.includes("Only 0"), false);
 });
 
@@ -311,17 +311,15 @@ test("a scan is offered on an active thread whatever the time is, and not on a c
   assert.equal(canRescan({ thread: { ...screen.thread!, status: "closed" } }), false);
 });
 
-test("the scan says the clock it ran at, where its data stops, and what is new, without naming the date", () => {
+test("the scan says the clock it ran at with its date, where its data stops, and what is new", () => {
   const label = rescanLabel(scan);
-  assert.match(label, /^Scan 2 · run at 10:00 AM ET · data through 9:45 AM$/);
+  assert.match(label, /^Scan 2 · run at Tue 2026-03-10 10:00 AM ET · data through 9:45 AM$/);
   const counts = rescanCounts(repopulated);
   assert.equal(counts, "2 of 3 matched · 1 new in this scan · 1 kept because you opened or starred them");
   assert.equal(heldOverCount(repopulated), 1);
   assert.equal(rescanCounts({ ...repopulated, candidates: repopulated.candidates.slice(0, 2) }), "2 of 3 matched · 1 new in this scan");
-  for (const text of [label, counts]) {
-    assert.equal(containsPracticeBannedTerm(text), false, text);
-    assert.doesNotMatch(text, /2026|Mar/);
-  }
+  for (const text of [label, counts]) assert.equal(containsPracticeBannedTerm(text), false, text);
+  assert.doesNotMatch(counts, /2026|Mar/); // the counts name no date; the scan's label names its own (D-221)
 });
 
 test("a running scan says it is counting, then how many names it has read, then that it is applying the filters", () => {

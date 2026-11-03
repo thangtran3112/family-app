@@ -41,6 +41,12 @@ export function formatEtTimeZone(iso: string | null): string {
   return time === EMPTY_VALUE ? time : `${time} ET`;
 }
 
+/** "Mon 2026-08-03 3:45 PM ET": a stamp that names its date too, for a time that can fall on another day than the one shown beside it. */
+export function formatEtDateTimeZone(iso: string | null): string {
+  const time = formatEtTimeZone(iso);
+  return time === EMPTY_VALUE ? time : `${formatEtDay(iso)} ${time}`;
+}
+
 /** "10:41:12 AM ET" (the reconnecting message) */
 export function formatEtClock(iso: string | null): string {
   if (!iso) return EMPTY_VALUE;

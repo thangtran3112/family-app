@@ -220,6 +220,8 @@ test.describe("Practice: the thread clock", () => {
 
     await nextOpenFromSummary(page);
     await expect(readout(page)).toContainText(/Mon 2026-09-28 · 9:3\d:\d{2} AM ET/, { timeout: 15_000 });
+    // D-218: the place line's "At" is the time the equity is priced at, so it moves with the figure, not stays on the clock the page loaded.
+    await expect(page.getByRole("region", { name: "Thread balance" })).toContainText(/At Mon 2026-09-28 · 9:3\d AM ET · 1 open position/, { timeout: 15_000 });
     // No look-ahead and no day: the position is the same shares at the same average cost, and the account is priced at the new clock.
     const after = await (await context.request.get(clockUrl(threadId))).json();
     expect(after.account.positions).toBe(1);

@@ -35,6 +35,7 @@ import {
   shadingData,
   syncSeries,
   valueAtOrBefore,
+  valueRuns,
   volumeData,
   wholeAxisLabel,
   type ChartBar,
@@ -297,7 +298,8 @@ export function MarketChart({
   // What each series was last given (by series object), so a refresh sends only what changed.
   const fed = useRef(new WeakMap<object, SeriesFed>());
   const markersFed = useRef<{ bars: ChartBar[]; markers: ChartMarkerInput[]; plugin: ISeriesMarkersPluginApi<Time> } | null>(null);
-  const overlaySeries = useRef(new Map<string, ISeriesApi<"Line", Time>>());
+  // One line per run of values of each overlay (`valueRuns`), keyed `id@first bar`: a session's stretch of VWAP is its own series (D-231).
+  const overlaySeries = useRef(new Map<string, { id: string; series: ISeriesApi<"Line", Time>; look: string }>());
   const paneSeries = useRef(new Map<string, PaneSeriesApi>());
   const priceLines = useRef<IPriceLine[]>([]);
   const panePriceLines = useRef(new Map<string, IPriceLine[]>());
@@ -425,7 +427,7 @@ export function MarketChart({
           return;
         }
         const values: Record<string, { value?: number } | undefined> = {};
-        for (const [id, series] of overlaySeries.current) values[id] = param.seriesData.get(series) as { value?: number } | undefined;
+        for (const { id, series } of overlaySeries.current.values()) values[id] ??= param.seriesData.get(series) as { value?: number } | undefined;
         for (const [id, entry] of paneSeries.current) values[id] = param.seriesData.get(entry.series) as { value?: number } | undefined;
         const volumeEntry = volumeSeries.current ? param.seriesData.get(volumeSeries.current) : undefined;
         callback(crosshairPoint(
@@ -557,27 +559,36 @@ export function MarketChart({
     rightOffset.current = wantedOffset;
     if (moneyAxis) currentChart.priceScale("right").applyOptions({ scaleMargins: { top: 0.12, bottom: 0.14 } });
 
-    const wantedOverlays = new Set(overlays.map(({ id }) => id));
-    for (const [id, series] of overlaySeries.current) {
-      if (!wantedOverlays.has(id)) {
-        currentChart.removeSeries(series);
-        overlaySeries.current.delete(id);
+    // An overlay is one line per run of its values (`valueRuns`): a line never joins two runs, so VWAP does not run across the pre-market (D-231).
+    // Only the run that reaches the newest bar shows its axis tag; an older run's last value is not the value now.
+    const wantedLines = new Set<string>();
+    overlays.forEach((overlay) => {
+      const lineStyle = overlay.style === "dashed" ? chartLibrary.LineStyle.Dashed : chartLibrary.LineStyle.Solid;
+      for (const [from, to] of valueRuns(overlay.values)) {
+        const key = `${overlay.id}@${bars[from]!.t}`;
+        wantedLines.add(key);
+        const newest = to === bars.length;
+        let line = overlaySeries.current.get(key);
+        if (!line) {
+          // No full-width dotted line at the last value: it sits within cents of the last-price line, where her marks land. The axis tag stays.
+          line = { id: overlay.id, series: currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2, priceLineVisible: false }), look: "" };
+          overlaySeries.current.set(key, line);
+        }
+        // Options are applied only when they change: each call to the library invalidates the chart, and a session's line is one of several.
+        const look = `${overlay.color}|${overlay.label}|${lineStyle}|${newest}`;
+        if (line.look !== look) {
+          line.series.applyOptions({ color: overlay.color, title: overlay.label, lineStyle, lastValueVisible: newest });
+          line.look = look;
+        }
+        syncSeries(line.series, fed.current, bars.slice(from, to), overlay.values.slice(from, to), "", lineData);
+      }
+    });
+    for (const [key, line] of overlaySeries.current) {
+      if (!wantedLines.has(key)) {
+        currentChart.removeSeries(line.series);
+        overlaySeries.current.delete(key);
       }
     }
-    overlays.forEach((overlay) => {
-      let series = overlaySeries.current.get(overlay.id);
-      if (!series) {
-        // No full-width dotted line at the last value: it sits within cents of the last-price line, where her marks land. The axis tag stays.
-        series = currentChart.addSeries(chartLibrary.LineSeries, { color: overlay.color, lineWidth: 2, priceLineVisible: false });
-        overlaySeries.current.set(overlay.id, series);
-      }
-      series.applyOptions({
-        color: overlay.color,
-        title: overlay.label,
-        lineStyle: overlay.style === "dashed" ? chartLibrary.LineStyle.Dashed : chartLibrary.LineStyle.Solid,
-      });
-      syncSeries(series, fed.current, bars, overlay.values, "", lineData);
-    });
 
     // When panes are added, removed or reordered the library renumbers them, so series that stay would sit in the
     // wrong pane. Rebuild the pane series from scratch whenever the pane layout changes.
@@ -710,7 +721,7 @@ export function MarketChart({
     const key = `${symbol}:${interval}`;
     const count = barAt.current.map.size;
     // Before the open the view waits at the session's first bar; from the first session bar on a followed chart shows the newest bars (D-186).
-    const waiting = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1);
+    const waiting = sessionStart === undefined ? null : pinnedRange(count, sessionStart, firstDraw + FOLLOW_RIGHT_PAD - 1, firstDraw);
     if (bars.length && fitKey.current !== key) {
       if (follow) currentChart.timeScale().setVisibleLogicalRange(waiting ?? { from: Math.max(0, count - firstDraw), to: count - 1 + FOLLOW_RIGHT_PAD });
       else currentChart.timeScale().fitContent();

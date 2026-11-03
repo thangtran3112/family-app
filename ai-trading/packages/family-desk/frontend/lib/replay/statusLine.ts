@@ -1,4 +1,4 @@
-import { formatEtClock, formatEtTimeZone } from "../desk/format.ts";
+import { formatEtClock, formatEtDateTimeZone } from "../desk/format.ts";
 import { PRACTICE_COPY, practiceText } from "../desk/freshness.ts";
 import type { Screen } from "./screen.ts";
 
@@ -7,11 +7,11 @@ import type { Screen } from "./screen.ts";
 
 export type PracticeStatusLine = { left: readonly string[]; right: readonly string[] };
 
-/** The Screen: "Prices: Alpaca SIP · past days | The scan runs at the thread clock ... Scanned 9:32 AM ET | Would-fire signals only". The scan's clock is the one time; a new Screen has none until its first scan. */
+/** The Screen: "Prices: Alpaca SIP · up to the thread clock | The scan runs at the thread clock ... Scanned 9:32 AM ET | Would-fire signals only". The scan's clock is the one time; a new Screen has none until its first scan. */
 export function screenStatusLine(screen: Pick<Screen, "rescan">): PracticeStatusLine {
   return {
     left: [PRACTICE_COPY.statusPricesPast, PRACTICE_COPY.statusScanAtClock],
-    right: [screen.rescan === null ? PRACTICE_COPY.screenStatusNotScanned : practiceText("statusScanned", { time: formatEtTimeZone(screen.rescan.as_of) }), PRACTICE_COPY.statusSignals],
+    right: [screen.rescan === null ? PRACTICE_COPY.screenStatusNotScanned : practiceText("statusScanned", { time: formatEtDateTimeZone(screen.rescan.as_of) }), PRACTICE_COPY.statusSignals],
   };
 }
 
