@@ -56,8 +56,10 @@ test("a futures chart with no stamp says Unavailable and names no as-of part (D-
     const bars = await response.json();
     await route.fulfill({ response, json: { ...bars, quality: "unavailable", as_of: null, bars: [], stamp: { ...bars.stamp, quality: "unavailable", as_of: null } } });
   });
+  const answered = page.waitForResponse("**/api/desk/bars/%2FMES**");
   await openDesk(page, "/futures");
-  const chart = page.getByRole("region", { name: "/MES 1d market chart" });
-  await expect(chart.locator("header")).toContainText("Unavailable");
-  await expect(chart.locator("header")).not.toContainText("as of");
+  await answered;
+  const header = page.getByRole("region", { name: "/MES 1d market chart" }).locator("header");
+  await expect(header).toContainText("Unavailable");
+  await expect(header).not.toContainText("as of");
 });
