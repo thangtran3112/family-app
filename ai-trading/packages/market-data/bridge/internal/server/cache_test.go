@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/thangtran3112/family-app/ai-trading/market-data/bridge/gen/marketdata/v1"
 	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/archive"
+	"github.com/thangtran3112/family-app/ai-trading/market-data/bridge/internal/providers/cache"
 )
 
 // The hot tier must be invisible on the wire (02t, Redis plan §5.7). The whole conformance script
@@ -177,5 +179,102 @@ func TestArchiveAndHotTierDoNotDoubleFetch(t *testing.T) {
 	}
 	if strings.Contains(down.Logs.String(), "panic") {
 		t.Error("panic in the logs")
+	}
+}
+
+// An entry is a hit inside its TTL and a vendor call again once the TTL has passed, read through
+// the endpoint. The window touches the open session (bars: 60 s) and the quote is the delayed rung
+// of a live session (30 s), both ±10% jitter, so 20 s is inside and 2 minutes is past.
+func TestHotTierEntriesExpireThroughTheEndpoint(t *testing.T) {
+	open := &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_MINUTE_1, Adjustment: pb.Adjustment_RAW,
+		Start: timestamppb.New(time.Date(2024, 5, 2, 8, 0, 0, 0, time.UTC)), End: timestamppb.New(fixedNow)}
+	for _, tc := range []struct {
+		name string
+		read func(*testing.T, *harness) any // the data the cache owns; "served" is router metadata
+	}{
+		{"bars", func(t *testing.T, h *harness) any { return normalize(t, getBars(t, h, open)) }},
+		{"quotes", func(t *testing.T, h *harness) any {
+			status, body := h.post("GetQuotes", &pb.GetQuotesRequest{Symbols: []string{"AAPL"}}, readAuth())
+			if status != 200 {
+				t.Fatalf("GetQuotes status %d: %s", status, body)
+			}
+			return normalize(t, body).(map[string]any)["quotes"]
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newCachedHarness(t)
+			h.IBKR.setDown(true) // the realtime rung is never stored; the delayed rung is
+			cold := tc.read(t, h)
+			if n := h.alpacaCalls.Load(); n != 1 || h.Hot.Len() == 0 {
+				t.Fatalf("miss: %d vendor calls (want 1), %d keys stored (want >0)", n, h.Hot.Len())
+			}
+			h.Advance(20 * time.Second)
+			if warm := tc.read(t, h); !reflect.DeepEqual(cold, warm) || h.alpacaCalls.Load() != 1 {
+				t.Fatalf("hit inside the TTL: %d vendor calls (want 1)\n cold %v\n warm %v", h.alpacaCalls.Load(), cold, warm)
+			}
+			h.Advance(2 * time.Minute)
+			tc.read(t, h)
+			if n := h.alpacaCalls.Load(); n != 2 {
+				t.Errorf("after the TTL: %d vendor calls, want 2 (the entry expired)", n)
+			}
+		})
+	}
+}
+
+// Redis down must be invisible to the caller: the endpoint answers 200 with the vendor's data, as it
+// would with no cache, whether Redis dies after warming or was never up. A real RedisStore over
+// miniredis, killed under the running server.
+func TestRedisDownTheEndpointStillAnswersFromTheProvider(t *testing.T) {
+	req := &pb.GetBarsRequest{Symbol: "AAPL", Timeframe: pb.Timeframe_DAY_1, Adjustment: pb.Adjustment_RAW,
+		Start: timestamppb.New(fixedNow.AddDate(0, 0, -5)), End: timestamppb.New(fixedNow)}
+	want := normalize(t, getBars(t, newHarness(t), req)) // the no-cache answer
+	quote := &pb.GetQuotesRequest{Symbols: []string{"AAPL"}}
+
+	for _, tc := range []struct {
+		name      string
+		warmFirst bool
+	}{
+		{"dies after warming", true},
+		{"down from boot", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mr := miniredis.RunT(t)
+			store, err := cache.NewRedisStore("redis://" + mr.Addr() + "/0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { store.Close() })
+			h := newCachedHarnessOn(t, store)
+			h.IBKR.setDown(true)
+			if tc.warmFirst {
+				getBars(t, h, req)
+				getBars(t, h, req)
+				if n := h.alpacaCalls.Load(); n != 1 || len(mr.Keys()) == 0 {
+					t.Fatalf("warm-up over redis: %d vendor calls (want 1), %d keys (want >0)", n, len(mr.Keys()))
+				}
+			}
+			mr.Close() // redis is gone
+			before := h.alpacaCalls.Load()
+			begin := time.Now()
+			const reads = 10
+			for i := range reads {
+				if got := normalize(t, getBars(t, h, req)); !reflect.DeepEqual(want, got) {
+					t.Fatalf("GetBars %d with redis down differs from the no-cache answer:\n want %v\n got  %v", i, want, got)
+				}
+				if status, body := h.post("GetQuotes", quote, readAuth()); status != 200 {
+					t.Fatalf("GetQuotes %d with redis down: %d %s", i, status, body)
+				}
+			}
+			if n := h.alpacaCalls.Load() - before; n != 2*reads { // nothing is cached any more: every read is a vendor call
+				t.Errorf("%d vendor calls for %d reads of bars and quotes, want %d", n, reads, 2*reads)
+			}
+			// The breaker opens after a few failures; without it each of the 20 reads would spend its timeout.
+			if took := time.Since(begin); took > 3*time.Second {
+				t.Errorf("%d reads with redis down took %v: the breaker is not limiting the cost", 2*reads, took)
+			}
+			if strings.Contains(h.Logs.String(), "panic") {
+				t.Error("panic in the logs")
+			}
+		})
 	}
 }
