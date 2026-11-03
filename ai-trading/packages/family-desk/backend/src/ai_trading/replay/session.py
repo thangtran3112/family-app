@@ -19,15 +19,15 @@ one-minute bar of the tape, from `advance`, at a price that bar proves.
 carry a strip and a daily block (`swing_play.py`). Every swing branch below is guarded by `ctx.swing`; the day-trade
 paths are unchanged.
 
-**A day holds several open positions** (N names, one average-cost position each, no cap on how many names or fills).
-A Buy or Sell mark is a fill against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the
-walk is `journal.assemble`). The one size rule is the cash check (`holds.check_buying_power`), applied to the shares a
-fill OPENS against the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). A resting
-order the tape reached while she was on another name fills like any other: at the bar that proved it, never past the
-day clock, booked when the name is next lifted to the clock (`advance`, `fill_away_orders`) or when the day ends
-(`end`), never cancelled for having been out of sight. The positions share the day clock: `positions` prices each at
-the clock, never at its own name's stale playhead (the name's own card is marked there too, `_marked`), `advance`
-pauses at the first stop crossed on ANY open name, and ending the day flattens every one of them at the clock.
+**A day holds several open positions** (N names, one average-cost position each, no cap on how many names or fills). A
+Buy or Sell mark is a fill against the name's position: it adds to it, sells part of it, or flips it (ADR-0016; the walk
+is `journal.assemble`). The one size rule is the cash check (`positions_mod.check_buying_power`), applied to the shares
+a fill OPENS against the cash the open positions and the WORKING orders have not spent (`_reserved_cash`). A resting
+order the tape reached while she was on another name fills like any other: at the bar that proved it, never past the day
+clock, booked when the name is next lifted to the clock (`advance`, `fill_away_orders`) or when the day ends (`end`),
+never cancelled for having been out of sight. The positions share the day clock: `positions` prices each at the clock,
+never at its own name's stale playhead (the name's own card is marked there too, `_marked`), `advance` pauses at the
+first stop crossed on ANY open name, and ending the day flattens every one of them at the clock.
 """
 
 import json
@@ -53,6 +53,7 @@ from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import ledger as ledger_mod
 from ai_trading.replay import orders as orders_mod
+from ai_trading.replay import positions as positions_mod
 from ai_trading.replay import signals as signals_mod
 from ai_trading.replay.cache import BlobStore, DbBlobStore
 from ai_trading.replay.data import (
@@ -77,6 +78,13 @@ from ai_trading.replay.model import (
 from ai_trading.replay.tape import BIG_PRINT_USD, PACE_WINDOW_S, Prints, Tape, pace, select_rows, ticks
 
 log = logging.getLogger(__name__)
+
+
+def _threads() -> Any:
+    """The threads module (the thread's balance and free cash), imported on first use: it imports this module."""
+    from ai_trading.replay import threads
+
+    return threads
 
 MINUTE = pd.Timedelta(minutes=1)
 JUMP_TAPE_WINDOW = pd.Timedelta(minutes=30)  # a longer jump shows (and counts) only its last 30 minutes of prints
@@ -961,9 +969,9 @@ def _flag_stops(db: Session, ctx: Ctx, previous: pd.Timestamp, target: pd.Timest
         for row, _ in live
     }
     while live:
-        crossing = holds_mod.first_stop_crossing(
+        crossing = positions_mod.first_stop_crossing(
             [
-                holds_mod.Hold(
+                positions_mod.Hold(
                     id=None,
                     symbol=row.symbol,
                     side=trade.side,  # type: ignore[arg-type]
@@ -1520,12 +1528,12 @@ def _check_can_work(db: Session, ctx: Ctx, side: str, shares: int, reference: fl
         )
         if rest:
             try:
-                holds_mod.check_buying_power(
+                positions_mod.check_buying_power(
                     shares=rest,
                     price=reference,
                     free_cash_usd=_swing_free_cash(db, row, thread, rows, mine, take, reference),
                 )
-            except holds_mod.HoldProblem as exc:
+            except positions_mod.HoldProblem as exc:
                 raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
         return
     open_ = journal_mod.assemble(ctx.marks)[1]
@@ -1627,7 +1635,7 @@ def day_buying_power(
         lambda s: (None, 0) if s.id not in opens else (opens[s.id].side, opens[s.id].shares),
         skipped,
     )
-    return round(swing_play.balance(db, thread) - held - reserved, 2)
+    return round(_threads().balance(db, thread) - held - reserved, 2)
 
 
 def _check_day_buying_power(
@@ -1648,8 +1656,8 @@ def _check_day_buying_power(
         gain = journal_mod.pnl_usd(closing.sign, closing.entry_price, price, take)
         free = round(free + closing.entry_price * closing.shares + gain, 2)
     try:
-        holds_mod.check_buying_power(shares=shares, price=price, free_cash_usd=free)
-    except holds_mod.HoldProblem as exc:
+        positions_mod.check_buying_power(shares=shares, price=price, free_cash_usd=free)
+    except positions_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
 
 
@@ -1667,7 +1675,7 @@ def _swing_free_cash(
     the cash the day's working orders hold back (`_reserved_cash`; `skip` is the order of this session filling now),
     plus, when the fill flips the hold (`take` shares close the whole hold first), the hold's notional and the closed
     P/L."""
-    free = swing_play.free_cash(db, thread, rows, row.day)
+    free = _threads().free_cash(db, thread, rows, row.day)
 
     def held_of(session: ReplaySession) -> tuple[str | None, int]:
         hold = next((r for r in rows if r.symbol == session.symbol and r.status == "open"), None)
@@ -1726,7 +1734,7 @@ def _place_swing_mark(
                 None if mine is None else mine.side, 0 if mine is None else mine.shares, side, shares
             )
             if rest:
-                holds_mod.check_buying_power(
+                positions_mod.check_buying_power(
                     shares=rest,
                     price=price,
                     free_cash_usd=_swing_free_cash(db, row, thread, rows, mine, take, price, ctx.filling),
@@ -1736,11 +1744,11 @@ def _place_swing_mark(
                 holds_mod.check_stop(stays, stop_price, price)
         elif kind in EXIT_KINDS:
             if mine is None or mine.side != ("long" if kind == "long_exit" else "short"):
-                raise holds_mod.HoldProblem("No open practice hold to exit")
+                raise positions_mod.HoldProblem("No open practice hold to exit")
             take = mine.shares
         elif kind == "stop":
             if mine is None:
-                raise holds_mod.HoldProblem("Open a practice hold before setting a stop")
+                raise positions_mod.HoldProblem("Open a practice hold before setting a stop")
             holds_mod.check_stop(mine.side, stop_price, price)
         mark = PracticeMark(
             session_id=row.id,
@@ -1800,7 +1808,7 @@ def _place_swing_mark(
             if mine is not None:
                 mine.updated_at = now
         db.flush()
-    except holds_mod.HoldProblem as exc:
+    except positions_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
     ctx.marks = _marks_of(_load_marks(db, row.id))
     shown = price if price is not None else _price_or_none(ctx)
@@ -1821,12 +1829,12 @@ def _check_reopen(
     cash since the exit (the shared day clock lets a second name mark at the same moment). 409, nothing is written."""
     others = [r for r in rows if r is not reopened]
     try:
-        holds_mod.check_buying_power(
+        positions_mod.check_buying_power(
             shares=reopened.shares,
             price=float(reopened.entry_price),
-            free_cash_usd=swing_play.free_cash(db, thread, others, day),
+            free_cash_usd=_threads().free_cash(db, thread, others, day),
         )
-    except holds_mod.HoldProblem:
+    except positions_mod.HoldProblem:
         raise ReplayProblem(
             "Can't undo that exit · it would leave you without enough practice cash", path="kind", status=409
         ) from None
@@ -1864,7 +1872,7 @@ def _undo_swing_mark(db: Session, ctx: Ctx, target: Mark) -> dict[str, Any]:
             if stop is not None:  # play may already have paused on the old stop: it must not pause on it twice
                 restored = replace(restored, stop_hit_at=swing_play.crossing_since(ctx, restored, set_at))
             hold_rows.apply(mine, restored)
-    except holds_mod.HoldProblem as exc:
+    except positions_mod.HoldProblem as exc:
         raise ReplayProblem(exc.message, path=exc.path, status=exc.status) from None
     if mine is not None:
         mine.updated_at = row.updated_at = now

@@ -12,10 +12,10 @@ from swing_world import NOW, make_owner
 
 from ai_trading.contracts.practice_thread import PracticeLedgerEntryV1
 from ai_trading.db.models import PracticeLedger, PracticeMark, ReplaySession
-from ai_trading.replay import hold_rows, holds
+from ai_trading.replay import hold_rows, holds, positions
 from ai_trading.replay import threads as threads_mod
-from ai_trading.replay.holds import HoldProblem
 from ai_trading.replay.ledger import entry_out
+from ai_trading.replay.positions import HoldProblem
 
 DAY = date(2026, 9, 14)
 AT = pd.Timestamp("2026-09-14 13:31", tz="UTC")
@@ -105,7 +105,7 @@ def test_an_entry_round_trips_between_the_row_and_the_pure_hold(db_session, thre
 def test_every_mutable_field_is_copied_back(db_session, thread) -> None:
     row = _enter(db_session, thread, side="short", stop=104.0)
     hold = hold_rows.to_hold(row)
-    hold = holds.restate(hold, 2.0, date(2026, 9, 15))  # a 2-for-1 split
+    hold = positions.restate(hold, 2.0, date(2026, 9, 15))  # a 2-for-1 split
     hold = holds.mark_close(hold, 49.5, date(2026, 9, 15))
     hold = holds.set_stop(hold, 51.0)
     hold = holds.exit_hold(hold, day=date(2026, 9, 16), at=LATER, price=48.0, source="auto")
@@ -244,7 +244,7 @@ def test_credit_of_an_auto_exit_has_no_session_or_mark_and_a_short_wins_when_it_
 
 def test_credit_uses_the_restated_shares_and_prices_after_a_split(db_session, thread) -> None:
     row = _enter(db_session, thread, price=100.0, stop=95.0)
-    hold_rows.apply(row, holds.restate(hold_rows.to_hold(row), 2.0, date(2026, 9, 15)))
+    hold_rows.apply(row, positions.restate(hold_rows.to_hold(row), 2.0, date(2026, 9, 15)))
     _close(row, price=52.0)
     credited = hold_rows.credit(db_session, row, NOW)
     assert credited is not None

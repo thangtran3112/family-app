@@ -42,7 +42,7 @@ from ai_trading.db.models import (
     ReplayDayList,
     ReplaySession,
 )
-from ai_trading.replay import hold_rows, swing
+from ai_trading.replay import hold_rows, positions, swing
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
 from ai_trading.replay import plan as plan_mod
@@ -516,7 +516,7 @@ def test_a_hold_exited_today_reaches_the_ledger_only_when_the_day_ends(db_sessio
     state = swing.state(db_session, thread)
     assert state["holds_open"] == 1 and state["equity_usd"] == _approx(50_000 + pnl + open_pnl)
     assert state["free_cash_usd"] == _approx(50_000 + pnl - 50 * float(kept.entry_price))
-    assert holds_mod.pnl(hold_rows.to_hold(sold), exit_price) == pnl
+    assert positions.pnl(hold_rows.to_hold(sold), exit_price) == pnl
     assert hold_rows.credit(db_session, sold, NOW) is None  # a second credit writes nothing
     views = {h["symbol"]: h for h in summary["holds"]}  # the strip lists what is open and what left today
     assert (
@@ -600,7 +600,7 @@ def test_a_two_for_one_split_restates_shares_and_prices_and_leaves_the_pnl_alone
     for field in ("entry_price", "stop_at_entry", "stop_price", "last_close"):
         assert getattr(after, field) == pytest.approx(getattr(before, field) / 2, abs=1e-5)
     assert after.splits == ({"day": SPLIT_DAY.isoformat(), "ratio": 2.0, "shares_before": 100, "shares_after": 200},)
-    assert holds_mod.pnl(after, after.last_close) == _approx(holds_mod.pnl(before, before.last_close))
+    assert positions.pnl(after, after.last_close) == _approx(positions.pnl(before, before.last_close))
     out = swing.day_list_out(db_session, owner, day6.id, svc)
     (view,) = out["holds"]
     assert view["shares"] == 200 and view["price_basis"] == "prior_close" and view["days_held"] == 1

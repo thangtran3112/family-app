@@ -38,7 +38,7 @@ from ai_trading.db.models import (
     ReplayDayList,
     ReplaySession,
 )
-from ai_trading.replay import hold_rows, screen
+from ai_trading.replay import hold_rows, positions, screen
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import journal as journal_mod
 
@@ -294,7 +294,7 @@ def stop_pause(ctx: "Ctx", previous: pd.Timestamp, target: pd.Timestamp) -> tupl
     rows = hold_rows.open_holds(db, ctx.row.thread_id, lock=True)
     live = [r for r in rows if r.stop_price is not None and r.stop_hit_at is None]
     minutes = {r.symbol: frame for r in live if (frame := day_minutes(ctx, r.symbol)) is not None}
-    crossing = holds_mod.first_stop_crossing([hold_rows.to_hold(r) for r in live], minutes, previous, target)
+    crossing = positions.first_stop_crossing([hold_rows.to_hold(r) for r in live], minutes, previous, target)
     if crossing is None:
         return None, target
     for row in live:
@@ -315,7 +315,7 @@ def stop_pause(ctx: "Ctx", previous: pd.Timestamp, target: pd.Timestamp) -> tupl
 # -- the strip -----------------------------------------------------------------------------------------------------
 
 
-def _value(hold: holds_mod.Hold, last: float | None) -> float:
+def _value(hold: positions.Hold, last: float | None) -> float:
     """What a hold is worth per share now: the revealed price, else its prior close (else where it was bought)."""
     if last is not None:
         return last
@@ -350,7 +350,7 @@ def strip(ctx: "Ctx", clock: pd.Timestamp) -> list[dict[str, Any]]:
                 "hold": {
                     "side": hold.side,
                     "shares": hold.shares,
-                    "unrealized_usd": holds_mod.pnl(hold, value),
+                    "unrealized_usd": positions.pnl(hold, value),
                     "stop_price": hold.stop_price,
                     "stop_distance_pct": room,
                     "stopped": "yes" if hold.stop_hit_at is not None else "no",
@@ -377,22 +377,6 @@ def strip(ctx: "Ctx", clock: pd.Timestamp) -> list[dict[str, Any]]:
 # -- the hold as the screens read it -------------------------------------------------------------------------------
 
 
-def balance(db: Any, thread: PracticeThread) -> float:
-    """The thread's balance: the starting balance plus its ledger (never unrealized P/L)."""
-    return _swing().balance(db, thread)
-
-
-def free_cash(db: Any, thread: PracticeThread, rows: list[PracticeHold], day: date | None) -> float:
-    """Free cash on `day` (b2): the ledger balance, plus today's realized P/L of the holds that exited today (credited
-    to the ledger only when the day ends), minus the entry notional of every open hold. `day` None: between days,
-    nothing is waiting to be credited."""
-    realized = sum(
-        holds_mod.closed_pnl(hold_rows.to_hold(r)) for r in rows if r.status == "closed" and r.exit_day == day
-    )
-    held = [hold_rows.to_hold(r) for r in rows if r.status == "open"]
-    return holds_mod.free_cash(balance(db, thread), realized, held)
-
-
 def _gap(ctx: "Ctx", row: PracticeHold) -> float | None:
     """A carried hold's overnight gap so far: the first regular price of the day against its restated prior close,
     signed for its side. None for a hold entered today, or until the first price is revealed."""
@@ -412,7 +396,7 @@ def open_trade(ctx: "Ctx", price: float | None) -> dict[str, Any] | None:
     hold = hold_rows.to_hold(row)
     value = _value(hold, price)
     days = plan_days(ctx)
-    r = holds_mod.r_multiple(hold, value)
+    r = positions.r_multiple(hold, value)
     return {
         "trade_no": row.id,
         "side": hold.side,
@@ -420,7 +404,7 @@ def open_trade(ctx: "Ctx", price: float | None) -> dict[str, Any] | None:
         "entry_price": hold.entry_price,
         "stop_price": hold.stop_price,
         "last_price": value,
-        "unrealized_usd": holds_mod.pnl(hold, value),
+        "unrealized_usd": positions.pnl(hold, value),
         "r": r,
         "opened_day_no": days.index(hold.entry_day) + 1,
         "days_held": days.index(ctx.row.day) - days.index(hold.entry_day) + 1,
@@ -446,7 +430,7 @@ def hold_out(ctx: "Ctx", row: PracticeHold, price: float | None) -> dict[str, An
     if row.status == "open":
         hold = hold_rows.to_hold(row)
         value = _value(hold, price)
-        view["unrealized_usd"], view["r"] = holds_mod.pnl(hold, value), holds_mod.r_multiple(hold, value)
+        view["unrealized_usd"], view["r"] = positions.pnl(hold, value), positions.r_multiple(hold, value)
         view["price_basis"] = "last" if price is not None else "prior_close"
     return view
 
@@ -479,7 +463,7 @@ def previous_stop(db: Any, row: PracticeHold, removed_mark_id: int) -> tuple[flo
     return price, set_at
 
 
-def crossing_since(ctx: "Ctx", hold: holds_mod.Hold, since: pd.Timestamp) -> pd.Timestamp | None:
+def crossing_since(ctx: "Ctx", hold: positions.Hold, since: pd.Timestamp) -> pd.Timestamp | None:
     """When `hold`'s stop in force was first crossed in the regular one-minute bars closing in `(since, day clock]`, or
     None. An undone stop note puts an older stop back, and whether play had already paused on it is not stored, so it is
     read again from the bars of every day from `since` to today (an earlier day's raw bars are taken to the hold's share
@@ -500,7 +484,7 @@ def crossing_since(ctx: "Ctx", hold: holds_mod.Hold, since: pd.Timestamp) -> pd.
         frames.append(now)
     if not frames:
         return None
-    found = holds_mod.first_stop_crossing([hold], {hold.symbol: pd.concat(frames)}, since, day_clock(ctx))
+    found = positions.first_stop_crossing([hold], {hold.symbol: pd.concat(frames)}, since, day_clock(ctx))
     return None if found is None else found.at
 
 
@@ -578,7 +562,6 @@ __all__ = (
     "day_clock",
     "first_price",
     "forming_daily",
-    "free_cash",
     "hold_out",
     "journal",
     "last_price",

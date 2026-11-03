@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from ai_trading.core.calendar import et, previous_session
 from ai_trading.core.calendar import session as trading_session
 from ai_trading.db.models import PracticeHold, PracticePlan, PracticeThread, PracticeWeek, ReplayDayList, ReplaySession
-from ai_trading.replay import hold_rows, journal, signals, swing
+from ai_trading.replay import hold_rows, journal, positions, signals, swing
 from ai_trading.replay import holds as holds_mod
 from ai_trading.replay import plan as plan_mod
 from ai_trading.replay import threads as threads_mod
@@ -127,7 +127,7 @@ def _closes(w: _Week, basis: date, symbols: list[str]) -> dict[str, pd.Series]:
     return out
 
 
-def _price_day(h: holds_mod.Hold) -> date:
+def _price_day(h: positions.Hold) -> date:
     """The session whose share basis a CLOSED hold's prices are on: its exit day (a split restated them to it). A hold a
     reverse split rounded down to 0 shares closed flat on the pre-split basis, so its basis is the session before."""
     assert h.exit_day is not None
@@ -197,7 +197,7 @@ def _holds(w: _Week, labels: dict[int, str]) -> list[week_mod.HoldFact]:
                 h.shares,
                 h.entry_price,
                 holds_mod.closed_pnl(h),
-                holds_mod.r_multiple(h, exit_price),
+                positions.r_multiple(h, exit_price),
             )
             stops = (h.stop_at_entry, h.stop_price)
         else:  # open at the close: that day's summary holds the hold as it stood (the row may have moved on since)
