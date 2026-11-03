@@ -3,19 +3,22 @@
 import { useMemo, useState } from "react";
 import { MarketChart } from "@/components/charts/MarketChart";
 import { ChartLegend } from "@/components/workspace/ChartLegend";
-import type { CrosshairPoint } from "@/lib/chart-data";
+import type { ChartMarkerInput, CrosshairPoint } from "@/lib/chart-data";
 import { legendModel, type ChartSeries, type IndicatorId } from "@/lib/desk/workspace";
 import type { ReplayView } from "@/lib/replay/feedState";
 import { chartLevels, declutterMarkers, firstDrawBars, positionLevel, signalMarkers, stopLevel } from "@/lib/replay/marks";
 import { visibleOverlays, type ChartPrefs, type PrefId } from "@/lib/replay/chartPrefs";
 import type { ReplayBar } from "@/lib/replay/schemas";
 import type { TicketSide, TimeInForce } from "@/lib/replay/ticket";
-import { ms } from "@/lib/replay/time";
+import { firstBarFrom, ms } from "@/lib/replay/time";
 import { ChartOrder } from "./ChartOrder";
 import styles from "./replay.module.css";
 
 // Practice charts show the thread's price, VWAP and the two EMAs with volume. RSI and MACD stay on the live workspace.
 export const REPLAY_INDICATORS: ReadonlySet<IndicatorId> = new Set<IndicatorId>(["vwap", "ema9", "ema21", "volume"]);
+
+/** One empty list for every bar: a chart with no markers is handed the same array, so a new bar does not look like a change of markers (D-217). */
+const NO_MARKERS: ChartMarkerInput[] = [];
 
 export type ReplayChartProps = {
   symbol: string;
@@ -47,7 +50,10 @@ export function ReplayChart(props: ReplayChartProps) {
 function IntradayChart({ symbol, view, bars, series, focus, dimmed, prefs, onTogglePref, order }: ReplayChartProps) {
   const [crosshair, setCrosshair] = useState<CrosshairPoint | null>(null);
   // Only the replayed signals are marked: her entries and exits are not drawn on the chart. Their labels that would print over each other lose their text; the shapes stay (D-099).
-  const markers = useMemo(() => declutterMarkers(signalMarkers(view.signals, bars), bars), [bars, view.signals]);
+  const markers = useMemo(() => {
+    const placed = signalMarkers(view.signals, bars);
+    return placed.length === 0 ? NO_MARKERS : declutterMarkers(placed, bars);
+  }, [bars, view.signals]);
   // Her toggles filter the key levels; her position and stop are her own lines, not a preference, so they always show.
   const levels = useMemo(() => [...chartLevels(view.levels, prefs), ...positionLevel(view.openTrade), ...stopLevel(view.openTrade)], [view.levels, view.openTrade, prefs]);
   const last = view.last?.price ?? null;
@@ -60,9 +66,7 @@ function IntradayChart({ symbol, view, bars, series, focus, dimmed, prefs, onTog
   // The bars before the replay window are lookback for the lines. The first view opens on the window's first bar, so a 15m axis reads 9:30 to 4:00, not 5:00 AM (D-099).
   const sessionStart = useMemo(() => {
     if (view.windowStart === null) return undefined;
-    const open = ms(view.windowStart);
-    const first = bars.findIndex((bar) => ms(bar.t) >= open);
-    return first < 0 ? bars.length : first;
+    return firstBarFrom(bars, ms(view.windowStart));
   }, [bars, view.windowStart]);
 
   return (

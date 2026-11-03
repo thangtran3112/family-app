@@ -18,6 +18,18 @@ const tapeClock = new Intl.DateTimeFormat("en-US", { timeZone: ET, hour: "2-digi
 
 export const ms = (iso: string): number => Date.parse(iso);
 
+/** Index of the first bar starting at or after `instantMs`, or `bars.length` when none does. The bars ascend by start: a search, not a walk that parses all 6,000 start times (D-217). */
+export function firstBarFrom(bars: readonly { t: string }[], instantMs: number): number {
+  let low = 0;
+  let high = bars.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (ms(bars[mid]!.t) < instantMs) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
 export const addMs = (iso: string, delta: number): string => new Date(ms(iso) + delta).toISOString();
 
 /** Milliseconds ET is behind UTC at `instant` (positive: UTC-5 reads as 18_000_000). */
@@ -44,9 +56,19 @@ export function etHhMm(iso: string): string {
   return hourMinute.format(new Date(ms(iso))).replace(/^24:/, "00:");
 }
 
+// The tape redraws its 120 rows on every poll, and most of them were on the last one: a time of day is formatted once per print, not once per poll (D-217).
+const tapeClocks = new Map<string, string>();
+const TAPE_CLOCKS_KEPT = 2000;
+
 /** "10:07:11" ET (24 h): the tape's Time column. */
 export function etTapeClock(iso: string): string {
-  return tapeClock.format(new Date(ms(iso))).replace(/^24:/, "00:");
+  let text = tapeClocks.get(iso);
+  if (text === undefined) {
+    if (tapeClocks.size >= TAPE_CLOCKS_KEPT) tapeClocks.clear();
+    text = tapeClock.format(new Date(ms(iso))).replace(/^24:/, "00:");
+    tapeClocks.set(iso, text);
+  }
+  return text;
 }
 
 /** The ET calendar day of an instant, "2026-10-23". */

@@ -4,7 +4,7 @@ import { chartPalette } from "../desk/chartPalette.ts";
 import { formatEtDateClock, formatPrice } from "../desk/format.ts";
 import type { ChartPrefs, LevelId } from "./chartPrefs.ts";
 import type { OpenTrade, ReplayBar, ReplayLevels, ReplayMark, ReplaySignal } from "./schemas.ts";
-import { ms } from "./time.ts";
+import { firstBarFrom, ms } from "./time.ts";
 
 // Practice marks and replayed signals to chart inputs (02o §d). The journal chart draws the marks with their "Practice" labels
 // (annotations on a finished past day, never orders); the live replay chart draws none of them, so it reads as a broker's chart.
@@ -12,14 +12,16 @@ import { ms } from "./time.ts";
 const AMBER = "#FFB020";
 const MUTED = "#9B9BA1";
 
-/** The start of the bar that was open at `instantMs`: the last bar starting at or before it. Null before the first bar. */
+/** The start of the bar that was open at `instantMs`: the last bar starting at or before it. Null before the first bar. The bars ascend by start, so this is a search, not a walk from the first of 6,000 (D-217). */
 export function barStartFor(bars: readonly Pick<ReplayBar, "t">[], instantMs: number): string | null {
-  let found: string | null = null;
-  for (const bar of bars) {
-    if (ms(bar.t) <= instantMs) found = bar.t;
-    else break;
+  let low = 0;
+  let high = bars.length; // the first bar that starts after the instant
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (ms(bars[mid]!.t) <= instantMs) low = mid + 1;
+    else high = mid;
   }
-  return found;
+  return low === 0 ? null : bars[low - 1]!.t;
 }
 
 export function markLabel(mark: Pick<ReplayMark, "kind" | "shares" | "stop_price">): string {
@@ -159,9 +161,8 @@ export const lastMark = (marks: readonly ReplayMark[]): ReplayMark | null => [..
 
 /** Index of the first bar at or after the window start (the lookback sits before it); 0 when none is earlier. */
 export function windowIndex(bars: readonly Pick<ReplayBar, "t">[], windowStart: string): number {
-  const start = ms(windowStart);
-  const index = bars.findIndex((bar) => ms(bar.t) >= start);
-  return index < 0 ? 0 : index;
+  const index = firstBarFrom(bars, ms(windowStart));
+  return index >= bars.length ? 0 : index;
 }
 
 /** Which side of its bar the library draws a marker's text on: only markers on one side can print over each other. */
@@ -183,11 +184,24 @@ const LABEL_GAP_BARS = 12;
  * ponytail: a fixed 12-bar gap, not measured from the zoom; widen or measure if labels still touch.
  */
 export function declutterMarkers(markers: readonly ChartMarkerInput[], bars: readonly Pick<ReplayBar, "t">[]): ChartMarkerInput[] {
-  const index = new Map(bars.map((bar, position) => [bar.t, position]));
+  // No markers, no work, and the same (empty) array back, so the chart sees nothing change when a bar is added (D-217).
+  if (markers.length === 0) return markers as ChartMarkerInput[];
+  // Where each marker's bar sits: a search by start time (the bars ascend), not a map of all 6,000 bars built for each new bar.
+  const barOf = markers.map((marker) => {
+    const target = ms(marker.time);
+    let low = 0;
+    let high = bars.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (ms(bars[mid]!.t) < target) low = mid + 1;
+      else high = mid;
+    }
+    return low < bars.length && bars[low]!.t === marker.time ? low : -1;
+  });
   const hidden = new Set<number>();
   for (const side of ["above", "below", "in"] as const) {
     const newestFirst = markers
-      .flatMap((marker, position) => (MARKER_SIDE[marker.kind] === side && index.has(marker.time) ? [{ position, bar: index.get(marker.time)! }] : []))
+      .flatMap((marker, position) => (MARKER_SIDE[marker.kind] === side && barOf[position]! >= 0 ? [{ position, bar: barOf[position]! }] : []))
       .sort((a, b) => b.bar - a.bar || b.position - a.position);
     let lastKept = Infinity;
     for (const { position, bar } of newestFirst) {
