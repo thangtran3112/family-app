@@ -168,7 +168,8 @@ test("a feed silent for 90 minutes pauses quotes and, with alerts running, pause
   await prepareDesk(context, "technical-alerts");
   await setScenario(context, { now: MIDDAY, feedAgeMinutes: 90 });
   await openDesk(page, "/", MIDDAY);
-  await expect(page.locator(".dk-top").getByRole("status")).toContainText("Quotes paused · last update ");
+  // The 1180 band shows "Quotes paused · 2 hr ago" (D-232); the title keeps the whole sentence at both bands.
+  await expect(page.locator(".dk-top").getByRole("status")).toHaveAttribute("title", /^Quotes paused · last update /);
   await expect(page.getByRole("contentinfo", { name: "Status" })).toContainText(COPY.alertsPaused);
   await expectCleanScreen(page);
 });

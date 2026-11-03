@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DeskApiError } from "@/lib/api/client";
 import { backoffMs } from "@/lib/desk/backoff";
 import { useReportPracticeChrome } from "@/components/shell/desktop/PracticeChrome";
 import { RightRail } from "@/components/shell/desktop/RightRail";
 import { Badge } from "@/components/ui/Badge";
+import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
@@ -35,15 +36,18 @@ import {
   heldFirst,
   isStarred,
   laneLine,
+  minuteOfClock,
   neverScanned,
   rescanCounts,
   rescanCurrent,
   rescanProgressText,
+  rescanRefusedText,
   rescanRunning,
   rescanStaleText,
   riskPlanText,
   scanBuiltText,
   screenCellText,
+  screenCellTitle,
   screenCellTone,
   screenColumns,
   screenCountsText,
@@ -144,6 +148,8 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   const [scanning, setScanning] = useState(false);
   // This screen saw a scan run, so when the job reads "done" it can tell her it finished, not just show a new label.
   const [scanSeen, setScanSeen] = useState(false);
+  // The server refused a scan because every filter waits for its first bar (409): only the thread clock changes that (D-234). The minute it was refused in, and its reason.
+  const [refused, setRefused] = useState<{ minute: number; reason: string } | null>(null);
   // Keyboard focus follows the flow (D-092): the page heading on arrival.
   const titleRef = useRef<HTMLHeadingElement>(null);
   // At the 1180 band the right rail is a tab strip: its tabs open drawers of their own (D-020).
@@ -180,7 +186,14 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   const day = landed ? read.day : screen.day;
   // The table follows the clock from the first scan, so its columns are the settled set from the first paint; the cells the read fills wait as placeholders (D-159).
   const live = followState({ clock, thread: screen.thread }, { candidates: rows }, { landed, failed: atClock.error !== null });
-  const columns = columnsOf(screen, live);
+  // One list of columns while nothing it reads changes, so the table is measured when its columns change, not on every render the clock's poll causes (D-235).
+  const following = live !== null;
+  const today = live?.today ?? false;
+  const pending = live?.pending ?? false;
+  const columns = useMemo(
+    () => withPriorities(columnsOf({ columns: screen.columns, universe: screen.universe }, following ? { today, pending } : null), "practiceList"),
+    [screen.columns, screen.universe, following, today, pending],
+  );
   const liveAt = rows.find((row) => row.live)?.live?.at ?? clock;
   const market = (landed ? read.market : null) ?? screen.market ?? null;
   const last = lanes.filter((lane) => lane.status === "active").at(-1) ?? null;
@@ -225,8 +238,14 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
       async () => {
         setScanning(true);
         setScanSeen(false);
+        setRefused(null);
         try {
           await rescanScreen(threadId);
+        } catch (error) {
+          // 409: every filter waits for its first bar of the day. Asking again at the same time gets the same answer, so say where time moves instead of offering a retry (D-234).
+          if (!(error instanceof DeskApiError && error.status === 409)) throw error;
+          setRefused({ minute: minuteOfClock(clock), reason: problemMessage(error, PRACTICE_COPY.screenRescanError) });
+          return;
         } finally {
           setScanning(false);
         }
@@ -255,6 +274,8 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
     return () => clearInterval(timer);
   }, [scanRunning, onChanged]);
 
+  // The refusal stands for the clock minute it was made in; once the clock moves, a scan is worth asking for again. A closed thread is refused for its own reason, which its hint already gives.
+  const refusal = refused !== null && refused.minute === minuteOfClock(clock) && canRescan(screen) ? refused.reason : null;
   const unscanned = neverScanned(screen);
   const current = rescanCurrent({ clock, rescan: screen.rescan });
   const stale = rescanStaleText({ clock, rescan: screen.rescan });
@@ -323,7 +344,7 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
               {atClock.error !== null && !landed && <ErrorBlock message={PRACTICE_COPY.screenLiveError} onRetry={atClock.refresh} />}
               <DenseTable
                 caption="Candidates"
-                columns={withPriorities(columns, "practiceList")}
+                columns={columns}
                 rows={rows}
                 rowKey={(row) => row.symbol}
                 selectedKey={selected}
@@ -404,15 +425,22 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
         <section className={styles.section} aria-label="Scan">
           <h2 className={styles.sectionTitle}>{PRACTICE_COPY.screenRescanTitle}</h2>
           <div className={styles.actions}>
-            <Button disabled={busy || scanning || scanRunning || !canRescan(screen) || current} onClick={() => void rescan()}>
+            <Button disabled={busy || scanning || scanRunning || !canRescan(screen) || current || refusal !== null} onClick={() => void rescan()}>
               {scanning || scanRunning ? PRACTICE_COPY.screenRescanning : unscanned ? PRACTICE_COPY.screenScanNow : PRACTICE_COPY.screenRescanNow}
             </Button>
-            {!scanRunning && (
+            {!scanRunning && refusal === null && (
               <span className={styles.muted} data-testid="rescan-hint">
                 {!canRescan(screen) ? PRACTICE_COPY.screenRescanClosed : current ? PRACTICE_COPY.screenRescanCurrent : PRACTICE_COPY.screenRescanHint}
               </span>
             )}
           </div>
+          {refusal !== null && (
+            <div data-testid="rescan-refused">
+              <Banner tone="warn" action={<Button client href={threadPageHref(threadId)}>{PRACTICE_COPY.screenToSummary}</Button>}>
+                {rescanRefusedText(refusal)}
+              </Banner>
+            </div>
+          )}
           {screen.rescan_job?.state === "running" && (
             <div className={styles.scanProgress} data-testid="rescan-progress">
               <progress
@@ -500,7 +528,7 @@ function ScreenClock({ day, shown, status, market }: { day: string; shown: strin
   );
 }
 
-function columnsOf(screen: Screen, live: FollowState | null): DenseColumn<Candidate>[] {
+function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowState | null): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
@@ -526,7 +554,12 @@ function columnsOf(screen: Screen, live: FollowState | null): DenseColumn<Candid
         // The read at the clock has not landed: the column is here, its value is on its way (D-159).
         if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} />;
         const text = screenCellText(column, row);
-        if (column.format === "earnings") return row.earnings_state === "reported" ? <Badge tone="warn">{text}</Badge> : text;
+        if (column.format === "earnings") {
+          if (row.earnings_state === "reported") return <Badge tone="warn">{text}</Badge>;
+          // One spelling of no value (D-236); a name that was checked and holds no report says so in its tooltip.
+          const title = screenCellTitle(column, row);
+          return title ? <span title={title}>{text}</span> : text;
+        }
         const tone = screenCellTone(column, row);
         return <span className={tone ? styles[tone] : undefined}>{text}</span>;
       },

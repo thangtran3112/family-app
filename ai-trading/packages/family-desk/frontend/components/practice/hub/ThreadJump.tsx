@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, FieldError, FieldRow, Input } from "@/components/ui/Field";
 import { formatEtDateClock } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
-import { etDayOf } from "@/lib/replay/time";
+import { etDayOf, ms } from "@/lib/replay/time";
 import { checkJump, type ThreadClock } from "@/lib/replay/threadClock";
 import hub from "./hub.module.css";
 import o from "./overview.module.css";
@@ -21,21 +21,23 @@ export function ThreadJump({ clock, shown, busy, onJump }: { clock: ThreadClock;
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [jumping, setJumping] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [jumpedTo, setJumpedTo] = useState<string | null>(null);
   const check = checkJump(clock, shown, date, time);
   const horizon = formatEtDateClock(clock.horizon, { seconds: false });
   const from = shown ?? clock.clock;
+  // "Jumped to" is true only while the clock still stands at the Jump's time: Next open, Play, another tab, any later move ends it, so the page never carries two times for one clock (D-233).
+  const note = jumping ? PRACTICE_COPY.clockJumpingNote : jumpedTo !== null && shown !== null && ms(shown) === ms(jumpedTo) ? practiceText("clockJumped", { when: formatEtDateClock(jumpedTo, { seconds: false }) }) : null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (check.to === null || busy || jumping) return;
     const to = check.to;
     setJumping(true);
-    setNote(PRACTICE_COPY.clockJumpingNote);
+    setJumpedTo(null);
     const ok = await onJump(to);
     setJumping(false);
-    setNote(ok ? practiceText("clockJumped", { when: formatEtDateClock(to, { seconds: false }) }) : null);
     if (ok) {
+      setJumpedTo(to);
       setDate("");
       setTime("");
     }
