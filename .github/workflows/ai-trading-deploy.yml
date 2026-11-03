@@ -364,8 +364,12 @@ jobs:
           umask 077
           proxy_opts=()
           [[ -z "${SSH_PROXY_COMMAND:-}" ]] || proxy_opts=(-o "ProxyCommand=$SSH_PROXY_COMMAND")
-          ssh_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -p "$VPS_PORT" "${proxy_opts[@]}")
-          scp_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -P "$VPS_PORT" "${proxy_opts[@]}")
+          # One shared set, so a future ssh or scp call cannot drift. The keepalive
+          # (15 s x 4 = 60 s of silence) stops an idle channel -- a long image pull
+          # prints nothing -- from being dropped by a middlebox mid-deploy.
+          common_opts=(-i "$SSH_KEY_FILE" -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o TCPKeepAlive=yes "${proxy_opts[@]}")
+          ssh_opts=("${common_opts[@]}" -o ConnectTimeout=20 -p "$VPS_PORT")
+          scp_opts=("${common_opts[@]}" -P "$VPS_PORT")
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "install -d -m 0700 /tmp/ai-trading-deploy /tmp/ai-trading-deploy/env /tmp/ai-trading-deploy/config /tmp/ai-trading-deploy/config/control /tmp/ai-trading-deploy/config/deploy/production /tmp/ai-trading-deploy/bootstrap/ai-trading/control"
           # Only the controller (deploy.sh) and its config CLI (family_config.py)
@@ -418,9 +422,42 @@ jobs:
             ai-trading/control/state.py \
             "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/bootstrap/ai-trading/control/"
           scp "${scp_opts[@]}" "$ENV_DIR"/*.env "$VPS_USER@$VPS_HOST:/tmp/ai-trading-deploy/env/"
+          # The one remote ssh below carries the whole deploy. Its output is teed
+          # to a file so a failure can be told apart: a dead channel (the host may
+          # have finished the transaction anyway) or a real deploy failure.
+          deploy_log="$(mktemp)"
+          trap 'rm -f "$deploy_log"' EXIT
+          set +e
           # shellcheck disable=SC2029 # GHCR_USER and IMAGE_TAG expand on the runner on purpose
           printf '%s\n' "$GITHUB_TOKEN" | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/ai-trading-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/ai-trading-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '$GHCR_USER' --password-stdin; sudo install -d -m 0755 /opt/family-app/ai-trading; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/family_config.py /opt/family-app/ai-trading/family_config.py; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/deploy.sh /opt/family-app/ai-trading/deploy.sh; sudo bash /tmp/ai-trading-deploy/bootstrap/install.sh --src-dir /tmp/ai-trading-deploy/bootstrap; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' MIROFISH_ACTIVATE='$MIROFISH_ACTIVATE' DEPLOY_DARK='$DEPLOY_DARK' ENV_STAGING_DIR=/tmp/ai-trading-deploy/env APP_CONFIG_STAGING_DIR=/tmp/ai-trading-deploy/config /opt/family-app/ai-trading/deploy.sh"
+            "read -r GH_TOKEN; set -Eeuo pipefail; DOCKER_CONFIG=/dev/shm/ai-trading-docker-config-\$\$; cleanup() { sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker logout ghcr.io >/dev/null 2>&1 || true; sudo rm -rf \"\$DOCKER_CONFIG\" /tmp/ai-trading-deploy; }; trap cleanup EXIT; sudo install -d -o root -g root -m 0700 \"\$DOCKER_CONFIG\"; printf '%s' \"\$GH_TOKEN\" | sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" docker login ghcr.io --username '$GHCR_USER' --password-stdin; sudo install -d -m 0755 /opt/family-app/ai-trading; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/family_config.py /opt/family-app/ai-trading/family_config.py; sudo install -o root -g root -m 0755 /tmp/ai-trading-deploy/deploy.sh /opt/family-app/ai-trading/deploy.sh; sudo bash /tmp/ai-trading-deploy/bootstrap/install.sh --src-dir /tmp/ai-trading-deploy/bootstrap; sudo env DOCKER_CONFIG=\"\$DOCKER_CONFIG\" IMAGE_TAG='$IMAGE_TAG' MIROFISH_ACTIVATE='$MIROFISH_ACTIVATE' DEPLOY_DARK='$DEPLOY_DARK' ENV_STAGING_DIR=/tmp/ai-trading-deploy/env APP_CONFIG_STAGING_DIR=/tmp/ai-trading-deploy/config /opt/family-app/ai-trading/deploy.sh" 2>&1 | tee "$deploy_log"
+          ssh_rc="${PIPESTATUS[1]}"
+          set -e
+          if ((ssh_rc != 0)); then
+            # Lock residue from an interrupted run is a host state the next run must
+            # clear: always a real failure, never swallowed below.
+            if grep -q 'lifecycle lock is held' "$deploy_log"; then
+              exit "$ssh_rc"
+            fi
+            # Not a transport failure: deploy.sh (or another remote step) failed.
+            if ((ssh_rc != 255)) && ! grep -Eq 'Connection .* closed|Broken pipe|Timeout, server .* not responding' "$deploy_log"; then
+              exit "$ssh_rc"
+            fi
+            # The channel died, which says nothing about the deploy. Re-read the
+            # truth over a fresh connection: deploy.sh writes last-good-tag only
+            # after the new release passed its health check.
+            echo "::warning::deploy ssh channel failed (exit $ssh_rc); checking the deploy host over a fresh connection" >&2
+            for attempt in 1 2 3; do
+              sleep 10
+              last_good="$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" 'sudo -n cat /opt/family-app/ai-trading/last-good-tag' 2>/dev/null)" || last_good=""
+              if [[ "$last_good" == "$IMAGE_TAG" ]]; then
+                echo "::warning::deploy ssh channel dropped (exit $ssh_rc) but the deploy host reports last-good-tag $IMAGE_TAG: the deploy completed, treating it as success" >&2
+                exit 0
+              fi
+              echo "deploy: fresh-connection check $attempt/3 did not find last-good-tag $IMAGE_TAG" >&2
+            done
+            exit "$ssh_rc"
+          fi
           SCRIPT_EOF
           # Host details come straight from the target's Firestore group (the old
           # ai-trading/deploy profile only linked these three names to shared/vps).
