@@ -8,7 +8,7 @@ const SCREEN = { rescan: scan("2026-03-10T12:30:00Z") };
 
 test("D-043: the Screen says where prices come from, that the scan runs at the thread clock, and when it ran", () => {
   const line = screenStatusLine(SCREEN);
-  assert.deepEqual(line.left, ["Prices: Alpaca SIP · past days", "The scan runs at the thread clock"]);
+  assert.deepEqual(line.left, ["Prices: Alpaca SIP · up to the thread clock", "The scan runs at the thread clock"]);
   assert.deepEqual(line.right, ["Scanned 8:30 AM ET", "Would-fire signals only · nothing is delivered"]);
 });
 
@@ -19,7 +19,7 @@ test("D-165: after a re-scan the status line gives the scan's clock as the one s
 
 test("the thread journal says it is read live and which ET date the balance stands at", () => {
   assert.deepEqual(journalStatusLine([{ day: "2026-10-21" }, { day: "2026-10-23" }]), {
-    left: ["Prices: Alpaca SIP · past days", "Journal is read live, by ET date"],
+    left: ["Prices: Alpaca SIP · up to the thread clock", "Journal is read live, by ET date"],
     right: ["Balance as of 2026-10-23", "Would-fire signals only · nothing is delivered"],
   });
   assert.equal(journalStatusLine([]).right[0], "Balance at the start · no trade yet");

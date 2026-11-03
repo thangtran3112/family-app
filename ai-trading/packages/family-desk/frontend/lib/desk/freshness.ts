@@ -316,9 +316,9 @@ export function notEnoughHistoryText(timeframe: string): string {
 
 export const PRACTICE_COPY = {
   band: "Practice · replay of {day} · nothing here reaches a broker",
-  bandHub: "Practice · replay of past days · nothing here reaches a broker",
-  bandMarks: "Practice trades are simulated on a finished day · nothing is sent to a broker",
-  statusPricesPast: "Prices: Alpaca SIP · past days",
+  bandHub: "Practice · a pretend account with one clock · nothing here reaches a broker",
+  bandMarks: "Practice trades are simulated at the thread clock · nothing is sent to a broker",
+  statusPricesPast: "Prices: Alpaca SIP · up to the thread clock",
   statusPricesReplay: "Prices: Alpaca SIP · replay",
   statusPricesReplayIex: "Prices: Alpaca IEX · replay",
   statusReplayClock: "Replay clock {time}",
