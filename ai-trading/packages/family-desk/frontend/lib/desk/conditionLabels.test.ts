@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Condition } from "@ai-trading/contracts";
-import { operandBoxLabels, rowsBoxLabels } from "./conditionLabels.ts";
+import { filterBoxLabels, operandBoxLabels, rowsBoxLabels } from "./conditionLabels.ts";
 import { OPERAND_CATALOG, operandDef } from "./operands.ts";
 import { formProblems } from "./problems.ts";
 
@@ -38,4 +38,20 @@ test("rowsBoxLabels paths a single row as `when` and several rows as the group; 
   assert.deepEqual(Object.keys(rowsBoxLabels({ mode: "any", rows: [row, row] }, OPERAND_CATALOG)), ["when.any.0.left.lookbackDays", "when.any.1.left.lookbackDays"]);
   assert.equal(formProblems([{ path: "when.pct", message: "Field required" }])[0]!.field, "Condition · Within %");
   assert.equal(formProblems([{ path: "when.op", message: "Field required" }])[0]!.field, "Condition · Operator");
+});
+
+// D-205, the Rank by half: the screener's Rank by is the same picker as a condition's side, so its boxes are named the same way.
+test("D-205: Rank by's number boxes are summarised under their own label, while ranking is on", () => {
+  const rows: Condition[] = [{ op: "gte", left: { series: "close" }, right: { value: 1 } }];
+  for (const def of OPERAND_CATALOG.filter((item) => item.group !== "Levels" && item.params.length > 0)) {
+    const form = { mode: "all" as const, rows, rankEnabled: true, rankBy: def.make(Object.fromEntries(def.params.map((p) => [p.key, p.defaultValue]))) };
+    const labels = filterBoxLabels(form, OPERAND_CATALOG);
+    for (const param of def.params) {
+      assert.equal(labels[`rank.by.${param.key}`], `Rank by · ${param.label}`, `${def.id}.${param.key}`);
+      assert.equal(formProblems([{ path: `rank.by.${param.key}`, message: "Input should be less than or equal to 60" }], "error", labels)[0]!.field, `Rank by · ${param.label}`);
+    }
+  }
+  const rvol = { mode: "all" as const, rows, rankBy: { series: "rvol", lookbackDays: 10 } as const };
+  assert.equal(filterBoxLabels({ ...rvol, rankEnabled: true }, OPERAND_CATALOG)["rank.by.lookbackDays"], "Rank by · Days");
+  assert.deepEqual(filterBoxLabels({ ...rvol, rankEnabled: false }, OPERAND_CATALOG), {}, "ranking off: no Rank by box on screen, nothing to name");
 });

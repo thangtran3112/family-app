@@ -23,6 +23,9 @@ type Problems = PlanProblems & ThreadProblems;
 
 const SLOW_START_MS = 10_000;
 
+/** The problems with no control of their own in this modal (`mode`: every slot is taken; `shares`: only an existing thread sets it). The footer carries these and no others (ADR-0026). */
+const FOOTER_KEYS: ReadonlySet<string> = new Set(["mode", "shares"]);
+
 /** Server problems to the form's fields: a path of the setup (`startAt`, `screen.filters`) is the setup half's, anything else the thread's (`startingBalance`, `plan.maxLossUsd`, and `mode` for "every slot is taken"). */
 const serverProblems = (problems: readonly DeskApiProblem[]): Problems => ({
   ...threadProblems(problems.filter((problem) => planFieldOfPath(problem.path) === "form")),
@@ -142,11 +145,14 @@ export function NewPlanModal({
   const shown: Problems = { ...live, ...problems };
   const { form: formProblem, ...fieldProblems } = shown;
   const formError = failure ?? formProblem ?? null;
-  const echo = Object.values(fieldProblems).find((text) => text) ?? null;
-  // Why Start is off, in the footer: a problem first, then what is still missing. null means it can start.
-  const held = echo ?? (full ? fullText : noFilters ? PRACTICE_COPY.newThreadFilterFirst : null);
+  // A sentence a field owns shows once, at the field (ADR-0026): the footer never repeats it, and the disabled button is explained by the line above.
+  const problemEntries = Object.entries(fieldProblems);
+  const atField = problemEntries.some(([key, text]) => text && !FOOTER_KEYS.has(key));
+  // What the footer says instead: a problem no field shows, then what is still missing. null means nothing is owed.
+  const owed = problemEntries.find(([key, text]) => text && FOOTER_KEYS.has(key))?.[1] ?? (full ? fullText : noFilters ? PRACTICE_COPY.newThreadFilterFirst : null);
+  const held = atField || owed !== null;
   const note = practiceText("threadSubmitHint", { balance: formatWhole(shownBalance) });
-  const status = confirmingDiscard ? PRACTICE_COPY.newPlanDiscardTitle : submitting && slow ? PRACTICE_COPY.newThreadSlowStart : (held ?? note);
+  const status = confirmingDiscard ? PRACTICE_COPY.newPlanDiscardTitle : submitting && slow ? PRACTICE_COPY.newThreadSlowStart : (owed ?? note);
 
   return (
     <Dialog
@@ -157,7 +163,7 @@ export function NewPlanModal({
       headerActions={<Button ref={closeRef} disabled={submitting} onClick={requestClose}>{PRACTICE_COPY.newPlanClose}</Button>}
       onSubmit={(event) => {
         event.preventDefault();
-        if (held === null && !submitting && !confirmingDiscard) void submit();
+        if (!held && !submitting && !confirmingDiscard) void submit();
       }}
       footer={
         <>
@@ -181,7 +187,7 @@ export function NewPlanModal({
               variant="primary"
               className={modal.submit}
               loading={submitting}
-              aria-disabled={held !== null || submitting || undefined}
+              aria-disabled={held || submitting || undefined}
               aria-describedby="new-plan-note"
             >
               {submitting && <span className={landing.spinner} aria-hidden="true" />}
