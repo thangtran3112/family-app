@@ -50,6 +50,10 @@ start_pg "$SRC_PG"
 docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE expense_app;" >/dev/null
 docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 -d expense_app \
   -c "CREATE TABLE seed (id serial primary key); INSERT INTO seed DEFAULT VALUES;" >/dev/null
+# The bridge's write-once H1 archive database rides in the same backup; the drill is told to require it.
+docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE ai_trading_market_archive_db;" >/dev/null
+docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 -d ai_trading_market_archive_db \
+  -c "CREATE TABLE seed (id serial primary key); INSERT INTO seed DEFAULT VALUES;" >/dev/null
 start_pg "$DST_PG"
 
 mkdir -p "$WORKDIR/state" "$WORKDIR/ciphertext" "$WORKDIR/src-receipts" "$WORKDIR/dst-receipts" "$WORKDIR/fake-bucket"
@@ -156,13 +160,29 @@ log "scenario 1: everything passes within the RTO deadline"
 docker exec "$DST_PG" psql -U postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS expense_app;" >/dev/null
 if ! run_drill "s1" "report-s1.json" \
   -e RECOVERY_DEPLOY_CMD=true -e RECOVERY_HEALTH_CHECK_CMD=true -e RECOVERY_SMOKE_TEST_CMD=true \
+  -e RECOVERY_REQUIRED_DATABASES="ai_trading_market_archive_db" \
   -e RECOVERY_DEADLINE_SECONDS=300 >"$WORKDIR/drill1.log" 2>&1; then
   cat "$WORKDIR/drill1.log" >&2
   fail "scenario 1 (should pass) exited nonzero"
 fi
-jq -e '.overall_pass == true and .restore_passed == true and .deploy_passed == true and .postgres_passed == true and .receipt_volume_passed == true and .health_check_passed == true and .smoke_test_passed == true and .rto_breached == false' \
+jq -e '.overall_pass == true and .restore_passed == true and .deploy_passed == true and .postgres_passed == true and .required_databases_passed == true and .receipt_volume_passed == true and .health_check_passed == true and .smoke_test_passed == true and .rto_breached == false' \
   "$WORKDIR/report-s1.json" >/dev/null || { cat "$WORKDIR/report-s1.json" >&2; fail "scenario 1 report shape wrong"; }
 log "PASS: scenario 1 (all steps pass, including real postgres_passed against \$DST_PG and skipped-as-passed receipt_volume_passed, RTO not breached)"
+
+log "scenario 1b: a required database that is not in the backup fails the drill and is reported"
+docker exec "$DST_PG" psql -U postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS expense_app;" >/dev/null
+if run_drill "s1b" "report-s1b.json" \
+  -e RECOVERY_DEPLOY_CMD=true -e RECOVERY_HEALTH_CHECK_CMD=true -e RECOVERY_SMOKE_TEST_CMD=true \
+  -e RECOVERY_REQUIRED_DATABASES="ai_trading_market_archive_db no_such_archive_db" \
+  -e RECOVERY_DEADLINE_SECONDS=300 >"$WORKDIR/drill1b.log" 2>&1; then
+  cat "$WORKDIR/drill1b.log" >&2
+  fail "scenario 1b (a required database is missing) should have exited nonzero"
+fi
+jq -e '.overall_pass == false and .required_databases_passed == false and .restore_passed == true' \
+  "$WORKDIR/report-s1b.json" >/dev/null || { cat "$WORKDIR/report-s1b.json" >&2; fail "scenario 1b report shape wrong"; }
+grep -q "required database missing after restore: no_such_archive_db" "$WORKDIR/drill1b.log" \
+  || { cat "$WORKDIR/drill1b.log" >&2; fail "scenario 1b did not name the missing database"; }
+log "PASS: scenario 1b (a database the backup lacks fails the drill, named in the log)"
 
 log "scenario 2: health-check fails -> overall_pass false, but script still writes a report"
 docker exec "$DST_PG" psql -U postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS expense_app;" >/dev/null

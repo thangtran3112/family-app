@@ -57,6 +57,18 @@ curl -s -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer $M
 are their proto names (`DELAYED_15M`, `HEALTH_STATE_OK`). With no token configured the bridge boots but rejects every
 call. `GET /healthz` reports the process only, never a provider.
 
+## H1 archive (`internal/archive`)
+
+Write-once Postgres history of finished RAW `DAY_1`/`MINUTE_1` sessions, read through by `GetBars`
+(and filled by `EnsureHistory`). Quotes, the open session, adjusted bars, `HOUR_1` and pinned
+providers never touch it. Off unless `ARCHIVE_ENABLED=1`, which then needs `ARCHIVE_DATABASE_URL`
+(falling back to `DESK_RUNTIME_DATABASE_URL` for local dev); an unreachable database never stops the
+bridge booting and bars pass through from the provider. `bridge migrate` applies `schema.sql`
+(idempotent; the boot step runs it too). The production database, role and the profile knob are in
+`infrastructure/apps/ai-trading/README.md`, "Market-data H1 archive"; the role script is
+`docker/postgres/zz-20-market-archive-roles.sh`. `ARCHIVE_TEST_DATABASE_URL=postgres://…` makes the
+archive tests run on that database as well as on the in-memory store.
+
 ## Redis hot tier (`internal/providers/cache`)
 
 A small, disposable cache in front of the providers. It is **not** a history store: finished RAW

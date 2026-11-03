@@ -60,6 +60,22 @@ for db in "${DATABASES[@]}"; do
     -c "CREATE TABLE seed (id serial primary key, note text); INSERT INTO seed (note) VALUES ('$db-row-1'), ('$db-row-2');" >/dev/null
 done
 
+# The bridge's write-once H1 archive: provisioned exactly as 30-postgres.sh does (the role script
+# on stdin, the password passed with -e) and migrated with the bridge's own schema.sql, as the
+# archive role, so the restore proof covers the real owners, grants and indexes.
+ARCHIVE_DB=ai_trading_market_archive_db
+ARCHIVE_PW=archive-test-password-0123456789
+ARCHIVE_ROLE_SCRIPT="$ROOT/ai-trading/packages/market-data/bridge/docker/postgres/zz-20-market-archive-roles.sh"
+ARCHIVE_SCHEMA="$ROOT/ai-trading/packages/market-data/bridge/internal/archive/schema.sql"
+[[ -f "$ARCHIVE_ROLE_SCRIPT" && -f "$ARCHIVE_SCHEMA" ]] || fail "archive role script or schema.sql not found"
+docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $ARCHIVE_DB;" >/dev/null
+docker exec -i -e POSTGRES_USER=postgres -e POSTGRES_DB="$ARCHIVE_DB" -e MARKET_ARCHIVE_DB_PASSWORD="$ARCHIVE_PW" \
+  "$SRC_PG" bash < "$ARCHIVE_ROLE_SCRIPT" >/dev/null
+docker exec -i "$SRC_PG" psql -U market_archive -d "$ARCHIVE_DB" -v ON_ERROR_STOP=1 -q < "$ARCHIVE_SCHEMA"
+docker exec "$SRC_PG" psql -U market_archive -d "$ARCHIVE_DB" -v ON_ERROR_STOP=1 -q \
+  -c "INSERT INTO market_archive.archive_sessions (symbol, timeframe, session_date, provider_id, bar_count) VALUES ('SPY', '1d', '2026-01-05', 'alpaca', 1), ('SPY', '1d', '2026-01-06', 'alpaca', 0);" \
+  -c "INSERT INTO market_archive.raw_1d (symbol, session_date, \"timestamp\", open, high, low, close, volume, provider_id) VALUES ('SPY', '2026-01-05', '2026-01-05T05:00:00Z', 1.5, 2, 1, 1.75, 100, 'alpaca');"
+
 docker exec "$SRC_PG" psql -U postgres -v ON_ERROR_STOP=1 \
   -c "CREATE ROLE fbk_app LOGIN;" \
   -c "ALTER ROLE fbk_app SET work_mem = '64MB';" \
@@ -234,6 +250,23 @@ owner_grant=$(docker exec "$DST_PG" psql -U postgres -d expense_app -tAc "SELECT
 [[ "$owner_grant" == "fbk_app true" ]] || fail "table ownership and grants not restored: got [$owner_grant], expected [fbk_app true]"
 log "PASS: table ownership and grants restored (seed owned by fbk_app, SELECT granted to it)"
 
+# The write-once history survives the round trip: rows, owners, the unique keys that make it
+# write-once, and the role itself (password hash comes back through globals.sql).
+arch_psql() { docker exec "$DST_PG" psql -U market_archive -d "$ARCHIVE_DB" -v ON_ERROR_STOP=1 -tAq "$@"; }
+[[ "$(arch_psql -c "SELECT (SELECT count(*) FROM market_archive.archive_sessions) || '/' || (SELECT count(*) FROM market_archive.raw_1d)")" == "2/1" ]] \
+  || fail "archive rows not restored: expected 2 sessions / 1 daily bar"
+owners=$(arch_psql -c "SELECT (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'market_archive') || ' ' || (SELECT string_agg(DISTINCT pg_get_userbyid(relowner), ',') FROM pg_class WHERE relnamespace = 'market_archive'::regnamespace AND relkind IN ('r', 'i'))")
+[[ "$owners" == "market_archive market_archive" ]] || fail "archive schema/object owners not restored: got [$owners]"
+[[ "$(arch_psql -c "WITH w AS (INSERT INTO market_archive.archive_sessions (symbol, timeframe, session_date, provider_id, bar_count) VALUES ('SPY', '1d', '2026-01-05', 'other', 9) ON CONFLICT DO NOTHING RETURNING 1) SELECT count(*) FROM w")" == "0" ]] \
+  || fail "restored archive is no longer write-once: a second vendor overwrote a session"
+# The bridge applies schema.sql at every boot, as this role, on the restored database.
+docker exec -i "$DST_PG" psql -U market_archive -d "$ARCHIVE_DB" -v ON_ERROR_STOP=1 -q < "$ARCHIVE_SCHEMA" \
+  || fail "the restored archive role cannot re-apply schema.sql (the bridge's boot migration)"
+docker run --rm --network "$NET" -e PGPASSWORD="$ARCHIVE_PW" --entrypoint psql fbk-test-backup:local \
+  -h "$DST_PG" -U market_archive -d "$ARCHIVE_DB" -tAc "SELECT 1" >/dev/null \
+  || fail "the archive role cannot log in over the network with its password after restore"
+log "PASS: archive database restored (rows, owners, write-once keys, schema re-apply, role password) as the bridge uses it"
+
 log "verifying receipts from BOTH the full set and the daily delta are present with correct bytes"
 [[ -f "$WORKDIR/dst-receipts/full-receipt.pdf" ]] || fail "full-receipt.pdf missing after restore"
 [[ "$(cat "$WORKDIR/dst-receipts/full-receipt.pdf")" == "full-receipt-bytes" ]] || fail "full-receipt.pdf content mismatch"
@@ -242,7 +275,7 @@ log "verifying receipts from BOTH the full set and the daily delta are present w
 log "PASS: full + daily receipts both present with correct bytes"
 
 report_line=$(grep '"status":"restored"' "$WORKDIR/restore.log")
-echo "$report_line" | jq -e '.status == "restored" and .receipts_verified == true and (.databases | length) == 6' >/dev/null \
+echo "$report_line" | jq -e '.status == "restored" and .receipts_verified == true and (.databases | length) == 7 and ([.databases[].database] | index("ai_trading_market_archive_db")) != null' >/dev/null \
   || fail "restore.sh's final report is missing or has the wrong shape: $report_line"
 log "PASS: restore.sh emitted a final machine-readable verification report"
 

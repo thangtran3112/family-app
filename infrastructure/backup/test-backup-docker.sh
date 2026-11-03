@@ -87,8 +87,8 @@ for _ in $(seq 1 30); do
 done
 docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1 || fail "disposable PostgreSQL never became ready"
 
-log "seeding representative App, Foundry, Temporal, visibility, and mailbox databases"
-for db in expense_app expense_foundry temporal temporal_visibility mailbox_broker; do
+log "seeding representative App, Foundry, Temporal, visibility, mailbox, and ai-trading market-archive databases"
+for db in expense_app expense_foundry temporal temporal_visibility mailbox_broker ai_trading_market_archive_db; do
   docker exec "$PG" psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db;" >/dev/null
   docker exec "$PG" psql -U postgres -v ON_ERROR_STOP=1 -d "$db" \
     -c "CREATE TABLE seed (id serial primary key, note text); INSERT INTO seed (note) VALUES ('$db-row-1'), ('$db-row-2');" >/dev/null
@@ -113,7 +113,7 @@ cat "$WORKDIR/backup.log" >&2
 inventory="$WORKDIR/dump-out/database-inventory.json"
 [[ -s "$inventory" ]] || fail "database-inventory.json missing"
 
-for db in expense_app expense_foundry temporal temporal_visibility mailbox_broker; do
+for db in expense_app expense_foundry temporal temporal_visibility mailbox_broker ai_trading_market_archive_db; do
   jq -e --arg db "$db" '.databases | index($db) != null' "$inventory" >/dev/null \
     || fail "manifest database list missing $db"
   [[ -f "$WORKDIR/dump-out/dumps/$db.dump" ]] || fail "dump file missing for $db"
@@ -145,7 +145,7 @@ after_sha=$(sha256sum "$WORKDIR/state/last-success.json" | awk '{print $1}')
 log "PASS: failed dump left the prior success marker byte-identical"
 rm -f "$WORKDIR/state/last-success.json"
 
-log "PASS: Task 3 dump + validation proof (real PostgreSQL 17, 5 representative databases)"
+log "PASS: Task 3 dump + validation proof (real PostgreSQL 17, 6 representative databases)"
 
 # ---------------------------------------------------------------------------
 # Task 4: receipt capture + manifest, against the real receipts dir above
