@@ -589,8 +589,7 @@ test.describe("Practice", () => {
     await expect(closedRow.getByRole("button", { name: /Day \d+$/ })).toHaveCount(0);
     await expect(closedRow.getByRole("link", { name: PRACTICE_COPY.landingJournal, exact: true })).toBeVisible(); // a closed thread's one action
     const again = await clickNewPlan(page);
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0); // no Day/Swing choice (ADR-0025)
     await expectCleanScreen(page);
   });
 
@@ -642,12 +641,10 @@ test.describe("Practice", () => {
     const listed = (await (await context.request.get(`${origin}/api/desk/replay/threads`)).json()) as Array<{ thread: { startingBalance: number; stats: { balance: number } } }>;
     expect([listed[0]!.thread.startingBalance, listed[0]!.thread.stats.balance]).toEqual([25000, 25000]);
 
-    // The server allows several active threads per mode, so the modal keeps both segments on and Day can start another thread.
+    // The server allows several active threads, so the modal can start another thread (and has no Day/Swing choice, ADR-0025).
     await openDesk(page, "/practice");
     const again = await clickNewPlan(page);
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeEnabled();
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.threadModeDay })).toBeChecked();
-    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toBeEnabled();
+    await expect(again.getByRole("radio", { name: PRACTICE_COPY.swingModeLabel, exact: true })).toHaveCount(0);
     await expect(again).not.toContainText("is already active");
     await expect(again.getByRole("button", { name: START_BUTTON })).toBeVisible();
     await expectCleanScreen(page);

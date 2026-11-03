@@ -67,8 +67,12 @@ def test_the_clock_jump_route_is_forward_only_and_stops_at_the_end_of_the_plan(w
     assert body["state"] == "paused" and body["running"] is False  # a jump does not play the clock
     assert pd.Timestamp(body["account"]["as_of"]) == et(DAYS[0], "11:03")  # the account is read at the new time
 
+    same = client.post(url, json={"to": _iso(et(DAYS[0], "11:03"))}, headers=auth_headers())
+    assert same.status_code == 200 and pd.Timestamp(same.json()["clock"]) == et(DAYS[0], "11:03")  # now: a no-op
     back = client.post(url, json={"to": _iso(et(DAYS[0], "10:00"))}, headers=auth_headers())
-    assert back.status_code == 200 and pd.Timestamp(back.json()["clock"]) == et(DAYS[0], "11:03")  # past: stays put
+    assert back.status_code == 422  # the past is refused (ADR-0025), not ignored
+    assert _problems(back) == [{"path": "to", "message": "Time only moves forward · that time has passed"}]
+    assert pd.Timestamp(client.get(url, headers=auth_headers()).json()["clock"]) == et(DAYS[0], "11:03")  # unmoved
 
     beyond = client.post(url, json={"to": _iso(AFTER_PLAN + pd.Timedelta(minutes=1))}, headers=auth_headers())
     assert beyond.status_code == 422

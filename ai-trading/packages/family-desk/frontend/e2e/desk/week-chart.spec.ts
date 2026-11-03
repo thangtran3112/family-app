@@ -30,7 +30,8 @@ async function linePixels(page: Page) {
   }, { chart: CHART, amber: EQUITY_AMBER, grey: BALANCE_GREY });
 }
 
-test.describe("Week review chart", () => {
+// ADR-0025 step 1: swing is closed (POST /threads answers 409); this file goes with the swing removal step.
+test.describe.skip("Week review chart", () => {
   test.beforeEach(async ({ context }) => {
     await prepareDesk(context);
   });

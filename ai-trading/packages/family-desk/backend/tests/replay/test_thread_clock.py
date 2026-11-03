@@ -327,7 +327,13 @@ def test_step_and_jump_move_the_clock_forward_only_and_nothing_clamps_them_at_th
     thread_id, _, _ = _started(db_session, user_id, svc)
     assert _control(db_session, user_id, svc, thread_id, step="bar")["clock"] == _at("09:35")
     assert _control(db_session, user_id, svc, thread_id, to=_at("09:50").to_pydatetime())["clock"] == _at("09:50")
-    assert _control(db_session, user_id, svc, thread_id, to=_at("09:40").to_pydatetime())["clock"] == _at("09:50")
+    same = _control(db_session, user_id, svc, thread_id, to=_at("09:50").to_pydatetime())
+    assert same["clock"] == _at("09:50")  # `to` equal to the clock: a no-op
+    with pytest.raises(ReplayProblem) as back:  # the past is refused, not ignored (ADR-0025)
+        _control(db_session, user_id, svc, thread_id, speed=5, to=_at("09:40").to_pydatetime())
+    assert (back.value.status, back.value.path, back.value.message) == (422, "to", clock_mod.TIME_FORWARD_ONLY)
+    assert _read(db_session, user_id, svc, thread_id)["speed"] == 1  # and nothing else in the request was applied
+    assert _read(db_session, user_id, svc, thread_id)["clock"] == _at("09:50")
     assert _control(db_session, user_id, svc, thread_id, to=_at("13:00").to_pydatetime())["clock"] == _at("13:00")
     assert _control(db_session, user_id, svc, thread_id, to=_at("17:00").to_pydatetime())["clock"] == _at("17:00")
     overnight = et(DAYS[1], "03:00")
