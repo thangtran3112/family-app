@@ -119,3 +119,78 @@ for (const scan of SCANS) {
     await expect.poll(async () => { const now = await pane(); return now.content <= now.width && scan.keep.every((label) => now.shown.includes(label)); }).toBe(true);
   });
 }
+
+// D-247: the Symbol cell is capped at 112 px, so a rescan pill beside the ticker was eaten whole by the cell's ellipsis and a row that is "New in this scan" or "No longer matches" showed
+// nothing. The state is now a dot (`data-rescan`) that the ellipsis cannot take: the ticker truncates, the dot is fixed. It shows at every width the Screen runs at, with the ticker whole.
+const MARK_WIDTHS = [null, 1300] as const;
+for (const width of MARK_WIDTHS) {
+  test(`D-247 a new or kept row shows its state beside a whole ticker${width === null ? "" : ` at ${width}`}`, async ({ page, context }) => {
+    test.setTimeout(120_000);
+    test.skip(width !== null && test.info().project.name !== "desktop-1440", "a viewport of its own: one project runs it");
+    if (width !== null) await page.setViewportSize({ width, height: page.viewportSize()!.height });
+    await prepareDesk(context);
+    await saveFilter(context, EVERY_NAME);
+    const threadId = await createThreadByApi(context, { startAt: "2026-09-25T09:45:00-04:00" });
+    await openScreen(page, context, threadId);
+    // Row 0 is new in this scan (a 4-letter ticker), row 1 is kept though it no longer matches (5 letters, the widest the cap must show whole), row 5 is new with a ticker too long for the cell.
+    const names = new Map([[0, "SMCI"], [1, "GOOGL"], [5, "VERYLONGTICKER"]]);
+    await page.route(`${origin}/api/desk/replay/threads/${threadId}/screen*`, async (route) => {
+      if (route.request().method() !== "GET" || route.request().url().includes("peek=")) return route.continue();
+      const response = await route.fetch();
+      const body = await response.json();
+      body.columns = SERVER_COLUMNS;
+      body.universe = { ...body.universe, prev_basis: false };
+      body.candidates = SYMBOLS.map((symbol, index) => candidate(names.get(index) ?? symbol, index, true, LIVE));
+      await route.fulfill({ response, json: body });
+    });
+    await openDesk(page, `/practice/screen?thread=${threadId}`);
+    const table = page.getByRole("table", { name: "Candidates" });
+    await expect(table.getByRole("row")).toHaveCount(31, { timeout: 60_000 });
+
+    const cell = async (symbol: string) => {
+      const td = table.locator("tbody tr", { hasText: symbol }).first().locator("td").first();
+      return td.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const mark = element.querySelector("[data-rescan]");
+        const dot = mark?.getBoundingClientRect();
+        const name = mark?.parentElement?.firstElementChild as HTMLElement | null;
+        return {
+          text: (element as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
+          textContent: element.textContent?.replace(/\s+/g, " ").trim() ?? "",
+          state: mark?.getAttribute("data-rescan") ?? null,
+          label: mark?.getAttribute("aria-label") ?? null,
+          title: mark?.getAttribute("title") ?? null,
+          dot: dot ? { width: dot.width, height: dot.height, inside: dot.left >= box.left && dot.right <= box.right && dot.top >= box.top && dot.bottom <= box.bottom } : null,
+          whole: name ? name.scrollWidth <= name.clientWidth : null,
+          cell: Math.round(box.width),
+        };
+      });
+    };
+
+    const fresh = await cell("SMCI");
+    expect(fresh.state, "a new row has its marker").toBe("new");
+    expect(fresh.label).toBe("New in this scan");
+    expect(fresh.title).toBe("New in this scan");
+    expect(fresh.textContent).toBe("SMCI · New in this scan");
+    expect(fresh.whole, "the 4-letter ticker is whole").toBe(true);
+
+    const kept = await cell("GOOGL");
+    expect(kept.state, "a kept row has its marker").toBe("held");
+    expect(kept.label).toBe("No longer matches");
+    expect(kept.title).toBe("No longer matches");
+    expect(kept.textContent).toBe("GOOGL · No longer matches");
+    expect(kept.whole, "the 5-letter ticker is whole in the 112 px cell").toBe(true);
+
+    const long = await cell("VERYLONGTICKER");
+    expect(long.state, "a ticker too long for the cell still shows the marker").toBe("new");
+    expect(long.whole, "that ticker truncates, the marker does not").toBe(false);
+
+    for (const mark of [fresh, kept, long]) {
+      expect(mark.dot!.width, "the marker has a box").toBeGreaterThan(0);
+      expect(mark.dot!.height).toBeGreaterThan(0);
+      expect(mark.dot!.inside, "the marker is inside its cell").toBe(true);
+    }
+    // A plain row carries no marker.
+    await expect(table.locator("tbody tr", { hasText: "NVDA" }).first().locator("[data-rescan]")).toHaveCount(0);
+  });
+}
