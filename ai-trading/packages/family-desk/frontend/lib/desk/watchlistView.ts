@@ -23,6 +23,20 @@ export function strategyChips(tags: WatchlistTableRow["tags"], max: number = STR
   return { shown: chips.slice(0, max), hidden: chips.slice(max) };
 }
 
+type BackfillItem = { asset_type: string; backfill: "ready" | "pending" };
+
+/**
+ * Whether the row waits on history that is still coming. A future has no history source to wait for, so it never does,
+ * even from an API that still answers `pending` for it (D-246): one rule for each row's tag and the banner's count.
+ */
+export const isBackfilling = (item: BackfillItem): boolean => item.backfill === "pending" && item.asset_type !== "future";
+
+/** The caption over the table while any symbol is backfilling, or null; it counts the same rows each row's tag marks. */
+export function backfillBanner(items: readonly BackfillItem[]): string | null {
+  const count = items.filter(isBackfilling).length;
+  return count > 0 ? `Backfilling history for ${count} ${count === 1 ? "symbol" : "symbols"}` : null;
+}
+
 export const NAME_MAX = 80;
 
 /** NFKC-normalised and trimmed, the same rule the API applies (1 to 80 characters). */

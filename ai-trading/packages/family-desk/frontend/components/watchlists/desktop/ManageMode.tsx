@@ -6,7 +6,7 @@ import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { PanelHeader } from "@/components/ui/Panel";
 import { AddSymbol } from "@/components/watchlists/AddSymbol";
 import { createWatchlist, deleteWatchlist, removeWatchlistItem, renameWatchlist, reorderWatchlist } from "@/lib/desk/watchlists";
-import { manageErrorMessage, moveSymbol, orderChange, validateListName } from "@/lib/desk/watchlistView";
+import { isBackfilling, manageErrorMessage, moveSymbol, orderChange, validateListName } from "@/lib/desk/watchlistView";
 import styles from "./watchlistDesktop.module.css";
 
 type Named = { id: number; name: string };
@@ -80,7 +80,7 @@ export function ManageMode({
   const original = items.map((item) => item.symbol);
   const order = draft ?? original;
   const change = orderChange(original, order);
-  const backfilling = new Set(items.filter((item) => item.backfill === "pending").map((item) => item.symbol));
+  const backfilling = new Set(items.filter(isBackfilling).map((item) => item.symbol));
 
   const [newName, setNewName] = useState("");
   const [horizon, setHorizon] = useState<Horizon>("intraday");

@@ -3,7 +3,7 @@ import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import { WatchlistTableSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
-import { manageErrorMessage, moveSymbol, normalizeListName, orderChange, strategyChips, tagLine, validateListName } from "./watchlistView.ts";
+import { backfillBanner, isBackfilling, manageErrorMessage, moveSymbol, normalizeListName, orderChange, strategyChips, tagLine, validateListName } from "./watchlistView.ts";
 import { droppedKeys, withPriorities } from "./columns.ts";
 
 const table = WatchlistTableSchema.parse(loadDeskFixture("watchlist_1_table"));
@@ -66,4 +66,23 @@ test("manage errors use plain words, the API detail first", () => {
 test("a narrow pane drops RVOL then bias label on the watchlist table", () => {
   const columns = withPriorities(["symbol", "last", "change_pct", "rvol_10d", "bias_label", "tags"].map((key) => ({ key })), "watchlist");
   assert.deepEqual(droppedKeys(columns), ["rvol_10d", "bias_label"]);
+});
+
+// D-246: a futures symbol never reads `ready` from an older API (no daily-bar source), so it must not hold the banner.
+const item = (symbol: string, asset_type: "stock" | "future", backfill: "ready" | "pending") => ({ symbol, asset_type, backfill });
+
+test("a futures item is never backfilling: it has no history source to wait for, whatever the API says", () => {
+  assert.equal(isBackfilling(item("/ES", "future", "pending")), false);
+  assert.equal(isBackfilling(item("/ES", "future", "ready")), false);
+  assert.equal(isBackfilling(item("AAPL", "stock", "pending")), true);
+  assert.equal(isBackfilling(item("AAPL", "stock", "ready")), false);
+});
+
+test("the banner counts only the symbols that can still fill: one future plus two stocks reads 2, and it clears with the stocks", () => {
+  const filling = [item("/ES", "future", "pending"), item("CHWY", "stock", "pending"), item("ETSY", "stock", "pending")];
+  assert.equal(backfillBanner(filling), "Backfilling history for 2 symbols");
+  assert.equal(backfillBanner([item("/ES", "future", "pending"), item("CHWY", "stock", "ready"), item("ETSY", "stock", "pending")]), "Backfilling history for 1 symbol");
+  assert.equal(backfillBanner([item("/ES", "future", "pending"), item("CHWY", "stock", "ready"), item("ETSY", "stock", "ready")]), null);
+  assert.equal(backfillBanner([item("/ES", "future", "pending")]), null);
+  assert.equal(backfillBanner([]), null);
 });

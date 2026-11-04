@@ -6,6 +6,7 @@ import { Labeled } from "../Labeled.tsx";
 import type { Quote } from "../../lib/stream.ts";
 import { openQuoteStream } from "../../lib/stream.ts";
 import { BarsSchema } from "../../lib/api/schemas.ts";
+import { isBackfilling } from "../../lib/desk/watchlistView.ts";
 import { firstChartSelection } from "../../lib/today-chart.ts";
 import {
   countSignalsToday,
@@ -235,7 +236,7 @@ function WatchlistRow({
           </button>
         ) : <span>{item.symbol}</span>}
         <span className={styles.symbolMeta}>
-          {kind ? kind : "unsupported asset"}{item.backfill === "pending" ? " · backfilling" : ""}
+          {kind ? kind : "unsupported asset"}{isBackfilling(item) ? " · backfilling" : ""}
         </span>
       </th>
       <td>
