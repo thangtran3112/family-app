@@ -30,14 +30,17 @@ export function cellTitle<R>(column: { truncate?: boolean | ((row: R) => string)
   return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
 }
 
-/** What a column does with its width. A `num` column is never clipped. A `fill` column takes the slack and ellipsizes; a `truncate` column that is not `fill` holds exactly `minWidth` and ellipsizes. */
-export function columnLayout(column: { kind?: ColumnKind; fill?: boolean; truncate?: unknown; minWidth?: number }): { fill: boolean; truncate: boolean; style: { width?: number; minWidth?: number; maxWidth?: number } | undefined } {
+/** What a column does with its width. A `num` column is never clipped. A `fill` column takes the slack and ellipsizes; a `truncate` column that is not `fill` holds exactly `minWidth` and ellipsizes, or, with only a `maxWidth`, is as wide as its content up to the cap and ellipsizes past it (D-243). */
+export function columnLayout(column: { kind?: ColumnKind; fill?: boolean; truncate?: unknown; minWidth?: number; maxWidth?: number }): { fill: boolean; truncate: boolean; style: { width?: number; minWidth?: number; maxWidth?: number } | undefined } {
   const clips = column.kind !== "num";
   const fill = clips && Boolean(column.fill);
   const truncate = clips && Boolean(column.truncate);
-  const { minWidth } = column;
-  if (minWidth === undefined) return { fill, truncate, style: undefined };
-  return { fill, truncate, style: truncate && !fill ? { width: minWidth, minWidth, maxWidth: minWidth } : { minWidth } };
+  const { minWidth, maxWidth } = column;
+  if (truncate && !fill) {
+    if (minWidth !== undefined) return { fill, truncate, style: { width: minWidth, minWidth, maxWidth: minWidth } };
+    return { fill, truncate, style: maxWidth === undefined ? undefined : { maxWidth } };
+  }
+  return { fill, truncate, style: minWidth === undefined ? undefined : { minWidth } };
 }
 
 // -- pane fit (D-157) ---------------------------------------------------------------------------------------------------------

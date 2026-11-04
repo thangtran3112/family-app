@@ -5,6 +5,7 @@ import type { Quote } from "@/lib/stream.ts";
 import { openQuoteStream } from "@/lib/stream.ts";
 import { qualityLabel } from "@/lib/labels";
 import { cardBackValue } from "@/lib/watchlists/cardBack";
+import { isBackfilling } from "@/lib/desk/watchlistView";
 import { marketSymbolForItem } from "@/lib/watchlists/symbols";
 import type { WatchlistItemsSchema } from "@/lib/api/schemas";
 import styles from "./watchlists.module.css";
@@ -43,7 +44,7 @@ function WatchlistRow({
       <th scope="row">
         <span className={styles.symbol}>{marketSymbol ?? item.symbol}</span>
         <span className={styles.assetType}>{marketSymbol ? (item.asset_type === "future" ? "Future" : "Stock") : "Unsupported asset"}</span>
-        {item.backfill === "pending" && <span className={styles.pending}>Backfilling history</span>}
+        {isBackfilling(item) && <span className={styles.pending}>Backfilling history</span>}
       </th>
       <td data-label="Latest price">
         <strong className={styles.price}>{cardBackValue(quote?.close)}</strong>

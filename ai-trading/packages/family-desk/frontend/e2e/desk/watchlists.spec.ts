@@ -139,6 +139,25 @@ test.describe("technical seed", () => {
     await expectCleanScreen(page);
   });
 
+  // D-246: a future never gets daily bars, so its row sat on `pending` for good and was counted by the caption for ever.
+  test("a future added from Manage reads ready: its row has no backfill tag and the caption does not count it", async ({ page }) => {
+    await openDesk(page, "/watchlists");
+    await manageButton(page).click();
+    await page.getByRole("textbox", { name: "Add a symbol" }).fill("/ES");
+    await expect(page.getByRole("combobox", { name: "Asset type" })).toHaveValue("future");
+    await page.getByRole("button", { name: "Add symbol" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Added /ES" })).toBeVisible();
+    const items = await apiGet<Array<{ symbol: string; backfill: string }>>(page, `/api/desk/watchlists/${DAY_MOVERS}/items`);
+    expect(items.find((item) => item.symbol === "/ES")?.backfill).toBe("ready");
+    const filling = items.filter((item) => item.backfill === "pending").length;
+    expect(filling).toBeGreaterThan(0); // the seeded stocks have no daily bars, so the caption has something to count
+    await expect(page.getByRole("listitem").filter({ hasText: "/ES" })).not.toContainText("Backfilling history");
+    await manageButton(page).click(); // back to the list: its caption counts the same rows
+    await expect(symbolTable(page).locator("tbody tr")).toHaveCount(DAY_MOVERS_SYMBOLS.length + 1);
+    await expect(page.getByText(/^Backfilling history for/)).toHaveText(`Backfilling history for ${filling} ${filling === 1 ? "symbol" : "symbols"}`);
+    await expectCleanScreen(page);
+  });
+
   test("moving NVDA down and saving the order keeps it after a reload", async ({ page }) => {
     await openDesk(page, "/watchlists");
     await manageButton(page).click();

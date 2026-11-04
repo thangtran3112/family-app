@@ -335,7 +335,7 @@ test.describe("the filing form", () => {
   test.beforeEach(async ({ context }) => prepareDesk(context, "technical"));
 
   test("opened from the Practice Screen it shows where she was, and Send says why it is off", async ({ page }) => {
-    await openDesk(page, "/feedback/new?from=%2Fpractice%2Fday%3Fid%3D5");
+    await openDesk(page, "/feedback/new?from=%2Fpractice%2Fscreen%3Fthread%3D5");
     await expect(page).toHaveTitle("Report a problem - Family Desk");
     const send = page.getByRole("button", { name: "Send report" });
     await expect(page.getByRole("radio", { name: "Bug" })).toBeChecked();
@@ -350,7 +350,7 @@ test.describe("the filing form", () => {
     await expect(form(page)).toContainText("Reason: a title and a description are required.");
     await page.getByRole("textbox", { name: /^Title/ }).fill("Screen marks a name starred");
     await expect(form(page)).toContainText("Reason: a description is required.");
-    await expect(page.getByText("25 / 120")).toBeVisible();
+    await expect(page.getByText("27 / 120")).toBeVisible(); // the counter is the title's length: "Screen marks a name starred"
     await page.getByRole("textbox", { name: "What happened?" }).fill("It turns green too early.");
     await expect(send).toBeEnabled();
     await expect(form(page)).toContainText("Ready · every required field is filled and nothing is uploading.");
@@ -377,7 +377,7 @@ test.describe("the filing form", () => {
 
   test("filing a bug with a screenshot shows the upload, then the sent state with the new id, and the API has the report", async ({ page }) => {
     const release = await holdUploads(page);
-    await openDesk(page, "/feedback/new?from=%2Fpractice%2Fday%3Fid%3D5");
+    await openDesk(page, "/feedback/new?from=%2Fpractice%2Fscreen%3Fthread%3D5");
     await page.getByRole("textbox", { name: /^Title/ }).fill("Screen marks a name starred");
     await page.getByRole("textbox", { name: "What happened?" }).fill("It turns green too early.");
     await page.getByRole("textbox", { name: "What did you expect?" }).fill("It should stay In progress.");

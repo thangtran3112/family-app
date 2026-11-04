@@ -1,3 +1,6 @@
+import threading
+from datetime import date
+
 import pytest
 from conftest import OTHER_EMAIL, OWNER_EMAIL, auth_headers, wait_for
 from sqlalchemy.orm import sessionmaker
@@ -5,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 import ai_trading.api.watchlists as watchlists_module
 from ai_trading.api.app import app
 from ai_trading.data.backfill import BackfillResult
+from ai_trading.db.models import Bar1d
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +67,74 @@ def test_adding_a_future_symbol_still_creates_the_item_even_though_backfill_writ
 
     assert response.status_code == 201
     assert response.json()["asset_type"] == "future"
+
+
+def _join_threads_done() -> bool:
+    return not any(t.name == "backfill_on_join" and t.is_alive() for t in threading.enumerate())
+
+
+def _backfill_by_symbol(client, watchlist_id):
+    rows = client.get(f"/api/desk/watchlists/{watchlist_id}/items", headers=auth_headers()).json()
+    return {row["symbol"]: row["backfill"] for row in rows}
+
+
+def test_a_future_is_not_pending_once_its_join_is_done(client):
+    """D-246: a future never writes `Bar1d` (no data source until 2b), so `pending` could never clear for it."""
+    watchlist_id = client.post(
+        "/api/desk/watchlists", json={"name": "Futures", "horizon": "swing"}, headers=auth_headers()
+    ).json()["id"]
+    client.post(
+        f"/api/desk/watchlists/{watchlist_id}/items",
+        json={"symbol": "/ES", "asset_type": "future"},
+        headers=auth_headers(),
+    )
+    assert wait_for(_join_threads_done)
+
+    assert _backfill_by_symbol(client, watchlist_id) == {"/ES": "ready"}
+
+
+def test_a_stock_stays_pending_until_its_daily_bars_land_and_a_future_beside_it_does_not(
+    client, db_session, monkeypatch
+):
+    """The stock path is unchanged: only stored daily bars clear `pending` (D-244); an empty join leaves it."""
+    monkeypatch.setattr(
+        watchlists_module,
+        "backfill_on_join",
+        lambda session, data_sources, *, symbol, asset, now: BackfillResult(
+            requested=(now.date(), now.date()), written=[], uncovered=[]
+        ),
+    )
+    watchlist_id = client.post(
+        "/api/desk/watchlists", json={"name": "Mixed", "horizon": "swing"}, headers=auth_headers()
+    ).json()["id"]
+    for symbol, asset_type in (("AAPL", "stock"), ("/ES", "future"), ("MSFT", "stock")):
+        client.post(
+            f"/api/desk/watchlists/{watchlist_id}/items",
+            json={"symbol": symbol, "asset_type": asset_type},
+            headers=auth_headers(),
+        )
+    assert wait_for(_join_threads_done)
+
+    # Two stocks still filling; the future does not count among them.
+    assert _backfill_by_symbol(client, watchlist_id) == {"AAPL": "pending", "/ES": "ready", "MSFT": "pending"}
+
+    db_session.add(
+        Bar1d(symbol="AAPL", day=date(2024, 12, 30), open=10, high=11, low=9, close=10, volume=1, source="test")
+    )
+    db_session.add(
+        Bar1d(symbol="MSFT", day=date(2024, 12, 30), open=10, high=11, low=9, close=10, volume=1, source="test")
+    )
+    db_session.commit()
+
+    assert _backfill_by_symbol(client, watchlist_id) == {"AAPL": "ready", "/ES": "ready", "MSFT": "ready"}
+    reordered = client.put(
+        f"/api/desk/watchlists/{watchlist_id}/order", json={"symbols": ["/ES", "MSFT", "AAPL"]}, headers=auth_headers()
+    )
+    assert [(row["symbol"], row["backfill"]) for row in reordered.json()] == [
+        ("/ES", "ready"),
+        ("MSFT", "ready"),
+        ("AAPL", "ready"),
+    ]
 
 
 def test_watchlist_item_actions_404_for_a_watchlist_owned_by_someone_else(client):
