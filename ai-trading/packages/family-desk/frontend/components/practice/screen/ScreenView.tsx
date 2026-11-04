@@ -14,7 +14,7 @@ import { DenseTable, type DenseColumn } from "@/components/ui/DenseTable";
 import { FactList } from "@/components/ui/FactList";
 import { PracticeNotice } from "@/components/practice/PracticeNotice";
 import { EmptyBlock, ErrorBlock, Skeleton } from "@/components/ui/StateBlocks";
-import { withPriorities } from "@/lib/desk/columns";
+import { SCREEN_WIDTH_CAPS, withPriorities } from "@/lib/desk/columns";
 import { formatEtDateClock, formatEtDateTimeZone, formatEtTimeZone } from "@/lib/desk/format";
 import { PRACTICE_COPY, practiceText } from "@/lib/desk/freshness";
 import { loadScreen, loadThread, openLane, patchScreen, rescanScreen } from "@/lib/desk/replay";
@@ -545,6 +545,9 @@ function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowSta
       key: "symbol",
       label: "Symbol",
       sortValue: (row) => row.symbol,
+      // The ticker with its rescan badge is 182 px on a live scan: the cell is capped so the badge gives way, not the columns beside it (D-243). The tooltip says it whole.
+      truncate: (row) => [row.symbol, row.new_since_list ? PRACTICE_COPY.screenRescanNew : null, row.held_over ? PRACTICE_COPY.screenRescanHeld : null].filter(Boolean).join(" · "),
+      maxWidth: SCREEN_WIDTH_CAPS.symbol,
       render: (row) => (
         <span>
           <span className={styles.symbol}>{row.symbol}</span>
@@ -553,11 +556,14 @@ function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowSta
         </span>
       ),
     },
-    { key: "filters", label: "Filters", sortValue: (row) => filtersText(row), render: (row) => filtersText(row) },
+    // The names that say why a row is listed never drop (D-223); past the cap they ellipsize and the tooltip holds them whole (D-243).
+    { key: "filters", label: "Filters", sortValue: (row) => filtersText(row), render: (row) => filtersText(row), truncate: true, maxWidth: SCREEN_WIDTH_CAPS.filters },
     ...screenColumns(screen, live).map((column): DenseColumn<Candidate> => ({
       key: column.key,
       label: column.label,
       align: column.format === "time" || column.format === "earnings" ? "left" : "right",
+      // A figure is never clipped (`num`); the earnings badge is the one text that varies in width, so it is capped like the name and the filters (D-243).
+      ...(column.format === "time" ? {} : column.format === "earnings" ? { truncate: (row: Candidate) => screenCellTitle(column, row) ?? screenCellText(column, row), maxWidth: SCREEN_WIDTH_CAPS.earnings } : { kind: "num" as const }),
       sortValue: column.value,
       // No name was checked (every cell a dash): the column would be a row of dashes to scroll past (D-136).
       hideWhenEmpty: column.format === "earnings",
@@ -566,7 +572,7 @@ function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowSta
         if (live?.pending && column.live) return <Skeleton width={36} height={10} className={styles.pending} still />;
         const text = screenCellText(column, row);
         if (column.format === "earnings") {
-          if (row.earnings_state === "reported") return <Badge tone="warn">{text}</Badge>;
+          if (row.earnings_state === "reported") return <Badge tone="warn"><span className={styles.badgeText}>{text}</span></Badge>;
           // One spelling of no value (D-236); a name that was checked and holds no report says so in its tooltip.
           const title = screenCellTitle(column, row);
           return title ? <span title={title}>{text}</span> : text;
