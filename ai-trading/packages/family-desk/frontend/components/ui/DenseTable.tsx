@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { cellAlign, cellTitle, columnLayout, dropEmptyColumns, fitColumns, type CellAlign, type ColumnFit, type ColumnKind, type ColumnWidth } from "@/lib/desk/denseTable";
-import { fitsAsRendered, measureKey } from "@/lib/desk/denseMeasure";
+import { fitsAsRendered, measureKey, measuredWidthsStale } from "@/lib/desk/denseMeasure";
 import { ariaSort, nextSort, sortRows, type SortState, type SortValue } from "@/lib/desk/sort";
 import styles from "./DenseTable.module.css";
 
@@ -27,6 +27,8 @@ export type DenseColumn<R> = {
   truncate?: boolean | ((row: R) => string);
   /** px. The column never gets narrower; on a `truncate` column that is not `fill` it is also the width. */
   minWidth?: number;
+  /** px. On a `truncate` column without `minWidth`: the widest the column gets. It is as wide as its content below the cap and ellipsizes (full text in the tooltip) past it, so a short value costs no more than it needs. Ignored on `num` and `fill`. */
+  maxWidth?: number;
   /** Drop the column when its cell is empty (nothing, "" or the em dash) in every row. */
   hideWhenEmpty?: boolean;
 };
@@ -131,6 +133,8 @@ export function DenseTable<R>({
   const settle = useCallback(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
+    // The table is wider than its pane though the fit says it fits: the widths measured are stale (a placeholder replaced by its value, a late font), so measure again (D-243).
+    if (measured.current && wrap.firstElementChild && measuredWidthsStale(applied.current, wrap.firstElementChild.getBoundingClientRect().width, wrap.clientWidth)) measured.current = null;
     if (measured.current) apply(fitColumns(measured.current.columns, measured.current.reserved, wrap.clientWidth), false);
     else {
       const next = measure();
@@ -172,6 +176,8 @@ export function DenseTable<R>({
     if (!wrap) return;
     const observer = new ResizeObserver(settle);
     observer.observe(wrap);
+    // The table's own box too: it grows when the values land (the wrapper does not), which is when a measure taken before them turns out stale.
+    if (wrap.firstElementChild) observer.observe(wrap.firstElementChild);
     return () => observer.disconnect();
   }, [showEmpty, settle]);
   // The scroll edge shadow: the wrapper says which edges have more to scroll to; the CSS draws the shadow (no re-render on scroll).
