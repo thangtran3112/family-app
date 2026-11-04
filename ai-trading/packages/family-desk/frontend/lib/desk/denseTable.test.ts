@@ -59,6 +59,14 @@ test("a number is never clipped; a truncating column holds its minWidth, a fill 
   assert.deepEqual(columnLayout({}), { fill: false, truncate: false, style: undefined });
 });
 
+test("a truncating column with a maxWidth is as wide as its content up to the cap, then ellipsizes (D-243)", () => {
+  assert.deepEqual(columnLayout({ truncate: true, maxWidth: 120 }), { fill: false, truncate: true, style: { maxWidth: 120 } });
+  assert.deepEqual(columnLayout({ truncate: true, minWidth: 60, maxWidth: 120 }), { fill: false, truncate: true, style: { width: 60, minWidth: 60, maxWidth: 60 } }, "an exact minWidth wins over a cap");
+  assert.deepEqual(columnLayout({ fill: true, truncate: true, minWidth: 60, maxWidth: 120 }), { fill: true, truncate: true, style: { minWidth: 60 } }, "a fill column takes the slack: no cap");
+  assert.deepEqual(columnLayout({ kind: "num", truncate: true, maxWidth: 120 }), { fill: false, truncate: false, style: undefined }, "a number is never clipped");
+  assert.deepEqual(columnLayout({ maxWidth: 120 }), { fill: false, truncate: false, style: undefined }, "nothing clips without truncate: a cap would cut a value");
+});
+
 // -- fitColumns (D-157) ------------------------------------------------------------------------------------------------------
 
 const col = (key: string, max: number, min: number, priority?: number): ColumnWidth => (priority === undefined ? { key, max, min } : { key, max, min, priority });

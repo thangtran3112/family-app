@@ -1,9 +1,9 @@
-import { columnLayout, type ColumnKind } from "./denseTable.ts";
+import { columnLayout, type ColumnFit, type ColumnKind } from "./denseTable.ts";
 
 // When DenseTable has to measure its pane fit, and when it does not (D-241). Pure, so node --test can pin it (components/ui/DenseTable.tsx uses it).
 
 /** What a column adds to the table's widths: everything about it that can change a header's or a cell's width. Not `render`: a new closure over the same column is not a new width. */
-type MeasuredColumn = { key: string; label: string; kind?: string; align?: string; priority?: number; fill?: boolean; truncate?: unknown; minWidth?: number };
+type MeasuredColumn = { key: string; label: string; kind?: string; align?: string; priority?: number; fill?: boolean; truncate?: unknown; minWidth?: number; maxWidth?: number };
 
 /**
  * The inputs of one measure, as a string: the columns by value, the row count, whether there is an actions cell, whether the empty state shows. DenseTable measures
@@ -11,7 +11,7 @@ type MeasuredColumn = { key: string; label: string; kind?: string; align?: strin
  * Portfolio tab) and at every poll of a table whose `hideWhenEmpty` column is dropped (`dropEmptyColumns` returns a new array then): two forced layouts each time.
  */
 export function measureKey(columns: readonly MeasuredColumn[], rowCount: number, hasActions: boolean, showEmpty: boolean): string {
-  const set = columns.map((c) => [c.key, c.label, c.kind ?? "", c.align ?? "", c.priority ?? "", c.fill ? 1 : 0, c.truncate ? 1 : 0, c.minWidth ?? ""].join("~")).join("|");
+  const set = columns.map((c) => [c.key, c.label, c.kind ?? "", c.align ?? "", c.priority ?? "", c.fill ? 1 : 0, c.truncate ? 1 : 0, c.minWidth ?? "", c.maxWidth ?? ""].join("~")).join("|");
   return `${rowCount}#${hasActions ? 1 : 0}${showEmpty ? 1 : 0}#${set}`;
 }
 
@@ -29,4 +29,13 @@ export function fitsAsRendered(columns: readonly { kind?: ColumnKind; fill?: boo
   if (applied.hidden.length > 0 || applied.wrap) return false;
   if (columns.some((column) => columnLayout(column).fill || columnLayout(column).truncate)) return false;
   return tableWidth <= paneWidth;
+}
+
+/**
+ * True when the table is wider than its pane although the fit it applied says everything left fits: the widths it was measured at are not the widths it has now (a placeholder was
+ * measured and its value landed wider, a web font arrived), so a column that "just fitted" overflows. The caller measures again. Not when the columns that never drop overflow on their
+ * own (`fits` false): there is nothing more to drop. Half a pixel is no scroll (D-243).
+ */
+export function measuredWidthsStale(applied: Pick<ColumnFit, "fits">, tableWidth: number, paneWidth: number): boolean {
+  return applied.fits && tableWidth - paneWidth > 0.5;
 }
