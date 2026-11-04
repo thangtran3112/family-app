@@ -111,7 +111,9 @@ def _items_out(session: Session, items: list[WatchlistItem]) -> list[WatchlistIt
         WatchlistItemReadOut(
             symbol=item.symbol,
             asset_type=item.asset_type,
-            backfill="ready" if item.symbol in available else "pending",
+            # A future has no daily-bar source until 2b's IBKR client ships, so its join fetches nothing and no `Bar1d`
+            # ever lands: it is `ready` (nothing left to fetch), not `pending` forever (D-246).
+            backfill="ready" if item.asset_type == "future" or item.symbol in available else "pending",
         )
         for item in items
     ]

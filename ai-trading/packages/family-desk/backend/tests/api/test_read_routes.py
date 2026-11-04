@@ -704,7 +704,7 @@ def test_watchlist_items_backfill_is_derived_from_stored_daily_bars(client, db_s
     assert response.status_code == 200
     assert response.json() == [
         {"symbol": "AAPL", "asset_type": "stock", "backfill": "ready"},
-        {"symbol": "/ES", "asset_type": "future", "backfill": "pending"},
+        {"symbol": "/ES", "asset_type": "future", "backfill": "ready"},  # D-246: nothing to fetch for a future
     ]
 
 

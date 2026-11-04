@@ -11,6 +11,7 @@ import { COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { loadWatchlistItems, loadWatchlists, loadWatchlistTable } from "@/lib/desk/watchlists";
 import { pickDefaultWatchlist } from "@/lib/desk/watchlistRail";
+import { backfillBanner } from "@/lib/desk/watchlistView";
 import { slotsText } from "@/lib/watchlists/slots";
 import { ManageMode } from "./ManageMode";
 import { StrategiesOnList } from "./StrategiesOnList";
@@ -88,13 +89,11 @@ export function WatchlistDesktop() {
       </EmptyBlock>
     );
   } else {
-    const backfilling = (items.data ?? []).filter((item) => item.backfill === "pending").length;
+    const backfilling = backfillBanner(items.data ?? []);
     body = (
       <>
         {table.updating && <p className={styles.caption}>{COPY.updating}</p>}
-        {backfilling > 0 && (
-          <p className={styles.caption}>Backfilling history for {backfilling} {backfilling === 1 ? "symbol" : "symbols"}</p>
-        )}
+        {backfilling && <p className={styles.caption}>{backfilling}</p>}
         <WatchlistTableDesktop rows={table.data.rows} dim={stale} />
       </>
     );

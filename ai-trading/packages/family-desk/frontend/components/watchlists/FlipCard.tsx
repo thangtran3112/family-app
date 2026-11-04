@@ -5,6 +5,7 @@ import { BarsSchema, TechnicalsSchema, WatchlistItemsSchema } from "@/lib/api/sc
 import { deskFetch } from "@/lib/api/client";
 import { BiasGauge } from "@/components/technicals/Gauges";
 import { loadTechnicalData } from "@/lib/technicals/load";
+import { isBackfilling } from "@/lib/desk/watchlistView";
 import { qualityLabel } from "@/lib/labels";
 import { openQuoteStream, type Quote } from "@/lib/stream.ts";
 import { cardBackValue } from "@/lib/watchlists/cardBack";
@@ -107,7 +108,7 @@ export function FlipCard({
         <div>
           <strong className={styles.symbol}>{marketSymbol ?? item.symbol}</strong>
           <span className={styles.assetType}>{marketSymbol ? (item.asset_type === "future" ? "Future" : "Stock") : "Unsupported asset"}</span>
-          {item.backfill === "pending" && <span className={styles.pending}>Backfilling history</span>}
+          {isBackfilling(item) && <span className={styles.pending}>Backfilling history</span>}
         </div>
         <button
           aria-label={flipped ? `Show ${marketSymbol ?? item.symbol} price front` : `Show ${marketSymbol ?? item.symbol} technical back`}
