@@ -37,6 +37,12 @@ export function backfillBanner(items: readonly BackfillItem[]): string | null {
   return count > 0 ? `Backfilling history for ${count} ${count === 1 ? "symbol" : "symbols"}` : null;
 }
 
+/** The table's own cadence: the items are read again this often while a stock is still backfilling (D-248). */
+export const BACKFILL_POLL_MS = 60_000;
+
+/** How often to read the items again: every `BACKFILL_POLL_MS` while a stock backfills, never once nothing does (a settled list must not poll). */
+export const backfillPollMs = (items: readonly BackfillItem[]): number | undefined => (items.some(isBackfilling) ? BACKFILL_POLL_MS : undefined);
+
 export const NAME_MAX = 80;
 
 /** NFKC-normalised and trimmed, the same rule the API applies (1 to 80 characters). */
