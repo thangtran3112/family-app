@@ -24,7 +24,7 @@ export const BOARD_PRIORITIES = {
   // fixed block (52-week high, distance from it). What never drops: the name (symbol, filters: they say why it is listed, D-223), the scan price, the price now and
   // its move, RVOL (the scan's), ATR %, RSI and earnings: 1,064 px with the pinned actions beside the widest Filters cell measured (186 px; 162 on the walks),
   // inside the 1,088 px pane at 1440 and the 1,108 px pane at 1180. A scan read before the open keeps `practiceList`: its previous-session figures are its figures.
-  // That sum held only for a name with no rescan badge and the shortest filters: on a live scan the name's cell was 182 px (ticker and its "No longer matches" badge), the filters 214
+  // That sum held only for a name with no rescan pill and the shortest filters: on a live scan the name's cell was 182 px (ticker and its "No longer matches" pill, since replaced by a dot, D-247), the filters 214
   // and the never-drop set 1,107 px, 19 px past the 1440 pane. The three text cells that vary with the data are capped (`SCREEN_WIDTH_CAPS`), so the set is bounded whatever the scan holds.
   practiceListOpen: { matched_since: 1, volume: 2, gap_pct_open: 3, vs_vwap_pct: 4, prev_close: 5, change_pct: 6, prev_change_pct: 7, prev_rvol: 8, high_252d: 9, dist_to_252d_high_pct: 10 },
   practiceReview: { range_pct: 1, close_move_pct: 2 },
@@ -42,7 +42,7 @@ export const BOARD_PRIORITIES = {
 
 /**
  * px, a cell's whole width with its padding: the most each text column of the Screen takes (D-243). Past the cap the text ellipsizes and the tooltip holds it whole; below it the column is
- * as wide as its content. The ticker stays whole (it needs 70 px), so the name's cap clips the rescan badge beside it; the filters' cap (200) is above the widest pair of the usual names
+ * as wide as its content. The ticker stays whole (it needs 70 px) and the rescan dot beside it is a fixed 6 px that the cap never clips (D-247); the filters' cap (200) is above the widest pair of the usual names
  * (186 px), so the "why it is listed" reads whole unless a scan names three; the earnings cap clips the "Reported before the open" badge (187 px), whose tooltip says the rest.
  * With the caps the never-drop set is at most 1,066 px in the 1,088 px pane at 1440 (the numbers are in `columns.test.ts`).
  */
