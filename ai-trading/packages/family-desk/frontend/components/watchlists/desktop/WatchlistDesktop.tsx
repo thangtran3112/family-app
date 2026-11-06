@@ -11,7 +11,7 @@ import { COPY } from "@/lib/desk/freshness";
 import { useDeskQuery } from "@/lib/desk/useDeskQuery";
 import { loadWatchlistItems, loadWatchlists, loadWatchlistTable } from "@/lib/desk/watchlists";
 import { pickDefaultWatchlist } from "@/lib/desk/watchlistRail";
-import { backfillBanner } from "@/lib/desk/watchlistView";
+import { backfillBanner, backfillPollMs } from "@/lib/desk/watchlistView";
 import { slotsText } from "@/lib/watchlists/slots";
 import { ManageMode } from "./ManageMode";
 import { StrategiesOnList } from "./StrategiesOnList";
@@ -36,7 +36,11 @@ export function WatchlistDesktop() {
   );
   // The table's prices dim and the badge speaks for the same feed the top bar does (V-Watchlists-03).
   const stale = useFreshness({ stamp: table.data?.stamp ?? null, connection: table.connection }).stale;
-  const items = useDeskQuery(`watchlist-items:${activeId}`, (signal) => loadWatchlistItems(activeId ?? 0, { signal }), { enabled: activeId !== null });
+  // The caption and every row's tag come from these items, so while a stock is pending they are read again as often as the table (D-248).
+  const items = useDeskQuery(`watchlist-items:${activeId}`, (signal) => loadWatchlistItems(activeId ?? 0, { signal }), {
+    enabled: activeId !== null,
+    intervalMs: (read) => backfillPollMs(read ?? []),
+  });
 
   function refreshSymbols() {
     table.refresh();
