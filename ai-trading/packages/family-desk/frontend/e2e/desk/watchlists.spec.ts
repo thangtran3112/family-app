@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, expectCleanScreen, openDesk, origin, prepareDesk, test, watchApi } from "./helpers";
+import { expect, expectCleanScreen, openDesk, origin, prepareDesk, SEED_NOW, test, watchApi } from "./helpers";
 
 // D7 Watchlists (02m §c2, §a3.5) against the real backend. Seed list ids: Day movers 1, Swing 2.
 
@@ -156,6 +156,47 @@ test.describe("technical seed", () => {
     await expect(symbolTable(page).locator("tbody tr")).toHaveCount(DAY_MOVERS_SYMBOLS.length + 1);
     await expect(page.getByText(/^Backfilling history for/)).toHaveText(`Backfilling history for ${filling} ${filling === 1 ? "symbol" : "symbols"}`);
     await expectCleanScreen(page);
+  });
+
+  // D-248: the items fed the caption and every row's tag but were read on load, add and delete only, so "Backfilling history" outlived the backfill until a reload.
+  // The items route answers from the real backend with each backfill field set by `answer`; the page's own clock runs the poll.
+  async function stubBackfill(page: Page, answer: (read: number) => (item: { asset_type: string }) => "pending" | "ready") {
+    let reads = 0;
+    await page.route(new RegExp(`/api/desk/watchlists/${DAY_MOVERS}/items$`), async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      reads += 1;
+      const real = (await (await route.fetch()).json()) as Array<{ asset_type: string; backfill: string }>;
+      const backfillOf = answer(reads);
+      await route.fulfill({ json: real.map((item) => ({ ...item, backfill: backfillOf(item) })) });
+    });
+    return () => reads;
+  }
+  const caption = (page: Page) => page.getByText(/^Backfilling history for/);
+
+  test("D-248: the caption clears by itself on the next poll when the last stock turns ready, and the poll then stops", async ({ page }) => {
+    const reads = await stubBackfill(page, (read) => (item) => (item.asset_type === "stock" && read < 2 ? "pending" : "ready"));
+    await page.clock.install({ time: new Date(SEED_NOW) });
+    await page.goto("/watchlists");
+    await expect(caption(page)).toHaveText(`Backfilling history for ${DAY_MOVERS_SYMBOLS.length} symbols`);
+    await expect.poll(reads).toBeGreaterThanOrEqual(1);
+    await page.clock.runFor(61_000); // the next read answers ready, no reload
+    await expect(caption(page)).toHaveCount(0);
+    await expect(symbolTable(page).locator("tbody tr")).toHaveCount(DAY_MOVERS_SYMBOLS.length);
+    const settled = reads();
+    await page.clock.runFor(180_000); // a settled list is not read again
+    expect(reads()).toBe(settled);
+    await expect(caption(page)).toHaveCount(0);
+  });
+
+  test("D-248: a future that reads pending never starts the poll and never shows the caption", async ({ page }) => {
+    const reads = await stubBackfill(page, () => (item) => (item.asset_type === "future" ? "pending" : "ready"));
+    await page.clock.install({ time: new Date(SEED_NOW) });
+    await page.goto("/watchlists");
+    await expect(symbolTable(page).locator("tbody tr")).toHaveCount(DAY_MOVERS_SYMBOLS.length);
+    await expect.poll(reads).toBe(1);
+    await page.clock.runFor(180_000);
+    expect(reads()).toBe(1);
+    await expect(caption(page)).toHaveCount(0);
   });
 
   test("moving NVDA down and saving the order keeps it after a reload", async ({ page }) => {
