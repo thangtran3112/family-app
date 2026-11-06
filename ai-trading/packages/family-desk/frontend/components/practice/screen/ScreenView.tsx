@@ -196,14 +196,15 @@ function ScreenBody({ screen, onChanged, failures }: { screen: Screen; onChanged
   const following = live !== null;
   const today = live?.today ?? false;
   const pending = live?.pending ?? false;
+  const marked = rows.some((row) => row.new_since_list || row.held_over);
   const columns = useMemo(
     () =>
       withPriorities(
-        columnsOf({ columns: screen.columns, universe: screen.universe }, following ? { today, pending } : null),
+        columnsOf({ columns: screen.columns, universe: screen.universe }, following ? { today, pending } : null, marked),
         // A scan read after the open adds the scan's own RVOL and change % to the previous session's: which of them give way is that board's (D-243).
         screen.universe.prev_basis ? "practiceList" : "practiceListOpen",
       ),
-    [screen.columns, screen.universe, following, today, pending],
+    [screen.columns, screen.universe, following, today, pending, marked],
   );
   const liveAt = rows.find((row) => row.live)?.live?.at ?? clock;
   const market = (landed ? read.market : null) ?? screen.market ?? null;
@@ -539,20 +540,31 @@ function ScreenClock({ day, shown, status, market }: { day: string; shown: strin
   );
 }
 
-function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowState | null): DenseColumn<Candidate>[] {
+/** A filled amber dot for a name new in this scan, a hollow grey one for a name kept though the scan no longer matches it. The words are its label, its tooltip and (hidden) the cell's text, so a reader reads "EAT · No longer matches". */
+function RescanMark({ state, text }: { state: "new" | "held"; text: string }) {
+  return (
+    <span className={styles.rescanMark} role="img" aria-label={text} title={text} data-rescan={state} data-tone={state === "new" ? "warn" : "neutral"}>
+      <span className="sr-only"> · {text}</span>
+    </span>
+  );
+}
+
+function columnsOf(screen: Pick<Screen, "columns" | "universe">, live: FollowState | null, marked: boolean): DenseColumn<Candidate>[] {
   return [
     {
       key: "symbol",
       label: "Symbol",
       sortValue: (row) => row.symbol,
-      // The ticker with its rescan badge is 182 px on a live scan: the cell is capped so the badge gives way, not the columns beside it (D-243). The tooltip says it whole.
+      // The rescan state is a dot beside the ticker, not a pill: the cell is capped (D-243) and its ellipsis would take a whole pill, so the ticker truncates and the dot never does (D-247).
+      // The tooltip says the whole text.
       truncate: (row) => [row.symbol, row.new_since_list ? PRACTICE_COPY.screenRescanNew : null, row.held_over ? PRACTICE_COPY.screenRescanHeld : null].filter(Boolean).join(" · "),
-      maxWidth: SCREEN_WIDTH_CAPS.symbol,
+      // A scan that carries a state holds the cap (the pill did, and the pane fits measured with it): the dot alone would free 24 px, and the fit would trade the previous session's columns for one-line headers.
+      ...(marked ? { minWidth: SCREEN_WIDTH_CAPS.symbol } : { maxWidth: SCREEN_WIDTH_CAPS.symbol }),
       render: (row) => (
-        <span>
+        <span className={styles.symbolCell}>
           <span className={styles.symbol}>{row.symbol}</span>
-          {row.new_since_list && <Badge tone="warn" style={{ marginLeft: 6 }}>{PRACTICE_COPY.screenRescanNew}</Badge>}
-          {row.held_over && <Badge tone="neutral" style={{ marginLeft: 6 }}>{PRACTICE_COPY.screenRescanHeld}</Badge>}
+          {row.new_since_list && <RescanMark state="new" text={PRACTICE_COPY.screenRescanNew} />}
+          {row.held_over && <RescanMark state="held" text={PRACTICE_COPY.screenRescanHeld} />}
         </span>
       ),
     },
