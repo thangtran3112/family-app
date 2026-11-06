@@ -5,9 +5,12 @@ import { backoffMs } from "./backoff.ts";
 import { connectionOf, initialQueryState, queryReducer, type QueryState } from "./queryState.ts";
 import type { Connection } from "./freshness.ts";
 
-export type DeskQueryOptions = {
-  /** Refetch every this many ms while the tab is visible; old values stay on screen meanwhile. After a failed read the wait doubles per failure (up to a minute). */
-  intervalMs?: number;
+export type DeskQueryOptions<T = unknown> = {
+  /**
+   * Refetch every this many ms while the tab is visible; old values stay on screen meanwhile. After a failed read the wait doubles per failure (up to a minute).
+   * A function is asked with the latest answer (null before the first) and may return undefined to stop polling, for a read that is only worth repeating while its answer says it is unfinished.
+   */
+  intervalMs?: number | ((data: T | null) => number | undefined);
   /** Skip fetching (for example until a symbol is known). */
   enabled?: boolean;
   /** Bump to refetch now while keeping the old values on screen (another screen changed the data). */
@@ -36,9 +39,12 @@ export type DeskQueryResult<T> = {
 export function useDeskQuery<T>(
   key: string,
   fetcher: (signal: AbortSignal) => Promise<T>,
-  { intervalMs, enabled = true, revision = 0 }: DeskQueryOptions = {},
+  { intervalMs: intervalOption, enabled = true, revision = 0 }: DeskQueryOptions<T> = {},
 ): DeskQueryResult<T> {
   const [raw, dispatch] = useReducer(queryReducer<T>, key, initialQueryState<T>);
+  // Derived, not stored: when the key changes before the first answer, show a clean loading state.
+  const state: QueryState<T> = raw.key === key ? raw : initialQueryState<T>(key);
+  const intervalMs = typeof intervalOption === "function" ? intervalOption(state.data) : intervalOption;
   const fetcherRef = useRef(fetcher);
   const runRef = useRef<(background: boolean) => void>(() => undefined);
   // The interval tick below reads these: when the last read failed, it waits out the backoff before asking again.
@@ -65,22 +71,21 @@ export function useDeskQuery<T>(
     };
     runRef.current = run;
     run(false);
-    const timer = intervalMs
-      ? setInterval(() => {
-          if (document.hidden) return;
-          if (failuresRef.current > 0 && Date.now() - failedAtRef.current < backoffMs(intervalMs, failuresRef.current)) return;
-          run(true);
-        }, intervalMs)
-      : undefined;
-    return () => {
-      controller.abort();
-      if (timer) clearInterval(timer);
-    };
+    return () => controller.abort();
+  }, [key, enabled, revision]);
+
+  // Its own effect: an interval that changes with the answer (a function option) must not read again by itself.
+  useEffect(() => {
+    if (!enabled || !intervalMs) return;
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      if (failuresRef.current > 0 && Date.now() - failedAtRef.current < backoffMs(intervalMs, failuresRef.current)) return;
+      runRef.current(true);
+    }, intervalMs);
+    return () => clearInterval(timer);
   }, [key, enabled, intervalMs, revision]);
 
   const refresh = useCallback(() => runRef.current(true), []);
-  // Derived, not stored: when the key changes before the first answer, show a clean loading state.
-  const state: QueryState<T> = raw.key === key ? raw : initialQueryState<T>(key);
   useEffect(() => {
     failuresRef.current = state.failures;
   });
