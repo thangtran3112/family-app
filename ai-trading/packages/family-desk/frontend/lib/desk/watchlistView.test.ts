@@ -3,7 +3,7 @@ import test from "node:test";
 import { DeskApiError } from "../api/client.ts";
 import { WatchlistTableSchema } from "../api/schemas.ts";
 import { loadDeskFixture } from "../fixtures/desk-mvp/load.ts";
-import { backfillBanner, isBackfilling, manageErrorMessage, moveSymbol, normalizeListName, orderChange, strategyChips, tagLine, validateListName } from "./watchlistView.ts";
+import { BACKFILL_POLL_MS, backfillBanner, backfillPollMs, isBackfilling, manageErrorMessage, moveSymbol, normalizeListName, orderChange, strategyChips, tagLine, validateListName } from "./watchlistView.ts";
 import { droppedKeys, withPriorities } from "./columns.ts";
 
 const table = WatchlistTableSchema.parse(loadDeskFixture("watchlist_1_table"));
@@ -85,4 +85,13 @@ test("the banner counts only the symbols that can still fill: one future plus tw
   assert.equal(backfillBanner([item("/ES", "future", "pending"), item("CHWY", "stock", "ready"), item("ETSY", "stock", "ready")]), null);
   assert.equal(backfillBanner([item("/ES", "future", "pending")]), null);
   assert.equal(backfillBanner([]), null);
+});
+
+// D-248: the caption and the row tags come from the items, so the items are read again while a stock is pending and not otherwise.
+test("the items are read every 60 s while a stock is pending, and not at all once nothing is (futures never count)", () => {
+  assert.equal(BACKFILL_POLL_MS, 60_000);
+  assert.equal(backfillPollMs([item("/ES", "future", "ready"), item("ETSY", "stock", "pending")]), 60_000);
+  assert.equal(backfillPollMs([item("CHWY", "stock", "ready"), item("ETSY", "stock", "ready")]), undefined);
+  assert.equal(backfillPollMs([item("/ES", "future", "pending")]), undefined);
+  assert.equal(backfillPollMs([]), undefined);
 });
