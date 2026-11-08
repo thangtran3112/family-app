@@ -55,6 +55,4 @@ Stay inside your area, follow any plan another session has published in the repo
 
 ## Model provider policy (STRICT — Toby, 2026-11-08)
 
-- **AWS Bedrock is forbidden for coding purposes, always** — for every coding harness (Claude Code, omp, opencode, Hermes, or anything else). Bedrock is permitted ONLY inside product application code (none in this repo today).
-- Coding harnesses use each developer's own configured provider and subscription; do not commit harness provider config, fallback lists, or API keys to this repo.
-- Treat any Bedrock routing for coding work as a violation: remove it and tell Toby.
+**AWS Bedrock must never be used by any coding harness for coding work** (Claude Code, omp, opencode, Hermes, or anything else). Bedrock is allowed only inside product application code (none in this repo today).
