@@ -55,7 +55,4 @@ Stay inside your area, follow any plan another session has published in the repo
 
 ## Model provider policy (STRICT — Toby, 2026-11-08)
 
-- Coding harnesses (Hermes, omp, opencode) may ONLY use the **Surplus** inference provider (`api.surplusintelligence.ai`). Switching among Surplus models is allowed; **no other provider is ever allowed**.
-- Claude Code uses its own Anthropic subscription only.
-- **AWS Bedrock is forbidden for coding purposes, always** — no exceptions for Hermes, omp, opencode, or Claude Code sessions. Bedrock is permitted ONLY inside product application code (service-connector runtime, jurispect-agentic DeerFlow team web agent).
-- Never add provider keys, fallback entries, or config that routes harness models outside Surplus. Treat any non-Surplus provider in a harness config as a violation: remove it and tell Toby.
+**AWS Bedrock must never be used by any coding harness for coding work** (Claude Code, omp, opencode, Hermes, or anything else). Bedrock is allowed only inside product application code (none in this repo today).
