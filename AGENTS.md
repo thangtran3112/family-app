@@ -52,3 +52,10 @@ Start a session inside the package you are changing. Each package's `AGENTS.md` 
 ## Parallel sessions
 
 Stay inside your area, follow any plan another session has published in the repo, keep edits to shared files (such as `ai-trading/plans/STATUS.md`) small and additive, merge `origin/dev` before you push, and never stage or revert another session's changes.
+
+## Model provider policy (STRICT — Toby, 2026-11-08)
+
+- Coding harnesses (Hermes, omp, opencode) may ONLY use the **Surplus** inference provider (`api.surplusintelligence.ai`). Switching among Surplus models is allowed; **no other provider is ever allowed**.
+- Claude Code uses its own Anthropic subscription only.
+- **AWS Bedrock is forbidden for coding purposes, always** — no exceptions for Hermes, omp, opencode, or Claude Code sessions. Bedrock is permitted ONLY inside product application code (service-connector runtime, jurispect-agentic DeerFlow team web agent).
+- Never add provider keys, fallback entries, or config that routes harness models outside Surplus. Treat any non-Surplus provider in a harness config as a violation: remove it and tell Toby.
